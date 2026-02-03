@@ -534,13 +534,24 @@ batch_special_algs()
     $genozip -tf ${TESTDIR}/special.force-2nd-segconf-vb_size.gz.fq.gz    || exit 1
 
     # bug was: bad SAM/BAM file with two prim alignments with the same QNAME and is_first compressed successfully but failed uncompress
+    test_header "regression: bad SAM/BAM file with two prim alignments with the same QNAME"
     $genozip -tf ${TESTDIR}/regression.defect-2024-09-19.duplicate-QNAMEs.sam --no-gencomp || exit 1
     $genozip -tf ${TESTDIR}/regression.defect-2024-09-19.duplicate-QNAMEs.sam --force-gencomp || exit 1
 
     # bug was: reading an R2 VB containing a single read failed (fixed 15.0.69)
+    test_header "regression: reading an R2 VB containing a single read failed"
     $genozip -tf ${TESTDIR}/regression.single-read.R1.fq ${TESTDIR}/regression.single-read.R2.fq -2e $GRCh38 || exit 1
 
+    # bug was: bamass: QUAL not compressed with SMUX when expected (fixed 15.0.76)
+    test_header "regression: bamass: QUAL not compressed with SMUX when expected"
+    $genozip -tf ${TESTDIR}/regression.bamass.mgi.fq --bamass ${TESTDIR}/regression.bamass.mgi.sam -e $GRCh38 --show-codec > $OUTDIR/out || exit 1
+    if ! grep SMUX $OUTDIR/out > /dev/null ; then 
+        echo "Expecting SMUX, but not found"
+        exit 1
+    fi
+
     # VCF with with allele values in FORMAT/GT > NUM_SMALL_ALLELES
+    test_header "VCF with with allele values in FORMAT/GT > NUM_SMALL_ALLELES"
     $genozip -tf ${TESTDIR}/special.large-alleles.vcf || exit 1
 }
 
@@ -727,55 +738,102 @@ batch_sendto()
 {
     batch_print_header
 
-    local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Premium | sed "s/[^0-9]//g"`
+    local lic_num=`tail -1 $LICENSESDIR/genozip_license.v71.Premium | sed "s/[^0-9]//g"`
 
-    test_header "sender compresses+tests, receiver uncompresses\n"
-    install_license_wrapper SendTo || exit 1
+    test_header "sender compresses+tests, receiver uncompresses"
+    rm -f $LICFILE
     $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
 
     install_license_wrapper Premium || exit 1
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output || exit 1
 
-    test_header "sender compresses+tests with encryption, receiver uncompresses\n"
-    install_license_wrapper SendTo || exit 1
+    test_header "sender compresses+tests with encryption, receiver uncompresses"
+    rm -f $LICFILE
     $genozip $TESTDIR/minimal.vcf -ft -p xyz --sendto $lic_num || exit 1
 
     install_license_wrapper Premium || exit 1
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output -p xyz || exit 1
 
-    test_header "wrong license number - expecting ACCESS DENIED\n"
-    install_license_wrapper SendTo || exit 1
+    test_header "wrong license number - expecting ACCESS DENIED"
+    rm -f $LICFILE
     $genozip $TESTDIR/minimal.vcf -ft --sendto 1234 || exit 1
 
     install_license_wrapper Premium || exit 1
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output 
     verify_failure genounzip $?
 
-    test_header "no license - expecting ACCESS DENIED\n"
-    install_license_wrapper SendTo || exit 1
+    test_header "no license - expecting ACCESS DENIED"
+    rm -f $LICFILE
     $genozip $TESTDIR/minimal.vcf -ft --sendto 1234 || exit 1
     $genounzip $TESTDIR/minimal.vcf.genozip -fo $output
     verify_failure genounzip $?
 
-    test_header "Academic license - expecting ACCESS DENIED\n"
-    install_license_wrapper SendTo || exit 1
-    local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Academic | sed "s/[^0-9]//g"`
+    # test trying to open file with non-Premium
+    for lictype in Student Research Standard Legacy Enterprise Secure Biobank; do
 
-    $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
-    install_license_wrapper Academic || exit 1
+        test_header "$lictype license - expecting ACCESS DENIED"
+        rm -f $LICFILE
+        local lic_num=`tail -1 $LICENSESDIR/genozip_license.v71.$lictype | sed "s/[^0-9]//g"`
 
-    $genounzip $TESTDIR/minimal.vcf.genozip -fo $output
-    verify_failure genounzip $?
+        $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
+        install_license_wrapper $lictype || exit 1
 
-    test_header "Enteprise license w/ no-eval - expecting ACCESS DENIED\n"
-    install_license_wrapper SendTo || exit 1
-    local lic_num=`tail -1 $LICENSESDIR/genozip_license.v15.Enterprise | sed "s/[^0-9]//g"`
+        $genounzip $TESTDIR/minimal.vcf.genozip -fo $output --no-eval
+        verify_failure genounzip $?
+    done
 
-    $genozip $TESTDIR/minimal.vcf -ft --sendto $lic_num || exit 1
-    install_license_wrapper Enterprise || exit 1
+    cleanup
+}
 
-    $genounzip $TESTDIR/minimal.vcf.genozip -fo $output --no-eval
-    verify_failure genounzip $?
+batch_pair_permissions()
+{
+    local T=$TESTDIR/basic-deep
+
+    # test with license types that should succeed
+    for lictype in Enterprise Secure Premium Biobank Legacy Research; do
+        test_header "pair: permissions for $lictype (should succeed)"
+        install_license_wrapper $lictype
+        $genozip $T.R1.fq $T.R2.fq -Xfe $GRCh38 --pair -o $output --no-eval || exit 1 
+    done
+
+    # test with license types that should fail
+    for lictype in Student Standard; do
+        test_header "pair: test permissions for $lictype (should fail)"
+        install_license_wrapper $lictype
+        $genozip $T.R1.fq $T.R2.fq -Xfe $GRCh38 --pair -o $output --no-eval  
+        verify_failure genozip $?
+    done
+
+    cleanup
+}
+
+batch_deep_bamass_permissions()
+{
+    local T=$TESTDIR/basic-deep
+
+    # test with license types that should succeed
+    for lictype in Enterprise Secure Premium Biobank Research; do
+        install_license_wrapper $lictype
+
+        test_header "deep: test permissions for $lictype (should succeed)"
+        $genozip $T.sam $T.R1.fq $T.R2.fq -Xfe $GRCh38 --deep -o $output --no-eval || exit 1 
+
+        test_header "bamass: test permissions for $lictype (should succeed)"
+        $genozip -A $T.sam $T.R1.fq -Xfe $GRCh38 -o $output --no-eval || exit 1 
+    done
+
+    # test with license types that should fail
+    for lictype in Student Standard Legacy; do
+        install_license_wrapper $lictype
+
+        test_header "deep: test permissions for $lictype (should fail)"
+        $genozip $T.sam $T.R1.fq $T.R2.fq -Xfe $GRCh38 --deep -o $output --no-eval 
+        verify_failure genozip $?
+
+        test_header "bamass: test permissions for $lictype (should fail)"
+        $genozip -A $T.sam $T.R1.fq -Xfe $GRCh38 -o $output --no-eval
+        verify_failure genozip $?
+    done
 
     cleanup
 }
@@ -790,22 +848,28 @@ batch_user_message_permissions()
     local recon=$OUTDIR/recon.vcf
     local recon_msg=$OUTDIR/msg
 
-    test_header "test: successful message: generated with Premium, read without a license"
-    install_license_wrapper Premium
-    $genozip $file --user-message $msg -fXo $output || exit 1
+    # test with license types that should succeed
+    for lictype in Premium Biobank; do
+        test_header "test: successful message: generated with $lictype, read without a license"
+        install_license_wrapper $lictype
+        $genozip $file --user-message $msg -fXo $output --no-eval || exit 1
 
-    rm -f $LICFILE
+        rm -f $LICFILE
 
-    $genounzip $output -fo $recon > $recon_msg || exit 1
-    if (( `grep "$line" $recon_msg | wc -l` != 1 )); then
-        echo "Error: cannot find message from $msg in $recon_msg"
-        exit 1
-    fi
+        $genounzip $output -fo $recon > $recon_msg || exit 1
+        if (( `grep "$line" $recon_msg | wc -l` != 1 )); then
+            echo "Error: cannot find message from $msg in $recon_msg"
+            exit 1
+        fi
+    done
 
-    test_header "test: failed message: generated with Enterprise"
-    install_license_wrapper Enterprise
-    $genozip $file --user-message $msg -fXo $output --no-eval
-    verify_failure genozip $?
+    # test with non-Premium (should fail)
+    for lictype in Student Research Standard Legacy Enterprise Secure; do
+        test_header "test: failed message: generated with $lictype"
+        install_license_wrapper $lictype
+        $genozip $file --user-message $msg -fXo $output --no-eval
+        verify_failure genozip $?
+    done
 
     cleanup
 }
@@ -818,21 +882,27 @@ batch_password_permissions()
     local recon=$OUTDIR/recon.vcf
     local recon_msg=$OUTDIR/msg
 
-    test_header "test: successful encryption: generated with Premium, read with Academic"
-    install_license_wrapper Premium
-    $genozip $file --password 1234567890qwertyuiop -fXo $output || exit 1
+    # test with license types that should succeed
+    for lictype in Premium Secure Biobank; do
+        test_header "test: successful encryption: generated with $lictype, read with Student"
+        install_license_wrapper $lictype
+        $genozip $file --password 1234567890qwertyuiop -fXo $output --no-eval || exit 1
 
-    install_license_wrapper Academic
-    $genounzip $output --password 1234567890qwertyuiop -fo $recon > $recon_msg || exit 1
+        install_license_wrapper Student
+        $genounzip $output --password 1234567890qwertyuiop -fo $recon > $recon_msg || exit 1
+    done
 
     test_header "test: failed decryption: wrong password"
     $genounzip $output --password wrong_password -fo $recon > $recon_msg
     verify_failure genounzip $?
 
-    test_header "test: failed encryption in Academic"
-    $genozip $file --password 1234567890qwertyuiop -fXo $output 
-    verify_failure genozip $?
-
+    # test with license types that should fail
+    for lictype in Student Research Standard Legacy Enterprise Secure Biobank; do
+        test_header "test: failed encryption in $lictype"
+        $genozip $file --password 1234567890qwertyuiop -fXo $output --no-eval
+        verify_failure genozip $?
+    done
+    
     cleanup
 }
 
@@ -2661,9 +2731,9 @@ if [ -n "$is_windows" ]; then
         export APPDATA="$BASEDIR/../AppData/Roaming"
     fi
 
-    LICFILE=$APPDATA/genozip/.genozip_license.v15
+    LICFILE=$APPDATA/genozip/.genozip_license.v71
 else
-    LICFILE=$HOME/.genozip_license.v15
+    LICFILE=$HOME/.genozip_license.v71
 fi
 
 if [ -n "$is_mac" ]; then 
@@ -2866,25 +2936,27 @@ case $GENOZIP_TEST in
 56)  batch_qname_flavors               ;;
 57)  batch_piz_no_license              ;;
 58)  batch_sendto                      ;;
-59)  batch_user_message_permissions    ;;
-60)  batch_password_permissions        ;;
-61)  batch_genocat_backcomp_recon_plan ;;
-62)  batch_reference_backcomp          ;;
-63)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-64)  batch_real_world_backcomp 12.0.42 ;; 
-65)  batch_real_world_backcomp 13.0.21 ;; 
-66)  batch_real_world_backcomp 14.0.33 ;; 
-67)  batch_real_world_backcomp latest  ;;
-68)  batch_basic basic.vcf     latest  ;;
-69)  batch_basic basic.bam     latest  ;;
-70)  batch_basic basic.sam     latest  ;;
-71)  batch_basic basic.fq      latest  ;;
-72)  batch_basic basic.fa      latest  ;;
-73)  batch_basic basic.bed     latest  ;;
-74)  batch_basic basic.gvf     latest  ;;
-75)  batch_basic basic.gtf     latest  ;;
-76)  batch_basic basic.me23    latest  ;;
-77)  batch_basic basic.generic latest  ;;
+59)  batch_pair_permissions            ;;
+60)  batch_deep_bamass_permissions     ;;
+61)  batch_user_message_permissions    ;;
+62)  batch_password_permissions        ;;
+63)  batch_genocat_backcomp_recon_plan ;;
+64)  batch_reference_backcomp          ;;
+65)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+66)  batch_real_world_backcomp 12.0.42 ;; 
+67)  batch_real_world_backcomp 13.0.21 ;; 
+68)  batch_real_world_backcomp 14.0.33 ;; 
+69)  batch_real_world_backcomp latest  ;;
+70)  batch_basic basic.vcf     latest  ;;
+71)  batch_basic basic.bam     latest  ;;
+72)  batch_basic basic.sam     latest  ;;
+73)  batch_basic basic.fq      latest  ;;
+74)  batch_basic basic.fa      latest  ;;
+75)  batch_basic basic.bed     latest  ;;
+76)  batch_basic basic.gvf     latest  ;;
+77)  batch_basic basic.gtf     latest  ;;
+78)  batch_basic basic.me23    latest  ;;
+79)  batch_basic basic.generic latest  ;;
 
 * ) break; # break out of loop
 

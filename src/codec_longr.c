@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_longr.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -20,7 +20,7 @@
 
 bool codec_longr_maybe_used (VBlockP vb, Did did_i)
 {
-    return (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z) && 
+    return (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == OPTION_OQ_Z) && 
                ((TECH(NANOPORE) && segconf.nontrivial_qual && !flag.no_longr && !flag.fast) || 
                 flag.force_qual_codec == CODEC_LONGR);
 }
@@ -179,7 +179,7 @@ COMPRESS (codec_longr_compress)
     STRw(seq); STRw (qual); 
     bool is_rev;
 
-    __atomic_add_fetch (&z_file->pacb_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
+    __atomic_add_fetch (&z_file->longr_lines, vb->lines.len, __ATOMIC_RELAXED);
 
     // calculate state->base_chan - the channel for each base. reads are treated in their
     // original (FASTQ) orientation.

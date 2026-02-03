@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_fields.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -737,7 +737,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_delta_seq_len)
 {
     int64_t delta;
     if (str_is_1char (snip, '$')) // since 15.0.61
-        delta = reconstruct_from_local_int (vb, ctx, 0, false);    
+        delta = reconstruct_from_local_int (vb, ctx, 0, RECON_OFF);    
     else
         delta = atoi (snip); // 0 if snip==""
 
@@ -1304,7 +1304,7 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
         ctx_set_last_value (VB, con_ctx, (int64_t)repeats);
 
     if (callback)
-        callback (vb, elem_ctx, cb_param, local_start, repeats);
+        callback (vb, elem_ctx, cb_param, local_start, repeats, width);
 
     if (is_int || is_bam)
        elem_ctx->local.len /= width; // return len back to counting in units of ltype
@@ -1466,15 +1466,13 @@ void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value), ValueT
 void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_type, char array_subtype,
                                  STRp(value), ValueType numeric, unsigned add_bytes)
 {
+    ContextP ctx = ctx_get_ctx (vb, dict_id);
+
     // all types of integer
-    if (sam_type == 'i') {
-        ContextP ctx = ctx_get_ctx (vb, dict_id);
+    if (sam_type == 'i') 
         seg_integer (vb, ctx, numeric.i, true, add_bytes);
-    }
 
     else if (sam_type == 'f') {
-        ContextP ctx = ctx_get_ctx (vb, dict_id);
-
         if (!ctx->is_initialized) 
             sam_seg_initialize_for_float (VB_SAM, ctx);
 
@@ -1495,6 +1493,8 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
     // Z,H,A - normal snips in their own dictionary
     else 
         seg_by_dict_id (VB, STRa(value), dict_id, add_bytes);     
+
+    ctx_set_encountered (vb, ctx); //xxx added
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -1555,6 +1555,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_YB_Z: COND (segconf.sam_has_xcons, sam_seg_buddied_Z_fields (vb, dl, MATED_YB, STRa(value), 0, add_bytes));
         
+        case _OPTION_XD_B_i : COND (segconf.sam_has_xcons, sam_seg_array_one_ctx (VB_SAM, dl, dict_id, array_subtype, STRa(value), sam_seg_xcons_XD_callback, NULL, NULL));
+
         case _OPTION_MI_Z: COND0 (!MP(ULTIMA), sam_seg_buddied_Z_fields (vb, dl, MATED_MI, STRa(value), 0, add_bytes))
                            COND (  MP(ULTIMA), sam_seg_ultima_MI (vb, dl, STRa(value), add_bytes));
         case _OPTION_CY_Z: dl->dont_compress_CY = sam_seg_barcode_qual (vb, dl, OPTION_CY_Z, SOLO_CY, segconf.n_CR_CB_CY_seps, STRa(value), qSTRa(segconf.CY_con_snip), &segconf.CY_con, add_bytes); break;
@@ -1619,11 +1621,11 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
                            COND (MP(BLASR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_XS_i), numeric.i, "0+00", add_bytes)); 
 
         case _OPTION_XC_i: COND0 (segconf.sam_has_BWA_XC_i, sam_seg_BWA_XC_i (vb, dl, numeric.i, add_bytes))
-                           COND (segconf.sam_has_xcons, sam_seg_xcons_XC_i (vb, numeric.i, add_bytes));
+                           COND (segconf.sam_has_xcons, sam_seg_xcons_XC (vb, dl, numeric.i, add_bytes));
 
-        case _OPTION_YY_i: COND (segconf.sam_has_xcons, sam_seg_xcons_YY_i (vb, numeric.i, add_bytes));
+        case _OPTION_YY_i: COND (segconf.sam_has_xcons, sam_seg_xcons_YY (vb, numeric.i, add_bytes));
         
-        case _OPTION_XO_i: COND (segconf.sam_has_xcons, sam_seg_xcons_XO_i (vb, dl, numeric.i, add_bytes));
+        case _OPTION_XO_i: COND (segconf.sam_has_xcons, sam_seg_xcons_XO (vb, dl, numeric.i, add_bytes));
 
         case _OPTION_XT_A: COND (segconf.sam_has_BWA_XT_A, sam_seg_BWA_XT_A (vb, value[0], add_bytes));
 
@@ -1666,7 +1668,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
                            COND  (segconf.sam_ms_type == ms_MINIMAP2, sam_seg_delta_seq_len (vb, dl, OPTION_ms_i, numeric.i, true, add_bytes));    // ms:i produced by minimap2
 
         case _OPTION_s1_i: COND (segconf.is_minimap2, sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
-
+        case _OPTION_s2_i: COND (segconf.is_minimap2, sam_seg_s2_i (vb, dl, numeric.i, add_bytes));
         case _OPTION_cm_i: COND (segconf.is_minimap2, sam_seg_cm_i (vb, dl, numeric.i, add_bytes));
 
         case _OPTION_Z5_i: seg_pos_field (VB, OPTION_Z5_i, SAM_PNEXT, 0, 0, 0, 0, numeric.i, add_bytes); break;

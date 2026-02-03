@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context_struct.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -12,6 +12,7 @@
 #include "mutex.h"
 #include "sections.h"
 #include "segconf.h"
+#include "sam_friend.h"
 
 typedef struct { // initialize with ctx_init_iterator()
     bytes next_b250;           // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
@@ -184,10 +185,14 @@ typedef struct Context {
         struct {
             bool mate_copied_exactly;  // SAM_QNAME: PIZ (consumed for PRIM preprocessing by sam_load_groups_add_qname)
         };
-        thool XG_inc_S;            // ZIP: bsseeker2 OPTION_XG_Z: whether to include soft_clip[0]
-        struct {                   // SAM_QUAL, SAM_CQUAL, OPTION_OQ_Z, FASTQ_QUAL: 
+        SamFlags prev_flags;       // PIZ SAM_FLAGS: previous line's SamFlags
+        PosType32 prev_pos;        // PIZ SAM_POS, SAM_PNEXT: previous line's value
+        WordIndex prev_wi;         // PIZ SAM_RNAME, SAM_RNEXT: previous line's word index
+        struct {                   // SAM_QUAL, OPTION_OQ_Z, FASTQ_QUAL: 
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
+            bool domq_has_diverse; // ZIP vctx, DOMQ codec internal use
         };
+        thool XG_inc_S;            // ZIP: bsseeker2 OPTION_XG_Z: whether to include soft_clip[0]
         struct ctx_tp {            // PIZ: OPTION_tp_B_ARR (15.0.10-15.0.27: OPTION_tp_B_c)
             #define TP_LEN_BITS 23
             #define HP_LEN_BITS 17

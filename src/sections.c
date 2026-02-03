@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sections.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -1122,7 +1122,7 @@ void sections_show_header (ConstSectionHeaderP header,
     case SEC_GENOZIP_HEADER: {
         SectionHeaderGenozipHeaderP h = (SectionHeaderGenozipHeaderP)header;
         z_file->z_flags.adler = h->flags.genozip_header.adler; // needed by digest_display_ex
-        char dt_specific[REF_FILENAME_LEN + 200] = "";
+        char dt_specific[REF_FILENAME_LEN + 1 KB] = "";
         dt = BGEN16 (h->data_type); // for GENOZIP_HEADER, go by what header declares
         if (dt >= NUM_DATATYPES) dt = DT_NONE;
 
@@ -1134,14 +1134,16 @@ void sections_show_header (ConstSectionHeaderP header,
                       h->vcf.max_ploidy_for_mux);
 
         else if ((DT(SAM) || DT(BAM)) && v14)
-            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(sorted=%u,collated=%u,std_seq_len=%u,seq_len_to_cm=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,MAPQ_use_xq=%u,has_MQ=%u,SA_CIGAR_abb=%u,SA_NM_by_X=%u,CIGAR_has_eqx=%u,is_ileaved=%u,%uXsam_factor=%u)\n", 
-                      SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32(h->sam.segconf_std_seq_len), h->sam.segconf_seq_len_cm, h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
+            snprintf (dt_specific, sizeof (dt_specific), "%ssegconf=(sorted=%u,collated=%u,std_seq_len=%u,seq_len_to_cm=%u,s1_to_cm_32=%u,ms_type=%u,has_MD_or_NM=%u,bisulfite=%u,MD_NM_by_unconverted=%u,predict_meth=%u,is_paired=%u,sag_type=%s,sag_has_AS=%u,pysam_qual=%u,cellranger=%u,SA_HtoS=%u,seq_len_dict_id=%s,deep_qname1=%u,deep_qname2=%u,deep_no_qual=%u,use_ins_ctx=%u,MAPQ_use_xq=%u,has_MQ=%u,SA_CIGAR_abb=%u,SA_NM_by_X=%u,CIGAR_has_eqx=%u,is_ileaved=%u,xcons_std_seq_len_M100=%u,%uXsam_factor=%u)\n", 
+                      SEC_TAB, h->sam.segconf_is_sorted, h->sam.segconf_is_collated, BGEN32(h->sam.segconf_std_seq_len), 
+                      h->sam.segconf_seq_len_cm, h->sam.segconf_s1_to_cm_32, 
+                      h->sam.segconf_ms_type, h->sam.segconf_has_MD_or_NM, 
                       h->sam.segconf_bisulfite, h->sam.segconf_MD_NM_by_un, h->sam.segconf_predict_meth, 
                       h->sam.segconf_is_paired, sag_type_name(h->sam.segconf_sag_type), h->sam.segconf_sag_has_AS, 
                       h->sam.segconf_pysam_qual, h->sam.segconf_10xGen, h->sam.segconf_SA_HtoS, dis_dict_id(h->sam.segconf_seq_len_dict_id).s,
                       h->sam.segconf_deep_qname1, h->sam.segconf_deep_qname2, h->sam.segconf_deep_no_qual, 
                       h->sam.segconf_use_ins_ctxs, h->sam.segconf_MAPQ_use_xq, h->sam.segconf_has_MQ, h->sam.segconf_SA_CIGAR_abb, h->sam.segconf_SA_NM_by_X, 
-                      h->sam.segconf_CIGAR_has_eqx, h->sam.segconf_is_ileaved,
+                      h->sam.segconf_CIGAR_has_eqx, h->sam.segconf_is_ileaved, h->sam.xcons_std_seq_len_M100,
                       SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
 
         else if (DT(REF)) {
@@ -1185,14 +1187,14 @@ void sections_show_header (ConstSectionHeaderP header,
                       sections_dis_flags (f, st, dt, is_r2).s, TXT_FILENAME_LEN, h->txt_filename);
         else
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
-                      "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(has_seq_len,is_mated,cnn,tokenized)=[[%u,%u,'%s',%u],[%u,%u,'%s',%u],[%u,%u,'%s',%u]]\n",
+                      "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(has_seq_len,consensus,mated,cnn,tokenized)=[[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u]]\n",
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                       digest_display (h->digest).s, digest_display (h->digest_header).s, 
                       SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
                       sections_dis_flags (f, st, dt, is_r2).s, TXT_FILENAME_LEN, h->txt_filename,
-                      h->flav_prop[0].has_seq_len, h->flav_prop[0].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[0].cnn]).s, h->flav_prop[0].is_tokenized,
-                      h->flav_prop[1].has_seq_len, h->flav_prop[1].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[1].cnn]).s, h->flav_prop[1].is_tokenized,
-                      h->flav_prop[2].has_seq_len, h->flav_prop[2].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[2].cnn]).s, h->flav_prop[2].is_tokenized);
+                      h->flav_prop[0].has_seq_len, h->flav_prop[0].is_consensus, h->flav_prop[0].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[0].cnn]).s, h->flav_prop[0].is_tokenized,
+                      h->flav_prop[1].has_seq_len, h->flav_prop[1].is_consensus, h->flav_prop[1].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[1].cnn]).s, h->flav_prop[1].is_tokenized,
+                      h->flav_prop[2].has_seq_len, h->flav_prop[2].is_consensus, h->flav_prop[2].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[2].cnn]).s, h->flav_prop[2].is_tokenized);
 
         break;
     }

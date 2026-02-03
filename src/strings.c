@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   strings.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -18,13 +18,13 @@
 #include <windows.h>
 #endif
 
-bool is_printable[256] = { [9]=1, [10]=1, [13]=1, [32 ... 126]=1 };
+const bool is_printable[256] = { ['\t']=1, ['\n']=1, ['\r']=1, [32 ... 126]=1 };
 
 // valid characters in a FASTQ sequence
-bool is_fastq_seq[256] = { ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, ['N']=true, 
-                           ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true };
+const bool is_fastq_seq[256] = { ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, ['N']=true, 
+                                 ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true };
 
-uint64_t p10[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
+const uint64_t p10[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
 
 char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */)
 {
@@ -588,7 +588,7 @@ not_scientific_float:
 bool str_is_in_range (rom str, uint32_t str_len, char first_c, char last_c)
 {
     for (rom after = str + str_len; str < after ; str++)
-        if (*str < first_c || *str > last_c) return false;
+        if (!IN_RANGX(*str, first_c, last_c)) return false;
     return true;
 }
 
@@ -951,7 +951,7 @@ uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out)
 {
     uint32_t out_len = 0;
     for (uint32_t i=0; i < in_len; i++)
-        if (in[i] >= 33 && in[i] <= 126) 
+        if (IS_NON_WS(in[i])) 
             out[out_len++] = also_uppercase ? UPPER_CASE(in[i]) : in[i];
 
     return out_len;

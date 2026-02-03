@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   context.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -1068,7 +1068,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
               cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
               cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
               z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, version_str().s);
-        dict_io_print (stderr, zctx->dict.data, 1000, true, true, false, false);
+        dict_io_print (stderr, zctx->dict_id, zctx->dict.data, 1000, true, true, false, false);
     }
 
     if (flag.deep) {
@@ -1520,7 +1520,7 @@ static void ctx_show_counts (ContextP zctx)
 
     if (sum_count)
         for (uint32_t i=0; i < counts_len; i++) {            
-            dict_io_print (info_stream, counts[i].snip, strlen(counts[i].snip), false, true, false, false);
+            dict_io_print (info_stream, zctx->dict_id, counts[i].snip, strlen(counts[i].snip), false, true, false, false);
             iprintf ("(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].word_index, counts[i].count, 
                      100 * (float)counts[i].count / (float)sum_count);
         }
@@ -1578,7 +1578,7 @@ StrTextMegaLong ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index)
     STR (snip);
     ctx_get_vb_snip_ex (vctx, vb_node_index, pSTRa(snip));
 
-    return str_snip_ex (STRa(snip), true); 
+    return str_snip_ex (DT_NONE, STRa(snip), true); 
 }
 
 // ZIP
@@ -1604,7 +1604,7 @@ StrTextMegaLong ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index)
     STR (snip);
     ctx_get_z_snip_ex (zctx, z_node_index, pSTRa(snip));
 
-    return str_snip_ex (STRa(snip), true); 
+    return str_snip_ex (DT_NONE, STRa(snip), true); 
 }
 
 void ctx_compress_counts (void)

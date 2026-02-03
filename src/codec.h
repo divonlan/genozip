@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -169,6 +169,13 @@ extern bool codec_t0_data_is_a_fit_for_t0 (VBlockP vb);
 extern bool codec_normq_comp_init (VBlockP vb, Did did_i, bool maybe_revcomped, bool force);
 
 // DOMQ stuff
+typedef struct {
+    uint8_t *qual;
+    uint32_t qual_len; 
+    uint8_t dom;     // dom of this line
+    bool is_diverse; // too few qual score in this line are dom
+} DomqLine;
+
 extern bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB callback, bool force);
 extern void codec_qual_show_stats (void);
 

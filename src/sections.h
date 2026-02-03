@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sections.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -205,7 +205,7 @@ typedef struct {
             DictId segconf_seq_len_dict_id;   // SAM: dict_id of one of the Q?NAME contexts (the "length=" item), which is expected to hold the seq_len for this read. 0 if there is no such item. v14.
             uint32_t segconf_std_seq_len;     // SAM: longest (up to 15.0.68: average) seq_len in segconf data. v14. (called sam_seq_len up to 15.0.68)
             SagType segconf_sag_type;         // SAM: v14
-            uint8_t segconf_seq_len_cm;       // SAM: v14   
+            uint8_t segconf_seq_len_cm;       // SAM: v14: minimap2: average seq_len / cm:i    
             uint8_t segconf_ms_type      : 3; // SAM: v14 
             uint8_t segconf_has_MD_or_NM : 1; // SAM: PIZ should call sam_analyze_copied_SEQ for dependent reads unless explicitly told not to. v14.
             uint8_t segconf_bisulfite    : 1; // SAM: v14
@@ -230,9 +230,10 @@ typedef struct {
             uint8_t segconf_is_ileaved   : 1; // 15.0.69: Deep: FASTQ component is interleaved
             uint8_t segconf_sam_factor;       // 15.0.28: BAM only: 64X estimated blow-up factor of SAM txt_data vs BAM 
             uint8_t segconf_deep_N_fq_score;  // 15.0.39: Deep: when copying QUAL from SAM, update scores of 'N' bases to this value
-            uint8_t unused_bits          : 8;
+            uint8_t xcons_std_seq_len_M100;   // 15.0.76: xcons: segconf.xcons_std_seq_len - 100
             uint16_t conc_writing_vbs;        // 15.0.64: max number of handed-over the VBs the writer will need to have open concurrent. Up to 15.0.63 this was in SectionHeaderReconPlan
-            char unused[245];
+            uint16_t segconf_s1_to_cm_32;     // 15.0.76: minimap2: 32X of average s1:i / cm:i   
+            char unused[243];
         } sam;
 
         struct { 

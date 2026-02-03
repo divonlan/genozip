@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   strings.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -10,24 +10,23 @@
 
 #include "genozip.h"
 
-#define IS_DIGIT(c)        ((c)>='0' && (c)<='9')
+#define IS_DIGIT(c)        IN_RANGX((c), '0', '9')
 #define NUM2HEXDIGIT(n)    ((n)<=9 ? '0' + (n) : 'a'+((n)-10))      
 #define HEXDIGIT2NUM(c)    (IS_DIGIT(c) ? ((c)-'0') : ((c)-'a'+10)) // converts an lowercase hex digit to a number [0,15]
-#define IS_HEXDIGIT(c)     (IS_DIGIT(c) || ((c)>='A' && (c)<='F') || ((c)>='a' && (c)<='f'))
-#define IS_HEXDIGITlo(c)   (IS_DIGIT(c) || ((c)>='a' && (c)<='f'))
-#define IS_HEXDIGITUP(c)   (IS_DIGIT(c) || ((c)>='A' && (c)<='F'))
-#define IS_CLETTER(c)      ((c)>='A' && (c)<='Z')
-#define IS_SLETTER(c)      ((c)>='a' && (c)<='z')
+#define IS_HEXDIGIT(c)     (IS_DIGIT(c) || IN_RANGX((c),'A','F') || IN_RANGX((c),'a','f'))
+#define IS_HEXDIGITlo(c)   (IS_DIGIT(c) || IN_RANGX((c),'a','f'))
+#define IS_HEXDIGITUP(c)   (IS_DIGIT(c) || IN_RANGX((c),'A','F'))
+#define IS_CLETTER(c)      IN_RANGX((c),'A','Z')
+#define IS_SLETTER(c)      IN_RANGX((c),'a','z')
+#define IS_LETTER(c)       (IS_CLETTER(c) || IS_SLETTER(c))
+#define IS_ALPHANUMERIC(c) (IS_LETTER(c)  || IS_DIGIT(c))
 #define IS_ACGT(c)         ((c)=='A' || (c)=='T' || (c)=='C' || (c)=='G') // AT often have slightly higher frequency than CG, so testing first
 #define IS_ACGTN(c)        (IS_ACGT(c) || (c)=='N')
-#define IS_WS(c)           ((c)=='\t' || (c)=='\r' || (c)=='\n')
-#define IS_LETTER(c)       (IS_CLETTER(c) || IS_SLETTER(c))
-#define IS_ALPHANUMERIC(c) (IS_LETTER(c) || IS_DIGIT(c))
-#define IS_NON_WS_PRINTABLE(c) (((c)>=33) && ((c)<=126))
-#define IS_QUAL_SCORE(c)   IS_NON_WS_PRINTABLE(c)
-extern bool is_printable[256];
+#define IS_NON_WS(c)       IN_RANGX((c), 33, 126)
+#define IS_QUAL_SCORE(c)   IN_RANGX((c), 33, 126)
+extern const bool is_printable[256];
 #define IS_PRINTABLE(c)    is_printable[(uint8_t)(c)]
-extern bool is_fastq_seq[256];
+extern const bool is_fastq_seq[256];
 #define IS_FASTQ_SEQ(c)    is_fastq_seq[(uint8_t)(c)]
 
 #define IS_VALID_URL_CHAR(c) (IS_ALPHANUMERIC(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
@@ -42,6 +41,7 @@ extern bool is_fastq_seq[256];
 #define IS_EQUAL_SIGN(str)  str_is_1char(str, '=')
 
 #define TF(x) ((x) ? "true" : "false")
+#define VX(x) ((x) ? "✓" : "✗")
 #define YN(x) ((x)==yes?"Yes" : (x)==no?"No" : "Unknown")
 #define S(s)  ((s) ? (s) : "(none)")
 
@@ -277,7 +277,7 @@ static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) i
 static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))        return false; return true; } 
 static bool inline str_is_fastq_seq(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_FASTQ_SEQ(str[i]))        return false; return true; } 
 extern bool str_is_utf8 (STRp(str));
-static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS_PRINTABLE(str[i])) return false; return true; } 
+static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS(str[i])) return false; return true; } 
 static bool inline str_is_ACGT(STRp(str), uint32_t *bad_i) { for (int i=0; i<str_len; i++) if (!IS_ACGT(str[i])) { if(bad_i) *bad_i = i; return false; } return true; } 
 static bool inline str_is_ACGTN(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))            return false; return true; } 
 
@@ -402,6 +402,6 @@ static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97-
                                              : (n) < 31 ? ((n)-26 + '[')  // 91->95.  5bits: 27->31
                                              :            '@';          } // 64.      5bits: 0
 
-extern uint64_t p10[]; // powers of 10
+extern const uint64_t p10[]; // powers of 10
 
 extern uint64_t crc64 (uint64_t crc, bytes data, uint64_t data_len); // implementation is in crc64.c

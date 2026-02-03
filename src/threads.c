@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   threads.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -42,6 +42,7 @@
 #include "sections.h"
 #include "arch.h"
 #include "license.h"
+#include "progress.h"
 
 static Buffer threads = {};
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
@@ -61,6 +62,10 @@ typedef struct {
     VBIType vb_i;
     VBID vb_id;
 } ThreadEnt;
+
+// mechanism to print a specific message upon exception
+static _Thread_local rom catch_msg=0, catch_func=0;
+static _Thread_local uint32_t catch_line=0;
 
 static rom __attribute__((unused)) threads_get_task_name (void)
 {
@@ -188,7 +193,13 @@ void threads_print_call_stack (void)
 
 static LONG WINAPI windows_exception_handler (EXCEPTION_POINTERS *ep)
 {
-    threads_print_call_stack_do (*ep->ContextRecord);
+    if (catch_msg) {
+        progress_newline(); 
+        fprintf (stderr, "Error in %s:%u: %s\n", catch_func, catch_line, catch_msg);
+    }
+
+    else
+        threads_print_call_stack_do (*ep->ContextRecord);
 
     return EXCEPTION_EXECUTE_HANDLER;
 }
@@ -252,12 +263,19 @@ static void noreturn threads_sigint_handler (int signum)
 // signal handler of SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGSYS
 static void noreturn threads_bug_signal_handler (int signum) 
 {
-    iprintf ("\n\nSignal \"%s\" received, exiting. Time: %s%s%s", 
-             strsignal (signum), str_time().s, cond_str(flags_command_line(), "\nCommand line: ", flags_command_line()), report_support_if_unexpected());
-    
-    threads_print_call_stack(); // this works ok on mac (in debug only), but seems to not print function names on Linux
+    if (catch_msg) {
+        progress_newline(); 
+        fprintf (stderr, "Error in %s:%u: %s\n", catch_func, catch_line, catch_msg);
+    }
 
-    buflist_test_overflows_all_vbs ("threads_bug_signal_handler", false);
+    else {
+        iprintf ("\n\nSignal \"%s\" received, exiting. Time: %s%s%s", 
+                strsignal (signum), str_time().s, cond_str(flags_command_line(), "\nCommand line: ", flags_command_line()), report_support_if_unexpected());
+        
+        threads_print_call_stack(); // this works ok on mac (in debug only), but seems to not print function names on Linux
+
+        buflist_test_overflows_all_vbs ("threads_bug_signal_handler", false);
+    }
 
     exit (128 + signum); // convention for exit code due to signal - both Linux and MacOS
 }
@@ -302,6 +320,19 @@ static void threads_init_signal_handlers (void)
 }
 
 #endif
+
+// set the error message to be displayed in case of an exception (segfault etc)
+void catch_exception_do (rom msg, FUNCLINE)
+{
+    catch_func = func;  // note: catch_* are thread-local variables
+    catch_line = code_line; 
+    catch_msg  = msg; 
+}
+
+void uncatch_exception (void)
+{
+    catch_msg  = NULL; 
+}
 
 // called by main thread at system initialization
 void threads_initialize (void)

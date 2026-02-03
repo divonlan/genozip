@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_private.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -36,8 +36,8 @@ typedef struct __attribute__((packed,aligned(1))) {
     // char qual[l_seq]
 } BAMAlignmentFixed, *BAMAlignmentFixedP;
 
-#define BAM_MAGIC  "BAM\1" // first 4 characters of a BAM file
-#define CRAM_MAGIC "CRAM"  // first 4 characters of a CRAM file
+#define BAM_MAGIC  "BAM\1" // first 4 bytes of a BAM file
+#define CRAM_MAGIC "CRAM"  // first 4 bytes of a CRAM file
 
 // as defined in https://samtools.github.io/hts-specs/SAMv1.pdf section 1.4.2
 #define SAM_FLAG_MULTI_SEG     ((uint16_t)0x0001) // 1     0000 0000 0001

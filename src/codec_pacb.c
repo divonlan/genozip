@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_pacb.c
-//   Copyright (C) 2023-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2023-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -116,7 +116,7 @@ bool codec_pacb_comp_init (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb, bo
 bool codec_pacb_maybe_used (Did did_i)
 {
     return (flag.force_qual_codec == CODEC_PACB || (TECH(PACBIO) && !flag.no_pacb && segconf.nontrivial_qual && !segconf.use_pacbio_iqsqdq)) &&
-           (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == SAM_CQUAL || did_i == OPTION_OQ_Z);
+           (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == OPTION_OQ_Z);
 }
 
 // ZIP: calculate the channel_i for each score on the line based on its environment (SEQ)
@@ -159,7 +159,7 @@ COMPRESS (codec_pacb_compress)
 {
     START_TIMER;
 
-    __atomic_add_fetch (&z_file->pacb_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
+    __atomic_add_fetch (&z_file->pacb_lines, vb->lines.len, __ATOMIC_RELAXED);
 
     uint8_t max_np = get_max_np();
     uint8_t n_channels = max_np * NUM_Ks;

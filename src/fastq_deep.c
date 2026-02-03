@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fastq_deep.c
-//   Copyright (C) 2023-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2023-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -490,7 +490,7 @@ static bool fastq_seg_deep_is_dup (VBlockFASTQP vb,
                  LN_NAME, z_dt_name(), qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), 
                  e ->vb_i, e ->line_i, DEEPHASHf(e ->hash));
         if (e2) iprintf (" another=[MAIN/%u/%u %016"PRIx64",%08x,%08x]", e2->vb_i, e2->line_i, DEEPHASHf(e2->hash));
-        iprint0("\n");
+        iprint_newline();
     }
 
     return e->dup;
@@ -693,6 +693,7 @@ void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), Conte
     }
 }
 
+// called for lines in which QUAL is deeped 
 void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, ContextP qual_ctx, uint32_t qual_len)
 {
     uint32_t trim_len = qual_len - dl->sam_seq_len;

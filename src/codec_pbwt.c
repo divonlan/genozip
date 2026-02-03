@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_pbwt.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -36,7 +36,7 @@ typedef struct {
     uint32_t count     : 24;   // number of consecutive runs in PbwtState->runs with fg_allele 
 } PbwtFgRunCount;
 
-#define htputc(c) fprintf (info_stream, IS_NON_WS_PRINTABLE(c) ? "%c" : "\\x%02x", (c))
+#define htputc(c) fprintf (info_stream, IS_NON_WS(c) ? "%c" : "\\x%02x", (c))
 
 void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows)
 {
@@ -51,7 +51,7 @@ void codec_pbwt_display_ht_matrix (VBlockP vb, uint32_t max_rows)
     for (uint32_t r=0; r < max_rows; r++) {
         for (uint32_t c=0; c < cols; c++) 
             iputc (ht[r * cols + c]);
-        iprint0 ("\n");
+        iprint_newline();
     }
 } 
 
@@ -75,13 +75,13 @@ static void show_runs (const PbwtState *state)
 
         if (fg) rc.count--;
     }
-    iprint0 ("\n");
+    iprint_newline();
 }
 
 #define SHOW(msg, cmd) ({ \
     fprintf (info_stream, msg " %-2u: ", line_i); \
     for (uint32_t i=0; i < ht_ctx->ht_per_line; i++) cmd; \
-    iprint0 ("\n"); }) // flush
+    iprint_newline(); }) // flush
 
 #define show_line    if (flag.show_alleles) SHOW ("LINE", (htputc (*B(Allele, ht_ctx->local, line_i * ht_ctx->ht_per_line + i))))
 #define show_perm(s) if (flag.show_alleles) SHOW ("PERM", (fprintf (info_stream, "%d ", (s)->perm[i].index)));       
@@ -438,7 +438,7 @@ CODEC_RECONSTRUCT (codec_pbwt_reconstruct)
             break;
 
         case '&': { // big allele beyond NUM_SMALL_ALLELES (since 15.0.69)
-            int64_t allele = reconstruct_from_local_int (vb, CTX(FORMAT_GT_HT_BIG), 0, false) + NUM_SMALL_ALLELES;
+            int64_t allele = reconstruct_from_local_int (vb, CTX(FORMAT_GT_HT_BIG), 0, RECON_OFF) + NUM_SMALL_ALLELES;
             RECONSTRUCT_INT (allele);
             break;
         }

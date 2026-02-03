@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   oq.c
-//   Copyright (C) 2024-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2024-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -65,7 +65,7 @@ COMPRESS (codec_oq_compress)
 
         for (uint32_t i=0; i < qual_len; i++) {
             #ifdef DEBUG // note: codecs that are destructive to QUAL data (DOMQ, NORMQ...) must set QUAL context to local_dep >= DEP_L1
-            ASSERT (qual[i] >= 33 && qual[i] <= 126, "%s/%u: Invalid QUAL[%u]=%d", VB_NAME, line_i, i, qual[i]);
+            ASSERT (IS_QUAL_SCORE(qual[i]), "%s/%u: Invalid QUAL[%u]=%d", VB_NAME, line_i, i, qual[i]);
             #endif
             count_q[(int)qual[i] - 33]++; // BAM note: qual in txt_data has been already converted to SAM values in bam_rewrite_qual
         }

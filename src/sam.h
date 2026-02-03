@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -91,6 +91,8 @@
 #pragma GENDICT SAM_BUDDY=DTYPE_FIELD=BUDDY       // must be called BUDDY, expected by sam_reconstruct_from_buddy 
 #pragma GENDICT SAM_TAXID=DTYPE_FIELD=TAXID
 #pragma GENDICT SAM_DEBUG_LINES=DTYPE_FIELD=DBGLINES  // used by --debug-lines
+
+#pragma GENDICT SAM_BADQUAL=DTYPE_FIELD=BADQUAL 
 
 // contexts that exist in FASTQ and not SAM - we put them here to reserve the Did so its not 
 // occupied by another SAM contexts causing dictionaries to become mingled in Deep
@@ -660,6 +662,7 @@
 #pragma GENDICT OPTION_XX_i=DTYPE_2=XX:i
 #pragma GENDICT OPTION_XY_i=DTYPE_2=XY:i
 #pragma GENDICT OPTION_YY_i=DTYPE_2=YY:i
+#pragma GENDICT OPTION_XD_B_i=DTYPE_2=XD:B:i
 
 // NanoSeq: https://github.com/cancerit/NanoSeq
 #pragma GENDICT OPTION_rb_Z=DTYPE_2=rb:Z     // read barcode
@@ -687,7 +690,6 @@ extern rom sag_type_name (SagType sagt);
 // ZIP Stuff
 COMPRESSOR_CALLBACK(sam_zip_seq); // used by longr codec
 COMPRESSOR_CALLBACK(sam_zip_qual);
-COMPRESSOR_CALLBACK(sam_zip_cqual);
 COMPRESSOR_CALLBACK(sam_zip_OQ);
 COMPRESSOR_CALLBACK(sam_zip_TQ);
 COMPRESSOR_CALLBACK(sam_zip_QX);
@@ -748,6 +750,7 @@ extern void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, ch
 extern int32_t sam_zip_get_np (VBlockP vb, LineIType line_i);
 extern void sam_zip_compress_sec_gencomp (void);
 extern void sam_compress_solo_huffman_sections (void);
+extern void sam_xcons_split_qual_line (VBlockP vb_, BufferP ql_buf);
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -773,6 +776,7 @@ extern void seq_filter_initialize (rom filename);
 extern rom sam_piz_get_textual_seq (VBlockP vb);
 extern bool sam_is_last_flags_rev_comp (VBlockP vb);
 extern void sam_piz_after_vb_header (VBlockP vb);
+extern void sam_xcons_reconstruct_QUAL (VBlockP vb, ContextP ctx, uint32_t qual_len, bool reconstruct);
 
 // PIZ writer stuff
 extern void gencomp_piz_initialize_vb_info (void); // used for writing files starting 15.0.64 
@@ -866,7 +870,7 @@ SPECIAL (SAM, 57, AGENT_RX,              agilent_special_AGENT_RX);             
 SPECIAL (SAM, 58, AGENT_QX,              agilent_special_AGENT_QX);              // introduced 15.0.23
 SPECIAL (SAM, 59, qname_rng2seq_len,     special_qname_rng2seq_len);             // introduced 15.0.26
 SPECIAL (SAM, 60, DEMUX_BY_XX_0,         sam_piz_special_DEMUX_BY_XX_0);         // introduced 15.0.27
-SPECIAL (SAM, 61, DEMUX_BY_AS,           sam_piz_special_DEMUX_BY_AS);           // introduced 15.0.27
+SPECIAL (SAM, 61, xcons_XO,              sam_piz_special_xcons_XO);              // note: 15.0.27 to 15.0.75 it was called DEMUX_BY_AS
 SPECIAL (SAM, 62, PLUS,                  piz_special_PLUS);                      // introduced 15.0.27
 SPECIAL (SAM, 63, ULTIMA_tp,             sam_piz_special_ULTIMA_tp);             // introduced 15.0.28
 SPECIAL (SAM, 64, ULTIMA_mi,             sam_piz_special_ULTIMA_MI);             // introduced 15.0.28
@@ -884,11 +888,12 @@ SPECIAL (SAM, 75, ML_REPEATS,            sam_piz_special_ML_REPEATS);           
 SPECIAL (SAM, 76, TMAP_XT,               sam_piz_special_TMAP_XT);               // introduced 15.0.68
 SPECIAL (SAM, 77, DEMUX_by_DUPLICATE,    sam_piz_special_DEMUX_by_DUPLICATE);    // introduced 15.0.69
 SPECIAL (SAM, 78, BX,                    sam_piz_special_BX);                    // introduced 15.0.74
+SPECIAL (SAM, 79, s1,                    sam_piz_special_s1);                    // introduced 15.0.76
+SPECIAL (SAM, 80, xcons_XD,              sam_piz_special_xcons_XD);              // introduced 15.0.76
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \
     { dt, _SAM_QUAL,        sam_zip_qual     }, \
-    { dt, _SAM_CQUAL,       sam_zip_cqual    }, \
     { dt, _OPTION_U2_Z,     sam_zip_U2       }, \
     { dt, _OPTION_OQ_Z,     sam_zip_OQ       }, \
     { dt, _OPTION_TQ_Z,     sam_zip_TQ       }, \

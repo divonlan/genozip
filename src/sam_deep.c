@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   deep_sam.c
-//   Copyright (C) 2023-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2023-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -145,7 +145,7 @@ void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAMP dl, QType q, STRp(q
 {
     // note: we must drop consensus reads, because Deep has an assumption, used to prove uniqueness by hash,
     // that there are no BAM alignments except those in the FASTQ files provided
-    if (!dl->FLAG.secondary && !dl->FLAG.supplementary && !segconf.flav_prop[q].is_consensus) {
+    if (!dl->FLAG.secondary && !dl->FLAG.supplementary) {
         dl->deep_hash.qname = deep_qname_hash (VB, q, STRa(qname), segconf.deep_paired_qname ? dl->FLAG.is_last : unknown, NULL);
         dl->is_deepable = true; // note: we haven't tested SEQ yet, so this might still change
 
@@ -153,9 +153,7 @@ void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAMP dl, QType q, STRp(q
     }
 
     else
-        vb->deep_stats[segconf.flav_prop[q].is_consensus ? RSN_CONSENSUS 
-                     : dl->FLAG.secondary                ? RSN_SECONDARY 
-                     :                                     RSN_SUPPLEMENTARY]++; // counting non-deepability reasons
+        vb->deep_stats[dl->FLAG.secondary ? RSN_SECONDARY : RSN_SUPPLEMENTARY]++; // counting non-deepability reasons
 }
 
 // ZIP compute thread while segging SEQ: set hash of forward SEQ (i.e. as it would appear in the FASTQ file) 
@@ -189,7 +187,7 @@ void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual))
     if (flag.show_deep == SHOW_DEEP_ALL || 
         (flag.show_deep == SHOW_DEEP_ONE_HASH && deephash_issame (dl->deep_hash, flag.debug_deep_hash)))
         iprintf ("\n%s Recording SAM alignment: deep_hash=%016"PRIx64",%08x,%08x\nQNAME=\"%.*s\"\nSEQ=\"%.*s\"\nQUAL=\"%.*s\"\n",
-                 LN_NAME, DEEPHASHf(dl->deep_hash), dl->QNAME_len, dl_qname(dl), dl->SEQ.len, vb->textual_seq_str, STRfw(dl->QUAL));
+                 LN_NAME, DEEPHASHf(dl->deep_hash), STRfQNAME, dl->SEQ.len, vb->textual_seq_str, STRfw(dl->QUAL));
 }
 
 // deep and bamass
@@ -458,7 +456,7 @@ static uint32_t sam_piz_deep_compress (VBlockSAMP vb, uint8_t *next, STRp(data),
                                  huffman_get_theoretical_max_comp_len (SAM_QUAL, data_len);
     
     bool len_is_1_byte = (data_len < (is_seq ? 1024 : 512)); // just a guess for now
-    uint8_t *guess_addr = next + (len_is_1_byte ? 1 : 5);   // we don't know comp_len yet, so just a guess
+    uint8_t *guess_addr = next + (len_is_1_byte ? 1 : 5);    // we don't know comp_len yet, so just a guess
     
     if (!is_seq)
         huffman_compress (VB, SAM_QUAL, STRa(data), guess_addr, &comp_len);
@@ -585,48 +583,36 @@ static void sam_piz_deep_add_qual (VBlockSAMP vb, STRp(qual))
     COPY_TIMER (sam_piz_deep_add_qual);
 }
 
-
-// For SAM: called for top-level SAM container if compressed with --deep (defined as con_item_cb in data_types.h)
-// for BAM: called from SEQ and QUAL translators (before translation) 
-CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
+// For SAM: called from sam_piz_con_item_cb
+// for BAM: called from sam_piz_sam2bam_SEQ (before translation) 
+void sam_piz_deep_SEQ_cb (VBlockSAMP vb, STRp(recon))
 {
-    VBlockSAMP vb = (VBlockSAMP)vb_;
+    // backcomp note: these must be precisely the same deepability conditions as in ZIP
+    if (flag.deep_sam_only                               || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
+        last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
+        IS_ASTERISK(recon)                               || // Missing SEQ
+        (!VER2(15,69) && str_is_monochar (STRa(recon))))    // mono-char SEQ is excluded in files generated up to 15.0.68
+        
+        vb->line_not_deepable = true;
     
-    START_TIMER;
+    else {
+        // note: we do QNAME during the SQBITMAP callback, because we need last_flags to be set 
+        // (in SAM QNAME reconstructs before flags). On the other hand, SQBITMAP and QUAL must be 
+        // handled right after reconstruction, because in BAM, immediately after they get converted to binary format.
+        sam_piz_alloc_deep_ents (vb, 4 KB + 8 * recon_len + (1 + vb->binary_cigar.len32) * 6/*6=theo. max. of nico op(1)+N(5)*/); // more than enough for compresssed QNAME, SEQ and QUAL
 
-    switch (con_item->dict_id.num) {
-        case _SAM_SQBITMAP:
-            // backcomp note: these must be precisely the same deepability conditions as in ZIP
-            if (flag.deep_sam_only                               || // Deep file (otherwise this callback will not be set), but SAM/BAM-only reconstruction
-                last_flags.secondary || last_flags.supplementary || // SECONDARY or SUPPLEMENTARY alignment
-                IS_ASTERISK(recon)                               || // Missing SEQ
-                (z_file->flav_prop[vb->comp_i][QNAME2].is_consensus && ctx_encountered_in_line (VB, SAM_QNAME2)) || // consensus alignment 
-                (!VER2(15,69) && str_is_monochar (STRa(recon))))    // mono-char SEQ is excluded in files generated up to 15.0.68
-                
-                vb->line_not_deepable = true;
-            
-            else {
-                // note: we do QNAME during the SQBITMAP callback, because we need last_flags to be set 
-                // (in SAM QNAME reconstructs before flags). On the other hand, SQBITMAP and QUAL must be 
-                // handled right after reconstruction, because in BAM, immediately after they get converted to binary format.
-                sam_piz_alloc_deep_ents (vb, 4 KB + 8 * recon_len + (1 + vb->binary_cigar.len32) * 6/*6=theo. max. of nico op(1)+N(5)*/); // more than enough for compresssed QNAME, SEQ and QUAL
-
-                sam_piz_deep_add_qname (vb);
-                if (!flag.header_only_fast) sam_piz_deep_add_seq (vb, STRa(recon));
-            }
-            break;
-    
-        case _SAM_QUAL:
-        case _SAM_QUALSA:
-            if (!vb->line_not_deepable && !vb->qual_missing && !segconf.deep_no_qual &&
-                !flag.seq_only && !flag.header_only_fast) // conditions that may only appear in genocat --fastq of a Deep file
-                sam_piz_deep_add_qual (vb, STRa(recon)); 
-            break;
-
-        default: break;
+        sam_piz_deep_add_qname (vb);
+        if (!flag.header_only_fast) sam_piz_deep_add_seq (vb, STRa(recon));
     }
+}
 
-    COPY_TIMER (sam_piz_con_item_cb);
+// For SAM: called from sam_piz_con_item_cb
+// for BAM: called from sam_piz_sam2bam_QUAL (before translation) 
+void sam_piz_deep_QUAL_cb (VBlockSAMP vb, STRp(recon))
+{
+    if (!vb->line_not_deepable && !vb->qual_missing && !segconf.deep_no_qual &&
+        !flag.seq_only && !flag.header_only_fast) // conditions that may only appear in genocat --fastq of a Deep file
+        sam_piz_deep_add_qual (vb, STRa(recon)); 
 }
 
 //-----------------------------------------------------------------------------

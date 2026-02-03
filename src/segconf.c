@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   segconf.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -664,7 +664,6 @@ rom RG_method_name (RGMethod method)
 QualHistType did_i_to_qht (Did did_i)
 {
     if (                                did_i == SAM_QUAL   ) return QHT_QUAL;
-    if ((TXT_DT(SAM) || TXT_DT(BAM)) && did_i == SAM_CQUAL  ) return QHT_CONSENSUS;
     if ((TXT_DT(SAM) || TXT_DT(BAM)) && did_i == OPTION_OQ_Z) return QHT_OQ;    
 
     return -1;

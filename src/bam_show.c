@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bam.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -75,7 +75,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     iprintf ("l_seq=%u ", l_seq);    
     iprintf ("rnext=%d ", NEXT_UINT32);
     iprintf ("pnext=%u ", 1+NEXT_UINT32);
-    iprintf ("tlen=%u ", NEXT_UINT32);
+    iprintf ("tlen=%d ", NEXT_UINT32);
 
     iprintf ("qname=\"%s\" cigar=\"", str_to_printable_(next_field, MIN_(l_read_name-1,512)).s); // restrict to 512 in case l_read_name is corrupted
     next_field += l_read_name; // note: l_read_name includes \0
@@ -96,7 +96,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
     for (int i=0; i < n_auxs; i++)
         bam_show_one_aux (auxs[i], aux_lens[i]);
 
-    iprint0 ("\n");
+    iprint_newline();
 
     return after;
 }

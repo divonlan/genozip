@@ -2,7 +2,7 @@
 
 # ------------------------------------------------------------------
 #   uninstall.sh
-#   Copyright (C) 2020-2025 Genozip Limited where applies
+#   Copyright (C) 2020-2026 Genozip Limited where applies
 #   Please see terms and conditions in the file LICENSE.txt
 #
 #   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited

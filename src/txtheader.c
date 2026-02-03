@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtheader.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -384,7 +384,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     txt_file->txt_data_so_far_single_0 = sum_fragment_len;
     txt_file->src_codec     = header.src_codec;
     
-    if (VER(15))
+    if (VER(15)) 
         for (QType q=0; q < NUM_QTYPES; q++)
             z_file->flav_prop[evb->comp_i][q] = header.flav_prop[q]; // storing in z_file rather than segconf, as VBs of several components may be reconstructing in parallel
 

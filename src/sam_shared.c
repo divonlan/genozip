@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_shared.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -36,6 +36,7 @@ void sam_reset_line (VBlockP vb_)
 
     ASSERT (VB_DT(SAM) || VB_DT(BAM), "VB has wrong data type: %s", dt_name (vb->data_type));
     
+    vb->aux_con = NULL; //xxx
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
     vb->textual_seq.len = 0;
     vb->meth_call.len32 = 0;
@@ -47,6 +48,13 @@ void sam_reset_line (VBlockP vb_)
     memset (&vb->first_sam_vb_zero_per_line, 0, (rom)&vb->after_sam_vb_zero_per_line - (rom)&vb->first_sam_vb_zero_per_line);
 
     if (IS_PIZ) {
+        // store values of previous line for select contexts
+        CTX(SAM_FLAG) ->prev_flags = last_flags;
+        CTX(SAM_RNAME)->prev_wi    = CTX(SAM_RNAME)->last_wi;
+        CTX(SAM_RNEXT)->prev_wi    = CTX(SAM_RNEXT)->last_wi;
+        CTX(SAM_PNEXT)->prev_pos   = CTX(SAM_PNEXT)->last_value.i;
+        CTX(SAM_POS)  ->prev_pos   = CTX(SAM_POS)  ->last_value.i;
+
         memset (&vb->first_sam_piz_vb_ff_per_line, 0xff, (rom)&vb->after_sam_vb_ff_per_line - (rom)&vb->first_sam_piz_vb_ff_per_line);
 
         vb->chrom_node_index = WORD_INDEX_NONE;

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fast.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -37,6 +37,8 @@ unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 uint64_t global_num_consumed = 0; // number of consumed deep/bamass ents. note: not in z_file because bamass can be used by several z_files.
 
 #define DT_NAME (FAF ? "FASTA" : "FASTQ")
+
+extern void bad_qual_str (VBlockP vb, STRp(qual));
 
 // if the two string differ by exactly one character - '1' vs '2' - return PAIR_R1 or PAIR_R2 (indicating the identify of fn1)  
 static PairType fastq_is_pair_strings (STRp(fn1), STRp(fn2))
@@ -771,7 +773,7 @@ void fastq_zip_after_segconf (VBlockP vb)
 void fastq_seg_finalize (VBlockP vb)
 {
     // assign the QUAL codec
-    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, segconf.deep_has_trimmed, false, NULL);
+    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false, NULL);
     
     if (segconf.has_agent_trimmer) 
         codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);
@@ -1059,7 +1061,10 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
     ASSSEG (*qual_len == *seq_len, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
             *seq_len, *qual_len, STRf(*seq), STRf(*qual));
 
-    ASSSEG (str_is_in_range (STRa(*qual), 33, 126), "Invalid QUAL - it contains non-Phred characters: \"%.*s\"", STRf(*qual));
+    if (!str_is_in_range (STRa(*qual), 33, 126)) {
+        bad_qual_str (VB, STRa(*qual));
+        ABOSEG ("Invalid QUAL in QNAME=\"%.*s\"\nQUAL=\"%.*s\" ('■' marks an invalid score)", STRf(*qname), STRfb(vb->scratch));
+    }
 
 done:
     COPY_TIMER (fastq_seg_get_lines);

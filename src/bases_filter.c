@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   bases_filter.c
-//   Copyright (C) 2021-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2021-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -43,7 +43,7 @@ void iupac_show (void)
         iprintf ("bases=%d: ", flag.bases);
         for (unsigned i=0; i < 256; i++)
             if (iupac_ascii_mask[i]) iprintf ("%c", i);
-        iprint0 ("\n");
+        iprint_newline();
     }
     else
         iprint0 ("bases=false\n");

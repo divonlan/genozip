@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_sv.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -422,7 +422,7 @@ fallback:
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_HOMSEQ)
 {    
     decl_acgt_decode;
-    uint32_t homseq_len = reconstruct_from_local_int (vb, ctx, 0, false);
+    uint32_t homseq_len = reconstruct_from_local_int (vb, ctx, 0, RECON_OFF);
     char method = snip[0];
 
     // method 1: with reference

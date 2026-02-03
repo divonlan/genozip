@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_sa.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -422,7 +422,8 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
         int64_t my_mapq = CTX(SAM_MAPQ)->last_value.i;
         
         // note: a non existing NM:i is taken as 0
-        int64_t my_nm   = sam_piz_line_has_aux_field (vb, _OPTION_NM_i) ? reconstruct_peek (VB, CTX(OPTION_NM_i), 0, 0).i : 0;
+        //xxx int64_t my_nm   = sam_piz_line_has_aux_field (vb, _OPTION_NM_i) ? reconstruct_peek (VB, CTX(OPTION_NM_i), 0, 0).i : 0;
+        int64_t my_nm = sam_piz_peek_OPTION (vb, CTX(OPTION_NM_i), 0, 0, 0).i;
         
         char my_strand  = last_flags.rev_comp ? '-' : '+';
 

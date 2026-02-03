@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   huffman.c
-//   Copyright (C) 2023-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2023-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -988,6 +988,80 @@ uint32_t nico_uncompress_textual_cigar (Did did_i, bytes comp, BufferP textual_c
 
     return huffman_uncompress_comp_len;
 }
+
+// To do: bug 1209
+// //----------------------------------------------------------------------------
+// // smx - multi-channel huffman for in-memory compression of MGI QUAL for Deep
+// // chewing during seg, compression during piz
+// //----------------------------------------------------------------------------
+
+// // any thread - but only one designated thread as there is no thread-saftey 
+// void smx_chew_one_qual (STRp(qual), rom seq, bool revcomp)
+// {
+//     HuffmanChewerP chewer = B1ST (HuffmanChewer, ZCTX(SAM_QUAL)->huffman);
+
+//     if (chewer->num_chewed >= MAX_CHEWED) return;
+
+//     uint32_t sam_base = IS_BAM_ZIP ? 33 : 0;
+
+//     if (!revcomp)
+//         for (uint32_t i=0; i < qual_len; i++) 
+//             chewer[nuke_encode(seq[i])].freq_table[qual[i] + sam_base] += CHEW_UNIT;
+//     else
+//         for (uint32_t i=0; i < qual_len; i++) 
+//             chewer[nuke_encode_comp(seq[i])].freq_table[qual[i] + sam_base] += CHEW_UNIT;
+
+//     chewer[0].num_chewed++; // num_chewed is counted on the [0] 
+// }
+
+// // any thread: compress one cigar with big numbers inline
+// uint32_t smx_compress_qual (VBlockP vb, STRp(qual), rom seq, 
+//                             bool revcomp, // if seq/qual are revcomped, mux by complement SEQ 
+//                             STR8c(comp)) 
+// {
+//     Did did_i = SAM_QUAL;
+//     decl_zctx (did_i);
+//     ASSHUFFEXISTS;
+
+//     ARRAY (HuffmanCodes, channels, zctx->huffman);
+
+//     Bits bits;
+//     uint64_t next_bit;
+//     int shift = huffman_compress_init_bits (STRa(comp), &bits, &next_bit);
+
+//     for (uint32_t i=0; i < qual_len; i++) {
+//         HuffmanCodesP h = &channels[revcomp ? nuke_encode_comp(seq[i]) : nuke_encode(seq[i])];
+//         huffman_compress_add_one (qual[i], comp_len); // xxx need to convert qual[i] to SAM?
+//     }
+
+//     huffman_compress_finalize_bits (zctx, &bits, next_bit, shift, qSTRa(comp));
+
+//     if (flag.debug_huffman_dict_id.num && flag.debug_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num)
+//         iprintf ("QUAL (smx): qual_len=%u comp_len=%u ratio=%.1f\n", 
+//                  qual_len, comp_len, (double)qual_len / (double)comp_len);
+
+//     return comp_len;
+// }
+
+// void smx_uncompress_qual (VBlockP vb, bytes comp, STRp(seq), 
+//                           bool revcomp, // if seq/qual are revcomped, mux by complement SEQ 
+//                           BufferP qual_buf, rom buf_name)
+// {
+//     Did did_i = SAM_QUAL;
+//     decl_zctx(did_i);
+//     ASSHUFFEXISTS;
+
+//     ARRAY (HuffmanCodes, channels, zctx->huffman);
+
+//     huffman_uncompress_init_bits;
+
+//     ARRAY_alloc (char, qual, seq_len, false, *qual_buf,vb, buf_name);
+
+//     for (uint32_t i=0; i < seq_len; i++) {
+//         HuffmanCodesP h = &channels[revcomp ? nuke_encode_comp(seq[i]) : nuke_encode(seq[i])];
+//         qual[i] = huffman_uncompress_get_c;
+//     }
+// }
 
 //--------------------------------------------------
 // Unit test

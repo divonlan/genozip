@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   seg.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -239,6 +239,40 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 // ------------------
 // Seg utilities
 // ------------------
+
+#define SNIPi1(op,n)            \
+    char snip[24];              \
+    snip[0] = (op);             \
+    unsigned snip_len = 1 + str_int ((n), &snip[1]);
+
+#define SNIPi2(op0,op1,n)       \
+    char snip[24];              \
+    snip[0] = (op0);            \
+    snip[1] = (op1);            \
+    unsigned snip_len = 2 + str_int ((n), &snip[2]);
+
+#define SNIPi2_2(op0,op1,n1,n2) \
+    char snip[48];              \
+    snip[0] = (op0);            \
+    snip[1] = (op1);            \
+    unsigned snip_len = 2 + str_int ((n1), &snip[2]); \
+    snip[snip_len++] = ',';     \
+    snip_len += str_int ((n2), &snip[snip_len])
+
+#define SNIPi3(op0,op1,op2,n)   \
+    char snip[24];              \
+    snip[0] = (op0);            \
+    snip[1] = (op1);            \
+    snip[2] = (op2);            \
+    unsigned snip_len = 3 + str_int ((n), &snip[3]);
+
+#define SNIPi4(op0,op1,op2,op3, n)  \
+    char snip[24];              \
+    snip[0] = (op0);            \
+    snip[1] = (op1);            \
+    snip[2] = (op2);            \
+    snip[3] = (op3);            \
+    unsigned snip_len = 4 + str_int ((n), &snip[4]);
 
 // TAB separator between fields
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_sag_zip.c
-//   Copyright (C) 2022-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2022-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -374,7 +374,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), boo
             if (has_hards && has_softs)
                 goto done; // we don't support adding an alignment with both soft and hard clips to an SA-based sag
 
-            if (segconf.SA_CIGAR_abbreviated == unknown)
+            if (has(SA_Z) && segconf.SA_CIGAR_abbreviated == unknown)
                 sam_seg_MAIN_determine_abbreviated (vb, is_bam); // SA_CIGAR_abbreviated was not seg in segconf, we set it now
 
             if (has(SA_Z) && sam_line_is_depn(dl)) {
@@ -726,7 +726,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
             vb->depn_far_count++; // for stats
 
             if (flag.show_depn || flag.show_buddy)
-                 iprintf ("%s: %.*s grp=%u aln=%s qname_hash=%08x\n", LN_NAME, dl->QNAME_len, dl_qname(dl), ZGRP_I(g), sam_show_sag_one_SA_aln (VB, vb->sag, vb->sa_aln).s, qname_hash);                
+                 iprintf ("%s: %.*s grp=%u aln=%s qname_hash=%08x\n", LN_NAME, STRfQNAME, ZGRP_I(g), sam_show_sag_one_SA_aln (VB, vb->sag, vb->sa_aln).s, qname_hash);                
                         
             break;
         }
@@ -762,20 +762,20 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
     }
 
     if (!g) {
-        if (flag.show_depn) iprintf ("vb=%u FAIL:NO_QNAME_MATCH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, dl->QNAME_len, dl_qname(dl), qname_hash, hi, STRf(cc), cp);
+        if (flag.show_depn) iprintf ("vb=%u FAIL:NO_QNAME_MATCH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfQNAME, qname_hash, hi, STRf(cc), cp);
         return; // no PRIM with this qname
     }
 
     // if this is BAM, and we have an odd number of bases, the final seq value in the BAM file of the "missing" base
     // we can't encode last "base" other than 0 (see also bug 531)
     if (is_bam && (seq_len&1) && (*B8 (vb->txt_data, dl->SEQ.index + seq_len/2) & 0xf)) {
-        if (flag.show_depn) iprintf ("vb=%u FAIL:ODD_BASE_NON0 QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, dl->QNAME_len, dl_qname(dl), qname_hash, hi, STRf(cc), cp);
+        if (flag.show_depn) iprintf ("vb=%u FAIL:ODD_BASE_NON0 QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfQNAME, qname_hash, hi, STRf(cc), cp);
         return;
     }
     
     int32_t nh;
     if ((IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) && !sam_seg_get_aux_int (vb, vb->idx_NH_i, &nh, is_bam, 1, 0x7fffffff, SOFT_FAIL)) {
-        if (flag.show_depn) iprintf ("vb=%u FAIL:NO_VALID_NH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, dl->QNAME_len, dl_qname(dl), qname_hash, hi, STRf(cc), cp);
+        if (flag.show_depn) iprintf ("vb=%u FAIL:NO_VALID_NH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfQNAME, qname_hash, hi, STRf(cc), cp);
         return; // missing or invalid NH:i in depn line
     }
 
@@ -801,10 +801,10 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
                 vb->solo_aln = B(SoloAln, z_file->sag_alns, ZGRP_I(g));
 
             if (flag.show_depn || flag.show_buddy) {
-                iprintf ("%s: %.*s grp=%u qname_hash=%08x", LN_NAME, dl->QNAME_len, dl_qname(dl), ZGRP_I(g), qname_hash);
+                iprintf ("%s: %.*s grp=%u qname_hash=%08x", LN_NAME, STRfQNAME, ZGRP_I(g), qname_hash);
                 if (has(HI_i)) iprintf (" HI=%d\n", hi);
                 else if (has(CC_Z) && has(CP_i)) iprintf (" CC=\"%.*s\" CP=%d\n", STRf(cc), cp);
-                else iprint0 ("\n");
+                else iprint_newline();
             }
             return; // done
         }
@@ -812,7 +812,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
     } while ((g = sam_sa_get_next_group_by_qname_hash (vb, &grp_index_i)));
 
     if (flag.show_depn) iprintf ("vb=%u FAIL:ALN_MISMATCH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", 
-                                 vb->vblock_i, dl->QNAME_len, dl_qname(dl), qname_hash, hi, STRf(cc), cp);
+                                 vb->vblock_i, STRfQNAME, qname_hash, hi, STRf(cc), cp);
 }
 
 // Seg compute VB: called when segging PRIM/DEPN VBs

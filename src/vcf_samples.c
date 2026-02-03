@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_samples.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -334,7 +334,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_DOSAGExDP)
 
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
     ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s. snip=%s", 
-            channel_i, ctx->tag_name, str_snip_ex (snip-2, snip_len+2, true).s);
+            channel_i, ctx->tag_name, str_snip_ex (DT_NONE, snip-2, snip_len+2, true).s);
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 
@@ -1191,7 +1191,7 @@ void vcf_FORMAT_PL_after_vbs (Did did_i) // PL or LPL
     if (!zctx->nodes.len) return; // no FORMAT/PL in this file
 
     if (zctx->nodes.len > 1) {
-        dict_io_print (info_stream, STRb(zctx->dict), true, false, true, false);
+        dict_io_print (info_stream, zctx->dict_id, STRb(zctx->dict), true, false, true, false);
         ABORT ("Expecting %s to have exactly one word in its dict, but it has %"PRIu64, zctx->tag_name, zctx->nodes.len);
     }
 

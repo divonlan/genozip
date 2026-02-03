@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_sag_load.c
-//   Copyright (C) 2022-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2022-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -286,7 +286,7 @@ static inline void sam_load_groups_add_qual (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
     if (!huffman_exists (SAM_QUAL)) // note: non-atomic: if it says it exists, then it exists. If it says it doesn't, it might or might not exist.
         huffman_piz_backcomp_produce_qual (STRa(qual)); // also handles thread-safety
 
-    // case: precise: compress directly into z_file->sag_qual: huffman or arith
+    // case: precise: compress directly into z_file->sag_qual
     if (start) {
         comp_len = after - *next;
         huffman_compress (VB, SAM_QUAL, STRa(qual), *next, &comp_len);
@@ -441,7 +441,7 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
 
     // get the index of the tag in this alignment's AUX container. we're really interested if they exist or not.
     ContainerPeekItem idxs[NUM_SOLO_TAGS] = SOLO_CON_PEEK_ITEMS;
-    container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(idxs), idxs, false); // doesn't consume the container snip, because sam_load_groups_add_aux will consume it
+    container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(idxs), idxs, &vb->aux_con, true);
 
     STR0(prev); // pointer into txt_data of previous tag reconstructed        
 
@@ -591,7 +591,7 @@ static inline void sam_load_groups_add_aux (VBlockSAMP vb, Sag *g)
 {
     // get the index of the tag in this alignment's AUX container. we're really interested if they exist or not.
     ContainerPeekItem idxs[2] = { { _OPTION_AS_i, -1 }, { _OPTION_MC_Z, -1 } };
-    container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(idxs), idxs, true);
+    container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(idxs), idxs, &vb->aux_con, true);
 
     // set AS.last_value, unless AS:i is skipped entirely
     if (segconf.sag_has_AS          && // depn lines' AS:i was segged against prim 

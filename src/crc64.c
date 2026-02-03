@@ -40,7 +40,7 @@
 
 // Genozip comment:
 // This file was obtained from https://raw.githubusercontent.com/srned/baselib/refs/heads/master/crc64.c and modified for Genozip purposes. Modifications are:
-// Copyright (C) 2024-2025 Genozip Limited. Patent Pending. Please see terms and conditions in the file LICENSE.txt
+// Copyright (C) 2024-2026 Genozip Limited. Patent Pending. Please see terms and conditions in the file LICENSE.txt
 
 #include "genozip.h"
 

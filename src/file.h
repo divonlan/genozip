@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   file.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -18,8 +18,8 @@ typedef rom FileMode;
 extern FileMode READ, WRITE, WRITEREAD;// this are pointers to static strings - so they can be compared eg "if (mode==READ)"
 
 //                             number of sam alignments that are non-deepable for each of these reasons                             | number of fastq reads that are deepable or non-deepable for each of these reasons
-typedef enum {                 RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_CONSENSUS, RSN_OVERFLOW, NDP_FQ_READS=16,           NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_BAD_N_QUAL, NDP_SAM_DUP, NDP_SAM_DUP_TRIM, NDP_NO_MATCH, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
-#define DEEP_STATS_NAMES_ZIP { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Consensus",   "Overflow",   [NDP_FQ_READS]="FQ_reads", "Deepable",   "Dpable_trim",     "No_ents",   "Bad_N_qual",   "SAM_dup",   "SAM_dup_trm",    "No_match"  }
+typedef enum {                 RSN_DEEPABLE, RSN_SECONDARY, RSN_SUPPLEMENTARY, RSN_NO_SEQ, RSN_OVERFLOW, NDP_FQ_READS=16,           NDP_DEEPABLE, NDP_DEEPABLE_TRIM, NDP_NO_ENTS, NDP_BAD_N_QUAL, NDP_SAM_DUP, NDP_SAM_DUP_TRIM, NDP_NO_MATCH, NUM_DEEP_STATS_ZIP } DeepStatsZip; 
+#define DEEP_STATS_NAMES_ZIP { "Deepable",   "Secondary",   "Supplementary",   "No_SEQ",   "Overflow",   [NDP_FQ_READS]="FQ_reads", "Deepable",   "Dpable_trim",     "No_ents",   "Bad_N_qual",   "SAM_dup",   "SAM_dup_trm",    "No_match"  }
 
 // bytes consumed by QNAME/SEQ/QUAL in z_file->deep_ents (SEQ_* in same order as PizZDeepSeqEncoding)                                                  | reasons why SEQ is stored explicitly in z_file->deep_ents and not vs the reference
 typedef enum {                 QNAME_BYTES, SEQ_PACKED_BYTES, SEQ_BY_REF_BYTES, SEQ_ARITH_BYTES, QUAL_MONOCHAR_BYTES, QUAL_BYTES,  EXPL_DEEPABLE,    EXPL_SEQ_AS_REF, EXPL_TOO_MANY_MISMATCHES, EXPL_SEQ_NONREF_NON_ACGT, EXPL_SEQ_END_OF_CONTIG, EXPL_SEQ_COPY_VERBATIM, EXPL_BISULFITE, NUM_DEEP_STATS_PIZ } DeepStatsPiz;
@@ -28,8 +28,8 @@ typedef enum {                 QNAME_BYTES, SEQ_PACKED_BYTES, SEQ_BY_REF_BYTES, 
 #define NUM_DEEP_STATS ((int)NUM_DEEP_STATS_ZIP > (int)NUM_DEEP_STATS_PIZ ? (int)NUM_DEEP_STATS_ZIP : (int)NUM_DEEP_STATS_PIZ)
 
 //                             stats regarding sam alignments                                                                               
-typedef enum {                 BA_TOTAL,     BA_USABLE, BA_UNMAPPED, BA_NO_SEQ, BA_NOT_PRIMARY, BA_NOT_IN_REF, BA_OVERFLOW, BA_AFTER } BamassStats; 
-#define BAMASS_STATS_NAMES   { "Alignments", "Usable",  "Unmapped",  "No_SEQ",  "Not_primary",  "Not_in_ref",  "Overflow",  ""       }     
+typedef enum {                 BA_TOTAL,     BA_USABLE, BA_UNMAPPED, BA_NO_SEQ, BA_NOT_PRIMARY, BA_NOT_IN_REF, BA_OVERFLOW, BA_CONSENSUS,    BA_AFTER } BamassStats; 
+#define BAMASS_STATS_NAMES   { "Alignments", "Usable",  "Unmapped",  "No_SEQ",  "Not_primary",  "Not_in_ref",  "Overflow",  "Consensus_seq", ""       }     
 
 #define LIBDEFLATE_MAX_LEVEL 12
 #define ZLIB_MAX_LEVEL 9
@@ -93,7 +93,7 @@ typedef struct File {
 
     // Used for READING GENOZIP files
     uint8_t genozip_version;           // major version of the genozip file being created / read
-    uint16_t genozip_minor_ver;
+    uint16_t genozip_minor_ver;        // since 15.0.28
             
     CompIType num_txt_files;           // PIZ Z_FILE: set from genozip header (ZIP: see num_txts_so_far)
     CompIType num_txts_so_far;         // ZIP Z_FILE: number of txt files compressed into this z_file - each becomes one or more components
@@ -229,17 +229,13 @@ typedef struct File {
     uint64_t sam_num_aligned;          // Z_FILE: ZIP: SAM/BAM: number of alignments successfully found by aligner. for stats 
     uint64_t sam_num_verbatim;         // Z_FILE: ZIP: SAM/BAM: number of alignments segged verbatim
     uint64_t sam_num_by_prim;          // Z_FILE: ZIP: SAM/BAM: number of alignments segged against prim / saggy
+    uint64_t sam_num_tlen_pred;        // Z_FILE: ZIP: SAM/BAM: number of alignments with TLEN successfully predicteds
     uint64_t fq_num_aligned;           // Z_FILE: ZIP: FASTQ: number of alignments successfully found by aligner. for stats 
     uint64_t fq_num_perfect_matches;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
     uint64_t fq_num_verbatim;          // Z_FILE: ZIP: FASTQ: number of lines segged verbatim
     uint64_t fq_num_monochar;          // Z_FILE: ZIP: FASTQ: number of lines segged monochar
     uint64_t vcf_num_samples_copied;   // Z_FILE: ZIP: VCF: number of samples copied
-    uint64_t domq_lines[MAX_NUM_COMPS];// Z_FILE: ZIP: number of lines per components of the various QUAL codecs (show in codec_qual_show_stats)
-    uint64_t divr_lines[MAX_NUM_COMPS];
-    uint64_t homp_lines[MAX_NUM_COMPS];
-    uint64_t pacb_lines[MAX_NUM_COMPS];
-    uint64_t longr_lines[MAX_NUM_COMPS];
-    uint64_t normq_lines[MAX_NUM_COMPS];
+    uint64_t domq_lines, divr_lines, homp_lines, pacb_lines, longr_lines, normq_lines;// Z_FILE: ZIP: number of lines QUAL codecs (show in codec_qual_show_stats)
 
     // per-component data 
     uint64_t comp_num_lines[MAX_NUM_COMPS];             // Z_FILE: PIZ/ZIP: number of lines in each component 

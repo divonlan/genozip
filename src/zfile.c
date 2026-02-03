@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zfile.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -53,7 +53,7 @@ static void zfile_show_b250_section (SectionHeaderUnionP header_p, ConstBufferP 
             default                 : iprintf ("%u ", word_index);
         }
     }
-    iprint0 ("\n");
+    iprint_newline();
 
     mutex_unlock (show_b250_mutex);
 }
@@ -657,7 +657,9 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 
     if (flag.show_reference) {
         if (flag.force)
-            iprintf ("%s", header->ref_filename);
+            iprintf ("%s\n", header->ref_filename);
+        else if (flag.md5)
+            iprintf ("%s\n", digest_display (header->ref_genome_digest).s);
         else
             iprintf ("%s was compressed using the reference file:\nName: %s\nMD5: %s\n",
                         z_name, header->ref_filename, digest_display (header->ref_genome_digest).s);

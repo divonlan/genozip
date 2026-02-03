@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seg.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -241,6 +241,7 @@ void sam_zip_after_compute (VBlockP vb_)
     z_file->sam_num_seq_by_aln      += vb->num_seq_by_aln;
     z_file->sam_num_verbatim        += vb->num_verbatim;
     z_file->sam_num_by_prim         += vb->num_vs_prim;
+    z_file->sam_num_tlen_pred       += vb->num_tlen_pred;
     z_file->secondary_count         += vb->secondary_count;
     z_file->supplementary_count     += vb->supplementary_count;
     z_file->mate_line_count         += vb->mate_line_count;
@@ -255,34 +256,36 @@ void sam_zip_after_compute (VBlockP vb_)
 // main thread: writing data-type specific fields to genozip header
 void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
-    header->sam.segconf_std_seq_len     = BGEN32(segconf.std_seq_len);   // v14 (up to 15.0.68 this was set to sam_seq_len which was the segconf-average seq len)
-    header->sam.segconf_seq_len_cm      = segconf.seq_len_to_cm;         // v14
-    header->sam.segconf_ms_type         = segconf.sam_ms_type;           // v14
-    header->sam.segconf_has_MD_or_NM    = segconf.has_MD_or_NM;          // v14
-    header->sam.segconf_bisulfite       = segconf.sam_bisulfite;         // v14
-    header->sam.segconf_is_paired       = segconf.is_paired;             // v14
-    header->sam.segconf_sag_type        = segconf.sag_type;              // v14
-    header->sam.segconf_sag_has_AS      = segconf.sag_has_AS;            // v14
-    header->sam.segconf_SA_HtoS         = segconf.SA_HtoS == yes;        // v14
+    header->sam.segconf_std_seq_len     = BGEN32(segconf.std_seq_len);      // v14 (up to 15.0.68 this was set to sam_seq_len which was the segconf-average seq len)
+    header->sam.segconf_seq_len_cm      = segconf.seq_len_to_cm;            // v14
+    header->sam.segconf_s1_to_cm_32     = segconf.s1_to_cm_32;              // 15.0.76
+    header->sam.segconf_ms_type         = segconf.sam_ms_type;              // v14
+    header->sam.segconf_has_MD_or_NM    = segconf.has_MD_or_NM;             // v14
+    header->sam.segconf_bisulfite       = segconf.sam_bisulfite;            // v14
+    header->sam.segconf_is_paired       = segconf.is_paired;                // v14
+    header->sam.segconf_sag_type        = segconf.sag_type;                 // v14
+    header->sam.segconf_sag_has_AS      = segconf.sag_has_AS;               // v14
+    header->sam.segconf_SA_HtoS         = segconf.SA_HtoS == yes;           // v14
     header->sam.segconf_SA_CIGAR_abb    = segconf.SA_CIGAR_abbreviated == yes; // 15.0.66
-    header->sam.segconf_is_sorted       = segconf.is_sorted;             // v14
-    header->sam.segconf_is_collated     = segconf.is_collated;           // v14
-    header->sam.segconf_pysam_qual      = segconf.pysam_qual;            // v14
-    header->sam.segconf_10xGen          = segconf.has_10xGen;            // v14
-    header->sam.segconf_seq_len_dict_id = segconf.seq_len_dict_id;       // v14
-    header->sam.segconf_MD_NM_by_un     = segconf.MD_NM_by_unconverted;  // v14
-    header->sam.segconf_predict_meth    = segconf.sam_predict_meth_call; // v14
-    header->sam.segconf_use_ins_ctxs    = segconf.use_insertion_ctxs;    // 15.0.30
-    header->sam.segconf_deep_qname1     = (segconf.deep_qtype == QNAME1);// v15
-    header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);// v15
-    header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;          // v15
-    header->sam.segconf_MAPQ_use_xq     = segconf.MAPQ_use_xq;           // 15.0.61
-    header->sam.segconf_has_MQ          = !!segconf.has[OPTION_MQ_i];    // 15.0.61
-    header->sam.segconf_SA_NM_by_X      = segconf.SA_NM_by_CIGAR_X;      // 15.0.66
-    header->sam.segconf_CIGAR_has_eqx   = segconf.CIGAR_has_eqx;         // 15.0.68
-    header->sam.segconf_is_ileaved      = segconf.is_interleaved;        // 15.0.69
+    header->sam.segconf_is_sorted       = segconf.is_sorted;                // v14
+    header->sam.segconf_is_collated     = segconf.is_collated;              // v14
+    header->sam.segconf_pysam_qual      = segconf.pysam_qual;               // v14
+    header->sam.segconf_10xGen          = segconf.has_10xGen;               // v14
+    header->sam.segconf_seq_len_dict_id = segconf.seq_len_dict_id;          // v14
+    header->sam.segconf_MD_NM_by_un     = segconf.MD_NM_by_unconverted;     // v14
+    header->sam.segconf_predict_meth    = segconf.sam_predict_meth_call;    // v14
+    header->sam.segconf_use_ins_ctxs    = segconf.use_insertion_ctxs;       // 15.0.30
+    header->sam.segconf_deep_qname1     = (segconf.deep_qtype == QNAME1);   // v15
+    header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);   // v15
+    header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;             // v15
+    header->sam.segconf_MAPQ_use_xq     = segconf.MAPQ_use_xq;              // 15.0.61
+    header->sam.segconf_has_MQ          = !!segconf.has[OPTION_MQ_i];       // 15.0.61
+    header->sam.segconf_SA_NM_by_X      = segconf.SA_NM_by_CIGAR_X;         // 15.0.66
+    header->sam.segconf_CIGAR_has_eqx   = segconf.CIGAR_has_eqx;            // 15.0.68
+    header->sam.segconf_is_ileaved      = segconf.is_interleaved;           // 15.0.69
+    header->sam.xcons_std_seq_len_M100  = (segconf.xcons_std_seq_len ? segconf.xcons_std_seq_len - 100 : 0);  // 15.0.76
     if (segconf.deep_N_fq_score && segconf.deep_N_sam_score)
-        header->sam.segconf_deep_N_fq_score = segconf.deep_N_fq_score;   // 15.0.39
+        header->sam.segconf_deep_N_fq_score = segconf.deep_N_fq_score;      // 15.0.39
     
     unsigned est_sam_factor_mult = round (MAX_(segconf.est_sam_factor, 1) * (double)SAM_FACTOR_MULT);
     if (est_sam_factor_mult > 255) {
@@ -377,7 +380,7 @@ void sam_seg_initialize (VBlockP vb_)
                    DID_EOL);
 
     // initialize these to LT_BLOB, the qual-type ones might be changed later to LT_CODEC (eg domq, longr)
-    ctx_set_ltype (VB, LT_BLOB, SAM_QUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq,
+    ctx_set_ltype (VB, LT_BLOB, SAM_QUAL, SAM_BADQUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq,
                    OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR, OPTION_CR_Z_X, OPTION_BX_Z,
                    OPTION_BI_Z, OPTION_BD_Z,
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);
@@ -386,8 +389,6 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_set_dyn_int (VB, SAM_BUDDY, OPTION_HI_i, OPTION_NM_i, OPTION_NH_i, OPTION_XM_i, OPTION_X1_i, OPTION_CP_i,
                      OPTION_AS_i, OPTION_XS_i, OPTION_ZS_i, OPTION_cm_i, OPTION_ms_i, OPTION_nM_i, OPTION_UQ_i,
                      T(segconf.has_TLEN_non_zero, SAM_TLEN), // note: we don't set if !has_TLEN_non_zero, bc values are stored in b250 and may require singletons
-                     T(segconf.sam_has_xcons, OPTION_YY_i),
-                     T(segconf.sam_has_xcons, OPTION_XO_i),
                      T(MP(BLASR), OPTION_XS_i), T(MP(BLASR), OPTION_XE_i), T(MP(BLASR), OPTION_XQ_i), T(MP(BLASR), OPTION_XL_i), T(MP(BLASR), OPTION_FI_i),
                      T(MP(NGMLR), OPTION_QS_i), T(MP(NGMLR), OPTION_QE_i), T(MP(NGMLR), OPTION_XR_i),
                      DID_EOL);
@@ -424,9 +425,8 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, 
                            SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, 
                            SAM_SEQINS_A, SAM_SEQINS_C, SAM_SEQINS_G, SAM_SEQINS_T, DID_EOL);
-    ctx_consolidate_stats (VB, SAM_QUAL, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, SAM_QUALSA, SAM_QUAL_PACBIO_DIFF,
-                           SAM_QUAL_FLANK, SAM_QUAL_FLANK_DOMQRUNS, SAM_QUAL_FLANK_QUALMPLX, SAM_QUAL_FLANK_DIVRQUAL, 
-                           SAM_CQUAL, SAM_CDOMQRUNS, SAM_CQUALMPLX, SAM_CDIVRQUAL, DID_EOL);
+    ctx_consolidate_stats (VB, SAM_QUAL, SAM_BADQUAL, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, SAM_QUALSA, SAM_QUAL_PACBIO_DIFF,
+                           SAM_QUAL_FLANK, SAM_QUAL_FLANK_DOMQRUNS, SAM_QUAL_FLANK_QUALMPLX, SAM_QUAL_FLANK_DIVRQUAL, SAM_CQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_OQ_Z, OPTION_OQ_DOMQRUNS, OPTION_OQ_QUALMPLX, OPTION_OQ_DIVRQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_TQ_Z, OPTION_TQ_DOMQRUNS, OPTION_TQ_QUALMPLX, OPTION_TQ_DIVRQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_2Y_Z, OPTION_2Y_DOMQRUNS, OPTION_2Y_QUALMPLX, OPTION_2Y_DIVRQUAL, DID_EOL);
@@ -467,12 +467,14 @@ void sam_seg_initialize (VBlockP vb_)
     else
         CTX(OPTION_t0_Z)->no_callback = true; // override Ultima's sam_zip_t0
     
-    if (segconf.has_10xGen)        sam_10xGen_seg_initialize (vb);
-    if (segconf.has_agent_trimmer) agilent_seg_initialize    (VB);
-    if (segconf.sam_has_abra2)     sam_abra2_seg_initialize  (vb);
-    if (MP(DRAGEN))                sam_dragen_seg_initialize (vb);
-    if (MP(STAR))                  sam_star_seg_initialize   (vb);
-    if (TECH(PACBIO))              sam_pacbio_seg_initialize (vb);
+    if (segconf.has_10xGen)        sam_10xGen_seg_initialize   (vb);
+    if (segconf.has_agent_trimmer) agilent_seg_initialize      (VB);
+    if (segconf.sam_has_abra2)     sam_abra2_seg_initialize    (vb);
+    if (MP(DRAGEN))                sam_dragen_seg_initialize   (vb);
+    if (MP(STAR))                  sam_star_seg_initialize     (vb);
+    if (TECH(PACBIO))              sam_pacbio_seg_initialize   (vb);
+    if (segconf.is_minimap2)       sam_minimap2_seg_initialize (vb);
+    if (segconf.sam_has_xcons)     sam_xcons_seg_initialize (vb);
 
     if (segconf.sam_has_BWA_XS_i) // XS:i is as defined some aligners
         seg_mux_init (vb, OPTION_XS_i, SAM_SPECIAL_BWA_XS, false, XS);
@@ -505,10 +507,6 @@ void sam_seg_initialize (VBlockP vb_)
         CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
         CTX(OPTION_ms_i)->flags.store = STORE_INT;  // since v14 - store QUAL_score for mate ms:i (in v13 it was stored in QUAL)
 
-    }
-    if (segconf.sam_has_xcons) {
-        seg_mux_init (vb, OPTION_YY_i, SAM_SPECIAL_DEMUX_BY_XX_0, false, YY);
-        seg_mux_init (vb, OPTION_XO_i, SAM_SPECIAL_DEMUX_BY_AS,   false, XO);
     }
 
     seg_mux_init (vb, SAM_FLAG,    SAM_SPECIAL_DEMUX_BY_BUDDY,     false, FLAG);
@@ -545,6 +543,7 @@ static void sam_seg_toplevel (VBlockP vb)
     uint64_t qname_dict_id = (IS_PRIM(vb) ? _SAM_QNAMESA : _SAM_QNAME);
     uint64_t qual_dict_id  = (IS_PRIM(vb) ? _SAM_QUALSA  : _SAM_QUAL );
 
+    // note: for SAM, we call sam_piz_deep_SEQ/QUAL_cb via an item callback, for BAM it is called from the SAM->BAM translators
     uint8_t deep_cb = flag.deep && (vb->comp_i != SAM_COMP_DEPN) ? CI1_ITEM_CB : 0; // note: DEPN alignments don't participate in Deep
 
     // top level snip - reconstruction as SAM
@@ -688,8 +687,12 @@ void sam_segconf_finalize (VBlockP vb_)
     segconf.est_sam_factor  = (double)segconf.est_segconf_sam_size / (double)Ltxt;
 
     segconf.seq_len_to_cm /= vb->lines.len32;
-    if (segconf.seq_len_to_cm > 255)
+    if (segconf.seq_len_to_cm > 255) // SectionHeaderGenozipHeader stores 8 bits
         segconf.seq_len_to_cm = 0;
+
+    segconf.s1_to_cm_32 = round ((double)segconf.s1_to_cm_32 / (double)vb->lines.len32);
+    if (segconf.s1_to_cm_32 > 65535) // SectionHeaderGenozipHeader stores 16 bits
+        segconf.s1_to_cm_32 = 0;
 
     // if unmapped test if this might is multiseq
     if (segconf.sam_is_unmapped && !flag.fast) 
@@ -771,12 +774,6 @@ void sam_segconf_finalize (VBlockP vb_)
     segconf.sam_predict_meth_call = segconf.sam_bisulfite &&
                                     !IS_REF_INTERNAL      && // bug 648
                                     (MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT)); // have methylation call tags
-
-
-    if (segconf.flav_prop[QNAME2].is_consensus && segconf.has[OPTION_XX_i] && segconf.has[OPTION_YY_i] && segconf.has[OPTION_XC_i] && segconf.has[OPTION_XO_i]) {
-        segconf.sam_has_xcons = true;
-        segconf.sam_has_BWA_XC_i = false;
-    }
     
     if (segconf.has[OPTION_rb_Z] && segconf.has[OPTION_rb_Z] == segconf.has[OPTION_mb_Z])
         segconf.sam_is_nanoseq = true;
@@ -898,7 +895,14 @@ void sam_segconf_finalize (VBlockP vb_)
     // note: we calculate the smux stdv to be reported in stats, even if SMUX is not used
     codec_smux_calc_stats (VB);
 
-    qname_segconf_finalize (VB);
+    qname_segconf_finalize (VB); // also makes sure that the consensus flavor, if there is one, is QNAME2
+
+    // discover if xcons-style consensus reads
+    sam_segconf_finalize_xcons(); // must be after qname_segconf_finalize
+
+    // can't use Deep for consensus files because they contain reads that are not in the FASTQ
+    ASSINP (!(flag.deep && segconf.flav_prop[QNAME2].is_consensus) || flag.force_deep,
+            "--deep is not supported for %s files with consensus reads. Override with --force-deep.", dt_name (vb->data_type));
 }
 
 // main thread: this is SAM/BAM's zip_after_segconf callback
@@ -942,9 +946,6 @@ void sam_seg_finalize (VBlockP vb_)
     // assign the QUAL codec
     if (vb->has_qual && CTX(SAM_QUAL)->local.len32) 
         codec_assign_best_qual_codec (VB, SAM_QUAL, sam_zip_qual, false, true, &codec_requires_seq);
-
-    if (vb->has_qual && CTX(SAM_CQUAL)->local.len32) 
-        codec_assign_best_qual_codec (VB, SAM_CQUAL, sam_zip_cqual, false, true, &codec_requires_seq);
 
     if (CTX(OPTION_OQ_Z)->local.len32 && !codec_oq_comp_init (VB)) 
         codec_assign_best_qual_codec (VB, OPTION_OQ_Z, sam_zip_OQ, false, true, &codec_requires_seq);
@@ -1187,6 +1188,7 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(ws_i, 'w', 's', 'i');
             TEST_AUX(xq_i, 'x', 'q', 'i');
             TEST_AUX(xq_i, 'X', 'Q', 'i');
+            TEST_AUX(cm_i, 'c', 'm', 'i');
 
             default: {}
         }
@@ -1403,6 +1405,11 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAMP dl)
         // the toplevel container to delete of previous separator (\t)
         container_seg (vb, CTX(SAM_AUX), 0, 0, 0, 0);
 
+    // segconf stuff
+    if (segconf.running) {
+        if (ctx_encountered_in_line (VB, OPTION_XC_i)) sam_segconf_xcons_one_line (vb, dl);
+    }
+
     COPY_TIMER(sam_seg_aux_all);
 }   
 
@@ -1563,7 +1570,6 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned ad
     // note: in PRIM segging against buddy here is used for loading sag, SAM_QNAMESA is used for reconstruction
     if (bt) {
         seg_special1 (VB, SAM_SPECIAL_COPY_BUDDY, '0' + bt, ctx, qname_len + add_additional_bytes); // seg QNAME as copy-from-buddy
-        seg_set_last_txt (VB, ctx, STRa(qname));
 
         // mirror logic of cases that sam_piz_special_COPY_BUDDY sets buddy_copied_exactly
         if ((bt & BUDDY_MATE) && !segconf.flav_prop[QNAME1].is_mated)
@@ -1574,14 +1580,11 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned ad
     }
 
     // case: DEPN with SA Group: seg against SA Group (unless already segged against buddy)
-    else if (IS_DEPN(vb) && vb->sag) {
+    else if (IS_DEPN(vb) && vb->sag)
         sam_seg_against_sa_group (vb, ctx, qname_len + add_additional_bytes);
-        seg_set_last_txt (VB, ctx, STRa(qname)); 
-    }
 
     else normal_seg: {
-        bool is_qname2 = qname_seg (VB, QNAME1/*must always start from QNAME1*/, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA
-        dl->is_consensus = is_qname2 && !IS_PRIM(vb)/*bug 949*/ && segconf.flav_prop[QNAME2].is_consensus;
+        qname_seg (VB, QNAME1/*must always start from QNAME1*/, STRa (qname), add_additional_bytes); // note: for PRIM component, this will be consumed with loading SA
 
         if (segconf.seq_len_dict_id.num)
             dl->seq_len_by_qname = ECTX(segconf.seq_len_dict_id)->last_value.i;
@@ -1590,6 +1593,8 @@ void sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (qname), unsigned ad
     // case: PRIM: additional seg against SA Group - store in SAM_QNAMESA - Reconstruct will take from here in PRIM per Toplevel container
     if (IS_PRIM(vb))
         seg_special0 (VB, SAM_SPECIAL_PRIM_QNAME, CTX(SAM_QNAMESA), 0); // consumed when reconstructing PRIM vb
+
+    seg_set_last_txt (VB, ctx, STRa(qname));
 }
 
 WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom),
@@ -1865,9 +1870,6 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
 
     // calculate diff vs. reference (denovo or loaded)
     sam_seg_SEQ (vb, dl, STRfld (SEQ), fld_lens[SEQ] + 1);
-
-    ASSSEG (str_is_in_range (flds[QUAL], fld_lens[QUAL], 33, 126), "Invalid QUAL - it contains non-Phred characters: \"%.*s\"",
-           STRfi (fld, QUAL));
 
     ASSSEG (fld_lens[SEQ] == fld_lens[QUAL] || vb->qual_missing, "Expecting QUAL(length=%u) to be of the same length as SEQ(length=%u)",
             fld_lens[QUAL], fld_lens[SEQ]);

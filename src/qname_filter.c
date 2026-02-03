@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   qname_filter.c
-//   Copyright (C) 2023-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2023-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -12,6 +12,7 @@
 #include "qname.h"
 #include "file.h"
 #include "sorter.h"
+#include "threads.h"
 
 typedef struct {
     uint32_t hash; // hash of qname
@@ -29,21 +30,28 @@ void qname_filter_initialize_from_file (rom filename, CompIType comp_i)
 
     if (flag.qname_filter == -1) filename++; // negative filter
 
+    ASSINP (file_exists (filename), "File not found: %s", filename);
+
+    catch_exception ("Too many lines in qnames file"); // print this error in case of an exception when declaring an on-stack array of the file lines 
     file_split_lines (filename, "qnames_file", VERIFY_ASCII);
+    uncatch_exception();
 
     ARRAY_alloc (QnameFilterItem, qname, n_lines, true, qnames_filter, evb, "qnames_filter");
     for (int i=0; i < n_lines; i++) {
         if (!line_lens[i]) continue;
 
         // qname includes FASTQ "@" prefix - remove it
-        bool has_prefix =(line_lens[i] && *lines[i] == '@');
+        bool has_prefix = (line_lens[i] > 1 && lines[i][0] == '@');
 
         // ignore everything after the first space or tab        
         rom sep;
         if ((sep = memchr (lines[i], ' ',  line_lens[i]))) line_lens[i] = sep - lines[i]; // truncate at first space
         if ((sep = memchr (lines[i], '\t', line_lens[i]))) line_lens[i] = sep - lines[i]; // truncate at first tab
 
-        qname[i].qname_len = MIN_(line_lens[i] - has_prefix, SAM_MAX_QNAME_LEN);
+        // qname which includes a FASTQ "@" prefix also has a /1 or /2 suffix - remove it
+        bool has_suffix = (has_prefix && line_lens[i] > 3 && lines[i][line_lens[i]-2] == '/' && (lines[i][line_lens[i]-1] == '1' || lines[i][line_lens[i]-1] == '2'));  
+
+        qname[i].qname_len = MIN_(line_lens[i] - has_prefix - 2*has_suffix, SAM_MAX_QNAME_LEN);
 
         memcpy (qname[i].qname, lines[i] + has_prefix, qname[i].qname_len);
 

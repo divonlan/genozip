@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_gatk.c
-//   Copyright (C) 2022-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2022-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -274,7 +274,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_RPA)
     predict_RU (vb);
     txtSTR (ru, CTX(INFO_RU)->predicted_RU);
 
-    int delta = reconstruct_from_local_int (VB, ctx, 0, false);
+    int delta = reconstruct_from_local_int (VB, ctx, 0, RECON_OFF);
 
     if (reconstruct) {
         RECONSTRUCT_INT (get_n_repeats (STRa(vb->REF), STRa(ru)) + delta);
@@ -843,7 +843,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEMUX_BY_DP)
 
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
     ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s. snip=%s", 
-            channel_i, ctx->tag_name, str_snip_ex (snip-2, snip_len+2, true).s);
+            channel_i, ctx->tag_name, str_snip_ex (DT_NONE, snip-2, snip_len+2, true).s);
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 

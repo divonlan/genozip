@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   container.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -136,7 +136,7 @@ extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
 extern bool container_peek_has_item (VBlockP vb, ContextP container_ctx, DictId item_dict_id, bool consume);
 
 typedef struct { uint64_t dnum; int16_t idx; } ContainerPeekItem;
-extern ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, bool consume);
+extern void container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, ConstContainerP *con_p, bool consume);
 
 extern StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes));
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   qname.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -526,7 +526,9 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         }
 
         else if (flag.debug_qname && reason) 
-            iprintf ("%.*s is not %s flavor \"%s\". Reason: %s\n", STRf(qname), qtype_name(q), qfs->name, reasons[reason]);
+            iprintf ("%.*s is not %s flavor \"%s\". Reason: %s%s\n", 
+                     STRf(qname), qtype_name(q), qfs->name, reasons[reason],
+                     (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split) ? ". Tip: Add --debug-split" : "");
     }
 
     if (!segconf.qname_flavor[q]) {
@@ -543,9 +545,9 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         ZCTX(did_i_bc2)->dict_did_i = did_i_bc1;
     }
 
-    if (segconf.qname_flavor[q] && segconf.qname_flavor[q]->id == QF_PACBIO_lbl && qname_len > 4 && !memcmp (&qname[qname_len-4], "/ccs", 4))
+    if (FLAVOR(q, PACBIO_lbl) && qname_len > 4 && !memcmp (&qname[qname_len-4], "/ccs", 4))
         segconf.is_pacbio_ccs = true;
-        
+                
     DO_ONCE // unit test
     if (flag.debug || flag.debug_qname)
         for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
@@ -686,7 +688,7 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
 }
 
 // returns true is redirected to QNAME2
-bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
+void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     START_TIMER;
 
@@ -715,7 +717,7 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
         qname_seg (vb, QNAME2, STRa(qname), 0);
 
         seg_by_ctx (vb, STRa(snip_redirect_to_QNAME2), qname_ctx, add_additional_bytes);
-        return true;
+        return;
     } 
 
     if (!success) { 
@@ -740,8 +742,6 @@ bool qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
 done:
     seg_set_last_txt (vb, qname_ctx, STRa(qname)); // needed for bi:Z, parent_read_id...
     COPY_TIMER (qname_seg);
-
-    return false;
 }
 
 // reduces qname to its canonical form: possibly reduces qname_len to make a qname more likely compareble between SAM/BAM and FASTQ 
@@ -781,10 +781,10 @@ uint32_t qname_hash_change_last (uint32_t hash, bool is_last)
     return (hash & 0xfffffffe) | is_last;
 }
 
-// ZIP: used for syncing DEPN/PRIM in gencomp and SAM/FASTQ in deep, and for scanning a SAM/BAM  
+// ZIP: used for syncing DEPN/PRIM in gencomp and SAM/FASTQ in deep and bamass, and for scanning a SAM/BAM  
 // PIZ: used for qname filters.
 uint64_t qname_calc_hash (QType q, CompIType comp_i/*only used in PIZ*/, STRp(qname), thool is_last, bool canonical, CrcType type, 
-                          uint32_t *uncanonical_suffix_len) // optional out
+                          uint32_t *uncanonical_suffix_len)  // optional out
 {
     uint32_t save_qame_len = qname_len;
     if (canonical) qname_canonize (q, qSTRa(qname), comp_i); // might shorten qname_len, does not modify the qname string

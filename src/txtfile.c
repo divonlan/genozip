@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtfile.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -511,7 +511,7 @@ void txtfile_zip_finalize_codecs (void)
         iprintf ("%s: src_codec=%s effective_codec=%s gz_header=%s", txt_file->basename, // same format as in txtfile_zip_finalize_codecs
                  codec_name (txt_file->src_codec), codec_name (txt_file->effective_codec),
                  display_gz_header (z_file->comp_gz_header[flag.zip_comp_i], GZ_HEADER_LEN, false).s);
-        if (flag.show_gz) { iprint0 ("\n"); exit_ok; };
+        if (flag.show_gz) { iprint_newline(); exit_ok; };
 
         iprintf (" effective_codec=%s\n", codec_name (txt_file->effective_codec));
     }

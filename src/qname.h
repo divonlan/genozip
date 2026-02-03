@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   qname.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -22,7 +22,7 @@ typedef packed_enum {
     // Illumina-style FASTQ QNAME2 flavors (also appears in Ultima, Singular...)
     QF_ILLUM_2bc, QF_ILLUM_1bc, QF_ILLUM_0bc, 
     // MGI flavors
-    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_SAP8, QF_MGI_varlen, QF_MGI_r6, QF_MGI_die6, QF_MGI_r7, QF_MGI_r8, QF_MGI_ll7, QF_MGI_cl, QF_MGI_rgs8, QF_MGI_rgs8FQ,
+    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_SAP8, QF_MGI_MFT, QF_MGI_varlen, QF_MGI_r6, QF_MGI_die6, QF_MGI_r7, QF_MGI_r8, QF_MGI_ll7, QF_MGI_cl, QF_MGI_ml, QF_MGI_dl, QF_MGI_rgs8, QF_MGI_rgs8FQ,
     // PacBio flavors 
     QF_PACBIO_3, QF_PACBIO_rng, QF_PACBIO_lbl, QF_PACBIO_pln, QF_ONSO,
     // Nanopore flavors
@@ -35,17 +35,19 @@ typedef packed_enum {
     // NCBI flavors
     QF_SRA_L, QF_SRA2, QF_SRA, QF_SRA_sra, QF_SRA_label,
     // Consensus alignments flavors
-    QF_CONSENSUS, QF_CONS, 
+    QF_CONSENSUS, QF_XCON, 
     // Other syntheic (i.e. non-sequencer) flavors
     QF_GENOZIP_OPT, QF_INTEGER, QF_HEX_CHR, QF_BAMSURGEON, QF_SEQAN, QF_CLC_GW, QF_STR_INT, QF_Sint, QF_GENERATED,
     NUM_FLAVORS
 } QnameFlavorId;
 
+#define FLAVOR(q,flavor) (segconf.qname_flavor[q] && segconf.qname_flavor[q]->id == QF_##flavor)
+
 #define dict_id_is_qname_sf dict_id_is_type_1
 #define dict_id_qname_sf dict_id_type_1
 
 extern const char sep_with_space[], sep_without_space[];
-extern bool qname_seg (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
+extern void qname_seg (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes);
 extern void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname));
 extern bool qname_segconf_rediscover_flavor (VBlockP vb, QType q, STRp(qname));
 extern QType qname_sam_get_qtype (STRp(qname));

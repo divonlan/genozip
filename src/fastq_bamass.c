@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bam_assist.c
-//   Copyright (C) 2024-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2024-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -43,9 +43,9 @@ static Buffer save_cigar_huff  = {}; // ZIP: save CIGAR huffman between z_files
 static double bamass_trims_ratio[3]; // ZIP: bamass compression ratio of SEQ of vb=1,2,3: in vb=1,2,3 we use the 3 bamass_trims options and subsequent VBs use the results to decide which to use
 static int generate_vbs_per_linker_vb;
 
-//*******************************************************
-// PART 1: read SAM/BAM file and popuate z_file->basass_*
-//*******************************************************
+//********************************************************
+// PART 1: read SAM/BAM file and populate z_file->bamass_*
+//********************************************************
 
 #define BAMASS_INC_STATS(reason) ({ if (flag_show_deep && !segconf_running) vb->deep_stats[reason]++; })
 
@@ -64,7 +64,7 @@ static void bamass_zip_display_reasons (void)
 
     for (int i=0; i < BA_AFTER; i++) 
         if (z_file->deep_stats[i])
-            iprintf ("%-13.13s: %"PRIu64" (%.1f%%)\n", (rom[])BAMASS_STATS_NAMES[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)z_file->deep_stats[0]);
+            iprintf ("%-14.14s: %"PRIu64" (%.1f%%)\n", (rom[])BAMASS_STATS_NAMES[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)z_file->deep_stats[0]);
 
     iprintf ("\nRAM consumption:\nbamass_index: %s\nbamass_ents: %s\nbamass_alns: %s\n",
              str_size (bamass_heads.len * sizeof (uint32_t)).s, 
@@ -120,7 +120,11 @@ static rom bamass_get_one_bam_aln (VBlockFASTQP vb, BAMAlignmentFixedP aln, uint
     int32_t hdr_contig_wi = LTEN32 (aln->ref_id);
     if (!IN_RANGE(hdr_contig_wi, 0, sam_hdr_contigs->contigs.len32) || aln->pos == -1 || aln->n_cigar_op == 0) 
         UNUSABLE(BA_UNMAPPED);
-    
+
+    // consensus sequences don't match any FASTQ sequence
+    if (aln->l_read_name > 4 && !memcmp (aln->read_name, "cons", 4))
+        UNUSABLE(BA_CONSENSUS);
+        
     if (aln->l_seq == 0) UNUSABLE(BA_NO_SEQ);
 
     *hdr_contig = B(Contig, sam_hdr_contigs->contigs, hdr_contig_wi);
@@ -178,6 +182,10 @@ static rom bamass_get_one_sam_aln (VBlockFASTQP vb, rom alignment, uint32_t rema
         UNUSABLE(BA_UNMAPPED);
     
     if (IS_ASTERISKi(fld,SEQ)) UNUSABLE(BA_NO_SEQ);
+
+    // consensus sequences don't match any FASTQ sequence
+    if (fld_lens[QNAME] > 4 && !memcmp (flds[QNAME], "cons", 4))
+        UNUSABLE(BA_CONSENSUS);
 
     ASSERT (str_get_uint16 (STRi(fld,FLAG), &sam_flags->value), "%s: invalid FLAG=\"%.*s\"", LN_NAME, STRfi(fld,FLAG));
 
@@ -250,7 +258,7 @@ static void bamass_generate_bamass_ents (VBlockP vb_)
         
         BAMASS_INC_STATS(BA_TOTAL);
 
-        ConstContigP hdr_contig;
+        ConstContigP hdr_contig = NULL;
         next = IS_BAM_ZIP ? bamass_get_one_bam_aln (vb, (BAMAlignmentFixedP)this, after - this, &usable, pSTRa(qname), &sam_flags, &hdr_contig, &pos, &n_cigar_op, &cigar, pSTRa(seq))
                           : bamass_get_one_sam_aln (vb, this,                     after - this, &usable, pSTRa(qname), &sam_flags, &hdr_contig, &pos, &n_cigar_op, &cigar, pSTRa(seq));
 
@@ -445,6 +453,24 @@ static void bamass_append_z_ents (VBlockP vb_)
     MAXIMIZE (bamass_alns_bufs.len32, vb->vblock_i+1);
     *B(BufferP, bamass_alns_bufs, vb->vblock_i) = CALLOC (sizeof (Buffer)); 
     buf_grab (evb, **B(BufferP, bamass_alns_bufs, vb->vblock_i), NULL, vb_bamass_alns);
+
+    if (flag.show_deep) {
+        #define ONCE_EVERY 10000000 // print once every 10M ents or so
+        static int64_t prev_print_ents_len = -ONCE_EVERY;
+        
+        if (prev_print_ents_len / ONCE_EVERY != bamass_ents.len / ONCE_EVERY) { 
+            if (prev_print_ents_len < 0) iprint_newline();
+
+            iprintf ("bamass entries: %s\tbamass_heads: %s\tbamass_ents: %s\tbamass_alns: %s\ttotal: %s\n", 
+                    str_int_commas (bamass_ents.len).s, 
+                    str_size (bamass_heads.len * sizeof (uint32_t)).s, // doesn't change after initialization
+                    str_size (bamass_ents.len * sizeof (BamAssEnt)).s, 
+                    str_size (bamass_alns.len).s,
+                    str_size (bamass_heads.len * sizeof (uint32_t) + bamass_ents.len * sizeof (BamAssEnt) + bamass_alns.len).s);
+
+            prev_print_ents_len = bamass_ents.len;
+        }
+    }
 
 done:
     for (BamassStats i=0; i < BA_AFTER; i++)

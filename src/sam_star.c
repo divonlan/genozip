@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_star.c
-//   Copyright (C) 2024-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2024-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -27,7 +27,10 @@ void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(raw), bool is_bam)
     int32_t vals[n_vals];
 
     if (is_bam) 
-        memcpy (vals, raw, raw_len * sizeof (uint32_t));
+        memcpy (vals, raw, raw_len * sizeof (uint32_t)); // works because little endian
+#ifdef __BIG_ENDIAN__
+#error BIG ENDIAN not implemented here yet
+#endif
 
     else {
         str_split_ints (raw, raw_len, n_vals, ',', val64, true);

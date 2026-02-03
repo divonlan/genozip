@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   reconstruct.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -56,7 +56,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
         my_ctx->last_delta = -my_ctx->last_delta; // negated previous delta
 
     else if (str_is_1char (delta_snip, '$')) // case: delta is in local (since 15.0.27)
-        my_ctx->last_delta = reconstruct_from_local_int (vb, my_ctx, 0, false);
+        my_ctx->last_delta = reconstruct_from_local_int (vb, my_ctx, 0, RECON_OFF);
 
     else // case: delta is in the snip
         my_ctx->last_delta = (int64_t)strtoull (delta_snip, NULL, 10 /* base 10 */); // strtoull can handle negative numbers, despite its name
@@ -90,7 +90,7 @@ static int64_t reconstruct_from_delta (VBlockP vb,
 #define ASSERT_IN_BOUNDS \
     ASSPIZ (ctx->next_local < ctx->local.len32, \
             "unexpected end of ctx->local data in %s[%u] (len=%u next_local=%u last_wi=%d ltype=%s lcodec=%s did_i=%u preprocessing=%u). %s", \
-            ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, ctx->last_wi, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing, ctx->local.len ? "" : "since len=0, perhaps a Skip function issue?");
+            ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, ctx->last_wi, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing, ctx->local.len ? "" : "since len=0, perhaps a Skip function issue? (debug with --debug-read-ctxs)");
 
 #define ASSERT_IN_BOUNDS_BEFORE(recon_len) \
     ASSPIZ (ctx->next_local + (recon_len) <= ctx->local.len, \
@@ -270,7 +270,7 @@ uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len
     if (!ctx->is_loaded) return len;
 
     // special case: handle SAM_QUAL missing quality (expressed as a ' ')
-    if (ctx->next_local < ctx->local.len32 && *Bc(ctx->local, ctx->next_local) == ' ' && (ctx->did_i == SAM_QUAL && (VB_DT(BAM) || VB_DT(SAM)))) {
+    if (ctx->did_i == SAM_QUAL/*fail quickly*/ && ctx->next_local < ctx->local.len32 && *Bc(ctx->local, ctx->next_local) == ' ' && (VB_DT(BAM) || VB_DT(SAM))) {
         len = 1;
         sam_reconstruct_missing_quality (vb, reconstruct);
     }
@@ -293,7 +293,7 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp(sn
     unsigned b64_len = base64_sizeof (DictId);
 
     ASSPIZ (b64_len + 1 <= *snip_len, "ctx=%s snip=%s snip_len=%u but expecting it to be >= %u", 
-            ctx->tag_name, str_snip_ex (STRa(*snip), true).s, *snip_len, b64_len + 1);
+            ctx->tag_name, str_snip_ex (DT_NONE, STRa(*snip), true).s, *snip_len, b64_len + 1);
 
     DictId dict_id;
     base64_decode ((*snip)+1, &b64_len, dict_id.id, sizeof (DictId));
@@ -392,7 +392,7 @@ HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int c
 {
     ContextP channel_ctx = MCTX (channel_i, snip, snip_len);
     ASSPIZ (channel_ctx, "Cannot find channel context of channel_i=%d of multiplexed context %s. snip=%s", 
-            channel_i, ctx->tag_name, str_snip_ex (snip-2, snip_len+2, true).s);
+            channel_i, ctx->tag_name, str_snip_ex (DT_NONE, snip-2, snip_len+2, true).s);
 
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 

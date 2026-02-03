@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   zip.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -417,7 +417,7 @@ static void zip_write_global_area (void)
     if (!flag_show_memory) // in show-mem, keep these, so we can report them.
         zip_free_undeeded_zctx_bufs_after_seg();
 
-    codec_qual_show_stats();
+    if (flag.show_qual) codec_qual_show_stats();
 
     // if we're making a reference, we need the RA data to populate the reference section chrome/first/last_pos ahead of ref_compress_ref
     THREAD_DEBUG (finalize_random_access);

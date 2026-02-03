@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   qname_flavors.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -345,15 +345,32 @@ static SmallContainer con_mgi_sap8 = {
     .repeats   = 1,
     .nitems_lo = 7,
     .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":L"                   },  
-                   { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 2 } },
-                   { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
-                   { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },
-                   { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
-                   { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 4 } },
+                   { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 2 } }, // lane
+                   { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // row
+                   { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // column
+                   { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 4 } }, // x
+                   { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 4 } }, // y
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } 
 };
 
 #define PX_mgi_sap8 { "", "", ":R", "C", ":", ":", PX_MATE_FIXED_0_PAD }
+
+// example: M:0:FT100099999:1:C001R001:0:1220
+static SmallContainer con_mgi_mft = {
+    .repeats   = 1,
+    .nitems_lo = 9,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"                    }, // prefix 1 (constant)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"                    }, // prefix 2 (constant) 
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"                    }, // prefix 3 (constant) 
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"                    }, // lane (integer)
+                   { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // column (fixed)
+                   { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // row (fixed)
+                   { .dict_id = { _SAM_Q6NAME }, .separator = ":"                    }, // x (integer)
+                   { .dict_id = { _SAM_Q7NAME }                                      }, // y (integer)
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } 
+};
+
+#define PX_mgi_mft { "", "", "", "", "C", "R", ":", "" }
 
 //--------------------------------------------------------------------------------------------------------------
 // MGI_E format: 27 characters: E, FlowCellSerialNumber[various], L, Lane[1], C, Column[3], R, Row[3] Tile[6-8]
@@ -388,7 +405,11 @@ CON_MGI_R(8);
 
 #define PX_mgi_R { "", "", "C", "R", "", PX_MATE_FIXED_0_PAD }
 
-// example: die1_A100004684C001R029011637
+// Variants of PX_mgi_R: can't use PX_mgi_R because 'L' of the ML or DL will terminate items[0]
+#define PX_mgi_R_ML { "ML", "", "C", "R", "", PX_MATE_FIXED_0_PAD } // Example: ML150009990L1C001R01100000061 
+#define PX_mgi_R_DL { "DL", "", "C", "R", "", PX_MATE_FIXED_0_PAD } // Example: DL100019990L4C005R00100001104
+
+// Example: die1_A100004684C001R029011637
 #define CON_MGI_die(n)                   \
 static SmallContainer con_mgi_die##n = {  \
     .repeats             = 1,            \
@@ -1148,7 +1169,7 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_ILLUM,   TECH_NCBI,    QANY,   &con_illumina_7bc,   no_validate,    ':', 7,  {1,3,4,5,6,-1},     {-1},           {1,3,5,6,-1},       {-1},           0,  5,6,   -1,-1, -1, 7,  -1, -1,                       },
     {},  { QF_SINGULAR,    "Singular",      { "B05:000:FC2:4:1:272670:483" },             TECH_SINGLR,  TECH_NCBI,    QANY,   &con_singular,       no_validate,    0,   6,  {3,4,5,6,-1},       {1,-1},         {5,6,-1},           {-1},           0,  6,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_SINGULAR       },
     {},  { QF_ELEMENT_AV,  "Element-AV",    { "AV250505:Q6177-5-8pool:1324334413:1:22105:0068:2686", "AV250505:Q6177-5-8pool:1324334413:1:22105:23413:0686" },     
-                                                                                          TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element_av,     no_validate,    0,   6,  {3,4,-1},           {5,6,-1},       {5,6,-1},           {-1},           0,  5,6,   -1,-1, -1, -1, -1, -1, 0,  PX_ELEMENT        }, // 15.0.75 - must be before QF_ELEMENT                                                                                         
+                                                                                          TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element_av,     no_validate,    0,   8,  {3,4,-1},           {5,6,-1},       {5,6,-1},           {-1},           0,  5,6,   -1,-1, -1, -1, -1, -1, 0,  PX_ELEMENT_AV     }, // 15.0.75 - must be before QF_ELEMENT                                                                                         
     {},  { QF_ELEMENT,     "Element",       { "PLT-03:BBS-0174:2140948523:1:10102:0293:0058", "PLT-16:APP-0316:UNKNOWN_FLOWCELL:1:10102:0582:0027" },     
                                                                                           TECH_ELEMENT, TECH_NCBI,    QANY,   &con_element,        no_validate,    0,   6,  {3,4,-1},           {5,6,-1},       {5,6,-1},           {-1},           0,  5,6,   -1,-1, -1, -1, -1, -1, 0,  PX_ELEMENT        },
     {},  { QF_ELEMENT_bc,  "Element-bc",    { "SDF-02:GFH-0166::1:13435:2311:1233:GTAGCCAATCA", "SDF-02:GFH-0166:2140948523:1:13435:2311:1233:GTAGCCAATCA"  }, 
@@ -1162,6 +1183,8 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_new8,       val_mgi_new,    0,   6,  {-1},               {1,3,4,5,6,7,-1},{4,5,6,-1},        {-1},           0,  5,6,   -1,-1, -1, -1, 7,  8,  0,  PX_mgi_new        }, // 15.0.51 
     {},  { QF_MGI_SAP8,    "MGI-SAP8",      { "SOME:2:PREFIX:L01:R001C012:0000:8199" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_sap8,       no_validate,    0,   7,  {-1},               {1,2,3,4,5,-1}, {2,3,4,5,-1},       {-1},           0,  4,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_mgi_sap8       }, // 15.0.70
+    {},  { QF_MGI_MFT,     "MGI-MFT",       { "M:0:FT100099999:1:C001R001:0:1220" },          
+                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_mft,        no_validate,    0,   8,  {3,6,7,-1},         {4,5,-1},       {4,5,6,7,-1},       {-1},           0,  6,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_mgi_mft        }, // 15.0.76
     {},  { QF_MGI_varlen,  "MGI-varlen",    { "8A_V100004684L3C001R029311637", "V300046476L1C001R00110001719" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_varlen,     no_validate,    0,   3,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_varlen     },
     {},  { QF_MGI_r6,      "MGI-R6",        { "8A_V100004684L3C001R029011637", "V300003413L4C001R016000000" },          
@@ -1174,6 +1197,8 @@ static QnameFlavorStruct qf[] = {
          { QF_MGI_rgs8,    "MGI-Rgs8",      { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074|2" },       
                                                                                           TECH_MGI,     TECH_NCBI,    QSAM,   &con_mgi_Rgs8,       no_validate,    '|', 6,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_Rgs,       }, 
     {},  { QF_MGI_r8,      "MGI-R8",        { "V300046476L1C001R00100001719" },           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8,         no_validate,    0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R          },
+    {},  { QF_MGI_ml,      "MGI-ML",        { "ML150009990L1C001R01100000061" },          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8,         no_validate,    0,   5,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R_ML       }, // 15.0.76
+    {},  { QF_MGI_dl,      "MGI-DL",        { "DL100019990L4C005R00100001104" },          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8,         no_validate,    0,   5,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R_DL       }, // 15.0.76
     {},  { QF_MGI_ll7,     "MGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_LL7,        no_validate,    0,   4,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_LL         },
     {},  { QF_MGI_cl,      "MGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_CL,         no_validate,    0,   6,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_CL         }, 
     {},  { QF_ULTIMA_a,    "Ultima-a",      { "012345_1-X0003-0072646116" },              TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_a,       no_validate,    0,   3,  {1,-1},             {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1, 25, PX_ULTIMA_A       },
@@ -1249,7 +1274,7 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_INTEGER,     "Integer",       { "123" },                                    TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_integer,        no_validate,    0,   0,  {0,-1},             {-1},           {0,-1},             {-1},           0,  0,-1,  -1,-1, -1, -1, -1, -1,                       }, 
     {},  { QF_STR_INT,     "Str_Integer",   { "read_1" },   /* eg CLC */                  TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_str_integer,    no_validate,    0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           0,  1,-1,  -1,-1, -1, -1, -1, -1,                       },
          { QF_CONSENSUS,   "consensus",     { "consensus:23" },                           TECH_CONS,    TECH_NCBI,    QANY,   &con_prfx_and_int,   no_validate,    0,   10, {0,-1},             {-1},           {0,-1},             {-1},           1,  0,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_consensus      },
-         { QF_CONS,        "cons",          { "cons113" },                                TECH_CONS,    TECH_NCBI,    QANY,   &con_prfx_and_int,   no_validate,    0,   4,  {0,-1},             {-1},           {0,-1},             {-1},           1,  0,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_cons           },
+         { QF_XCON,        "cons",          { "cons113" },                                TECH_CONS,    TECH_NCBI,    QANY,   &con_prfx_and_int,   no_validate,    0,   4,  {0,-1},             {-1},           {0,-1},             {-1},           1,  0,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_cons           },
          { QF_Sint,        "Sint",          { "S522414" },                                TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_prfx_and_int,   no_validate,    0,   1,  {0,-1},             {-1},           {0,-1},             {-1},           0,  0,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_Sint           },
     {},  { QF_GENERATED,   "Generated",     { "mapped.ILLUMINA.bwa:1" },                  TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_generated,      no_validate,    0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           1,  1,-1,  -1,-1, -1, -1, -1, -1,                       },
     {},  { QF_GENOZIP_OPT, "Genozip-opt",   { "basic.1" },  /* must be last */            TECH_UNKNOWN, TECH_NCBI,    QANY,   &con_genozip_opt,    no_validate,    0,   1,  {1,-1},             {-1},           {1,-1},             {-1},           1,  1,-1,  -1,-1, -1, -1, -1, -1,                       },

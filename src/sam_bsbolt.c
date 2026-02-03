@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bsbolt.c
-//   Copyright (C) 2022-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2022-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -106,7 +106,7 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl)
 static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), rom extra)
 {
     iprintf ("%s: QNAME=\"%.*s\" bisulfite_strand=%c XB=\"%.*s\" CIGAR=\"%.*s\" %s\n", 
-             LN_NAME, dl->QNAME_len, dl_qname(dl), vb->bisulfite_strand, STRf(XB), STRfw(dl->CIGAR), extra);
+             LN_NAME, STRfQNAME, vb->bisulfite_strand, STRf(XB), STRfw(dl->CIGAR), extra);
     if (vb->scratch.len32)   printf ("XM: %.*s\n", STRfb(vb->scratch));
     if (vb->meth_call.len32) printf ("SQ: %.*s\n\n", STRfb(vb->meth_call));
 }

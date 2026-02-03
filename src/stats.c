@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   stats.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -266,7 +266,7 @@ static void stats_output_file_metadata (void)
                                   :                                   str_size (segconf.vb_size).s, z_file->section_list.len32); })
 
     #define REPORT_QNAME                                                                                    \
-        FEATURE (z_file->num_lines, "Read name style: %s%s", "Qname=%s%s",                                  \
+        FEATURE (z_file->num_lines, "Read name style: %s%s", "QNAME=%s%s",                                  \
                  segconf_qf_name (0), cond_str(segconf.qname_flavor[1], "+", segconf_qf_name(1))) // no space surrounding the '+' as expected by batch_qname_flavors
 
     switch (z_file->data_type) {
@@ -345,14 +345,14 @@ static void stats_output_file_metadata (void)
                         
             FEATURE (true, "Aligner: %s", "Mapper=%s", segconf_sam_mapper_name()); 
 
-            bufprintf (evb, &features, "QUAL=%s;", !segconf.nontrivial_qual ? "Trivial" : (ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN) ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+            if (ZCTX(SAM_QUAL)->qual_codec == CODEC_DOMQ && z_file->num_lines)
+                bufprintf (evb, &features, "QUAL=DOMQ%s (DIVR:%.f%%);", segconf.sam_has_xcons ? ".xcons" : "",
+                           100.0 * (double)z_file->divr_lines / (double)z_file->num_lines);                
+            else
+                bufprintf (evb, &features, "QUAL=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+
             bufprintf (evb, &features, "QUAL_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
             
-            if (segconf.flav_prop[QNAME2].is_consensus) { // Qual of consensus reads
-                bufprintf (evb, &features, "CQUAL=%s;", (ZCTX(SAM_CQUAL)->qual_codec != CODEC_UNKNOWN) ? codec_name (ZCTX(SAM_CQUAL)->qual_codec) : codec_name (ZCTX(SAM_CQUAL)->lcodec));
-                bufprintf (evb, &features, "CQUAL_histo=%s;", segconf_get_qual_histo(QHT_CONSENSUS).s);
-            }
-
             if (segconf.has[OPTION_OQ_Z]) {
                 bufprintf (evb, &features, "OQ=%s;", (ZCTX(OPTION_OQ_Z)->qual_codec != CODEC_UNKNOWN) ? codec_name (ZCTX(OPTION_OQ_Z)->qual_codec) : codec_name (ZCTX(OPTION_OQ_Z)->lcodec));
                 bufprintf (evb, &features, "OQ_histo=%s;", segconf_get_qual_histo(QHT_OQ).s);
@@ -402,6 +402,8 @@ static void stats_output_file_metadata (void)
                              segconf_qf_name (QSAM), cond_str(segconf.deep_sam_qname_flavor[1], "+", segconf_qf_name(QSAM2)))
 
                 REPORT_QNAME;
+                
+                bufprintf (evb, &features, "tlen_pred=%.1f%%;", 100.0 * (double)z_file->sam_num_tlen_pred / (double)num_alignments);
 
                 if (z_file->sam_num_seq_by_aln) // seg SEQ vs internal or external reference according to SAM alignment 
                     bufprintf (evb, &features, "seq_by_sam_aln=%.1f%%;", 100.0 * (double)z_file->sam_num_seq_by_aln / (double)num_alignments);
@@ -470,17 +472,21 @@ static void stats_output_file_metadata (void)
             if (bamass_pc) 
                 bufprintf (evb, &features, "bamass=%.1f%%;", bamass_pc);
 
-            if (z_file->fq_num_aligned) 
+            if (z_file->fq_num_aligned && z_file->num_lines) 
                 bufprintf (evb, &features, "aligner_ok (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->fq_num_aligned / (double)z_file->num_lines, 100.0 * (double)z_file->fq_num_perfect_matches / (double)z_file->num_lines); // report even if num_aligned=0 (i.e. wrong reference)           
 
-            if (z_file->fq_num_monochar) 
+            if (z_file->fq_num_monochar && z_file->num_lines) 
                 bufprintf (evb, &features, "monochar=%.1f%%;", 100.0 * (double)z_file->fq_num_monochar / (double)z_file->num_lines);
 
-            if (z_file->fq_num_verbatim)
+            if (z_file->fq_num_verbatim && z_file->num_lines)
                 bufprintf (evb, &features, "verbatim=%.1f%%;", 100.0 * (double)z_file->fq_num_verbatim / (double)z_file->num_lines);
 
             if (!FAF) {
-                bufprintf (evb, &features, "Qual=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+                if (ZCTX(SAM_QUAL)->qual_codec == CODEC_DOMQ && z_file->num_lines)
+                    bufprintf (evb, &features, "QUAL=DOMQ (DIVR:%.f%%);", 100.0 * (double)z_file->divr_lines / (double)z_file->num_lines);                
+                else
+                    bufprintf (evb, &features, "QUAL=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
+                
                 bufprintf (evb, &features, "Qual_histo=%s;", segconf_get_qual_histo(QHT_QUAL).s);
 
                 bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
@@ -502,13 +508,13 @@ static void stats_output_file_metadata (void)
             if (z_file->max_ploidy != 2) 
                 bufprintf (evb, &features, "ploidy=%u;", z_file->max_ploidy);
 
-            if (z_file->mate_line_count) {
+            if (z_file->mate_line_count && z_file->num_lines) {
                 double pc = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
                 bufprintf (evb, &stats, "Mated: %.*f%%   ", PREC(pc), pc); //  no newline
                 bufprintf (evb, &features, "mated=%.*f%%;", PREC(pc), pc);
             }
 
-            if (z_file->vcf_num_samples_copied) {
+            if (z_file->vcf_num_samples_copied && z_file->num_lines) {
                 double pc = 100.0 * (double)z_file->vcf_num_samples_copied  / (double)(z_file->num_lines * vcf_header_get_num_samples());
                 bufprintf (evb, &features, "samples_copied=%.*f%%;", PREC(pc), pc);
             }
@@ -975,7 +981,7 @@ static void stats_display (void)
         // stats text doesn't include SEC_STATS and SEC_GENOZIP_HEADER - the last 3 sections in the file - since stats text is generated before these sections are compressed
         iprintf ("\nNote: ZIP total file size excludes overhead of %s\n", str_size (stats.count).s);
 
-    iprint0 ("\n");
+    iprint_newline();
 
     buf_destroy (stats);
     buf_destroy (STATS);

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bwa.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -277,6 +277,8 @@ void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t XC, unsigned a
     else {
         seg_integer (VB, ctx, XC, true, add_bytes);
     }
+
+    ctx_set_encountered (VB, ctx); // needed for segconf xcons_std_line_histogram building to work
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_XC)

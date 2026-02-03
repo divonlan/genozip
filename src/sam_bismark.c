@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_bismark.c
-//   Copyright (C) 2022-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2022-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -96,7 +96,7 @@ void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int spe
 
         if (flag.show_wrong_xm) {
             iprintf ("%s: QNAME=\"%.*s\" bisulfite_strand=%c %s\n", 
-                     LN_NAME, dl->QNAME_len, dl_qname(dl), vb->bisulfite_strand, vb->meth_call.len ? "" : "(no meth_call)");
+                     LN_NAME, STRfQNAME, vb->bisulfite_strand, vb->meth_call.len ? "" : "(no meth_call)");
             iprintf ("XM: %.*s\n", xm_len, xm);
             if (vb->meth_call.len) iprintf ("SQ: %.*s\n", STRfb(vb->meth_call));
         }

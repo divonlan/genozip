@@ -1,12 +1,12 @@
 // ------------------------------------------------------------------
 //   codec_normq.c
-//   Copyright (C) 2022-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2022-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-// fallback compression algorithm for SAM/FASTQ QUAL values if LONGR and DOMQ are not applicable
+// fallback compression algorithm for SAM/FASTQ QUAL values if other codecs not applicable
 
 #include "codec.h"
 #include "sam_private.h" // this is a SAM-only codec
@@ -39,7 +39,7 @@ COMPRESS(codec_normq_compress)
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (!soft_fail) goto do_compress;
 
-    __atomic_add_fetch (&z_file->normq_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
+    __atomic_add_fetch (&z_file->normq_lines, vb->lines.len, __ATOMIC_RELAXED);
 
     buf_alloc_exact (vb, *qual_buf, qual_buf->len, char, CTX_TAG_LOCAL); 
     

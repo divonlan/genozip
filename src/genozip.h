@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   genozip.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -372,9 +372,10 @@ typedef int ThreadId;
 #define THREAD_ID_NONE ((ThreadId)-1)
 
 #define VER(n) (z_file->genozip_version >= (n))
-#define VER2(major,minor) ((z_file->genozip_version == (major) && (z_file->genozip_minor_ver >= (minor))) || \
-                           (z_file->genozip_version > (major)))
-                           
+#define VER2(major,minor) (({ ASSERT0 ((major) >= 15 && ((major)>15 || (minor)>=28), "VER2 can test versions starting 15.0.28"); /* optimized out */ \
+                              (z_file->genozip_version == (major) && (z_file->genozip_minor_ver >= (minor))) || \
+                              (z_file->genozip_version > (major)); }))
+
 #define EXACT_VER(n) (z_file->genozip_version == (n))
 
 #define load_relaxed(var)        __atomic_load_n    (&var, __ATOMIC_RELAXED)
@@ -439,32 +440,6 @@ typedef int ThreadId;
 // Strings - declarations
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]
 
-#define SNIPi1(op,n)            \
-    char snip[24];              \
-    snip[0] = (op);             \
-    unsigned snip_len = 1 + str_int ((n), &snip[1]);
-
-#define SNIPi2(op0,op1,n)       \
-    char snip[24];              \
-    snip[0] = (op0);            \
-    snip[1] = (op1);            \
-    unsigned snip_len = 2 + str_int ((n), &snip[2]);
-
-#define SNIPi2_2(op0,op1,n1,n2) \
-    char snip[48];              \
-    snip[0] = (op0);            \
-    snip[1] = (op1);            \
-    unsigned snip_len = 2 + str_int ((n1), &snip[2]); \
-    snip[snip_len++] = ',';     \
-    snip_len += str_int ((n2), &snip[snip_len])
-
-#define SNIPi3(op0,op1,op2,n)   \
-    char snip[24];              \
-    snip[0] = (op0);            \
-    snip[1] = (op1);            \
-    snip[2] = (op2);            \
-    unsigned snip_len = 3 + str_int ((n), &snip[3]);
-
 #define STR(x)   rom x;        uint32_t x##_len
 #define eSTR(x)  extern rom x; extern uint32_t x##_len
 #define STR0(x)  rom x=NULL;   uint32_t x##_len=0
@@ -521,6 +496,7 @@ typedef int ThreadId;
 #define STRfw(txtword) (txtword).len, Btxt ((txtword).index) // used with TxtWord
 #define STRfBw(buf,txtword) (txtword).len, Bc ((buf), (txtword).index) // used with TxtWord or ZWord
 #define STRfN(x) (x), ((x)!=1 ? "s" : "") // to match format eg "%u file%s" - singular or plural 
+#define STRfQNAME dl->QNAME_len, dl_qname(dl)
 
 #define STRtxt(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
 #define STRline(dl,fld) Btxt ((dl)->line_start + (dl)->fld.index), (dl)->fld.len // used with LineWord
@@ -669,6 +645,7 @@ static inline void iputc(char c) { fputc ((c), info_stream); } // no flushing
 
 #define iprintf(format, ...)     ( { fprintf (info_stream, (format), __VA_ARGS__); fflush (info_stream); } )
 static inline void iprint0 (rom str) { fprintf (info_stream, "%s", str); fflush (info_stream); } 
+static inline void iprint_newline (void) { fprintf (info_stream, "\n"); fflush (info_stream); } 
 
 extern noreturn void stall (void);
 

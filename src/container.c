@@ -1,7 +1,7 @@
 
 // ------------------------------------------------------------------
 //   container.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -81,7 +81,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
             if (item->dict_id.num) 
                 iprintf ("%s(%u) ", dis_dict_id (item->dict_id).s, ctx->did_i); 
         
-        iprint0 ("\n");
+        iprint_newline();
     }
 
     return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, is_new); 
@@ -182,25 +182,28 @@ bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, boo
 
 // PIZ: peek a context which is normally a container and not yet encountered: get indices of requested items 
 // (-1 if item is not in container). 
-ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, 
-                                    ContainerPeekItem *req_items, // caller must initialize all items' idx=-1
-                                    bool consume)
+void container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, 
+                              ContainerPeekItem *req_items, // caller must initialize all items' idx=-1
+                              ConstContainerP *con_p, // if non-NULL, use this container
+                              bool consume)
 {
     ASSISLOADED(ctx);
 
-    ContainerP con;
-    if (ctx_encountered (vb, ctx->did_i)) 
-        con = container_retrieve (vb, ctx, ctx->last_con_wi, 0, 0, 0, 0);
+    if (*con_p)
+        {} // use this container
+
+    else if (ctx_encountered (vb, ctx->did_i)) 
+        *con_p = container_retrieve (vb, ctx, ctx->last_con_wi, 0, 0, 0, 0);
 
     else { 
         STR(snip);
         WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
-        if (!snip || *snip != SNIP_CONTAINER) return NULL; // not a container, so definitely doesn't contain the item
+        if (!snip || *snip != SNIP_CONTAINER) return; // not a container, so definitely doesn't contain the item
 
-        con = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
+        *con_p = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
     }
 
-    for_con2 (con)
+    for_con2 (*con_p)
         for (uint16_t req_i=0 ; req_i < n_items; req_i++) {
             ContextP ctx = item->dict_id.num ? ECTX(item->dict_id) : NULL;
             if (ctx) {
@@ -212,8 +215,6 @@ ContainerP container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items,
                 }
             }
         }
-
-    return con; 
 }
 
 static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_lines_ctx, rom recon_start)

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_piz.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -29,7 +29,7 @@ void sam_piz_xtra_line_data (VBlockP vb_)
     if (SAM_PIZ_HAS_SAG) {
         iprintf ("grp_i=%u", ZGRP_I(vb->sag));
         if (IS_SAG_SA) iprintf (" aln_i=%"PRIu64" (%d within group)", ZALN_I(vb->sa_aln), (int)(ZALN_I(vb->sa_aln) - vb->sag->first_aln_i));
-        iprint0 ("\n");
+        iprint_newline();
         
         sam_show_sag_one_grp (VB, ZGRP_I(VB_SAM->sag));
     }
@@ -70,8 +70,9 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.CIGAR_has_eqx         = header->sam.segconf_CIGAR_has_eqx;
         segconf.has[OPTION_MQ_i]      = header->sam.segconf_has_MQ;
         segconf.is_interleaved        = header->sam.segconf_is_ileaved;
-        
-        flag.deep = header->flags.genozip_header.dts2_deep; 
+        segconf.s1_to_cm_32           = header->sam.segconf_s1_to_cm_32;
+        segconf.xcons_std_seq_len     = header->sam.xcons_std_seq_len_M100 ? (header->sam.xcons_std_seq_len_M100 + 100) : 0;
+        flag.deep                     = header->flags.genozip_header.dts2_deep; 
 
         z_file->max_conc_writing_vbs  = MAX_(1, BGEN16 (header->sam.conc_writing_vbs)); // since 15.0.64. For earlier v14,15 versions, this will be 0 in the file and set to 1 here, and might be further updated when uncompressing SectionHeaderReconPlan.
     }
@@ -86,8 +87,14 @@ bool sam_piz_initialize (CompIType comp_i)
     return true;
 }
 
+// Data Type callback piz_header_init: called after TxtHeader section is read 
 void sam_piz_header_init (CompIType comp_i)
 {
+    // PRIM and DEPN inherit QNAME flavor from MAIN
+    if (comp_i == SAM_COMP_MAIN)
+        for (QType q=0; q < NUM_QTYPES; q++)
+            z_file->flav_prop[SAM_COMP_PRIM][q] = z_file->flav_prop[SAM_COMP_DEPN][q] = z_file->flav_prop[SAM_COMP_MAIN][q];
+
     if (flag.qnames_file)
         qname_filter_initialize_from_file (flag.qnames_file, comp_i); // note: uses SectionHeaderTxtHeader.flav_props to canonize qnames
 
@@ -237,9 +244,13 @@ IS_SKIP (sam_piz_is_skip_section)
             SKIPIFF ((cov || cnt) && !flag.bases && !has_sa);
 
         case _SAM_QUAL  : case _SAM_DOMQRUNS  : case _SAM_QUALMPLX  : case _SAM_DIVRQUAL  :
-        case _SAM_CQUAL : case _SAM_CDOMQRUNS : case _SAM_CQUALMPLX : case _SAM_CDIVRQUAL : 
+        case _SAM_CQUAL : case _SAM_CDOMQRUNS : case _SAM_CQUALMPLX : case _SAM_CDIVRQUAL : // backcomp up to 15.0.75
+        case _SAM_BADQUAL : 
             SKIPIF (is_prim);                                         
             SKIPIF (deep_fq && (flag.seq_only || flag.header_only_fast));
+            SKIPIFF (cov || cnt);
+
+        case _OPTION_XO_i : // needed to reconstruct QUAL in xcons
             SKIPIFF (cov || cnt);
 
         case _OPTION_np_i : case _OPTION_ec_f : // np is needed for reconstruting QUAL (PACB codec), and ec is needed to rereconstruct np
@@ -813,14 +824,27 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
     return true; // go ahead and reconstruct
 }
 
-bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id)
+// called for items with CI1_ITEM_CB, after reconstruction
+CONTAINER_ITEM_CALLBACK (sam_piz_con_item_cb)
 {
-    ASSPIZ0 (vb->aux_con, "this function can only be called while reconstructing the AUX container");
+    VBlockSAMP vb = (VBlockSAMP)vb_;
+    
+    START_TIMER;
 
-    for_con (vb->aux_con)
-        if (item->dict_id.num == dict_id.num) return true;
+    switch (con_item->dict_id.num) {
+        case _SAM_SQBITMAP: // called for Deep files for SAM / FASTQ reconstruction (but not BAM)
+            sam_piz_deep_SEQ_cb (vb, STRa(recon));
+            break;
+    
+        case _SAM_QUAL:     // called for Deep files for SAM / FASTQ reconstruction (but not BAM)
+        case _SAM_QUALSA:
+            sam_piz_deep_QUAL_cb (vb, STRa(recon));
+            break;
 
-    return false;
+        default: break;
+    }
+
+    COPY_TIMER (sam_piz_con_item_cb);
 }
 
 // v14: De-multiplex by has_mate
@@ -1013,7 +1037,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_FASTQ_CONSUME_AUX)
         { _OPTION_MC_Z, -1 }, { _OPTION_SA_Z, -1 }, { _OPTION_ec_f, -1 }, { _OPTION_np_i, -1 }, 
         { _OPTION_iq_Z, -1 }, { _OPTION_dq_Z, -1 }, { _OPTION_sq_Z, -1 } };
 
-    vb->aux_con = container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(peek_items), peek_items, true);
+    container_peek_get_idxs (VB, CTX(SAM_AUX), ARRAY_LEN(peek_items), peek_items, &vb->aux_con, true);
 
     // if this line has an MC:Z field store it directly history - might be needed for subsequent line CIGAR
     if (CTX(OPTION_MC_Z)->flags.store_per_line && CTX(OPTION_MC_Z)->is_loaded && // MC:Z is buddied
@@ -1038,4 +1062,49 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_FASTQ_CONSUME_AUX)
 bool sam_is_last_flags_rev_comp (VBlockP vb)
 {
     return last_flags.rev_comp;
+}
+
+bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id)
+{
+    ASSPIZ0 (vb->aux_con, "this function can only be called while reconstructing the AUX container");
+
+    for_con (vb->aux_con)
+        if (item->dict_id.num == dict_id.num) return true;
+
+    return false;
+}
+
+// peek an OPTION that may or may not exist in the line.
+ValueType sam_piz_peek_OPTION (VBlockSAMP vb, ContextP option_ctx, pSTRp(txt)/*optional*/, bool *exists/*optional*/)
+{
+    bool option_exists = false;
+    bool consume = vb->preprocessing; // consume if loading Sag, peek only if reconstructing
+
+    if (!vb->aux_con) { // called before AUX is reconstructed
+        ContainerPeekItem idx = { option_ctx->dict_id.num, -1 };
+        container_peek_get_idxs (VB, CTX(SAM_AUX), 1, &idx, &vb->aux_con, consume);
+
+        if (idx.idx >= 0) option_exists = true; 
+    }
+    else 
+        for_con (vb->aux_con)
+            if (item->dict_id.num == option_ctx->dict_id.num) { option_exists = true; break; }
+
+    if (exists) *exists = option_exists;
+
+    if (option_exists) {
+        if (exists) *exists = true;
+
+        if (consume) { // called from SAG load
+            ASSERT (!txt && !txt_len, "sam_piz_peek_OPTION(%s): consuming non-int options is not implemented yet", option_ctx->tag_name);
+
+            reconstruct_from_ctx (vb, option_ctx->did_i, 0, RECON_OFF);
+            return option_ctx->last_value;
+        }
+        else // called from reconstruction
+            return reconstruct_peek (VB, option_ctx, STRa(txt)); // xxx consume if preprocessing
+    }
+
+    else
+        return (ValueType){};
 }

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fastq_seq.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -41,7 +41,7 @@ static inline bool seq_len_by_qname (VBlockFASTQP vb, uint32_t seq_len)
            seq_len == ECTX(segconf.seq_len_dict_id)->last_value.i; // length is equal seq_len
 }
 
-void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
+void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deeped)
 {
     START_TIMER;
 
@@ -62,12 +62,12 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep)
         pair_is_forward = strand_ctx->last_value.i;
     }
         
-    if (deep && flag.deep) {
+    if (deeped && flag.deep) {
         fastq_deep_seg_SEQ (vb, dl, STRa(seq), bitmap_ctx, nonref_ctx);
         goto done;
     }
 
-    if (deep && flag.bam_assist) {
+    if (deeped && flag.bam_assist) {
         fastq_bamass_seg_CIGAR (vb);
         
         aln_res = fastq_bamass_seg_SEQ (vb, dl, STRa(seq), (vb->R1_vb_i > 0), pair_gpos, pair_is_forward);
@@ -124,13 +124,14 @@ uint32_t fastq_zip_get_seq_len (VBlockP vb, uint32_t line_i)
     return DATA_LINE (line_i)->sam_seq_len;
 }
 
-// used by QUAL codecs: LONGR and HOMP
+// used by SEQ-dependent QUAL codecs: LONGR, PACB, SMUX and HOMP
 COMPRESSOR_CALLBACK (fastq_zip_seq) 
 {
     ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
     bool trimmed = flag.deep && (dl->seq.len > dl->sam_seq_len);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
+    // note: see bug 1208
     *line_data_len  = trimmed ? MIN_(maximum_size, dl->seq.len - dl->sam_seq_len) // compress only trimmed bases, other bases will be copied from Deep
                     :           MIN_(maximum_size, dl->seq.len);
     
@@ -179,7 +180,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_PAIR2_GPOS)
         if (bitmap_ctx->r1_is_aligned == PAIR1_ALIGNED)
             ctx->localR1.next++; // we didn't use this pair value 
 
-        new_value->i = reconstruct_from_local_int (vb, ctx, 0, false);
+        new_value->i = reconstruct_from_local_int (vb, ctx, 0, RECON_OFF);
     }
 
     // case: pair-1 is aligned, and GPOS is a delta vs pair-1. 

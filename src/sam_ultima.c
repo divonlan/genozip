@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_ultima.c
-//   Copyright (C) 2022-2025 Genozip Limited. Patent pending.
+//   Copyright (C) 2022-2026 Genozip Limited. Patent pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -69,12 +69,13 @@ static inline void seg_one_tp (VBlockSAMP vb, ContextP chan[TP_NUM_BINS], char *
 }
 
 // example: tp:B:c,1,1,1,1,1,1,-1,2,0,0,0,2,-1,1,1,-1,2,0,0,0,0,2,-1,1,1,0,0,
-void sam_seg_ULTIMA_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, uint32_t tp_len)
+ARRAY_ITEM_CALLBACK (sam_seg_ULTIMA_tp)
 {
     START_TIMER;
 
-    char *tp = (char *)tp_; // this is OPTION_tp_B_ARR.local - we transfer it to the channels and free it
-    ZipDataLineSAMP dl = (ZipDataLineSAMP )dl_;
+    char *tp = (char *)array; // this is OPTION_tp_B_ARR.local - we transfer it to the channels and free it
+    uint32_t tp_len = array_len;
+    ZipDataLineSAMP dl = (ZipDataLineSAMP)cb_param;
 
     // note: flags.no_textual_seq is set to false, in sam_seg_finalize, as required by sam_piz_special_ULTIMA_tp
     ASSSEG (tp_len == dl->SEQ.len, "Expecting length of TP:B:c to be seq_len=%u but it is %u", dl->SEQ.len, tp_len);
@@ -123,7 +124,7 @@ void sam_seg_ULTIMA_tp (VBlockSAMP vb, ContextP arr_ctx, void *dl_, void *tp_, u
     for (int bin=0; bin < TP_NUM_BINS-1; bin++) 
         chan[bin]->local.len32 = BNUM (chan[bin]->local, next[bin]);
 
-    arr_ctx->local.len32 = 0; 
+    ctx->local.len32 = 0; 
 
     COPY_TIMER (sam_seg_ULTIMA_tp);
 }

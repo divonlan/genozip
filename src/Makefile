@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------
 #   Makefile
-#   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+#   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 #   Please see terms and conditions in the file LICENSE.txt
 #
 #   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -12,7 +12,6 @@
 
 OBJDIR_LINUX   := objdir.linux
 OBJDIR_WINDOWS := objdir.windows
-OBJDIR_OSX_X86 := objdir.osx-x86
 OBJDIR_OSX_ARM := objdir.osx-arm
 
 architecture := $(shell uname -sm | sed -e 's/amd/x86_/')
@@ -27,14 +26,6 @@ endif
 ifeq ($(architecture),Linux x86_64)
 	linux_x86 := 1
 	OBJDIR=$(OBJDIR_LINUX)
-endif
-
-ifeq ($(architecture),Darwin x86_64)
-	osx = x86
-	osx_x86 := 1		
-	OBJDIR=$(OBJDIR_OSX_X86)
-	CFLAGS   += -mmacosx-version-min=10.9 -DNO_UTIMENSAT # Conda requires support from 10.9 but utimensat() was only introduced in MacOS 10.13
-	CXXFLAGS += -mmacosx-version-min=10.9 
 endif
 
 ifeq ($(architecture),Darwin arm64)
@@ -92,13 +83,6 @@ ifdef linux_x86
 	# DEBUGFLAGS += -fsanitize=thread -Dsanitize_thread=1
 	DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 # not compatable with valgrind - comment out if using valgrind
 endif
-
-ifdef osx_x86
-	AS := nasm
-	x86_64 := 1
-	ASFLAGS := -f macho64 --prefix=_ -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
-	DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1
-endif	
 
 ifdef osx_arm64
 	noarch := 1
@@ -368,10 +352,6 @@ autocomplete-debug.sh : autocomplete_gen.sh flags.c
 	@echo "Generating $@"
 	@./autocomplete_gen.sh debug
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
-
-ifdef osx_x86
-objdir.mac/secure/license.o : CFLAGS := $(patsubst -march=% ,-march=x86-64 ,$(CFLAGS)) # plain vanilla x86-64, so it runs on Rosetta x86-64 simulator on M1/M2/M3
-endif
 
 -include $(DEPS)
 
@@ -668,23 +648,19 @@ $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
 	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC_8_5) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
-# get Mac files: ../installers/genozip-osx-x86.tar and objdir.mac/secure/license.o
-$(INSTALLERS)/genozip-osx-x86.tar : $(C_SRCS) $(X86_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
-	@echo "getting $>"
-	@wsl mac-build-and-fetch.sh x86 
-
+# get Mac files: ../installers/genozip-osx-arm.tar and objdir.mac/secure/license.o
 $(INSTALLERS)/genozip-osx-arm.tar : $(C_SRCS) $(ARM_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
 	@echo "getting $>"
-	@wsl mac-build-and-fetch.sh arm
+	@wsl mac-build-and-fetch.sh
 
 $(INSTALLERS)/LICENSE.html: genozip$(EXE)
 	@./genozip$(EXE) --license=html,5000 > $@
 
 BUILD_FILES = version.h Makefile \
-	objdir.linux/secure/license.o objdir.windows/secure/license.o objdir.osx-x86/secure/license.o \
+	objdir.linux/secure/license.o objdir.windows/secure/license.o \
 	objdir.osx-arm/secure/license.o ../RELEASE_NOTES.txt ../LICENSE.txt \
 	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar \
-	$(INSTALLERS)/genozip-osx-x86.tar $(INSTALLERS)/genozip-osx-arm.tar $(INSTALLERS)/LICENSE.html
+	$(INSTALLERS)/genozip-osx-arm.tar $(INSTALLERS)/LICENSE.html
 
 push-build: # push files modified during the build process
 	@git stage $(BUILD_FILES) -f
@@ -704,7 +680,6 @@ finalize-distribution:
 
 distribution: initialize-build-distribution increment-version ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
               $(INSTALLERS)/genozip-osx-arm.tar 			\
-			  $(INSTALLERS)/genozip-osx-x86.tar 			\
 			  $(INSTALLERS)/genozip-linux-x86_64.tar.build	\
 			  $(INSTALLERS)/genozip-installer.exe 			\
               push-build conda/.conda-timestamp genozip-latest.exe genozip-latest finalize-distribution
@@ -759,11 +734,6 @@ genozip-osx-%/genozip: $(OBJS) $(OBJDIR)/distribution.osx-%.o
 	@echo Linking $@
 	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-# note: two separate rules for x86 and arm, as we can't have multiple targets with a % in the same rule(?)
-genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols: genozip-osx-x86/genozip 
-	@echo Generating $@
-	@ln -f $< $@ 
-
 genozip-osx-arm/genounzip genozip-osx-arm/genocat genozip-osx-arm/genols: genozip-osx-arm/genozip 
 	@echo Generating $@
 	@ln -f $< $@ 
@@ -772,12 +742,6 @@ genozip-osx-%/LICENSE.txt: ../LICENSE.txt
 	@(mkdir genozip-osx-$(osx) >& /dev/null ; exit 0)
 	@echo Generating $@
 	@cp -f $< $@
-
-OSX_X86_TARGZ_OBJS = genozip-osx-x86/genozip genozip-osx-x86/genounzip genozip-osx-x86/genocat genozip-osx-x86/genols genozip-osx-x86/LICENSE.txt
-
-$(INSTALLERS)/genozip-osx-x86.tar: $(OSX_X86_TARGZ_OBJS) 
-	@echo "Creating $@"
-	@tar -cf $@ --lzma genozip-osx-x86
 
 OSX_ARM_TARGZ_OBJS = genozip-osx-arm/genozip genozip-osx-arm/genounzip genozip-osx-arm/genocat genozip-osx-arm/genols genozip-osx-arm/LICENSE.txt
 

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_smux.c
-//   Copyright (C) 2024-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2024-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -68,7 +68,6 @@ static void set_stdv (double *histo, int histo_len)
     if (flag.show_qual)      
         iprintf ("SMUX threadshold: '%c' has the highest standard deviation: %2.1f%%\n", 
                  segconf.smux_max_stdv_q, 100.0 * segconf.smux_max_stdv);
-
 }
 
 // calculate stats for smux AND qmux as well as stats
@@ -88,15 +87,15 @@ void codec_smux_calc_stats (VBlockP vb)
 
     // calculate histograms
     for (LineIType line_i=0; line_i < vb->lines.len32 && num_bp < BP_IN_SAMPLE; line_i++) {   
-        uint8_t *qual; 
+        bytes qual; 
         uint32_t qual_len;
         qual_callback (vb, ctx, line_i, (char **)pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
         
-        if (!qual_len) continue; // case in SAM: dl->dont_compress_QUAL || dl->is_consensus
+        if (!qual_len) continue; // case in SAM: dl->dont_compress_QUAL
 
         STRw(seq);
         bool is_rev;
-        seq_callback (vb, NULL, line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, &is_rev);
+        seq_callback (vb, NULL, line_i, pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, &is_rev);
 
         if (qual[0] != ' ') { // ignore missing qual
             if (!is_rev)
@@ -139,10 +138,10 @@ void codec_smux_calc_stats (VBlockP vb)
                 if (histo_by_seq[b][q] > SHOW_THREASHOLD) 
                     iprintf ("'%c'=%2.1f%% ", q + '!', 100.0 * histo_by_seq[b][q]);
             }
-            iprint0 ("\n");
+            iprint_newline();
         }
 
-        iprint0 ("\n");
+        iprint_newline();
     }
 
     set_stdv ((double *)histo_by_seq, 4);
@@ -153,7 +152,7 @@ bool codec_smux_maybe_used (Did did_i)
 {
     #define SMUX_STDV_THREADHOLD 0.08 // between 0 and 1. The higher this is, the more drastic differences between the quality histogram associated with each base is needed to qualify for SMUX
 
-    return did_i == SAM_QUAL/*==FASTQ_QUAL*/ && // we only calculated stats for SAM_QUAL (not OQ or CQUAL)
+    return did_i == SAM_QUAL/*==FASTQ_QUAL*/ && // we only calculated stats for SAM_QUAL (not OQ)
                (flag.force_qual_codec == CODEC_SMUX || 
                 (TECH(MGI) && segconf.nontrivial_qual && !flag.no_smux && segconf.smux_max_stdv > SMUX_STDV_THREADHOLD)); // not yet seen benefit for non-MGI files);
 }

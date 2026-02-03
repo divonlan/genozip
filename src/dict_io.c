@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   dict_io.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -155,10 +155,10 @@ static void dict_io_compress_one_fragment (VBlockP vb)
                  ctx_tag_name_ex (vb->fragment_ctx).s, vb->fragment_ctx->did_i, vb->fragment_num_words, vb->vblock_i);
     
     if (dict_id_is_show (vb->fragment_ctx->dict_id))
-        dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, true, true, false);
+        dict_io_print (info_stream, vb->fragment_ctx->dict_id, vb->fragment_start, vb->fragment_len, true, true, true, false);
 
     if (flag.show_contigs && vb->fragment_ctx->did_i == CHROM)
-        dict_io_print (info_stream, vb->fragment_start, vb->fragment_len, true, true, true, VB_DT(SAM) || VB_DT(BAM));
+        dict_io_print (info_stream, vb->fragment_ctx->dict_id, vb->fragment_start, vb->fragment_len, true, true, true, VB_DT(SAM) || VB_DT(BAM));
 
     if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->dcodec);
 
@@ -374,7 +374,7 @@ void dict_io_read_all_dictionaries (void)
             if (!ctx->dict.len) continue;
 
             if (flag.show_contigs && ctx->did_i == CHROM)
-                dict_io_print (info_stream, STRb(ctx->dict), true, false, true, Z_DT(SAM));
+                dict_io_print (info_stream, ctx->dict_id, STRb(ctx->dict), true, false, true, Z_DT(SAM));
             
             if (flag.show_dict || (flag.show_one_dict && dict_id_is_show (ctx->dict_id))) 
                 iprintf ("%-8s\tdid_i=%-3u\tnum_snips=%u\tdict_size=%s\tall_the_same_wi=%u\tdeep_sam=%s\tdeep_fastq=%s\n", 
@@ -382,10 +382,10 @@ void dict_io_read_all_dictionaries (void)
                          ctx->dict_flags.all_the_same_wi, TF(ctx->dict_flags.deep_sam), TF(ctx->dict_flags.deep_fastq));
 
             if (dict_id_is_show (ctx->dict_id))
-                dict_io_print (info_stream, STRb(ctx->dict), true, true, true, false);
+                dict_io_print (info_stream, ctx->dict_id, STRb(ctx->dict), true, true, true, false);
         }
         
-        if (flag.show_dict) iprint0 ("\n"); // but not for show_contigs or show_one_dict, as often wc is used to count them 
+        if (flag.show_dict) iprint_newline(); // but not for show_contigs or show_one_dict, as often wc is used to count them 
 
         if (is_genocat) exit_ok; // if this is genocat - we're done
     }
@@ -393,11 +393,13 @@ void dict_io_read_all_dictionaries (void)
     COPY_TIMER_EVB (dict_io_read_all_dictionaries);
 }
 
-StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
+StrTextMegaLong str_snip_ex (DataType dt, STRp(snip), bool add_quote)
 {
     StrTextMegaLong s;
     int s_len=0;
-    DataType dt = txt_file ? txt_file->data_type : z_file->data_type;
+
+    if (dt == DT_NONE)
+        dt = txt_file ? txt_file->data_type : z_file->data_type;
 
     char op = (snip_len && snip[0] > 0 && snip[0] < 32) ? snip[0] : 0;
     int i=1;
@@ -440,7 +442,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
 
     if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION ||
         X_VCF(LEN_OF) || X_VCF(ARRAY_LEN_OF) || X_VCF(COPY_MATE) || (X_VCF(GQ) && snip_len > 8) ||
-        X_SAM(COPY_BUDDY))
+        (X_SAM(COPY_BUDDY) && snip_len > 3))
     {
         unsigned b64_len = base64_sizeof (DictId);
         DictId dict_id;
@@ -490,7 +492,7 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
     }
 
     else if (X_VCF(DEFER) && snip_len > 2) {
-        SNPRINTF (s, "%.*s", (int)sizeof (s)-50, str_snip_ex (snip+2, snip_len-2, false).s); // recursive call
+        SNPRINTF (s, "%.*s", (int)sizeof (s)-50, str_snip_ex (dt, snip+2, snip_len-2, false).s); // recursive call
         return s;
     }  
 
@@ -552,15 +554,75 @@ StrTextMegaLong str_snip_ex (STRp(snip), bool add_quote)
     return s;
 }
 
+// decide for a SPECIAL snip in a Deep file, whether it is a FASTQ or SAM special (ugly code)
+static DataType dict_io_print_deep_dt_by_special (char special, DictId dict_id)
+{
+    #if NUM_FASTQ_SPECIAL != 16
+    #error need to update dict_io_print_deep_dt_by_special()
+    #endif
+
+    #define SP(sam_name, fq_name) ({ \
+        ASSERT ((int)SAM_SPECIAL_##sam_name == (int)FASTQ_SPECIAL_##fq_name, "expecting SAM_SPECIAL_%s == FASTQ_SPECIAL_%s", #sam_name, #fq_name); /* optimized away if ok */ \
+        special == SAM_SPECIAL_##sam_name; \
+    })
+
+    //     SAM                    FASTQ               // special index as appears in sam.h and fastq.h
+    //     ---------------------  --------------      ------------------------------------------------
+    
+    // SAM specials that don't appear in v15 (when deep was introduced), so these specials are definitely FASTQ
+    if (SP(TLEN_old,              PAIR2_GPOS)      || // 1
+        SP(MD_old,                deep_copy_QNAME) || // 4
+        SP(PNEXT_IS_PREV_POS_old, ULTIMA_C)        || // 10
+        SP(COPY_MATE_TLEN_old,    AGENT_QX))          // 12
+        return DT_FASTQ;
+
+    // FASTQ specials that can't appear in deep files - so these are definitely SAM
+    if (SP(TLEN,                  SEQ_by_bamass))     // 15
+        return DT_SAM;
+        
+    // specials that apply to OPTION in FASTQ but FIELD in SAMs
+    if (SP(COPY_MATE_FLAG,        AGENT_RX))          // 11
+        return dict_id_is_field (dict_id) ? DT_SAM : DT_FASTQ;
+
+    // specials that apply to OPTION in SAM but FIELD in FASTQ
+    if (SP(BDBI,                  mate_lookup)     || // 2
+        SP(delta_seq_len,         set_deep)        || // 3
+        SP(FLOAT,                 deep_copy_SEQ)   || // 5
+        SP(NM,                    backspace)       || // 7
+        SP(MD,                    copy_line1)      || // 8
+        SP(REF_CONSUMED,          monochar_QUAL)   || // 9
+        SP(COPY_BUDDY_CIGAR,      qname_rng2seq_len)) // 13
+        return dict_id_is_field (dict_id) ? DT_FASTQ : DT_SAM;
+
+    // specials that in SAM apply to only one specific field
+    if (SP(BIN,                   deep_copy_QUAL))    // 6
+        return dict_id.num == _SAM_BAM_BIN    ? DT_SAM : DT_FASTQ;
+
+    if (SP(FASTQ_CONSUME_AUX,     DEMUX_by_R))        // 14
+        return dict_id.num == _SAM_FQ_AUX     ? DT_SAM : DT_FASTQ;
+
+    // specials that in FASTQ apply to only one specific field
+    if (SP(CIGAR,                 unaligned_SEQ))     // 0
+        return dict_id.num == _FASTQ_SQBITMAP ? DT_FASTQ : DT_SAM;
+    
+    return DT_SAM; // larger than the max FASTQ special
+
+    #undef SP
+}
+
 // print one or more words in Context.dict
-void dict_io_print (FILE *fp, STRp(data), bool with_word_index, bool add_quotation_marks, bool add_newline, bool remove_non_contigs)
+void dict_io_print (FILE *fp, DictId dict_id, STRp(data), bool with_word_index, bool add_quotation_marks, bool add_newline, bool remove_non_contigs)
 {
     rom word = data, after = data + data_len;
-    
+    bool is_deep = flag.deep;
+
     for (WordIndex wi=0; word < after; wi++) {
         int word_len = strlen (word);
 
-        StrTextMegaLong snip = str_snip_ex (STRa(word), add_quotation_marks);
+        DataType dt = is_deep && word_len > 2 && word[0] == SNIP_SPECIAL 
+                    ? dict_io_print_deep_dt_by_special (word[1], dict_id) : DT_NONE;
+
+        StrTextMegaLong snip = str_snip_ex (dt, STRa(word), add_quotation_marks);
 
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
         bool remove_one = remove_non_contigs && 
@@ -584,8 +646,8 @@ void dict_io_show_singletons (VBlockP vb, ContextP ctx)
 {
     if (ctx->ltype == LT_SINGLETON) {
         iprintf ("%s: %s.local contains singletons:\n", VB_NAME, ctx->tag_name);
-        dict_io_print (info_stream, STRb(ctx->local), true, true, true, false);
-        iprint0 ("\n");
+        dict_io_print (info_stream, ctx->dict_id, STRb(ctx->local), true, true, true, false);
+        iprint_newline();
     }
 
     else

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   fastq.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -176,9 +176,9 @@ SPECIAL (FASTQ, 6,  deep_copy_QUAL,    fastq_special_deep_copy_QUAL);         //
 SPECIAL (FASTQ, 7,  backspace,         fastq_special_backspace);              // v15
 SPECIAL (FASTQ, 8,  copy_line1,        fastq_special_copy_line1);             // v15
 SPECIAL (FASTQ, 9,  monochar_QUAL,     fastq_special_monochar_QUAL);          // v15
-SPECIAL (FASTQ, 10, ULTIMA_C,          ultima_c_piz_special_DEMUX_BY_Q4NAME); // introduced 15.0.15
-SPECIAL (FASTQ, 11, AGENT_RX,          agilent_special_AGENT_RX);             // introduced 15.0.23
-SPECIAL (FASTQ, 12, AGENT_QX,          agilent_special_AGENT_QX);             // introduced 15.0.23
-SPECIAL (FASTQ, 13, qname_rng2seq_len, special_qname_rng2seq_len);            // introduced 15.0.26
-SPECIAL (FASTQ, 14, DEMUX_by_R,        fastq_special_DEMUX_by_R);             // introduced 15.0.58
-SPECIAL (FASTQ, 15, SEQ_by_bamass,     fastq_special_SEQ_by_bamass);          // introduced 15.0.69
+SPECIAL (FASTQ, 10, ULTIMA_C,          ultima_c_piz_special_DEMUX_BY_Q4NAME); // 15.0.15
+SPECIAL (FASTQ, 11, AGENT_RX,          agilent_special_AGENT_RX);             // 15.0.23
+SPECIAL (FASTQ, 12, AGENT_QX,          agilent_special_AGENT_QX);             // 15.0.23
+SPECIAL (FASTQ, 13, qname_rng2seq_len, special_qname_rng2seq_len);            // 15.0.26
+SPECIAL (FASTQ, 14, DEMUX_by_R,        fastq_special_DEMUX_by_R);             // 15.0.58 (it it still used?)
+SPECIAL (FASTQ, 15, SEQ_by_bamass,     fastq_special_SEQ_by_bamass);          // 15.0.69

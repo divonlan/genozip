@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   sam_seq.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -1474,7 +1474,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
 
     // before translating - add to Deep if needed
     if (flag.deep) 
-        sam_piz_con_item_cb (vb, &(ContainerItem){ .dict_id = ctx->dict_id }, STRa(recon));
+        sam_piz_deep_SEQ_cb (VB_SAM, STRa(recon));
     
     BAMAlignmentFixedP alignment = (BAMAlignmentFixedP)Btxt (vb->line_start);
     uint32_t l_seq = alignment->l_seq;

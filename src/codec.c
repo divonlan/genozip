@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -332,7 +332,8 @@ done:
 }
 
 void codec_assign_best_qual_codec (VBlockP vb, Did did_i,  
-                                   LocalGetLineCB callback, bool no_seq_dependency, 
+                                   LocalGetLineCB callback, 
+                                   bool no_seq_dependency, // only consider codecs in which SEQ is not required to compress QUAL
                                    bool maybe_revcomped,
                                    bool *codec_requires_seq)
 {
@@ -347,9 +348,9 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
         return;
     }
 
-    Codec forced_codec = qual_codec        ? qual_codec 
-                       : did_i == SAM_QUAL ? flag.force_qual_codec // == FASTQ_QUAL
-                       :                     0;
+    Codec forced_codec = qual_codec                                        ? qual_codec 
+                       : (did_i == SAM_QUAL && flag.force_qual_codec)      ? flag.force_qual_codec // note: SAM_QUAL==FASTQ_QUAL
+                       :                                                     0;
 
     if (forced_codec)  
         switch (forced_codec) {
@@ -380,7 +381,8 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     if (!qual_codec)
         store_release (ZCTX(did_i)->qual_codec, ctx->ltype == LT_BLOB ? CODEC_NONE : ctx->lcodec);
 
-    if (codec_requires_seq && (ctx->lcodec == CODEC_PACB || ctx->lcodec == CODEC_LONGR || ctx->lcodec == CODEC_HOMP || ctx->lcodec == CODEC_SMUX)) 
+    #define LCODEC(x) (ctx->lcodec == CODEC_##x)
+    if (codec_requires_seq && (LCODEC(PACB) || LCODEC(LONGR) || LCODEC(HOMP) || LCODEC(SMUX))) 
         *codec_requires_seq = true;
 
     if (!qual_codec && (flag.show_codec || flag.show_qual) && ctx->lcodec) // printing aligned to the output of codec_assign_best_codec
@@ -425,35 +427,25 @@ void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec)
 
 void codec_qual_show_stats (void)
 {
-    if (!flag.show_qual || !z_file) return;
+    if (!z_file || !z_file->num_lines) return;
 
-    bool has_domq = false;
-    for (CompIType comp_i=0; comp_i < z_file->num_components; comp_i++) 
-        has_domq |= z_file->domq_lines[comp_i] || z_file->divr_lines[comp_i];
+    uint32_t domq  = z_file->domq_lines;
+    uint32_t divr  = z_file->divr_lines;
+    uint32_t homp  = z_file->homp_lines;
+    uint32_t pacb  = z_file->pacb_lines;
+    uint32_t longr = z_file->longr_lines;
+    uint32_t normq = z_file->normq_lines;
 
-    if (!has_domq) return;
+    uint32_t other = z_file->num_lines - domq - divr - homp - pacb - longr - normq; 
 
-    iprint0 ("\nDOMQ codec stats (values are number of lines):\n");
-
-    for (CompIType comp_i=0; comp_i < z_file->num_components; comp_i++) {
-        uint32_t domq  = z_file->domq_lines[comp_i];
-        uint32_t divr  = z_file->divr_lines[comp_i];
-        uint32_t homp  = z_file->homp_lines[comp_i];
-        uint32_t pacb  = z_file->pacb_lines[comp_i];
-        uint32_t longr = z_file->longr_lines[comp_i];
-        uint32_t normq = z_file->normq_lines[comp_i];
-        uint32_t total = z_file->comp_num_lines[comp_i];
-        uint32_t other = total - domq - divr - homp - pacb - longr - normq; 
-
-        iprintf ("comp_i=%u DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) LONGR=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%u (%.1f%%)\n", comp_i,
-                  domq,  (double)domq / total * 100, 
-                  divr,  (double)divr / total * 100, 
-                  homp,  (double)homp / total * 100, 
-                  pacb,  (double)pacb / total * 100, 
-                  longr, (double)longr / total * 100, 
-                  normq, (double)normq / total * 100, 
-                  other, (double)other / total * 100);
-    }
+    iprintf ("\nQUAL codec stats (# lines): DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) LONGR=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%u (%.1f%%)\n",
+                domq,  (double)domq  / z_file->num_lines * 100, 
+                divr,  (double)divr  / z_file->num_lines * 100, 
+                homp,  (double)homp  / z_file->num_lines * 100, 
+                pacb,  (double)pacb  / z_file->num_lines * 100, 
+                longr, (double)longr / z_file->num_lines * 100, 
+                normq, (double)normq / z_file->num_lines * 100, 
+                other, (double)other / z_file->num_lines * 100);
 }
 
 UNCOMPRESS (codec_hapmat_uncompress)

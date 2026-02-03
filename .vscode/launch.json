@@ -16,8 +16,8 @@
             // "program": "${workspaceFolder}/src/genounzip.exe",
             // "program": "${workspaceFolder}/src/genols-debug.exe",
 
-            "args" : ["--echo", "-fX", "--truncate", "./private/test/gz.bgzf.truncated.fq.gz"],
-
+"args" : ["--decompress", "--test", "--quiet", "--echo", "--no-tip", "--check-latest", "--reference", "public/hs37d5.v15.ref.genozip", "bug2.deep.genozip"],
+// "args" : ["-e", "public/hs37d5.v15.ref.genozip", "-3", "-f", "--force-deep", "-B100", "--show-counts=QNAME", "bug2.sam", "bug2.fq"],
             "environment": [
                 { "name": "GENOZIP_REFERENCE", "value": "c:\\Users\\divon\\genozip/public", },
             ],

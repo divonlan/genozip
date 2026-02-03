@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   dict_id.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -129,7 +129,7 @@ bool dict_id_is_show (DictId dict_id)
     dict_id = dict_id_typeless (dict_id);
 
     for (unsigned i=0; i < DICT_ID_LEN; i++)
-        if (IS_NON_WS_PRINTABLE(dict_id.id[i]))
+        if (IS_NON_WS(dict_id.id[i]))
             dict_id_str[s_len++] = dict_id.id[i];
 
     unsigned len = strlen (flag.show_one_dict);

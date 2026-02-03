@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vcf_copy.c
-//   Copyright (C) 2024-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2024-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -169,7 +169,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_SAMPLE)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
-    new_value->i = ctx->local.len ? reconstruct_from_local_int (VB, ctx, 0, false) 
+    new_value->i = ctx->local.len ? reconstruct_from_local_int (VB, ctx, 0, RECON_OFF) 
                                   : 0; // local was dropped because no sample is copied (see vcf_copy_sample_seg_finalize) 
 
     rom recon = BAFTtxt;

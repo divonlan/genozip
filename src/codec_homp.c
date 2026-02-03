@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   codec_homp.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -123,7 +123,7 @@ COMPRESS (codec_homp_compress)
     LocalGetLineCB *seq_callback = (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq);
     void (*update_qual_len)(VBlockP, uint32_t, uint32_t) = (VB_DT(FASTQ) ? fastq_update_qual_len : sam_update_qual_len);
 
-    __atomic_add_fetch (&z_file->homp_lines[vb->comp_i], vb->lines.len, __ATOMIC_RELAXED);
+    __atomic_add_fetch (&z_file->homp_lines, vb->lines.len, __ATOMIC_RELAXED);
 
     // first pass - condese qual scores of homopolymers by removing redundant scores
     for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   

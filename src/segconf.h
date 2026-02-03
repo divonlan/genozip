@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   segconf.h
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -60,7 +60,7 @@ typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             M
 
 typedef struct { char s[SAM_MAX_QNAME_LEN+1]; } QnameStr;
 
-typedef enum { QHT_QUAL, QHT_CONSENSUS, QHT_OQ, NUM_QHT } QualHistType;
+typedef enum { QHT_QUAL, QHT_OQ, NUM_QHT } QualHistType;
 extern QualHistType did_i_to_qht (Did did_i);
 
 typedef struct { uint8_t q; int count; } QualHisto;
@@ -172,7 +172,6 @@ typedef struct {
     bool sam_has_abra2;
     int64_t sam_first_qs;       // qs:i value of the first line of segconf
     bool sam_diverse_qs;        // true if not all qs:i values in segconf are equal sam_first_qs
-    bool sam_has_xcons;
     bool sam_bisulfite;         // this BAM file is of reads that have been treated with bisulfite to detect methylation
     bool sam_predict_meth_call; // ZIP/PIZ: true if segging SEQ should also predict the methylation call in vb->meth_call
     bool bs_strand_not_by_rev_comp; // true if vb->bisulfite_strand cannot be predicted by FLAG.rev_comp
@@ -204,6 +203,7 @@ typedef struct {
     bool sag_has_AS;            // sag store the AS:i values of prim lines that have them. Set if its beneficial to seg AS:i in depn lines against prim
     uint32_t sam_cigar_len;     // approx average CIGAR len rounded up (during segconf.running==true - total len)
     uint32_t seq_len_to_cm;     // ZIP/PIZ: approx average of (seq_len/cm:i) (during segconf.running - cumulative)
+    uint32_t s1_to_cm_32;       // ZIP/PIZ: approx average of (s1:i/cm:i) x 32 (during segconf.running - cumulative)
     bool use_pacbio_iqsqdq;     // ZIP: if iq:Z sq:Z and dq:Z are present in all lines, we can compress them, as well as QUAL, better. 
     char CR_CB_seperator;       // ZIP: seperator within CR:Z and CB:Z fields
     bool no_gc_checking;        // ZIP: if true: vb=1 had no depn lines, so we heuristically decided not to check for gc in future VBs (note that some VBs running in parallel to vb=1 might have had depn lines)
@@ -211,6 +211,14 @@ typedef struct {
     bool has_TR_TQ;             // ZIP: use cellrangerATAC-style TR:Z / TQ:Z methods             
     bool has_RSEM;              // ZIP: RSEM is used (https://github.com/bli25/RSEM_tutorial)
     RGMethod RG_method;
+
+    #define MIN_XCONS_STD_QUAL_LEN 100
+    #define MAX_XCONS_STD_QUAL_LEN (MIN_XCONS_STD_QUAL_LEN + 255) // SectionHeaderGenozipHeader.xcons_std_seq_len_M100 is uint8_t
+    union {
+    uint32_t xcons_std_line_histogram[MAX_XCONS_STD_QUAL_LEN - MIN_XCONS_STD_QUAL_LEN + 1]; // Segconf: used to find the most common standard xcons qual length ("standard": alignments with XC:i but without XO:i)
+    uint32_t xcons_std_seq_len;// Seg / PIZ 
+    };
+    bool sam_has_xcons;
 
     uint8_t n_CR_CB_CY_seps, n_BC_QT_seps, n_RX_seps;
     char BC_sep, RX_sep;

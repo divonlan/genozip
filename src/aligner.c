@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   aligner.c
-//   Copyright (C) 2020-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -360,7 +360,7 @@ void aligner_recon_get_gpos_and_fwd (VBlockP vb, bool is_pair_2,
 
     // first file of a pair (R1) or a non-pair fastq or sam
     if (!is_pair_2 && !is_interleaved_r2) {
-        *gpos = gpos_ctx->last_value.i = reconstruct_from_local_int (vb, gpos_ctx, 0, false);
+        *gpos = gpos_ctx->last_value.i = reconstruct_from_local_int (vb, gpos_ctx, 0, RECON_OFF);
         *is_forward = NEXTLOCALBIT (strand_ctx);  
 
         if (segconf.is_interleaved) bitmap_ctx->r1_is_aligned = PAIR1_ALIGNED;      
@@ -369,14 +369,14 @@ void aligner_recon_get_gpos_and_fwd (VBlockP vb, bool is_pair_2,
     // 2nd file of a pair (R2) 
     else if (is_pair_2) {
         *is_forward = fastq_piz_get_r2_is_forward (vb); // MUST be called before gpos reconstruction as it inquires GPOS.localR1.next
-        reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, false); // calls fastq_special_PAIR2_GPOS
+        reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, RECON_OFF); // calls fastq_special_PAIR2_GPOS
         *gpos = gpos_ctx->last_value.i;
     }
     
     // R2 in a single-file interleaved FASTQ
     else {
         *is_forward = fastq_piz_get_interleaved_r2_is_forward (vb);
-        reconstruct_from_ctx (vb, gpos_r2_ctx->did_i, 0, false); // calls fastq_special_PAIR2_GPOS
+        reconstruct_from_ctx (vb, gpos_r2_ctx->did_i, 0, RECON_OFF); // calls fastq_special_PAIR2_GPOS
         *gpos = gpos_r2_ctx->last_value.i;
     }
 

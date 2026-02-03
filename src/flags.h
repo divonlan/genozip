@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   flags.h
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
@@ -127,7 +127,7 @@ typedef struct {
     ReferenceType reference;
 
     // stats / metadata flags for end users
-    int show_wrong_md, show_wrong_xg, show_wrong_xm, show_wrong_xb; 
+    int show_wrong_md, show_wrong_xg, show_wrong_xm, show_wrong_xb, show_tlen_pred; 
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND, VLD_NO_REPORT } validate; // genocat: tests if this is a valid genozip file (z_file opens correctly)
     StatsType show_stats;
     CompIType show_stats_comp_i;
@@ -155,7 +155,7 @@ typedef struct {
         seg_only, show_bam, xthreads,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_stack, show_aligner, show_buddy,
-        echo,         // show the command line in case of an error
+        echo,         // show the command line in case of an error (including echo and its optional argument)
         recover,      // PIZ: attempted recovery from data corruption
         #define SHOW_ALL_HEADERS (-1)
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections

@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   vblock.c
-//   Copyright (C) 2019-2025 Genozip Limited. Patent Pending.
+//   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -467,5 +467,5 @@ void vb_display_deferred_q (VBlockP vb, rom func)
     for (int i=0; i < vb->deferred_q_len; i++)
         iprintf ("%s ", CTX(vb->deferred_q[i].did_i)->tag_name);
 
-    iprint0 ("\n");
+    iprint_newline();
 }
