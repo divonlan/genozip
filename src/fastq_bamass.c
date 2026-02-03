@@ -249,7 +249,7 @@ static void bamass_generate_bamass_ents (VBlockP vb_)
         SamFlags sam_flags;
         PosType32 pos;
         BamCigarOpP cigar = NULL;
-        uint32_t n_cigar_op;
+        uint32_t n_cigar_op = 0;
         rom this = next;
 
         vb->scratch.len = 0;
