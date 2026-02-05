@@ -76,6 +76,9 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 
         z_file->max_conc_writing_vbs  = MAX_(1, BGEN16 (header->sam.conc_writing_vbs)); // since 15.0.64. For earlier v14,15 versions, this will be 0 in the file and set to 1 here, and might be further updated when uncompressing SectionHeaderReconPlan.
     }
+
+    ASSINP0 (!(flag.qname_only && segconf.seq_len_dict_id.num), 
+             "genocat limitation: --qname-only cannot be used with this file because its QNAME format embeds seq_len");
 }
 
 // main thread: called for each txt file, after reading global area, before reading txt header
@@ -227,19 +230,21 @@ IS_SKIP (sam_piz_is_skip_section)
     bool cov     = flag.collect_coverage;
     bool cnt     = flag.count && !flag.grep;  // we skip if we're only counting, but not also if based on --count, but not if --grep, because grepping requires full reconstruction
     bool deep_fq = OUT_DT(FASTQ) && (comp_i <= SAM_COMP_DEPN); // genocat of fastq data from a Deep file
+    bool qonly   = flag.qname_only;
 
     #define has_sa (ZCTX(OPTION_SA_Z)->z_data_exists > 0)
     #define is_aux dict_id_is_aux_sf(dict_id) // #define so calculated only when (rarely) needed
 
     switch (dict_id.num) {
         case _SAM_SQBITMAP :
+            SKIPIF (qonly);
             SKIPIFF ((cov || cnt) && !flag.bases && 
                      !has_sa); // if this file has SA:Z: needed by MD:Z which is needed by NM:i which is needed by SA:Z
             
         case _SAM_NONREF   : case _SAM_NONREF_X : case _SAM_GPOS     : case _SAM_STRAND :
         case _SAM_SEQMIS_A : case _SAM_SEQMIS_C : case _SAM_SEQMIS_G : case _SAM_SEQMIS_T : 
         case _SAM_SEQINS_A : case _SAM_SEQINS_C : case _SAM_SEQINS_G : case _SAM_SEQINS_T : 
-            SKIPIF (is_prim); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_sags, but not needed for reconstruction
+            SKIPIF (is_prim || qonly); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_sags, but not needed for reconstruction
                            // (during PRIM SA Group loading, skip function is temporarily changed to sam_plsg_only). see also: sam_load_groups_add_grps
             SKIPIFF ((cov || cnt) && !flag.bases && !has_sa);
 
@@ -248,23 +253,26 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_BADQUAL : 
             SKIPIF (is_prim);                                         
             SKIPIF (deep_fq && (flag.seq_only || flag.header_only_fast));
-            SKIPIFF (cov || cnt);
+            SKIPIFF (cov || cnt || qonly);
 
         case _OPTION_XO_i : // needed to reconstruct QUAL in xcons
-            SKIPIFF (cov || cnt);
+            SKIPIFF (cov || cnt || qonly);
 
         case _OPTION_np_i : case _OPTION_ec_f : // np is needed for reconstruting QUAL (PACB codec), and ec is needed to rereconstruct np
         case _OPTION_iq_sq_dq : case SAM_QUAL_PACBIO_DIFF: // iq_sq_dq, if it exists, is combined with DIFF to construct QUAL
-            SKIPIFF (cov || cnt);
+            SKIPIFF (cov || cnt || qonly);
 
         case _SAM_TLEN    :
+            SKIPIF (qonly); 
+            // fallthrough
+
         case _SAM_BAM_BIN :
         case _SAM_EOL     :
             SKIPIF (deep_fq);
             // fallthrough
 
         case _SAM_QUALSA  :
-            SKIPIFF (preproc || cov || (cnt && !(flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))));
+            SKIPIFF (preproc || qonly || cov || (cnt && !(flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))));
 
         case _SAM_Q1NAME : case _SAM_QNAMESA : case _SAM_QNAME2 :
             KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
@@ -284,7 +292,7 @@ IS_SKIP (sam_piz_is_skip_section)
             
         case _OPTION_AS_i  : // we don't skip AS in preprocessing unless it is entirely skipped
             SKIPIF (preproc && !segconf.sag_has_AS);
-            SKIPIF (deep_fq);
+            SKIPIF (deep_fq || qonly);
             SKIPIFF ((cov || cnt) && is_aux);
   
         // data stored in SAGs - needed for reconstruction, and also for preproccessing
@@ -295,7 +303,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_CY_Z: case _OPTION_CY_ARR: case _OPTION_CY_DIVRQUAL: case _OPTION_CY_DOMQRUNS: case _OPTION_CY_QUALMPLX:
         case _OPTION_QT_Z: case _OPTION_QT_ARR: case _OPTION_QT_DIVRQUAL: case _OPTION_QT_DOMQRUNS: case _OPTION_QT_QUALMPLX:
         case _OPTION_QX_Z:                      case _OPTION_QX_DIVRQUAL: case _OPTION_QX_DOMQRUNS: case _OPTION_QX_QUALMPLX:
-            SKIPIFF (deep_fq || cov || cnt);
+            SKIPIFF (deep_fq || cov || cnt || qonly);
 
         case _SAM_FQ_AUX   : KEEPIFF (OUT_DT(FASTQ) || flag.collect_coverage);
         
@@ -313,19 +321,23 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_NM_i  : // required for SA:Z reconstruction
         case _OPTION_MD_Z  : // required NM:i reconstruction
             if (!has_sa) goto other; // not needed if this file has no SA:Z
-            SKIPIFF (preproc); 
+            SKIPIFF (preproc || qonly); 
             
         case _OPTION_MC_Z  :          
-        case _SAM_CIGAR    : SKIPIFF (preproc && IS_SAG_SA);
+        case _SAM_CIGAR    : 
         case _SAM_RNEXT    : // Required by RNAME and PNEXT
         case _SAM_PNEXT    : // PNEXT is required by POS
-        case _SAM_POS      : SKIPIFF (preproc && IS_SAG_SA);
+        case _SAM_POS      : 
+            SKIPIF (qonly);
+            SKIPIFF (preproc && IS_SAG_SA);
+
         case _SAM_TOPLEVEL : KEEPIF (flag.deep && is_dict); // needed to reconstruct the FASTQ components
                              SKIPIFF (preproc || OUT_DT(BAM) || OUT_DT(CRAM) || OUT_DT(FASTQ));
         case _SAM_TOP2BAM  : SKIPIFF (preproc || OUT_DT(SAM) || OUT_DT(FASTQ));
         case 0             : KEEPIFF (ST(VB_HEADER) || !preproc);
         
         default            : other :
+            SKIPIF (qonly);
             SKIPIF ((cov || cnt) && is_aux && !(is_dict && dict_id.num == _OPTION_OC_Z/*dict-alias of MC0_Z needed to reconstruct CIGAR*/));
             SKIPIF (deep_fq && is_aux && !is_dict); // Dictionaries might be needed for FASTQ AUX fields
             SKIPIF (deep_fq && is_dict && is_aux && !f.dictionary.deep_fastq); // outputting FASTQ: we don't need SAM-only AUX dicts
@@ -798,17 +810,20 @@ bool sam_piz_filter_up_to_v13_stuff (VBlockP vb, DictId dict_id, int item, bool 
 // not be reconstructed. contexts are not consumed.
 CONTAINER_FILTER_FUNC (sam_piz_filter)
 {
+    #define CONTAINER_IS(name) (dict_id.num == _##name)
+    #define ITEM_IS(name)      (con->items[item].dict_id.num == _##name)
+
     bool v13_ret_value;
     if (!VER(14) && sam_piz_filter_up_to_v13_stuff (vb, dict_id, item, &v13_ret_value))
         return v13_ret_value;
 
-    else if (dict_id.num == _SAM_TOP2NONE) { 
-        if (con->items[item].dict_id.num == _SAM_QUAL && (flag.header_only_fast || flag.seq_only)) // only possible when genocat --fastq of a deep file
+    else if (CONTAINER_IS(SAM_TOP2NONE)) { 
+        if (ITEM_IS(SAM_QUAL) && (flag.header_only_fast || flag.seq_only)) // only possible when genocat --fastq of a deep file
             return false; // don't reconstruct QUAL
     }
     
     // collect_coverage: rather than reconstructing optional, reconstruct SAM_FQ_AUX that just consumes MC:Z if it exists
-    else if (dict_id.num == _SAM_AUX) {
+    else if (CONTAINER_IS(SAM_AUX)) {
         if (flag.collect_coverage) {
             if      (CTX(SAM_FQ_AUX    )->is_loaded) reconstruct_from_ctx (vb, SAM_FQ_AUX,     0, false); // filter_repeats is set in the AUX container since v14
             else if (CTX(SAM_FQ_AUX_OLD)->is_loaded) reconstruct_from_ctx (vb, SAM_FQ_AUX_OLD, 0, false);
@@ -820,6 +835,11 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
         else
             VB_SAM->aux_con = con;
     }
+
+    // --qname-only: skip reconstructing everything but QNAME, BUDDY, EOL
+    else if (CONTAINER_IS(SAM_TOPLEVEL) && flag.qname_only &&
+             !ITEM_IS(SAM_QNAME) && !ITEM_IS(SAM_QNAMESA) && !ITEM_IS(SAM_BUDDY) && !ITEM_IS(SAM_EOL))
+        return false;
 
     return true; // go ahead and reconstruct
 }

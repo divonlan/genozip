@@ -78,7 +78,7 @@ typedef struct {
     
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     int header_one, header_only_fast, no_header, header_only, // how to handle the txt header
-        seq_only, qual_only,  
+        seq_only, qual_only, qname_only,
         regions, gpos, samples, 
         qname_filter, seq_filter, // 1 positive, -1 negative filter
         drop_genotypes, gt_only, snps_only, indels_only, // VCF options

@@ -1104,6 +1104,7 @@ batch_bam_subsetting()
     ass_eq_num "`$genocat $file --FLAG=-0x0030 --count`" 315       # should be the same as samtools' "-F 0x0030"
     ass_eq_num "`$genocat $file --MAPQ 20 --count`" 8753
     ass_eq_num "`$genocat $file --MAPQ ^20 --count`" 91156
+    ass_eq_num "`$genocat $file --qname-only --count`" 99909
 
     local file=$TESTDIR/test.human3-collated.bam.genozip
     $genozip $TESTDIR/test.human3-collated.bam -fXB4 --force-gencomp || exit 1
