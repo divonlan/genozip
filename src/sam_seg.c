@@ -278,6 +278,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_deep_qname1     = (segconf.deep_qtype == QNAME1);   // v15
     header->sam.segconf_deep_qname2     = (segconf.deep_qtype == QNAME2);   // v15
     header->sam.segconf_deep_no_qual    = segconf.deep_no_qual;             // v15
+    header->sam.segconf_deep_FAF        = segconf.fasta_as_fastq;           // 15.0.77
     header->sam.segconf_MAPQ_use_xq     = segconf.MAPQ_use_xq;              // 15.0.61
     header->sam.segconf_has_MQ          = !!segconf.has[OPTION_MQ_i];       // 15.0.61
     header->sam.segconf_SA_NM_by_X      = segconf.SA_NM_by_CIGAR_X;         // 15.0.66
@@ -856,7 +857,7 @@ void sam_segconf_finalize (VBlockP vb_)
         flag.aligner_available = false;
 
     // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
-    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
+    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--idxstats
     if (z_file->num_txts_so_far == 1 && (flag.aligner_available || !sam_hdr_contigs) && IS_REF_LOADED_ZIP)
         ctx_populate_zf_ctx_from_contigs (SAM_RNAME, ref_get_ctgs());
 
@@ -876,7 +877,7 @@ void sam_segconf_finalize (VBlockP vb_)
 
     if (flag.reference == REF_INTERNAL && !txt_file->redirected && !flag.seg_only && (segconf.sam_is_unmapped && !segconf.is_long_reads))
         TIP ("Compressing this unmapped %s file using a reference would shrink it by an additional 20%%-50%%.\n"
-             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
              dt_name (txt_file->data_type), arch_get_argv0(), txt_file->name);
     
     ASSERT (!flag.debug_or_test || !segconf.has[OPTION_SA_Z] || segconf.sam_has_SA_Z || MP(LONGRANGER) || MP(UNKNOWN),

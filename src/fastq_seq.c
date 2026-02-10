@@ -271,7 +271,7 @@ bool fastq_piz_R1_test_aligned (VBlockFASTQP vb)
     return (bitmap_ctx->r1_is_aligned == PAIR1_ALIGNED);
 }
 
-static void fastq_update_coverage_aligned (VBlockFASTQP vb)
+void fastq_update_coverage_aligned (VBlockFASTQP vb)
 {
     declare_seq_contexts;
     PosType64 gpos;
@@ -283,6 +283,8 @@ static void fastq_update_coverage_aligned (VBlockFASTQP vb)
         reconstruct_from_ctx (VB, FASTQ_GPOS, 0, false); // calls fastq_special_PAIR2_GPOS
         gpos = gpos_ctx->last_value.i;
     }
+
+    // TO DO: interleaved files, see aligner_recon_get_gpos_and_fwd
     
     ASSPIZ0 (gpos != NO_GPOS, "expecting a GPOS, because sequence is aligned");
 

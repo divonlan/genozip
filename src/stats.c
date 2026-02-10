@@ -243,9 +243,11 @@ static void stats_output_file_metadata (void)
         
     bufprint0 (evb, &stats, "\n\n");
     if (txt_file->name) 
-        bufprintf (evb, &stats, "%s file%s%s: %.*s\n", 
-                   flag.deep?"BAM/FASTQ" : z_dt_name_faf(),
-                   z_file->bound_txt_names.count > 1 ? "s" : "", // param holds the number of txt files
+        bufprintf (evb, &stats, "%s%s%s file%s%s: %.*s\n", 
+                   z_dt_name_faf(),
+                   flag.deep ? "/" : "",
+                   flag.deep ? (segconf.fasta_as_fastq ? "FASTA" : "FASTQ") : "",
+                   s_or_nil(z_file->bound_txt_names.count), // param holds the number of txt files
                    (flag.deep && flag.pair)?" (deep & paired)" : flag.deep?" (deep)" : flag.pair?" (paired)" : "", 
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     

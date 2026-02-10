@@ -565,7 +565,7 @@ static void bamass_after_link_entries (VBlockP vb)
     COPY_TIMER (bamass_after_link_entries);
 }
 
-// ZIP: runs during FASTQ zip_initialize if --bamass specified
+// ZIP: runs during FASTQ / FASTA zip_initialize if --bamass specified
 void fastq_bamass_populate (void)
 {
     START_TIMER;
@@ -890,7 +890,7 @@ StrTextLong bamass_dis_ent (VBlockP vb, const BamAssEnt *e, uint64_t qname_hash)
 void fastq_bamass_zip_finalize (bool is_last_fastq) 
 {
     if (flag_show_deep) {
-        iprintf ("\nZIP: FASTQ%s reads breakdown by bammassability:\n", IS_R2 ? " (R1+R2)" : "");
+        iprintf ("\nZIP: %s%s reads breakdown by bammassability:\n", z_dt_name_faf(), IS_R2 ? " (R1+R2)" : "");
         
         for (int i=BA_AFTER+1; i < NUM_DEEP_STATS_ZIP; i++) 
             if (z_file->deep_stats[i])
@@ -1219,6 +1219,11 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
     // set vb_bamass_cigar, vb->seq_len, vb->ref_consumed
     fastq_bamass_recon_cigar (vb);
 
+    if (flag.collect_coverage) {
+        fastq_update_coverage_aligned (vb);
+        goto done;
+    }
+
     if (vb->R1_vb_i) // R2 
         fastq_piz_R1_test_aligned (vb); // set r1_is_aligned
 
@@ -1327,6 +1332,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
     Ltxt = BNUMtxt (recon);
     nonref_ctx->next_local = BNUM (nonref_ctx->local, nonref);
 
+done:
     buf_free (vb->scratch); 
     buf_free (vb_bamass_cigar);
     if (flag.debug) buf_free (bitmap_ctx->piz_is_set); 

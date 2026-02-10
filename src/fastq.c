@@ -78,7 +78,8 @@ thool fastq_verify_and_sort_pairs (int n_fns, rom *fns, FailType soft_fail)
 
     // verify FASTQ; unable to analyze url or redirected    
     for (int i=0; i < n_fns; i++) {
-        ASSINP (txtfile_zip_get_file_dt (fns[i]) == DT_FASTQ, "Expecting %s to be a FASTQ file, but judging by its name, it is not", fns[i]);
+        DataType dt = txtfile_zip_get_file_dt (fns[i]);
+        ASSINP (dt == DT_FASTQ || dt == DT_FASTA, "Expecting %s to be a FASTQ or FASTA file, but judging by its name, it is not", fns[i]);
 
         if (strstr (fns[i], "://") || !strcmp (fns[i], "-")) return unknown; 
     }
@@ -519,7 +520,7 @@ void fastq_zip_initialize (void)
         z_file->R1_first_vb_i = z_file->num_vbs + 1; // 1 for --pair, >1 for --deep
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
-    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--sex/--idxstats
+    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--idxstats
     if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // single file, or first of pair (and never Deep)
         ctx_populate_zf_ctx_from_contigs (FASTQ_CONTIG, ref_get_ctgs()); 
 
@@ -697,7 +698,7 @@ void fastq_segconf_finalize (VBlockP vb)
 
     if (!segconf.multiseq && !flag.reference && !txt_file->redirected && !flag.seg_only)
         TIP ("Compressing a %s file using a reference file can reduce the compressed file's size by an additional %s.\n"
-             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n", 
+             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n", 
              DT_NAME, (FAF ? "60%-80%" : "20%-60%"), arch_get_argv0(), txt_file->name);
 
     // cases where aligner is available (note: called even if reference is not loaded, so that it errors in segconf_calculate)
@@ -857,8 +858,8 @@ void fastq_seg_finalize (VBlockP vb)
     if (FAF || !desc_is_l3 || !has_aux)    REMOVE (11, 20, 2);
     if (FAF || !desc_is_l3 || !has_extra)  REMOVE (10, 18, 2);
     if (FAF || !desc_is_l3 || !has_qname2) REMOVE (9,  16, 2);
-    if (FAF)                               REMOVE (8,  14, 2);    
-    if (!has_line3)                        REMOVE (8,  15, 1); // removing CON_PX_SEP the '+' now becomes the prefix of E2L (as QNAME2, EXTRA, AUX have already been removed)
+    if (FAF)                               REMOVE (8,  14, 2); // removing entire 3rd line including '+'   
+    if (!FAF && !has_line3)                REMOVE (8,  15, 1); // removing CON_PX_SEP the '+' now becomes the prefix of E2L (as QNAME2, EXTRA, AUX have already been removed)
     if (desc_is_l3 || !has_aux)            REMOVE (4,  9,  2);
     if (desc_is_l3 || !has_extra)          REMOVE (3,  7,  2);
     if (desc_is_l3 || !has_qname2)         REMOVE (2,  5,  2);
@@ -1274,12 +1275,12 @@ IS_SKIP (fastq_piz_is_skip_section)
 
     #define GPOS_dicts _FASTQ_GPOS, _FASTQ_GPOS_DELTA, _FASTQ_GPOS_R2
 
-    #define SEQ_dicts_ex_GPOS _FASTQ_SQBITMAP, _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_CIGAR, \
+    #define SEQ_dicts_skip_if_cov _FASTQ_NONREF, _FASTQ_NONREF_X, \
                        _FASTQ_STRAND, _FASTQ_STRAND_R2,\
                        _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, \
                        _FASTQ_SEQINS_A, _FASTQ_SEQINS_C, _FASTQ_SEQINS_G, _FASTQ_SEQINS_T
 
-    #define SEQ_dicts SEQ_dicts_ex_GPOS, GPOS_dicts
+    #define SEQ_dicts SEQ_dicts_skip_if_cov, _FASTQ_SQBITMAP, GPOS_dicts, _FASTQ_CIGAR
     
     #define LINE3_dicts _FASTQ_LINE3,  _FASTQ_T0HIRD, _FASTQ_T1HIRD, _FASTQ_T2HIRD, _FASTQ_T3HIRD, _FASTQ_T4HIRD, _FASTQ_T5HIRD, \
                         _FASTQ_T6HIRD, _FASTQ_T7HIRD, _FASTQ_T8HIRD, _FASTQ_T9HIRD, _FASTQ_TAHIRD, _FASTQ_TBHIRD, _FASTQ_TmHIRD /* just line3, not all qnames */
@@ -1310,11 +1311,11 @@ IS_SKIP (fastq_piz_is_skip_section)
             _FASTQ_DEBUG_LINES, DICT_ID_NONE) || DESC_subfields))
         return true;
 
-    // if we're doing --sex/coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
+    // if we're doing --coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
     if (flag.collect_coverage && 
         (   dict_id_is_in (dict_id, LINE1_3_dicts, _FASTQ_DEBUG_LINES, QUAL_dicts, DICT_ID_NONE)
          || DESC_subfields
-         || (!flag.bases && dict_id_is_in (dict_id, SEQ_dicts_ex_GPOS, DICT_ID_NONE))))
+         || (!flag.bases && dict_id_is_in (dict_id, SEQ_dicts_skip_if_cov, DICT_ID_NONE))))
         return true;
 
     // note: we don't SKIP for --count with an additional filter. Logic is too complicated and bug-prone.
@@ -1474,11 +1475,13 @@ void fastq_reset_line (VBlockP vb_)
 
 void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header)
 {
-    header->fastq.segconf_seq_len_dict_id = segconf.seq_len_dict_id;     // v14
-    header->fastq.segconf_fa_as_fq        = segconf.fasta_as_fastq;      // 15.0.58
-    header->fastq.segconf_is_ileaved      = segconf.is_interleaved;      // 15.0.58
-    header->fastq.segconf_std_seq_len     = BGEN32(segconf.std_seq_len); // 15.0.69
-    header->fastq.segconf_use_ins_ctxs    = segconf.use_insertion_ctxs;  // 15.0.69
+    header->fastq.segconf_seq_len_dict_id    = segconf.seq_len_dict_id;     // v14
+    header->fastq.segconf_fa_as_fq           = segconf.fasta_as_fastq;      // 15.0.58
+    header->fastq.segconf_is_ileaved         = segconf.is_interleaved;      // 15.0.58
+    header->fastq.segconf_std_seq_len        = BGEN32(segconf.std_seq_len); // 15.0.69
+    header->fastq.segconf_use_ins_ctxs       = segconf.use_insertion_ctxs;  // 15.0.69
+    
+    header->flags.genozip_header.dts2_bamass = (flag.bam_assist != NULL);   // 15.0.77
 }
 
 void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
@@ -1491,5 +1494,8 @@ void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.is_interleaved     = header->fastq.segconf_is_ileaved;
         segconf.std_seq_len        = BGEN32(header->fastq.segconf_std_seq_len);
         segconf.use_insertion_ctxs = header->fastq.segconf_use_ins_ctxs;
-    } 
+    }
+
+    if (VER2(15,77))
+        flag.bam_assist            = header->flags.genozip_header.dts2_bamass ? "bamass" : NULL; 
 }

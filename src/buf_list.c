@@ -1,7 +1,10 @@
 // ------------------------------------------------------------------
 //   buf_list.c
 //   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
-//   Please see terms and conditions in the files LICENSE.non-commercial.txt and LICENSE.commercial.txt
+//   Please see terms and conditions in the file LICENSE.txt
+//
+//   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
+//   under penalties specified in the license.
 
 #ifdef _WIN32
 #include <windows.h>

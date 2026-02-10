@@ -55,6 +55,7 @@ typedef union SectionFlags {
                                        // SAM/BAM: PRIM and/or DEPN components exist (v14)
         uint8_t has_taxid        : 1;  // obsolete: each line in the file has Taxonomic ID information (v12 to 15.0.41)
         #define dts2_deep        dt_specific2 // SAM: this file is compressed with --deep (v15)
+        #define dts2_bamass      dt_specific2 // FASTQ: this file was compressed with --bamass (15.0.77)
         uint8_t dt_specific2     : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ (v15, "unused" up to v14)
     } genozip_header;
 
@@ -233,7 +234,9 @@ typedef struct {
             uint8_t xcons_std_seq_len_M100;   // 15.0.76: xcons: segconf.xcons_std_seq_len - 100
             uint16_t conc_writing_vbs;        // 15.0.64: max number of handed-over the VBs the writer will need to have open concurrent. Up to 15.0.63 this was in SectionHeaderReconPlan
             uint16_t segconf_s1_to_cm_32;     // 15.0.76: minimap2: 32X of average s1:i / cm:i   
-            char unused[243];
+            uint8_t segconf_deep_FAF     : 1; // 15.0.77: Deep: FASTA-as-FASTQ 
+            uint8_t unused_bits          : 7; // 
+            char unused[242];
         } sam;
 
         struct { 

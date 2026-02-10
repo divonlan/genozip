@@ -997,7 +997,7 @@ void txtfile_query_first_bytes_in_file (rom filename, uint32_t len)
     ASSERTISNULL (txt_file);
     ASSERTMAINTHREAD;
 
-    // note: at the moment, this function is only used for FASTQ files, in which case gz discovery is not done. If ever used for other file types, we will need to explicitly ask file_open_txt_read to not discover and just use igzip.
+    // note: used for FASTQ/A files, in which case gz discovery is skipped in file_open_txt_read_gz.
     txt_file = file_open_txt_read (filename);
     ASSINP (txt_file, "failed to open file %s", filename);
     
@@ -1141,8 +1141,8 @@ void txtfile_read_vblock (VBlockP vb)
     // max_block_size exists for fixed-block-size codecs: VB data read will be <= this size
     uint32_t max_block_size = mgzip_get_max_block_size();
 
-    ASSERT (my_vb_size >= max_block_size, "vblock=%s < max_block_size=%u bytes, in codec=%s. This is not supported.%s", 
-            str_size(my_vb_size).s, max_block_size, codec_name(txt_file->effective_codec),
+    ASSERT (my_vb_size >= max_block_size, "%s: vblock=%s < max_block_size=%u bytes, in codec=%s. This is not supported.%s", 
+            txt_name, str_size(my_vb_size).s, max_block_size, codec_name(txt_file->effective_codec),
             segconf_running ? "" : " Use --no-bgzf to switch codec or use --vblock set specificy a larger size");
 
     while (1) {     

@@ -46,6 +46,9 @@ ExeType exe_type;
 
 unsigned file_i, n_files; // number of input files in the execution
 
+static int process_argc;
+static char **process_argv; // pointer to array of strings (pointers)
+
 // primary_command vs command: primary_command is what the user typed on the command line. command is what is 
 // running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and command=PIZ
 CommandType command = NO_COMMAND, primary_command = NO_COMMAND; 
@@ -76,6 +79,31 @@ rom command_name (void) // see CommandType
 }
 
 noreturn void stall (void) { while (1) sleep (1); }
+
+static void main_delete_zfile_on_error (bool is_error)
+{
+    STRli (save_name, strlen (z_file->name)+1);
+
+    if (z_file && z_file->name) 
+        strcpy (save_name, z_file->name);
+
+    file_close (&z_file); // also frees file->name
+
+    // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
+    // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
+    if (is_error && !flag.debug_or_test && file_exists (save_name)) 
+        file_remove (save_name, true);
+}
+
+static void main_free_all_on_error (void)
+{
+    flags_finalize();
+    chrom_finalize();
+    ref_finalize (true);
+    vb_destroy_pool_vbs (POOL_MAIN, true);
+    vb_destroy_pool_vbs (POOL_BGZF, true);
+    vb_destroy_vb (&evb);
+}
 
 void noreturn main_exit (bool show_stack, bool is_error) 
 {
@@ -115,20 +143,9 @@ void noreturn main_exit (bool show_stack, bool is_error)
             threads_cancel_other_threads();
         }
 
-        // if we're in ZIP - rename failed genozip file (but not in PIZ - as its not expected to change the file)
-        if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) {
-            STRli (save_name, strlen (z_file->name)+1);
-
-            if (z_file && z_file->name) 
-                strcpy (save_name, z_file->name);
-
-            file_close (&z_file); // also frees file->name
-
-            // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
-            // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
-            if (is_error && !flag.debug_or_test && file_exists (save_name)) 
-                file_remove (save_name, true);
-        }
+        // if we're in ZIP - delete z_file
+        if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) 
+            main_delete_zfile_on_error (is_error);
 
         if (is_error) // call after canceling the writing threads 
             file_put_data_abort();
@@ -141,14 +158,8 @@ void noreturn main_exit (bool show_stack, bool is_error)
         threads_finalize();
 
         // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
-        if (arch_is_valgrind()) {
-            flags_finalize();
-            chrom_finalize();
-            ref_finalize (true);
-            vb_destroy_pool_vbs (POOL_MAIN, true);
-            vb_destroy_pool_vbs (POOL_BGZF, true);
-            vb_destroy_vb (&evb);
-        }
+        if (arch_is_valgrind()) 
+            main_free_all_on_error();
     }
 
     else
@@ -156,6 +167,80 @@ void noreturn main_exit (bool show_stack, bool is_error)
 
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
+
+void noreturn main_restart_on_error (rom add_cmd_option)
+{
+#ifndef _WIN32s
+    if (flag.restarted) exit_on_error (true); // if this is already a restarted process - we don't restart again
+
+    DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
+
+        fprintf (stderr, "\nAttempting to recover by restarting with %s", add_cmd_option); 
+
+        // case: skip freeing buffers since we're exiting any, UNLESS run under valgrind - in which case we free, so we can detect true memory leaks
+        if (!arch_is_valgrind())
+            flag.let_OS_cleanup_on_exit = true;  
+
+        if (flag.debug_threads)
+            threads_write_log (true);
+
+        // this is normally blocked, it runs only with certain flags (see code)
+        buflist_test_overflows_all_vbs ("main_restart_on_error", true);
+
+        if (flag.log_filename) {
+            iprintf ("%s - execution errored, restarting with %s\n", str_time().s, add_cmd_option);
+            fclose (info_stream);
+        } 
+
+        // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
+        int save_stdout = dup (1);
+        int save_stderr = dup (2);
+        close (1);   
+        close (2);
+
+        url_close_remote_file_stream (NULL);  
+        file_kill_external_compressors(); 
+    
+        // cancel all other compute threads before closing z_file, so other threads don't attempt to access it 
+        // (eg. z_file->data_type) and get a segmentation fault.
+        threads_cancel_other_threads();
+
+        // if we're in ZIP - delete z_file
+        if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary)
+            main_delete_zfile_on_error (true);
+
+        file_put_data_abort();
+
+        dup2 (save_stdout, 1); // restore - inherited through execvp
+        dup2 (save_stderr, 2);
+        
+        fflush (stdout);
+        fflush (stderr);
+        
+        threads_finalize();
+
+        // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
+        if (arch_is_valgrind()) 
+            main_free_all_on_error();
+    }
+
+    else
+        sleep (10000); // wait to be killed by first thread that is executing in DO_ONCE
+
+    // restart with extra command line option(s) - but not if we are already restarted
+    rom argv[process_argc + 3];
+    memcpy (argv, process_argv, process_argc * sizeof (rom));
+    argv[process_argc]     = add_cmd_option;
+    argv[process_argc + 1] = "--restarted"; // prevent recursive restarting
+    argv[process_argc + 2] = NULL;  // list terminator
+    
+    execvp (argv[0], (char **)argv); // doesn't normally return
+    ABORT ("execvp(%s) failed: %s", argv[0], strerror (errno));
+
+#else 
+    exit_on_error (true); // Not supported on Windows yet
+#endif
+}
 
 static void main_print_help (bool explicit)
 {
@@ -767,7 +852,7 @@ static void main_no_files (int argc)
         genols (NULL, true,  NULL, false); // finalize and print
     }
 
-    // case: requesting to display the reference: genocat --reference <ref-file> and optionally --regions
+    // case: requesting to display the reference: genocat --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 and optionally --regions
     else if (is_genocat && IS_REF_LOADED_ZIP) {
         flags_update (0, NULL);
         ref_display_ref();
@@ -782,9 +867,12 @@ static void main_no_files (int argc)
         main_print_help (false);
 }
 
-int main (int argc, char **argv)
+int main (int argc, char *argv[])
 {      
-    flag.test_i = getenv ("GENOZIP_TEST");
+    process_argv = argv;
+    process_argc = argc;
+
+    flag.test_i = getenv (GENOZIP_TEST);
     if (flag.test_i && !flag.test_i[0]) flag.test_i = NULL; // empty GENOZIP_TEST is the same as no GENOZIP_TEST
 
     flag.debug_or_test = flag.debug || flag.test_i;

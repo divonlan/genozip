@@ -344,7 +344,7 @@ typedef struct {
     // shared FASTA/FASTQ
     bool multiseq;              // sequences in file are variants of each others 
     #define FAF segconf.fasta_as_fastq
-    bool fasta_as_fastq;        // Segging a FASTA file as a QUAL-less FASTQ
+    bool fasta_as_fastq;        // ZIP/PIZ: Segging a FASTA file as a QUAL-less FASTQ (also in SAM with Deep)
     char desc_char;             // FASTA: '>' by default, but can also be '@' ; FASTQ: normally '@', but can be '>' if fasta_as_fastq
     #define DC segconf.desc_char
 

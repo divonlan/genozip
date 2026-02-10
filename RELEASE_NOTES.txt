@@ -3,6 +3,13 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.77 10/2/2026
+- FASTA: support --bamass, --deep and --optimize as in FASTQ (but not --pair yet), 
+- Deep: new genocat --fasta option for displaying the fasta component of a Deep file with FASTA  
+- New genocat option for SAM/BAM: --qname-only
+- If GZ block identification is wrong, restart with --no-bgzf
+- Minor bug fixes
+
 15.0.76 3/2/2026
 - Discontinue support for Mac with Intel processors (now only ARM / Mx processors are supported for Mac)
 - FASTQ with --bamass: compression improvements for MGI data

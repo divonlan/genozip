@@ -201,6 +201,9 @@ typedef struct {
 
     #define HAS_DEBUG_SEG(ctx) (flag.debug_seg && (!flag.dict_id_debug_seg.num || dict_id_typeless ((ctx)->dict_id).num == flag.dict_id_debug_seg.num))
 
+    // undocumented command line options used with one process spawns another
+    int restarted;           // this process was run as a restart after an error.
+
     // internal flags set by the system, not the command line
     CompIType zip_comp_i;    // ZIP only: currently zipping component (copied into VBlock.comp_i, FlagsTxtHeader.comp_i, SectionEntFileFormat.comp_i)
     bool is_windows, is_mac, is_linux, is_wsl, // set according to OS
@@ -231,7 +234,7 @@ typedef struct {
          deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written
          deep_sam_only,      // PIZ: only SAM data is needed, no need to create deep_ents
          deep_no_qual,       // ZIP: don't deep QUAL data
-         removing_cache,     // genocat: running --no-cache with only -e <ref-file> to remove cache
+         removing_cache,     // genocat: running --no-cache with only -e 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 to remove cache
          let_OS_cleanup_on_exit, // don't release resources as we are about to exit - the OS does it faster
          reading_reference;  // system is currently reading a reference
     int only_headers,        // genocat --show_headers (not genounzip) show only headers (value is section_type+1 or SHOW_ALL_HEADERS)

@@ -120,12 +120,12 @@ void fastq_deep_zip_finalize (void)
         ZipZDeep *ent = &deep_ents[unconsumed_ent_i[0]];
 
         WARN ("WARNING: detected %"PRIu64" %s alignments (other than supplementary, secondary and consensus alignments) which "
-              "are absent in the FASTQ file(s). Genozip requires that the FASTQ files included in --deep cover all alignments "
+              "are absent in the FAST%c file(s). Genozip requires that the FAST%c files included in --deep cover all alignments "
               "in the %s file, or otherwise, in rare cases, the resulting compressed file might be corrupted. If such corruption occurs, "
               "the testing that will follow now will detect it. If the testing completes successfully, then there is no problem. "
-              "An example of an alignment present in the %s file but missing in the FASTQ file(s) can be obtained by running:\n"
+              "An example of an alignment present in the %s file but missing in the FAST%c file(s) can be obtained by running:\n"
               "   %s\n",
-              count_unconsumed, z_dt_name(), z_dt_name(), z_dt_name(),
+              count_unconsumed, z_dt_name(), QorA, QorA, z_dt_name(), z_dt_name(), QorA, 
               piz_advise_biopsy_line (COMP_NONE, ent->vb_i, ent->line_i, segconf.sam_deep_filename).s);
 
         if (!flag.force_deep) flag.test = true; // force testing in this case (unless --force-deep)

@@ -988,7 +988,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
     progress_finalize_component_time ("Done", DIGEST_NONE);
 
-    // --sex and --coverage - output results
+    // --coverage and --idxstats: output results
     if (txt_file && !flag_loading_auxiliary) {
         if (flag.show_coverage) coverage_show_coverage();
         if (flag.idxstats) coverage_show_idxstats();

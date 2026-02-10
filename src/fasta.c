@@ -217,6 +217,8 @@ out_of_data:
 // SEG & ZIP stuff
 //-------------------------
 
+extern void fastq_bamass_populate (void);
+
 // called by main thread at the beginning of zipping this file
 void fasta_zip_initialize (void)
 {
@@ -232,6 +234,11 @@ void fasta_zip_initialize (void)
         comment_redirect_snip[0] = SNIP_SPECIAL;
         comment_redirect_snip[1] = FASTA_SPECIAL_COMMENT;
         comment_redirect_snip_len += 2;
+    }
+
+    if (flag.bam_assist) {
+        qname_zip_initialize(); // note: might also be called during segconf from fasta_segconf_is_qualless_fastq. no harm.
+        fastq_bamass_populate();
     }
 }
 
@@ -275,23 +282,34 @@ static bool fasta_segconf_is_qualless_fastq (VBlockP vb)
     n_lines = ROUNDDOWN2 (n_lines) - 2; // keep whole pairs or lines, and drop last pair that might be truncated. now there are at least 4 pairs (8 lines)
 
     for (uint32_t i=0; i < n_lines; i += 2) 
-        if (lines[i][0] != DC) return false; // not all contigs are single-line of SEQ
+        if (lines[i][0] != DC) 
+            return false; // not all contigs are single-line of SEQ
 
     // test first 4 seqs to make sure they are uppercase and do not contain unique amino characters
     for (uint32_t i=1; i <= 7; i += 2) 
-        if (!str_is_fastq_seq (lines[i], MIN_(256, line_lens[i]))) return false; // line contains an invalid SEQ character for FASTQ  
-
-    qname_zip_initialize();
+        if (!str_is_fastq_seq (lines[i], MIN_(256, line_lens[i]))) 
+            return false; // line contains an invalid SEQ character for FASTQ  
+    
+    qname_zip_initialize(); 
     qname_segconf_discover_flavor (vb, QNAME1, lines[0]+1, strcspn (lines[0]+1, " \t\r\n")); 
 
-    if (!segconf.qname_flavor[QNAME1]) return false;
+    if (!flag.reference  && // if a reference file is given, we treat FASTA and FASTQ regardless of QNAME
+        !flag.bam_assist && // --bamass, --pair or --deep: user is effectively telling us this is FAF file
+        !flag.pair       && 
+        !flag.deep       && 
+        !segconf.qname_flavor[QNAME1]) 
+        return false;
 
     // DECIDED! convert VB to a FASTQ VB.
 
     // re-initialize z_file / txt_file stuff
-    txt_file->data_type = z_file->data_type = DT_FASTQ;
-    ctx_initialize_predefined_ctxs (z_file->contexts, DT_FASTQ, z_file->d2d_map, &z_file->num_contexts);
+    txt_file->data_type = DT_FASTQ;
     
+    if (!flag.deep) { // if --deep, already initialized as SAM
+        z_file->data_type = DT_FASTQ;
+        ctx_initialize_predefined_ctxs (z_file->contexts, DT_FASTQ, z_file->d2d_map, &z_file->num_contexts);
+    }
+
     // re-initialize segconf VB
     vb_change_datatype_nonpool_vb (&vb, DT_FASTQ);
 

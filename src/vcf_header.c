@@ -376,7 +376,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 
     if (!flag.reference && segconf.vcf_illum_gtyping && !flag.seg_only && has_PROBE)
         TIP ("Compressing an Illumina Genotyping VCF file using a reference file can reduce the compressed file's size by 20%%.\n"
-             "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
     
     // (bug 1079) add PP and/or PL INFO lines if needed

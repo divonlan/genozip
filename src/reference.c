@@ -1206,7 +1206,7 @@ void ref_compress_ref (void)
 
         if (ref_pc >= 10)
             TIP ("Compressing this %s file using a reference will save at least %s (%u%%).\n"
-                 "Use: \"%s --reference <ref-file> %s\". ref-file may be a FASTA file or a .ref.genozip file.\n",
+                 "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
                  dt_name (txt_file->data_type), str_size (ref_bytes).s, ref_pc, arch_get_argv0(), txt_file->name);
     }
 
@@ -1230,16 +1230,22 @@ void ref_set_reference (rom filename, ReferenceType ref_type, bool is_explicit)
 
     ASSINP (!filename || filename[0] != '-', "expecting a the name a reference file after --reference, but found \"%s\"", filename); // catch common error of a command line option instead of a ref filename
     
-    rom env = getenv ("GENOZIP_REFERENCE");
+    rom env = getenv (GENOZIP_REFERENCE);
     unsigned filename_len;
     StrTextLong alt_name;
 
-    if (!filename) {
-        if (!env || !env[0] || file_is_dir (env)) return; // nothing to set
+    if (!filename) { // called from setting flags
+        if (!env || !env[0]) return; 
 
+        bool is_dir = file_is_dir (env);
+        WARN_IF (IS_ZIP && is_dir, "Ignoring $%s=%s because it is a directory. Use --reference to override", GENOZIP_REFERENCE, env);
+
+        if (is_dir) return; // nothing to set (note: in PIZ, this will be called again with a file name after getting it from the genozip_header)        
+        
         filename     = env;
         filename_len = strlen (env);
-        WARN ("Note: Using the reference file \"%.*s\" set in $GENOZIP_REFERENCE. You can override this with --reference", STRf(filename));
+        WARN ("Using reference file \"%.*s\" set in $%s. Use --reference to override", 
+              STRf(filename), GENOZIP_REFERENCE);
     }
 
     // explicit filename, relative to GENOZIP_REFERENCE directory

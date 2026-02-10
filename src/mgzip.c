@@ -366,13 +366,13 @@ static GzStatus mgzip_block_verify_header (FileP file, // option 1
                    codec_name (file->effective_codec), file->basename, (uint64_t)ftello64 (fp) - h_len);
     }
 
-    // case: this is GZIP block (by the magic) but it is NOT a valid BGZF block (see: https://samtools.github.io/hts-specs/SAMv1.pdf)
+    // case: this is GZIP block (by the magic) but it is NOT a valid (BGZF | IL1M | ...) block
     else if (!is_header_prefix (h, prefix, prefix_len)) {
         if (discovering)
             return GZ_IS_OTHER_FORMAT;
         else 
-            ABORT ("Encountered a GZIP block that unexpectedly is not %s in %s offset=%"PRIu64" file_size=%"PRIu64" found=%s expected=%s. Solution: use --no-bgzf", 
-                   codec_name (file->effective_codec), file->basename, (uint64_t)ftello64 (fp) - h_len, file->disk_size, display_gz_header (h, h_len, false).s, display_gz_header (STRa(prefix), false).s);
+            RESTART ("--no-bgzf", "Encountered a GZIP block that unexpectedly is not %s in %s offset=%"PRIu64" file_size=%"PRIu64" found=%s expected=%s", 
+                     codec_name (file->effective_codec), file->basename, (uint64_t)ftello64 (fp) - h_len, file->disk_size, display_gz_header (h, h_len, false).s, display_gz_header (STRa(prefix), false).s);
     }
 
     return GZ_SUCCESS;
@@ -552,8 +552,9 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
             return GZ_IS_OTHER_FORMAT;
 
         // data is not e.g. IL1M somewhere in the middle of the file...
-        ASSERT (feof (fp), "Encountered a GZIP block that unexpectedly is not %s in %s offset=%"PRIu64" file_size=%"PRIu64"\nSolution: use --no-bgzf", 
-                codec_name (codec), file->basename, (uint64_t)ftello64 ((FILE *)file->file) - file->gz_data.len, file->disk_size);
+        if (!feof (fp)) 
+            RESTART ("--no-bgzf", "Encountered a GZIP block that unexpectedly is not %s in %s offset=%"PRIu64" file_size=%"PRIu64, 
+                     codec_name (codec), file->basename, (uint64_t)ftello64 ((FILE *)file->file) - file->gz_data.len, file->disk_size);
 
         // case: final data in file is not a full gz block and truncation allowed: 
         // account and then ignore the data that will not be gz-decompressed 
@@ -1591,13 +1592,15 @@ void il1m_compress (void)
 {
     void *compressor = libdeflate_alloc_compressor (evb, flag.fast?1 : flag.best?9 : 5, __FUNCLINE); 
 
-    uint8_t *in = MALLOC (1 MB), *out = MALLOC (2 MB);
+    uint8_t *in = MALLOC (2 MB), *out = MALLOC (4 MB);
     uint32_t in_len;
-    for (int i=0; (in_len = fread (in, 1, 1 MB, stdin)); i++) {
+
+    // note: if combined with --no-bgzf - 3rd block is artifically non-compliance (2 MB instead of 1 MB)
+    for (int i=0; (in_len = fread (in, 1, (i==2 && flag.no_bgzf) ? (2 MB) : (1 MB), stdin)); i++) {
         GzipFooter footer = { .crc32 = LTEN32 (crc32 (0, in, in_len)),
                               .isize = LTEN32 (in_len) };
 
-        uint32_t out_len = libdeflate_deflate_compress (compressor, in, in_len, out, 2 MB);
+        uint32_t out_len = libdeflate_deflate_compress (compressor, in, in_len, out, 4 MB);
         ASSERT (out_len, "deflate failed: in_len=%u block_i=%u", in_len, i);
 
         ASSERT0 (1 == fwrite (_S(IL1M_HEADER), 1, stdout), "fwrite failed #1");

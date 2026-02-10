@@ -420,14 +420,14 @@ static void file_open_txt_read_gz (FileP file)
     }
 
     // case: discovery deferred to the end of segconf when we know segconf.tech
-    if (file->data_type == DT_FASTQ) {  // note: even if --no-bgzf: so we can report correct src_codec in stats
+    if (file->data_type == DT_FASTQ || file->data_type == DT_FASTA) {  // note: even if --no-bgzf: so we can report correct src_codec in stats
         file->effective_codec = file->src_codec = txtfile_is_gzip (file) ? CODEC_GZ : CODEC_NONE; // based on the first 3 bytes
         file->discover_during_segconf = (file->effective_codec == CODEC_GZ);
         txtfile_initialize_igzip (file);
     }
 
-    // run discovery now if not FASTQ. That's because other data types might have header
-    // which is read before segconf. luckily FASTQ doesn't.
+    // run discovery now if not FASTQ/A. That's because other data types might have header
+    // which is read before segconf. luckily FASTQ/A don't.
     else
         txtfile_discover_specific_gz (file); // decide between GZ, BGZF and NONE
 }
@@ -734,9 +734,9 @@ FileP file_open_z_read (rom filename)
         disk_filename = ref_fasta_to_ref (file);
 
     ASSINP (!flag.reading_reference || filename_has_ext (file->name, REF_GENOZIP_), 
-            "You specified file \"%s\", however with --reference or --REFERENCE, you must specify a reference file (%s file or FASTA file)\n"
+            "You specified file \"%s\", however with --reference%s, you must specify a reference file (%s file or FASTA file)\n"
             "Tip: To create a genozip reference file from a FASTA file, use 'genozip --make-reference myfasta.fa'",
-            file->name, REF_GENOZIP_);
+            file->name, IS_ZIP ? " or --REFERENCE" : "", REF_GENOZIP_);
 
     if ((!flag.seg_only && !flag.show_bam) || flag_loading_auxiliary) {
 

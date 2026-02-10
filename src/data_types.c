@@ -95,6 +95,5 @@ rom z_dt_name (void)
 
 rom z_dt_name_faf (void) 
 { 
-    return FAF ? "FASTA" : z_dt_name(); 
+    return (z_file && Z_DT(FASTQ) && FAF) ? "FASTA" : z_dt_name(); // in case of Deep with FAF, still report SAM/BAM
 }
-

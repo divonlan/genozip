@@ -232,11 +232,29 @@ void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
         segconf.vb_size = ROUNDUP1M (segconf.vb_size);
     }
     
-    if (flag.best && !flag.vblock)
+    // if calculated VB is not enough for 1024 rows, grow it
+    bool modified = false;
+
+    #define MIN_LINES_PER_VB 1024
+    if (vb && vb->txt_data.len && vb->lines.len && 
+        MIN_LINES_PER_VB * vb->txt_data.len / vb->lines.len > segconf.vb_size) {
+
+        segconf.vb_size = MIN_(VBLOCK_MEMORY_MAX_DYN, ROUNDUP1M (MIN_LINES_PER_VB * vb->txt_data.len / vb->lines.len));
+        modified = true;        
+    }
+
+    if (flag.best && (!flag.vblock || modified)) {
         segconf.vb_size = MAX_(segconf.vb_size, VBLOCK_MEMORY_BEST);
-    
-    if (flag.low_memory && !flag.vblock)
+        modified = true;        
+    }
+
+    if (flag.low_memory && (!flag.vblock || modified)) {
         segconf.vb_size = MIN_(segconf.vb_size, VBLOCK_MEMORY_LOW_MEM);
+        modified = true;        
+    }
+    
+    WARN_IF (flag.vblock != NULL && modified, "Ignoring '%s %s', using '%s %u' instead", 
+             OT("vblock", "B"), flag.vblock, OT("vblock", "B"), (unsigned)(segconf.vb_size / (1 MB)));
 
     if (flag_show_memory) 
         iprintf ("\nvblock size set to %u MB %s%s\n", 

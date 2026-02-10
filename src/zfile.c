@@ -641,7 +641,7 @@ static rom zfile_read_genozip_header_get_ref_filename (rom header_fn)
 
 static void zfile_read_genozip_header_set_reference (ConstSectionHeaderGenozipHeaderP header, rom ref_filename)
 {
-    WARN ("Note: using the reference file %s. You can override this with --reference or $GENOZIP_REFERENCE", ref_filename);
+    WARN ("Using reference file %s. Use --reference or $%s to override", ref_filename, GENOZIP_REFERENCE);
     ref_set_reference (ref_filename, REF_EXTERNAL, false);
 }
 
@@ -670,7 +670,7 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
 
         rom gref_fn = ref_get_filename();
 
-        rom env = getenv ("GENOZIP_REFERENCE");
+        rom env = getenv (GENOZIP_REFERENCE);
         int env_len = env ? strlen (env) : 0;
         
         if (env_len > 1 && (env[env_len-1] == '/' || env[env_len-1] == '\\')) 
@@ -688,8 +688,12 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
             if (!flag.dont_load_ref_file && ref_filename && file_exists (ref_filename)) 
                 zfile_read_genozip_header_set_reference (header, ref_filename);
             else 
-                ASSINP (flag.dont_load_ref_file, "Please use --reference to specify the path to the reference file. Original path was: %.*s",
-                        REF_FILENAME_LEN, header->ref_filename);
+                ASSINP (flag.dont_load_ref_file, "Please indicate the location of the reference file. Original path was: %.*s\n"
+                                                 "Three options:\n"
+                                                 "1. use --reference to specify the path to the file\n"
+                                                 "2. set %s environment variable to the path to the file\n"
+                                                 "3. set %s to the directory of the file, and %s will find it by filename",
+                        REF_FILENAME_LEN, header->ref_filename, GENOZIP_REFERENCE, GENOZIP_REFERENCE, global_cmd);
 
             FREE (ref_filename);
         }
@@ -935,7 +939,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
 
     // case: we are reading a file expected to be the reference file itself
     if (flag.reading_reference) {
-        ASSINP (data_type == DT_REF, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference <fasta-file.fa>'",
+        ASSINP (data_type == DT_REF, "Error: %s is not a reference file. To create a reference file, use 'genozip --make-reference 𝑓𝑎𝑠𝑡𝑎-𝑓𝑖𝑙𝑒.𝑓𝑎'",
                 ref_get_filename());
 
         // note: in the reference file itself, header->ref_filename is the original fasta used to create this reference

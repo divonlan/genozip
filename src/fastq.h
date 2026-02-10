@@ -88,6 +88,8 @@
 #define NO_PAIR_FMT_PREFIX "--pair cannot be used because %s is not perfectly paired with its counterpart (read names differ or are not aligned) (technical: "
 #define NO_PAIR_FMT_SUFFIX (flag.deep ? " Solution: add --not-paired" : "")
 
+#define QorA (segconf.fasta_as_fastq ? 'A' : 'Q')
+
 // Txtfile stuff
 extern thool fastq_verify_and_sort_pairs (int n_fns, rom *fns, FailType soft_fail);
 extern int32_t fastq_unconsumed (VBlockP vb, uint32_t first_i);

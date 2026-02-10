@@ -65,6 +65,10 @@ typedef int32_t TaxonomyId;
 // -----------------
 #define GENOZIP_EXT ".genozip"
 
+// envrionment variables
+#define GENOZIP_REFERENCE "GENOZIP_REFERENCE" // reference file name (directory permitted for PIZ)
+#define GENOZIP_TEST      "GENOZIP_TEST"      // code testing mode, set in test.sh
+
 #define MAX_POS ((PosType64)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
 
 #define MAX_DICTS 2048
@@ -495,7 +499,8 @@ typedef int ThreadId;
 #define STRfb(buf) (int)(buf).len, (buf).data 
 #define STRfw(txtword) (txtword).len, Btxt ((txtword).index) // used with TxtWord
 #define STRfBw(buf,txtword) (txtword).len, Bc ((buf), (txtword).index) // used with TxtWord or ZWord
-#define STRfN(x) (x), ((x)!=1 ? "s" : "") // to match format eg "%u file%s" - singular or plural 
+#define s_or_nil(x) ((x)!=1 ? "s" : "")
+#define STRfN(x) (x), s_or_nil(x) // to match format eg "%u file%s" - singular or plural 
 #define STRfQNAME dl->QNAME_len, dl_qname(dl)
 
 #define STRtxt(txtword) Btxt ((txtword).index), (txtword).len // used with TxtWord
@@ -638,6 +643,8 @@ extern void noreturn main_exit (bool show_stack, bool is_error);
 #define exit_on_error(show_stack) main_exit (show_stack, true)
 #define exit_ok                   main_exit (false, false)
 
+extern void noreturn main_restart_on_error (rom add_cmd_option);
+
 extern FILE *info_stream;
 extern bool is_info_stream_terminal; // is info_stream going to a terminal
 
@@ -692,6 +699,8 @@ extern rom report_support_if_unexpected (void);
 #define RETURNW0(condition, ret, string)     ( { if (__builtin_expect (!(condition), 0)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
 #define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true);} )
 #define ABORT0(string)                       ABORT (string "%s", "")
+#define RESTART(add_cmd_option, format, ...) ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); main_restart_on_error(add_cmd_option);} )
+#define RESTART0(add_cmd_option, string)     RESTART (add_cmd_option, string "%s", "")
 #define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
 #define WARN0(string)                        WARN (string "%s", "")
 #define NOISYWARN(format, ...)               ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } )

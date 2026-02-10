@@ -130,6 +130,7 @@ extern void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_byt
 
 // SEQ
 extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep);
+extern void fastq_update_coverage_aligned (VBlockFASTQP vb);
 
 // QUAL
 extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual));
