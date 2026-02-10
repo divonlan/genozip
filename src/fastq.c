@@ -895,7 +895,7 @@ void fastq_read_R1_data (VBlockP vb_, VBIType R1_vb_i)
     START_TIMER;
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
 
-    if (flag.no_zriter) zriter_flush(); 
+    zriter_flush(); 
 
     Section sec = sections_vb_header (R1_vb_i);
 
@@ -907,8 +907,7 @@ void fastq_read_R1_data (VBlockP vb_, VBIType R1_vb_i)
         
     piz_read_all_ctxs (VB, &sec, true);
     
-    if (flag.no_zriter) 
-        file_seek (z_file, 0, SEEK_END, READ, HARD_FAIL); // restore
+    file_seek (z_file, 0, SEEK_END, READ, HARD_FAIL); // restore
 
     COPY_TIMER (fastq_read_R1_data);
 }

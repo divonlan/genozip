@@ -937,7 +937,7 @@ static void ref_copy_compressed_sections_from_reference_file (void)
 
     file_close (&ref_file);
 
-    zriter_wait_for_bg_writing(); // complete writing copied sections before moving on
+    zriter_flush(); // complete writing copied sections before moving on
 
     COPY_TIMER_EVB (ref_copy_compressed_sections_from_reference_file);
 }

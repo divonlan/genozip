@@ -18,7 +18,7 @@ fi
 
 if [[ "$1" != debug ]]; then
     # remove diagnostic options, and also alternative names for options (eg list-chroms==contigs, license==licence etc)
-    diagnostics_genozip="|^debug|^show-|^dump-|^biopsy|^bgzf|head|check-latest|force-[PLy|deep|domq|homp|longr|normq|pacb|smux]|hold-cache|licence|^optimise|license-prepare|no-[header|domq|eval|homp|longr|pacb|smux|zriter|faf]|STATS|analyze-insertions|skip-segconf|submit-stats|^t_|verify-codec|xthreads|log-digest|chroms|no-FAF|no-interleaved"
+    diagnostics_genozip="|^debug|^show-|^dump-|^biopsy|^bgzf|head|check-latest|force-[PLy|deep|domq|homp|longr|normq|pacb|smux]|hold-cache|licence|^optimise|license-prepare|no-[header|domq|eval|homp|longr|pacb|smux|faf]|STATS|analyze-insertions|skip-segconf|submit-stats|^t_|verify-codec|xthreads|log-digest|chroms|no-FAF|no-interleaved"
     diagnostics_genounzip="|^debug|^show-|^dump-|STATS|chroms|licence|log-digest|make-reference|no-eval|^recover$|^t_|verify-codec|xthreads|decompress|hold-cache|tar"
     diagnostics_genocat="|^debug|^show-|^dump-|STATS|chroms|licence|log-digest|one-vb|^FASTQ|^FQ|^fq|^BAM|^SAM|^VCF|^BCF|decompress|gpos|hold-cache|make-reference|no-[eval|pg]|^qname$|qname-file|^recover$|verify-codec|xthreads"
     diagnostics_genols="|^debug|^show-|licence|no-eval"

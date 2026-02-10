@@ -1147,7 +1147,7 @@ static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
     seg_by_ctx (VB, STRa(PL_to_PLn_redirect_snip), ctx, 0);
 }
 
-// in unknown (=test) mode, this function is called to pick one of the two compressed options, and drop the others
+// Compute thread: in unknown (=test) mode, this function is called to pick one of the two compressed options, and drop the others
 void vcf_FORMAT_PL_decide (VBlockVCFP vb)
 {
     Did keep_did_i, remove_did_i;

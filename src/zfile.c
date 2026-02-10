@@ -375,7 +375,7 @@ static void *zfile_read_from_disk (FileP file, VBlockP vb, BufferP buf, uint32_t
             st_name (st), len, (uint32_t)(buf->size - buf->len));
 
     char *start = BAFTc (*buf);
-    uint32_t bytes = fread (start, 1, len, Z_READ_FP(file));
+    uint32_t bytes = fread (start, 1, len, GET_FP(file));
     ASSERT (bytes == len, "reading %s%s read only %u bytes out of len=%u: %s", 
             st_name (st), cond_str(dict_id.num, " dict_id=", dis_dict_id(dict_id).s), bytes, len, strerror(errno));
 
@@ -519,7 +519,7 @@ SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec,
                         crypt_get_encrypted_len (&header_size, NULL); // update header size if encrypted
     
     SectionHeaderUnion header;
-    uint32_t bytes = fread (&header, 1, header_size, Z_READ_FP(z_file));
+    uint32_t bytes = fread (&header, 1, header_size, GET_FP(z_file));
     
     ASSERT (bytes == header_size, "called from %s:%u: Failed to read header of section type %s from file %s: %s (bytes=%u header_size=%u)", 
             func, code_line, st_name(sec->st), z_name, strerror (errno), bytes, header_size);
@@ -592,7 +592,7 @@ bool zfile_advance_to_next_header (uint64_t *offset, uint64_t *gap)
         memset (data, 0, sizeof(data));
         
         uint32_t bytes;
-        if (!(bytes = fread (data+4, 1, 128 KB, Z_READ_FP(z_file))))
+        if (!(bytes = fread (data+4, 1, 128 KB, GET_FP(z_file))))
             return false; // possibly 4 bytes of the Footer magic remaining
 
         // note: we accept a magic in the final 4 bytes of data - this could be a Footer. We 
@@ -749,7 +749,7 @@ static uint64_t zfile_read_genozip_header_get_actual_offset (void)
     buf_alloc_exact_zero (evb, evb->scratch, size + 100, char, "scratch");
     evb->scratch.len -= 100; // extra allocated memory to ease the scan loop
 
-    int ret = fread (evb->scratch.data, size, 1, Z_READ_FP(z_file));
+    int ret = fread (evb->scratch.data, size, 1, GET_FP(z_file));
     ASSERT (ret == 1, "Failed to read %u bytes from the end of %s", size, z_name);
 
     for_buf_back (uint8_t, p, evb->scratch)
@@ -771,7 +771,7 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     TEMP_FLAG(quiet, false);
 
     SectionFooterGenozipHeader footer;
-    int ret = fread (&footer, sizeof (footer), 1, Z_READ_FP(z_file));
+    int ret = fread (&footer, sizeof (footer), 1, GET_FP(z_file));
     ASSERTW (ret == 1, "Skipping empty file %s", z_name);
     if (!ret) return 0; // failed
     
@@ -790,7 +790,7 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
 
     SectionHeaderGenozipHeader top = {};
     RETURNW (fread (&top, 1, MIN_(sizeof (SectionHeaderGenozipHeader), z_file->disk_size - offset/*header was shorter in earlier verions*/), 
-                    Z_READ_FP(z_file)), 0, "Error in %s: failed to read genozip header", z_name);
+                    GET_FP(z_file)), 0, "Error in %s: failed to read genozip header", z_name);
 
     RETURNW (BGEN32 (top.magic) == GENOZIP_MAGIC, 0, "Error in %s: offset=%"PRIu64" of the GENOZIP_HEADER section as it appears in the Footer appears to be wrong, or the GENOZIP_HEADER section has bad magic (file_size=%"PRIu64").%s", 
              z_name, offset, z_file->disk_size, flag.debug_or_test ? " Try again with --recover." : "");
@@ -979,7 +979,7 @@ error:
     return false;
 }
 
-// Update the first SEC_TXT_HEADER fragment of the current txt file. 
+// ZIP MAIN: Update the first SEC_TXT_HEADER fragment of the current txt file. 
 void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
 {
     // sanity check - we skip empty files, so data is expected
@@ -1013,7 +1013,7 @@ void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
         crypt_do (evb, (uint8_t *)header, evb->scratch.len, 1 /*was 0 up to 14.0.8*/, header->section_type, true);
     }
 
-    zriter_write (&evb->scratch, NULL, offset_in_z_file, false);  // note: cannot write in background with offset
+    zriter_write (&evb->scratch, NULL, offset_in_z_file, false);  
 
     buf_free (evb->scratch);
 }
@@ -1107,7 +1107,7 @@ DataType zfile_piz_get_file_dt (rom z_filename)
             goto done;
 
         SectionFooterGenozipHeader footer;
-        int ret = fread (&footer, sizeof (footer), 1, Z_READ_FP(file));
+        int ret = fread (&footer, sizeof (footer), 1, GET_FP(file));
         ASSERTW (ret == 1, "Skipping empty file %s", z_name);    
         if (!ret) goto done; // empty file / cannot read
         
@@ -1120,7 +1120,7 @@ DataType zfile_piz_get_file_dt (rom z_filename)
             goto done;
 
         SectionHeaderGenozipHeader header;
-        int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), Z_READ_FP(file));
+        int bytes = fread ((char*)&header, 1, sizeof(SectionHeaderGenozipHeader), GET_FP(file));
         if (bytes < sizeof(SectionHeaderGenozipHeader)) goto done;
 
         ASSERTW (BGEN32 (header.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", z_name);

@@ -11,5 +11,4 @@
 #include "genozip.h"
 
 extern void zriter_write (BufferP buf, BufferP section_list, int64_t offset_in_z_file, bool background);
-extern void zriter_wait_for_bg_writing (void);
 extern void zriter_flush (void);

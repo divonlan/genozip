@@ -142,7 +142,7 @@ void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
         BLST (SectionEntModifiable, vb->section_list)->dict_id = dict_id; // note: this is in union with num_lines
 }
 
-// ZIP: remove section from list when it is deleted from z_data by zfile_remove_ctx_group_from_z_data
+// ZIP (possibly compute thread): remove section from list when it is deleted from z_data by zfile_remove_ctx_group_from_z_data
 void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len)
 {
     SectionEntModifiable *sec;
@@ -158,13 +158,15 @@ void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len)
 // writing those sections to the disk. we use the current disk position to update the offset
 void sections_list_concat (BufferP section_list)
 {
+    ASSERTMAINTHREAD;
+
     ARRAY (SectionEntModifiable, vb_sec, *section_list);
 
     // update the offset
     for (uint32_t i=0; i < vb_sec_len; i++) 
         vb_sec[i].offset += z_file->disk_so_far;
 
-    // copy all entries. note: z_file->section_list is protected by zriter_mutex 
+    // copy all entries
     buf_append_buf (evb, &z_file->section_list, section_list, SectionEntModifiable, "z_file->section_list");
 
     section_list->len = 0;

@@ -166,8 +166,6 @@ void profiler_add_evb_and_print_report (void)
         PRINT (txtfile_get_unconsumed_callback, 2);
         PRINT (mgzip_copy_unconsumed_blocks, 2);
         PRINT (zriter_write, 1);
-        PRINT (write_fg, 2);
-        PRINT (write_bg, 2);
         PRINT (bgzf_io_thread, 1);
         PRINT (sam_sa_prim_finalize_ingest, 1);
         PRINT (sam_gencomp_trim_memory, 2);

@@ -109,13 +109,7 @@ typedef struct File {
     Buffer comp_sections_index;        // ZIP/PIZ Z_FILE: an index into Txt sections
     Buffer first_last_sec_index;       // ZIP/PIZ Z_FILE: sec_i of first section in the file of each section type
 
-    // Used for WRITING GENOZIP files
-    Mutex zriter_mutex;                // Z_FILE ZIP: forces one writer at a time
-    Buffer zriter_threads;             // Z_FILE ZIP: list of currently writing threads and their buffers
-    bool zriter_last_was_fg;
-
-    #define Z_READ_FP(f) (((f)->mode == READ || flag.no_zriter) ? (FILE *)(f)->file : (f)->z_reread_file) 
-    #define GET_FP(f,md) (((f)->mode == READ || (md) != READ || (f)->supertype != Z_FILE || flag.no_zriter) ? (FILE *)(f)->file : (f)->z_reread_file)
+    #define GET_FP(f) ((FILE *)(f)->file) 
 
     FILE *z_reread_file;               // Z_FILE ZIP: file pointer for re-reading files as they are being writting (used for pair reading)
 

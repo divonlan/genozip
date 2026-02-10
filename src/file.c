@@ -862,7 +862,6 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
     mutex_initialize (file->dicts_mutex);
     mutex_initialize (file->custom_merge_mutex);
     mutex_initialize (file->test_abbrev_mutex);
-    mutex_initialize (file->zriter_mutex);
     
     if (!flag.zip_no_z_file) {
 
@@ -877,9 +876,6 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
         else {
             file->file = fopen (file->name, file->mode);
             
-            if (!flag.no_zriter) 
-                file->z_reread_file = fopen (file->name, READ);
-
 #ifndef _WIN32
             // set z_file permissions to be the same as the txt_file permissions (if possible)
             if (file->file && txt_file && txt_file->name && !txt_file->is_remote) {
@@ -1015,7 +1011,6 @@ void file_close (FileP *file_p)
 
         buflist_destroy_file_bufs (file);
 
-        mutex_destroy (file->zriter_mutex);
         mutex_destroy (file->dicts_mutex);
         mutex_destroy (file->custom_merge_mutex);
         mutex_destroy (file->test_abbrev_mutex);
@@ -1147,11 +1142,11 @@ bool file_seek (FileP file, int64_t offset,
             offset += (IS_ZIP ? tar_file_offset() : flag.t_offset); // 0 if not using tar
 
             test_already_there:
-            if (ftello64 (GET_FP(file, mode)) == offset) return true; // already at the right offset
+            if (ftello64 (GET_FP(file)) == offset) return true; // already at the right offset
         }
     }
 
-    int ret = fseeko64 (GET_FP(file, mode), offset, whence);
+    int ret = fseeko64 (GET_FP(file), offset, whence);
 
     if (fail_type != HARD_FAIL) {
         if (!flag.to_stdout && fail_type==WARNING_FAIL) {

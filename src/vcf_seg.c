@@ -409,7 +409,7 @@ void vcf_seg_finalize (VBlockP vb_)
     __atomic_add_fetch (&z_file->mate_line_count, (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
 }
 
-// after each VB is compressed and merge (VB order is arbitrary)
+// Compute thread: after each VB is compressed and merge (VB order is arbitrary)
 void vcf_zip_after_compress (VBlockP vb)
 {
     if (VB_VCF->PL_mux_by_DP == unknown) 

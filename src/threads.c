@@ -48,8 +48,8 @@ static Buffer threads = {};
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
 static Mutex print_call_stack_mutex = { };
 pthread_t main_thread = 0; 
-static pthread_t writer_thread, zriter_thread;
-static bool writer_thread_is_set = false, zriter_thread_is_set = false;
+static pthread_t writer_thread;
+static bool writer_thread_is_set = false;
 
 static Buffer log = {}; // for debugging thread issues, activated with --debug-threads
 static Mutex log_mutex = {};
@@ -122,7 +122,6 @@ static void threads_print_call_stack_do (CONTEXT thread_ctx)
     fprintf (stderr, "\nCall stack (%s thread):\n",  // note: SUBMIT is not a separate thread in Windows
                threads_am_i_main_thread()   ? "MAIN" 
              : threads_am_i_writer_thread() ? "WRITER"
-             : threads_am_i_zriter_thread() ? "ZRITER"
              :                                threads_get_task_name());
 
 //     HANDLE process = GetCurrentProcess();
@@ -228,7 +227,6 @@ void threads_print_call_stack (void)
                 am_i_submit()                ? "SUBMIT"
               : threads_am_i_main_thread()   ? "MAIN" 
               : threads_am_i_writer_thread() ? "WRITER"
-              : threads_am_i_zriter_thread() ? "ZRITER" 
               :                                 threads_get_task_name());
         fflush (stderr);
 
@@ -376,22 +374,6 @@ void threads_unset_writer_thread (void)
 bool threads_am_i_writer_thread (void)
 {
     return writer_thread_is_set && pthread_self() == writer_thread;    
-}
-
-void threads_set_zriter_thread (void)
-{
-    zriter_thread_is_set = true;
-    zriter_thread = pthread_self();
-}
-
-void threads_unset_zriter_thread (void)
-{
-    zriter_thread_is_set = false;
-}
-
-bool threads_am_i_zriter_thread (void)
-{
-    return zriter_thread_is_set && pthread_self() == zriter_thread;    
 }
 
 void threads_write_log (bool to_info_stream)

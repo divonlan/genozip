@@ -787,7 +787,7 @@ void zip_one_file (rom txt_basename,
             str_int_commas (txt_file->disk_so_far).s, flag.truncate ? "or truncated " : "", str_int_commas (txt_file->disk_gz_uncomp_or_trunc).s,
             txtfile_codec_name (z_file, flag.zip_comp_i, false).s);
     
-    zriter_wait_for_bg_writing(); // complete writing VBs before moving on
+    zriter_flush(); // complete writing VBs before moving on
 
     dispatcher_calc_avg_compute_vbs (dispatcher);
 
