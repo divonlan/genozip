@@ -55,7 +55,7 @@ void vcf_zip_finalize (bool is_last_user_txt_file)
 
     if (!flag.reference && refalt_z_pc > 10 && !flag.seg_only)
         TIP ("Compressing a this %s file using a reference file can reduce the compressed file's size by %d%%-%d%%.\n"
-             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
+             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
              z_dt_name(), refalt_z_pc / 3, (int)((float)refalt_z_pc / 1.5), arch_get_argv0(), txt_file->name);
 
     if (!flag.let_OS_cleanup_on_exit) {
@@ -302,7 +302,7 @@ void vcf_segconf_finalize (VBlockP vb_)
 
         if (!flag.reference && !flag.seg_only)
             TIP ("Compressing a Ultima Genomics %s file using a reference file can reduce the size by 12%%.\n"
-                 "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
+                 "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
                  z_dt_name(), arch_get_argv0(), txt_file->name);
     }
 
@@ -318,17 +318,17 @@ void vcf_segconf_finalize (VBlockP vb_)
         
     if (!flag.reference && segconf.vcf_is_gvcf && !flag.seg_only && vcf_num_samples < 5)
         TIP ("Compressing a GVCF file using a reference file can reduce the compressed file's size by 10%%-30%%.\n"
-             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
+             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
 
     else if (!flag.reference && segconf.vcf_is_platypus && (segconf.has[INFO_SC] || segconf.has[INFO_HP]) && !flag.seg_only)
         TIP ("Compressing a Platypus %s file using a reference file can reduce the compressed file's size by 30%%.\n"
-             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
+             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
              z_dt_name(), arch_get_argv0(), txt_file->name);
 
     else if (!flag.reference && segconf.vcf_is_sv && !flag.seg_only)
         TIP ("Compressing a structrual variants %s file using a reference file can reduce the compressed file's size by 20%%-60%%.\n"
-            "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n", 
+            "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n", 
             z_dt_name(), arch_get_argv0(), txt_file->name);
 
     else if (segconf.has[INFO_SNVHPOL]) // isaac field

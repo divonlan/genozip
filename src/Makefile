@@ -127,6 +127,7 @@ SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_
 
 MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c\
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
+		  error.c 																								\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c specials.c    	\
 		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c digest.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c vcf_modify.c     	\
@@ -139,7 +140,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
 		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
 		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
-		  sam_blasr.c sam_dragen.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c sam_cpu.c   			\
+		  sam_blasr.c sam_dragen.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c sam_cpu.c bai.c		\
 		  sam_star.c sam_abra2.c sam_minimap2.c sam_modify.c sam_recon_plan_piz.c gencomp_zip.c gencomp_piz.c	\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c fastq_aux.c    \
 		  deep.c																								\
@@ -176,14 +177,14 @@ CONDA_DEVS = Makefile ../.gitignore
 CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
 INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h 					\
-            endianness.h md5.h sections.h text_help.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h 					\
+            endianness.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h 								\
             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 		\
             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
 		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h tip.h deep.h filename.h stats.h multiplexer.h 						\
-		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h mgzip.h coverage.h threads.h local_type.h sorter.h			\
+		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h mgzip.h coverage.h threads.h error.h local_type.h sorter.h	\
 			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h writer_private.h zriter.h bases_filter.h genols.h 		\
 			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h sam_friend.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h		\
-			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h 								\
+			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h bai.h							\
 			\
 			zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h													\
 			\

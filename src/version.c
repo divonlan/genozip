@@ -17,6 +17,7 @@
 #include "flags.h"
 #include "arch.h"
 #include "file.h"
+#include "threads.h"
 
 static rom latest_version = NULL;
 static bool thread_running = false;
@@ -264,9 +265,9 @@ static void udpate_do (void)
 
 void version_print_notice_if_has_newer (void)
 {
-    // case: Genozip finished its work while thread is still running - kill it
+    // case: Genozip finished its work while thread is still running - cancel it
     if (load_acquire (thread_running)) {
-        pthread_cancel (thread_id);
+        pthread_cancel_safe (thread_id);
         PTHREAD_JOIN (thread_id, "version_background_test_for_newer_do"); // wait for cancelation to complete
 
         if (flag.debug_upgrade)
@@ -274,8 +275,12 @@ void version_print_notice_if_has_newer (void)
 
         __atomic_thread_fence (__ATOMIC_ACQUIRE); // make sure github_stream is updated      
         
-        if (github_stream) 
+        if (github_stream) {
+            // leak the pipe - it's state might be corrupted as we abruptly terminated the thread using it (which might cause fclose to fail on Linux, and hang on Windows)  
+            stream_leak_pipe (github_stream);
+
             stream_close (&github_stream, STREAM_KILL_PROCESS);
+        }
     }
     
     // case: thread completed, and there is a new version

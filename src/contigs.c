@@ -198,8 +198,7 @@ WordIndex contigs_get_by_name_do (ConstBufferP contigs, ConstBufferP contigs_dic
     return word_index;
 }             
 
-// binary search for this chrom in contigs. we count on gcc tail recursion optimization to keep this fast.
-// looks in Reference contigs if ref is provided, or in CHROM if ref=NULL
+// find the contigs in ctgs (binary searching)
 WordIndex contigs_get_by_name (ConstContigPkgP ctgs, STRp(contig_name))
 {
     ASSERT (ctgs->contigs.len == ctgs->by_name.len, "%s: expecting contigs.len=%"PRIu64" == by_name.len=%"PRIu64, ctgs->name, ctgs->contigs.len, ctgs->by_name.len);
@@ -448,6 +447,17 @@ void foreach_contig (ConstContigPkgP ctgs, ContigsIteratorCallback callback, voi
         rom ref_chrom_name = Bc(ctgs->dict, ctg->char_index); 
         callback (ref_chrom_name, strlen (ref_chrom_name), ctg->max_pos, callback_param);
     }
+}
+
+PosType64 contigs_len_of_longest_contig (ConstContigPkgP ctgs)
+{
+    if (!ctgs) return 0;
+
+    PosType64 max_len = 0;
+    for_buf (const Contig, ctg, ctgs->contigs) 
+        MAXIMIZE (max_len, ctg->max_pos - ctg->min_pos + 1);
+
+    return max_len;
 }
 
 // -----------------------------

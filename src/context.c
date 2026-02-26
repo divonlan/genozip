@@ -1067,7 +1067,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
               report_support(),
               cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
               cond_str (VB_DT(BAM) || VB_DT(SAM) || VB_DT(FASTQ), "segconf_qf_name=", segconf_qf_name(QNAME1)), 
-              z_dt_name(), zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, version_str().s);
+              dt_name(z_file->data_type)/*not z_dt_name*/, zctx->tag_name, VB_NAME, segconf.vb_size, zctx->dict.len, version_str().s);
         dict_io_print (stderr, zctx->dict_id, zctx->dict.data, 1000, true, true, false, false);
     }
 
@@ -1371,31 +1371,51 @@ rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, STRp
     return my_snip; 
 }
 
-// PIZ: returns word index of the snip, or WORD_INDEX_NONE if it is not in the dictionary
-WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip))
+// PIZ main thread: must be called from data-type-specific piz_initialize 
+// IMPORTANT: when using for a new did, check piz_word_list_hash in the union in typedef Context
+void ctx_get_word_index_by_snip_initialize (Did did_i)
 {
+    decl_zctx (did_i);
+    if (zctx->piz_word_list_hash.len) return; // already initialized
+    
+    ARRAY (const char, dict, zctx->dict);
+
+    ARRAY_alloc (WordIndex, hash_table, 5 * zctx->word_list.len, false, zctx->piz_word_list_hash, evb, "zctx->piz_word_list_hash");
+    memset (hash_table, 0xff, hash_table_len * sizeof (WordIndex)); // initialize to WORD_INDEX_NONE
+    
+    // prepare hash-based index
+    for_buf2 (CtxWord, word, wi, zctx->word_list) {
+        WordIndex *hash_ent = &hash_table[hash_do (hash_table_len, &dict[word->char_index], word->snip_len)];
+        if (*hash_ent == WORD_INDEX_NONE) // if more than one word maps to the same hash, only the first one is recorded
+            *hash_ent = wi;
+    }
+}
+
+// PIZ any thread: returns word index of the snip, or WORD_INDEX_NONE if it is not in the dictionary
+WordIndex ctx_get_word_index_by_snip (Did did_i, STRp(snip))
+{
+    decl_zctx (did_i);
+    ASSERT (zctx->piz_word_list_hash.len, "not initialized for %s", zctx->tag_name);
+
     if (!snip_len) snip_len = strlen (snip);
 
-    ARRAY (const CtxWord, words, ctx->word_list);
-    ARRAY (const char, dict, ctx->dict);
+    ARRAY (const CtxWord, words, zctx->word_list);
+    ARRAY (const char, dict, zctx->dict);
 
-    if (!ctx->piz_word_list_hash.data) 
-        buf_alloc_255 (vb, &ctx->piz_word_list_hash, 0, 5*ctx->word_list.len, WordIndex, 0, "piz_word_list_hash");
-
-    WordIndex *hash_ent = B(WordIndex, ctx->piz_word_list_hash, hash_do (5*ctx->word_list.len, STRa(snip)));
+    // case: we're lucky and snip is in the hash table
+    WordIndex *hash_ent = B(WordIndex, zctx->piz_word_list_hash, hash_do (zctx->piz_word_list_hash.len32, STRa(snip)));
     if (*hash_ent != WORD_INDEX_NONE && str_issame_(STRa(snip), &dict[words[*hash_ent].char_index], words[*hash_ent].snip_len))
         return *hash_ent;
 
+    // snip is not in hash, look for it linearly
     for (WordIndex wi=0; wi < words_len; wi++)
-        if (str_issame_(STRa(snip), &dict[words[wi].char_index], words[wi].snip_len)) {
-            *hash_ent = wi;
+        if (str_issame_(STRa(snip), &dict[words[wi].char_index], words[wi].snip_len)) 
             return wi;
-        }
 
     return WORD_INDEX_NONE;
 }
 
-// get the node_index=word_index of a snip from zctx. its an error if the snip doesn't exist.
+// ZIP: get the node_index=word_index of a snip from zctx. its an error if the snip doesn't exist.
 WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip))
 {
     return hash_find_snip_in_ol_nodes (vb, ctx, STRa(snip), NULL);
@@ -1974,15 +1994,17 @@ void ctx_show_zctx_big_consumers (FILE *out)
             *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->ston_hash.name,   .size = zctx->ston_hash.size };
             *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->ston_ents.name,   .size = zctx->ston_ents.size };
         }
-        else 
+        else {
             *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->word_list.name,   .size = zctx->word_list.size };
+            *next++ = (BigConsumers){ .tag_name = tag, .buf_name = zctx->piz_word_list_hash.name, .size = zctx->piz_word_list_hash.size };
+        }
         
         if (pool) {
             // for this zctx, get total size of these 4 buffers across all VBs
             // note: we are assuming did_i is equal in vctx and zctx - this will not be true in 
             // the first generation of VBs, so best to test mid-stream, otherwise mis-accounting will occur
             uint64_t dict=0, nodes=0, b250=0, local_hash=0, local=0, dyn_lt_order=0, 
-                     per_line=0, piz_word_list_hash=0, history=0, piz_ctx_specific_buf=0;
+                     per_line=0, history=0, piz_ctx_specific_buf=0;
             LocalType ltype=0;
             uint32_t max_nodes = 0;
 
@@ -2010,7 +2032,6 @@ void ctx_show_zctx_big_consumers (FILE *out)
                     b250                 += vctx->b250.size;
                     local                += vctx->local.size;
                     per_line             += vctx->per_line.size;
-                    piz_word_list_hash   += vctx->piz_word_list_hash.size;
                     history              += vctx->history.size;
                     piz_ctx_specific_buf += vctx->piz_ctx_specific_buf.size;
                 }
@@ -2029,7 +2050,6 @@ void ctx_show_zctx_big_consumers (FILE *out)
             else {
                 *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_B250,           .size = b250, .n_words = zctx->word_list.len };
                 *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "per_line",             .size = per_line };
-                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "piz_word_list_hash",   .size = piz_word_list_hash };
                 *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "history",              .size = history };
                 *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "piz_ctx_specific_buf", .size = piz_ctx_specific_buf };
             }

@@ -17,6 +17,8 @@
 #include "contigs.h"
 #include "stats.h"
 #include "arch.h"
+#include "tip.h"
+#include "bai.h"
 
 // globals
 ContigPkgP sam_hdr_contigs = NULL; // If no contigs in header: BAM: empty structure (RNAME must be * for all lines); SAM: NULL (RNAME in lines may have contigs) 
@@ -28,7 +30,14 @@ static rom map_sigs[] = SAM_MAPPER_SIGNATURE;
 
 uint32_t sam_num_header_contigs (void)
 {
-    return sam_hdr_contigs ? sam_hdr_contigs->contigs.len32 : 0;
+    return contigs_num_contigs (sam_hdr_contigs);
+}
+
+WordIndex sam_get_contig_by_name (STRp(contig_name))
+{
+    // note: returns WORD_INDEX_NONE if contig not found, or if no contigs in sam header
+    return sam_hdr_contigs ? contigs_get_by_name (sam_hdr_contigs, STRa(contig_name))
+                           : WORD_INDEX_NONE;
 }
 
 rom sam_get_deep_tip (void)
@@ -41,7 +50,7 @@ void sam_destroy_deep_tip (void)
     buf_destroy (sam_deep_tip);
 }
 
-static void sam_header_add_contig (STRp (contig_name), PosType64 LN, void *out_ref_index)
+static void sam_header_add_contig (STRp(contig_name), PosType64 LN, void *out_ref_index)
 {
     WordIndex ref_index;
 
@@ -91,6 +100,7 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
     if (bam_header_len) {     
         bam_txt_hdr_len = GET_UINT32(txt_header+4);
         if (!bam_txt_hdr_len) return; // no header
+        
         __save_ = txt_header[bam_txt_hdr_len + 8]; // temporary \0 after textual header
         *(__addr_ = (char *)&txt_header[bam_txt_hdr_len + 8]) = 0;
 
@@ -101,7 +111,7 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
         if (*line != '@') break;
 
         char *newline = strchr (line, '\n');
-        ASSERT (newline, "line %u of textual SAM header does not end with a newline: \"%s\"", i, line);
+        ASSERT (newline, "line_i=%u of textual SAM header does not end with a newline: \"%s\"", i, line);
 
         if (line[1] == 'S' && line[2] == 'Q') { // this test will always be in the buffer - possible in the overflow area
 
@@ -125,11 +135,10 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
     }
 
     if (bam_header_len) SAFE_RESTORE;
-    
 }
 
 // call a callback for each SQ line (contig). Note: callback function is the same as foreach_contig
-static void foreach_binary_SQ_line (rom txt_header, uint32_t txt_header_len, // binary BAM header
+static void foreach_binary_SQ_line (STRp(txt_header), // binary BAM header
                                     ContigsIteratorCallback callback, void *callback_param)
 {
     #define HDRSKIP(n) if (txt_header_len < next + n) goto incomplete_header; next += n
@@ -283,7 +292,7 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
         SAFE_NULT(fq);
         if (!sam_deep_tip.len || !strstr (B1STc(sam_deep_tip), fq)) { // avoid dups
             if (!sam_deep_tip.len) 
-                bufprintf (evb, &sam_deep_tip, "Tip: Use --deep to losslessly co-compress BAM and FASTQ, saving about 40%%, compared to compressing FASTQ and BAM separately. E.g.:\n"
+                bufprintf (evb, &sam_deep_tip, _TIP "Use --deep to losslessly co-compress BAM and FASTQ, saving about 40%%, compared to compressing FASTQ and BAM separately. E.g.:\n"
                            "%s --reference %s --deep %s\n"
                            "See %s for more information.",
                            arch_get_argv0(), ref_get_filename() ? ref_get_filename() : "reference-genome.fa.gz", txt_name, WEBSITE_DEEP);
@@ -495,7 +504,8 @@ static void sam_header_alloc_contigs (BufferP txt_header)
     }
 }
 
-static void sam_header_zip_inspect_SQ_lines (VBlockP txt_header_vb, BufferP txt_header) 
+// ZIP/PIZ: main thread
+static void sam_header_inspect_SQ_lines (VBlockP txt_header_vb, BufferP txt_header) 
 {
     START_TIMER;
     
@@ -506,15 +516,14 @@ static void sam_header_zip_inspect_SQ_lines (VBlockP txt_header_vb, BufferP txt_
         if (sam_hdr_contigs->contigs.param) // contigs originate from textual header
             foreach_textual_SQ_line (txt_header->data, IS_SRC_BAM ? txt_header->len32 : 0, sam_header_add_contig, NULL);
         else
-            foreach_binary_SQ_line  (STRb(*txt_header), sam_header_add_contig, NULL);
+            foreach_binary_SQ_line (STRb(*txt_header), sam_header_add_contig, NULL);
 
         COPY_TIMER_EVB (sam_header_add_contig);
 
-        if (IS_ZIP)            
-            contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group
+        contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group and by bai_get_line_sam
     }
 
-    COPY_TIMER_EVB (sam_header_zip_inspect_SQ_lines);
+    COPY_TIMER_EVB (sam_header_inspect_SQ_lines);
 }
 
 // called from cram_read_sam_header to verify that all CRAM header contigs appear in reference, 
@@ -576,14 +585,12 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
 
     if (flag.show_txt_contigs && is_genocat) exit_ok;
 
-    // get contigs from @SQ lines
-    if (IS_ZIP || flag.collect_coverage)  // note: up to v13, contigs were carried by SEC_REF_CONTIG for REF_INTERNAL too 
-        sam_header_zip_inspect_SQ_lines (txt_header_vb, txt_header);
+    SAFE_NULB(*txt_header); // nul-terminate as required by foreach_textual_SQ_line (required only for SAM, but no harm)
+
+    // get contigs from header (SAM: @SQ lines, BAM: binary ref data)
+    sam_header_inspect_SQ_lines (txt_header_vb, txt_header); // note: up to v13, contigs were carried by SEC_REF_CONTIG for REF_INTERNAL too 
 
     if (IS_ZIP && !flag.bam_assist) {
-
-        if (!IS_BAM_ZIP) *BAFTc (*txt_header) = 0; // nul-terminate as required by foreach_textual_SQ_line
-
         sam_header_zip_inspect_HD_line  (txt_header);
         sam_header_zip_inspect_PG_lines (txt_header);
         sam_header_zip_inspect_RG_lines (txt_header);
@@ -597,6 +604,10 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
     }
 
     else if (IS_PIZ) {
+        
+        // initialize BAI making - decide if to output a .bai file based on the header and flags
+        bai_initialize (B1STc(*txt_header), sam_num_header_contigs(), contigs_len_of_longest_contig (sam_hdr_contigs));
+
         // deep tip - create in case tip is displayed in "--test after ZIP"
         uint32_t hdr_len = IS_SRC_BAM_PIZ ? *B32(*txt_header, 1)     : txt_header->len32;
         rom hdr          = IS_SRC_BAM_PIZ ? (rom)B32(*txt_header, 2) : txt_header->data;
@@ -604,6 +615,7 @@ bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct Flags
         sam_header_create_deep_tip (hdr, hdr + hdr_len);
     }
 
+    SAFE_RESTORE;
     COPY_TIMER_EVB (sam_header_inspect);
     return true;
 }

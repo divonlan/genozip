@@ -21,7 +21,7 @@ install_license_wrapper()
 
 cleanup() 
 { 
-    rm -fR $OUTDIR/* $TESTDIR/*.bad $TESTDIR/*.rejects.* 
+    rm -fR $OUTDIR/* $TESTDIR/*.bad
     cleanup_cache
     install_license_wrapper Premium || exit 1
     unset GENOZIP_REFERENCE    
@@ -722,6 +722,12 @@ batch_coverage_idxstats()
     $genozip -Xf $T.R1.fq.gz --bamass $T.sam -o $output -e $GRCh38 || exit 1
     verify_coverage_has_24_chromosomes "FASTQ with bamass"
 
+    $genozip -Xf $T.R1.fasta.gz -o $output -e $GRCh38 || exit 1
+    verify_coverage_has_24_chromosomes "FASTA (FAF) without bamass"
+
+    $genozip -Xf $T.R1.fasta.gz --bamass $T.sam -o $output -e $GRCh38 || exit 1
+    verify_coverage_has_24_chromosomes "FASTA (FAF) with bamass"
+
     $genozip -Xf $T.sam -o $output -e $GRCh38 || exit 1
     verify_coverage_has_24_chromosomes "SAM"
 
@@ -1201,8 +1207,8 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     fi
 
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*bcf* test.*sam* test.*bam test.*fq* test.*fa*                \
-                   test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* test.*txt* test.*.pbi                    \
+    local files=( `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*vcf.bz2 test.*bcf* test*.sam test*.sam.* test*.bam test*.fq* test*.fa*                \
+                   test.*gvf* test.*gtf* test.*gff* test.*locs* test*.bed* test.*txt* test.*.pbi                    \
                    | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$filter_bcf" | grep -v "$debug_filter" \
                    | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora" ` )
 
@@ -1405,7 +1411,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
     fi
 
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf* test.*sam* test.*bam \
+    local files=( `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*vcf.bz2 test.*sam* test.*bam \
                    test.*fq* test.*fa* \
                    test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
                    test.*txt* test.*pbi \
@@ -1481,6 +1487,153 @@ batch_real_world_with_ref_md5() # $1 extra genozip argument
     cleanup_cache
 }
 
+get_sam_type() # $1 = filename
+{
+    local first_chars="@RG" # first 3 characters of test.ubam.sam
+
+    local head="$(head -c4 "$1")"
+    if [[ "$head" == "CRAM" ]];               then echo "CRAM";   return; fi
+    if [[ "${head:0:3}" == "$first_chars" ]]; then echo "SAM";    return; fi 
+
+    local bhead="$(head -c26 "$1" | tail -c3)"
+    local size=$(stat -c%s "$1")
+
+    if [[ "$bhead" == "BAM" ]]; then
+        txt_size=`zcat $1 | wc -c`
+        if (( txt_size < size )); then echo "BAM_Z0"; return; fi # BGZF with non-compressed blocks. Note: just testing for "BAM" is not enough, bc if BAM header is small, then the txt_header BGZF block might be z0 will the rest of the file is compressed.
+    fi
+
+    local zhead="`$zcat < $1 2>/dev/null | head -c3`" # zcat of a file called txt doesn't work on mac, hence input redirection
+    if [[ "$zhead" == "BAM" ]];    then echo "BAM";    return; fi
+    if [[ "${zhead:0:1}" == "@" ]]; then echo "SAM_GZ"; return; fi
+
+    echo "UNIDENTIFIED"
+}
+
+verify_sam_type() # $1=filename ; $2=expected type
+{
+    local type=$(get_sam_type "$1")
+
+    if [[ "$type" != "$2" ]]; then
+        echo "Error: expected $filename to be a $2 but it is a $type"
+        exit 1
+    fi
+}
+
+batch_test_bai()
+{
+    batch_print_header
+
+    cleanup
+    rm -f $TESTDIR/*.test-bai/*genounzip* # not in cleanup so we can inspect after the test
+
+    # two special cases: 
+    # deep.left-right-trimming.bam: a Deep file 
+    # special.large.bam a file that bai-generate-test-data.sh compresses with -B35: beyond the 32MB threashold at which writer_flush starts to fragment
+    local files=( deep.left-right-trimming.bam \
+                  special.large.bam \
+                  `cd $TESTDIR; ls -1 test.*bam | egrep -v "test.Bismark_SE.bam|test.Bismark_pe.bam|test.NovaSeq.bam|test.bgi-CL.bam|test.header-only-no-SQ.bam|test.human3-collated.bam|test.longranger-wgs.bam|test.nanoseq.pre.bam|test.pacbio-minimap2-rna.bam|test.pacbio.ccs.10k.bam|test.pacbio.ccs.giab.bam|test.pacbio.ccs.kinetic.bam|test.pacbio.ccs.normal-tumor.normal.bam|test.pacbio.ccs.oak.bam|test.pacbio.ccs.sq-dq-iq.bam|test.pacbio.ccs.virus.bam|test.pacbio.subreads.bam|test.pacbio.subreads2.bam|test.pacbio.subreads3.bam|test.transcriptome.bam|test.ubam.bam"` ) # samtools index fails (no SQ, not sorted, or not BGZF)
+
+    for bam in ${files[@]}; do
+        test_header "Testing BAI of $bam"
+
+        # to remove all generated ranges for all files: make -C $GENOZIP_HOME/private/test clean-test-index
+        bai-generate-test-data.sh $bam || exit 1 # negligible time if already generated
+
+        local dir=$TESTDIR/$bam.test-bai
+        rm -f $dir/*genounzip*
+
+        local sam_gz=${bam/bam/sam.gz}
+
+        local recon_bam="$dir/genounzip.bam"
+        local recon_sam="$dir/genounzip.sam.gz"
+        
+        if [[ "$bam" == deep.left-right-trimming.bam ]]; then # Deep - special case
+            $genocat "$dir/${bam/bam/deep}".genozip -fo "$recon_bam" || exit 1 
+            $genocat "$dir/${bam/bam/deep}".genozip -fo "$recon_sam" || exit 1 
+        else 
+            $genounzip "$dir/$bam.genozip" -fo "$recon_bam" || exit 1 # generates .bam and .bam.bai
+            $genocat   "$dir/$bam.genozip" -fo "$recon_sam" || exit 1 # generates .sam.gz and .sam.gz.bai
+        fi
+
+        verify_sam_type "$recon_bam" BAM
+        verify_sam_type "$recon_sam" SAM_GZ
+
+        for txt_file in "$recon_bam" "$recon_sam"; do
+            if [[ ! -f "$txt_file.bai" ]]; then
+                echo "genounzip didn't generate $txt_file.bai, likely because $bam is unmapped or unsorted. If so, exclude it from the file list"
+                exit 1
+            fi
+        done
+
+        for index_sam in $dir/*.index.sam ; do
+            range="$(basename "$index_sam" | rev | cut -d. -f3- | rev)" # quotes: this way, so '*' doesn't expand as an argument to basename, and not expand once again when assigning to range ; rev logic - in case contig name itself contains a '.'
+
+            for txt_file in "$recon_bam" "$recon_sam"; do
+                echo "Testing $bam range=$range reconstructed=$(basename $txt_file)"
+                
+                recon_range_sam="$dir/$range.$(basename $txt_file).sam"
+                
+                samtools view -@12 --no-PG "$txt_file" "$range" > "$recon_range_sam" || exit 1
+
+                # compare two subset SAMs generated by samtools view: one (index) with the samtools index BAI
+                # and the second with the BAI generated by genounzip/cat
+                if [[ "$(md5sum < "$recon_range_sam")" != "$(md5sum < "$index_sam")" ]] ; then # md5sum is A LOT faster than cmp
+                    echo "ERROR: samtools returned a different range for samtools index bai vs genounzip (of $(basename $txt_file)) bai. See:"
+                    ls -l "$index_sam" "$recon_range_sam"
+                    exit 1
+                fi
+            done
+        done
+    done
+}
+
+batch_test_tbi()
+{
+    batch_print_header
+
+    cleanup
+    rm -f $TESTDIR/*.test-tbi/*genounzip* # not in cleanup so we can inspect after the test
+
+    local files=( `cd $TESTDIR; ls -1 test.*vcf.gz | \
+                   egrep -v "test.1KG-38.vcf.gz|test.SequelII-CLR.sv.vcf.gz|test.human2.cnv.vcf.gz|test.icgc.vcf.gz|test.msvcf-15x490541.vcf.gz|test.msvcf-2x6000000.vcf.gz"`) # tabix fails (fails parsing, or not BGZF or too short)
+
+    for vcf in ${files[@]}; do
+        test_header "Testing TBI of $vcf"
+
+        # to remove all generated ranges for all files: make -C $GENOZIP_HOME/private/test clean-test-index
+        tbi-generate-test-data.sh $vcf || exit 1 # negligible time if already generated
+
+        local dir=$TESTDIR/$vcf.test-tbi
+        rm -f $dir/*genounzip*
+
+        local txt_file="$dir/genounzip.vcf.gz"
+        $genounzip "$dir/${vcf/gz/genozip}" -fo "$txt_file" || exit 1 # generates .vcf.gz and .vcf.tbi
+
+        if [[ ! -f "$txt_file.tbi" ]]; then
+            echo "genounzip didn't generate $txt_file.tbi."
+            exit 1
+        fi
+
+        for tabix_vcf in $dir/*.tabix.vcf ; do
+            range="$(basename "$tabix_vcf" | rev | cut -d. -f3- | rev)" # rev logic - in case contig name itself contains a '.'
+
+            echo "Testing $vcf range=$range reconstructed=$(basename $txt_file)"
+            
+            recon_range_vcf="$dir/$range.genounzip.vcf"
+            
+            bcftools view --threads 8 --no-version "$txt_file" "$range" > "$recon_range_vcf" || exit 1
+
+            # compare two subset SAMs generated by bcftools view: one (tabix) with the tabix BAI
+            # and the second with the BAI generated by genounzip
+            if [[ "$(md5sum < "$recon_range_vcf")" != "$(md5sum < "$tabix_vcf")" ]] ; then # md5sum is A LOT faster than cmp
+                echo "ERROR: bcftools returned a different range for tabix tbi vs genounzip (of $(basename $txt_file)) tbi. See:"
+                ls -l "$tabix_vcf" "$recon_range_vcf"
+                exit 1
+            fi
+        done
+    done
+}
 
 batch_real_world_with_ref_backcomp()
 {
@@ -1632,22 +1785,6 @@ batch_multiseq()
     # test_standard "--multiseq" " " test.nanopore-virus.fq
 }
 
-get_sam_type() # $1 = filename
-{
-    local first_chars="@RG" # first 3 characters of test.ubam.sam
-
-    local head="`head -c4 $1`"
-    if [[ "$head" == "CRAM" ]];               then echo "CRAM";   return; fi
-    if [[ "${head:0:3}" == "$first_chars" ]]; then echo "SAM";    return; fi 
-
-    local bhead="`head -c26 $OUTDIR/txt | tail -c3`"
-    if [[ "$bhead" == "BAM" ]];               then echo "BAM_Z0"; return; fi # BGZF with non-compressed blocks
-
-    local zhead="`$zcat < $1 2>/dev/null | head -c3`" # zcat of a file called txt doesn't work on mac, hence input redirection
-    if [[ "$zhead" == "BAM" ]];               then echo "BAM";    return; fi
-    if [[ "$zhead" == "$first_chars" ]];      then echo "SAM_GZ"; return; fi
-}
-
 batch_sam_bam_cram_output()
 {
     batch_print_header
@@ -1660,10 +1797,10 @@ batch_sam_bam_cram_output()
     local name=$OUTDIR/test.ubam 
 
     # prepare files
-    samtools view -h $src -OSAM -o $name.sam || exit 1
+    samtools view -@12 -h $src -OSAM -o $name.sam || exit 1
     gzip -c $name.sam > $name.sam.gz
     cp $src $name.bam
-    samtools view $src -OCRAM -o $name.cram >& /dev/null || exit 1
+    samtools view -@12 $src -OCRAM -o $name.cram >& /dev/null || exit 1
 
     # tests flags_piz_set_out_dt and mgzip_piz_calculate_mgzip_flags 
     for file in $name.sam $name.sam.gz $name.bam $name.cram; do
@@ -2750,7 +2887,7 @@ batch_faf()
 sparkling_clean()
 {
     batch_print_header
-    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*rejects* ${TESTDIR}/*.DEPN
+    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*.DEPN
     unset GENOZIP_REFERENCE
 }
 
@@ -2983,34 +3120,36 @@ case $GENOZIP_TEST in
 50)  batch_real_world_optimize         ;;
 51)  batch_real_world_with_ref_md5     ;; 
 52)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
-53)  batch_make_reference              ;;
-54)  batch_headerless_wrong_ref        ;;
-55)  batch_replace                     ;;
-56)  batch_coverage_idxstats           ;;
-57)  batch_qname_flavors               ;;
-58)  batch_piz_no_license              ;;
-59)  batch_sendto                      ;;
-60)  batch_pair_permissions            ;;
-61)  batch_deep_bamass_permissions     ;;
-62)  batch_user_message_permissions    ;;
-63)  batch_password_permissions        ;;
-64)  batch_genocat_backcomp_recon_plan ;;
-65)  batch_reference_backcomp          ;;
-66)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-67)  batch_real_world_backcomp 12.0.42 ;; 
-68)  batch_real_world_backcomp 13.0.21 ;; 
-69)  batch_real_world_backcomp 14.0.33 ;; 
-70)  batch_real_world_backcomp latest  ;;
-71)  batch_basic basic.vcf     latest  ;;
-72)  batch_basic basic.bam     latest  ;;
-73)  batch_basic basic.sam     latest  ;;
-74)  batch_basic basic.fq      latest  ;;
-75)  batch_basic basic.fa      latest  ;;
-76)  batch_basic basic.bed     latest  ;;
-77)  batch_basic basic.gvf     latest  ;;
-78)  batch_basic basic.gtf     latest  ;;
-79)  batch_basic basic.me23    latest  ;;
-80)  batch_basic basic.generic latest  ;;
+53)  batch_test_bai                    ;;
+54)  batch_test_tbi                    ;;
+55)  batch_make_reference              ;;
+56)  batch_headerless_wrong_ref        ;;
+57)  batch_replace                     ;;
+58)  batch_coverage_idxstats           ;;
+59)  batch_qname_flavors               ;;
+60)  batch_piz_no_license              ;;
+61)  batch_sendto                      ;;
+62)  batch_pair_permissions            ;;
+63)  batch_deep_bamass_permissions     ;;
+64)  batch_user_message_permissions    ;;
+65)  batch_password_permissions        ;;
+66)  batch_genocat_backcomp_recon_plan ;;
+67)  batch_reference_backcomp          ;;
+68)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+69)  batch_real_world_backcomp 12.0.42 ;; 
+70)  batch_real_world_backcomp 13.0.21 ;; 
+71)  batch_real_world_backcomp 14.0.33 ;; 
+72)  batch_real_world_backcomp latest  ;;
+73)  batch_basic basic.vcf     latest  ;;
+74)  batch_basic basic.bam     latest  ;;
+75)  batch_basic basic.sam     latest  ;;
+76)  batch_basic basic.fq      latest  ;;
+77)  batch_basic basic.fa      latest  ;;
+78)  batch_basic basic.bed     latest  ;;
+79)  batch_basic basic.gvf     latest  ;;
+80)  batch_basic basic.gtf     latest  ;;
+81)  batch_basic basic.me23    latest  ;;
+82)  batch_basic basic.generic latest  ;;
 
 * ) break; # break out of loop
 

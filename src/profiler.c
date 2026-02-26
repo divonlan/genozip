@@ -109,7 +109,12 @@ void profiler_add_evb_and_print_report (void)
 
     iprintf ("Wallclock: %s milliseconds\n", str_int_commas (ms (CHECK_TIMER)).s);
 
-    if (IS_ZIP) {
+    if (IS_SHOW_BAI) {
+        iprint0 ("SHOW-BAI:\n");
+        PRINT (show_bai, 1);
+    }
+
+    else if (IS_ZIP) {
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
         PRINT (ref_load_stored_reference, 1);
         PRINT (ref_read_one_range, 2);
@@ -126,7 +131,7 @@ void profiler_add_evb_and_print_report (void)
         if (!flag.bam_assist) PRINT (txtheader_zip_read_and_compress, 1);
         PRINT (txtfile_read_header, 2);
         PRINT (sam_header_inspect, 2);
-        PRINT (sam_header_zip_inspect_SQ_lines, 3); 
+        PRINT (sam_header_inspect_SQ_lines, 3); 
         PRINT (sam_header_add_contig, 4); 
         PRINT (contigs_create_index, 4);
         PRINT (sam_header_zip_inspect_PG_lines, 3); 
@@ -349,6 +354,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (gencomp_piz_initialize_vb_info, 2);
         PRINT (txtheader_piz_read_and_reconstruct, 1);
         PRINT (sam_header_inspect, 2);
+        PRINT (sam_header_inspect_SQ_lines, 3); 
         PRINT (digest_txt_header, 2);
         PRINT (vb_get_vb, 1);
         PRINT (piz_read_one_vb, 1);
@@ -361,6 +367,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_piz_deep_finalize_ents, 2);
         PRINT (sam_gencomp_trim_memory, 1);
         if (z_has_gencomp) PRINT (buf_trim_do, 2);
+        PRINT (bai_write, 1);
+        PRINT (bgzf_compress_tbi, 2);
         PRINT (piz_main_loop_idle, 1);
 
         if (profile.nanosecs.sam_load_groups_add_one_prim_vb) {
@@ -389,8 +397,9 @@ void profiler_add_evb_and_print_report (void)
         PRINT (piz_uncompress_all_ctxs__recon, 1);
 
         PRINT (reconstruct_vb, 1);
-        for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
-            PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
+        if (z_file)
+            for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
+                PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
 
         PRINT (sam_piz_special_SEQ, 2);
         PRINT (sam_reconstruct_SEQ_vs_ref, 3);
@@ -403,7 +412,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (aligner_reconstruct_seq, 2);
         PRINT (sam_piz_sam2bam_SEQ, 2);
         PRINT (sam_piz_special_QUAL, 2);
-        if (Z_DT(SAM) || Z_DT(BAM)) {
+        if (z_file && (Z_DT(SAM) || Z_DT(BAM))) {
             PRINT (codec_longr_reconstruct,3);
             PRINT (codec_homp_reconstruct, 3);
             PRINT (codec_t0_reconstruct,   3);
@@ -435,7 +444,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (digest, 1); // note: in SAM/BAM digest is done in the writer thread, otherwise its done in the compute thread. TODO: change level to 0 in case of SAM/BAM
         PRINT (piz_get_line_subfields, 2);
         
-        if (Z_DT(FASTQ)) {
+        if (z_file && Z_DT(FASTQ)) {
             PRINT (codec_longr_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 2);
             PRINT (codec_domq_reconstruct_dom_run, 3);
@@ -448,6 +457,8 @@ void profiler_add_evb_and_print_report (void)
             iprintf ("GENOUNZIP BGZF threads: %s\n", str_int_commas (ms(profile.nanosecs.bgzf_compute_thread)).s);
             PRINT (bgzf_compute_thread, 1);
             PRINT (bgzf_compress_one_block, 2);
+            PRINT (bai_calculate_one_vb, 2);
+            PRINT (bai_get_line, 3);
         }
     }
 

@@ -45,7 +45,7 @@ typedef struct File {
     bool is_remote;                    // true if file is downloaded from a url
     bool redirected;                   // TXT_FILE: true if this file is redirected from stdin/stdout or a pipe
     bool no_more_blocks;               // ZIP TXT_FILE: txtfile_read_block has completed returning all the file's data (note: it is possible that we read all the data on the disk file so feof(fp)=true, but no_more_blocks=false, because some of it is waiting in buffers: gz_data or state->avail_in)
-    bool is_in_tar;                    // z_file: file is embedded in tar file
+    bool is_in_tar;                    // Z_FILE: file is embedded in tar file
     DataType data_type;
     Codec src_codec;                   // TXT_FILE ZIP/PIZ: internal or external codec of txt file (eg CRAM, BAM, XZ, ZIP, BGZF, MGZF, NONE...). Passed in SectionHeaderTxtHeader.src_codec.
                                        // Z_FILE PIZ: set to CODEC_BCF or CODEC_CRAM iff GenozipHeader.data_type is DT_BCF/DT_CRAM
@@ -55,7 +55,7 @@ typedef struct File {
 
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // ZIP: size of actual file on disk. 0 if not known (eg stdin or http stream). 
-    int64_t disk_so_far;               // ZIP: Z/TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
+    int64_t disk_so_far;               // ZIP: Z/TXT_FILE & PIZ TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
     int64_t disk_gz_uncomp_or_trunc;   // ZIP: TXT_FILE: gz-compressed data actually either decompressed or discarded due to truncate
     int64_t gz_blocks_so_far;          // ZIP: TXT_FILE: number of gz blocks read from disk
     int64_t est_seggable_size;         // TXT_FILE ZIP, Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
@@ -155,11 +155,16 @@ typedef struct File {
     // TXT_FILE: accounting for truncation when --truncate-partial-last-line is used
     uint32_t last_truncated_line_len;  // ZIP: bytes truncated due to incomplete final line. note that if file is BGZF, then this truncated data is contained in the final intact BGZF blocks, after already discarding the final incomplete BGZF block
 
-    // TXT_FILE: data used in --coverage and --idxstats
+    // TXT_FILE PIZ: data used in genocat --coverage and --idxstats
     Buffer coverage;
     Buffer read_count;
     Buffer unmapped_read_count;
-    
+
+    // TXT_FILE PIZ: genounzip of a BAM
+    Buffer bai_stats;
+    Buffer bai_chunks;
+    Buffer bai_linear;
+
     // Z_FILE: SAM/BAM SAG stuff
     Buffer sag_grps;                   // Z_FILE ZIP/PIZ: an SA group is a group of alignments, including the primary aligngment
     Buffer sag_grps_index;             // Z_FILE ZIP: index z_file->sag_grps by qname hash
@@ -262,6 +267,7 @@ extern FileP file_open_z_write (rom filename, FileMode mode, DataType data_type,
 extern StrText file_get_z_run_time (FileP file);
 extern FileP file_open_txt_read (rom filename);
 extern FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_level);
+extern bool was_most_recent_file_skipped (void);
 extern void file_close (FileP *file_p);
 extern bool file_seek (FileP file, int64_t offset, int whence, rom mode, FailType soft_fail); // SEEK_SET, SEEK_CUR or SEEK_END
 extern FileType file_get_type (rom filename);

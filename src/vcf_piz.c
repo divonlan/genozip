@@ -11,6 +11,14 @@
 #include "zfile.h"
 #include "txtfile.h"
 
+// main thread: called for each txt file, after reading global area, before reading txt header
+bool vcf_piz_initialize (__attribute__((unused)) CompIType comp_i)
+{
+    ctx_get_word_index_by_snip_initialize (VCF_CHROM);
+
+    return true;
+}
+
 void vcf_piz_finalize (bool is_last_z_file)
 {
     vcf_header_finalize();

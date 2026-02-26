@@ -51,7 +51,10 @@ typedef struct {
     VBIType vblock_i;             /* VB 1-based sequential number in the dispatcher (or 0 if not in dispatcher) */\
     CompIType comp_i;             /* ZIP/PIZ: txt component within z_file that this VB belongs to  */ \
     bool is_last_vb_in_txt_file;  /* ZIP: this VB is the last VB in its txt_file (excluding gencomp VBs)  */ \
+    union { \
     Codec txt_codec;              /* ZIP: if compute thread is expected to decompress scratch into txt_data, this is the codec. If not, CODEC_UNKNOWN. */ \
+    bool is_txt_header;           /* PIZ BGZF VBs: is this data from PLAN_TXTHEADER */ \
+    };  \
     \
     /* compute thread stuff */ \
     ThreadId compute_thread_id;   /* id of compute thread currently processing this VB */ \
@@ -101,16 +104,20 @@ typedef struct {
     uint8_t num_type2_subfields; \
     RangeP range;                 /* ZIP: used for compressing the reference ranges. SAM PIZ: used */ \
     \
-    union { \
-    struct { /* ZIP */ \
+    union {                                     \
+    struct { /* ZIP */                          \
     uint32_t num_rollback_ctxs;   /* ZIP: Seg rollback contexts */ \
-    Did rollback_dids[MEDIUM_CON_NITEMS]; \
-    }; \
-    struct { /* PIZ */ \
-    uint32_t con_stack_len;      \
+    Did rollback_dids[MEDIUM_CON_NITEMS];       \
+    };                                          \
+    struct { /* PIZ */                          \
+    uint32_t con_stack_len;                     \
     ConStack con_stack[MAX_CON_STACK]; /* PIZ: current containers being reconstructed ([0] is always a top level container) */ \
-    }; \
-    }; \
+    };                                          \
+    struct { /* PIZ BGZF VB (for BAI writing)*/ \
+        uint32_t first_rname, last_rname; /* need to be unsigned so rname=-1 (unmapped) is last*/ \
+        PosType32 first_pos,  last_pos;         \
+    };                                          \
+    };                                          \
     \
     Buffer frozen_state;          /* PIZ: reconstruction state - frozen during reconstruct_peek */ \
     \
@@ -156,6 +163,7 @@ typedef struct {
     Buffer z_data_test;           /* ZIP: for use of codec_assign_best_codec */ \
     Buffer reread_prescription;   /* ZIP SAM/BAM DEPN: list of lines to be re-read at seg initialize */\
     Buffer optimized_txt_data;    /* ZIP: --optimized: txt_data being re-written, if it cannot be re-written in place */ \
+    Buffer bai_linear;            /* PIZ BGZF VB : data for preparing BAI linear index */\
     }; \
     Buffer txt_data;              /* ZIP: txt_data as read from disk and uncompressed - either the txt header (in evb) or the VB data lines PIZ: reconstructed data */\
     Buffer comp_txt_data;         /* ZIP/PIZ: source-compressed data as read/written from/to disk */ \
@@ -183,11 +191,14 @@ typedef struct {
     Buffer gencomp_lines;         /* ZIP SAM: array of GencompLineIEntry: SAM-SA: primary/dependent lines */ \
     Buffer optimized_line;        /* ZIP: re-written line in case of --optimize */ \
     Buffer flusher_blocks;        /* PIZ writer vb */ \
+    Buffer bai_stats;             /* PIZ BGZF VB : collect per-contig info on mapped/placed-unmapped reads for BAI file. .count counts unmapped-unplaced reads. */\
     }; \
     \
     union { \
-    Buffer dt_specific_vb_header_payload; \
+    Buffer dt_specific_vb_header_payload; /* ZIP/PIZ VBs: generic name for dt-specific data like vb_plan */ \
     Buffer vb_plan;               /* SAM MAIN: reconstruction plan for this VB */ \
+    Buffer bai_chunks;            /* PIZ BGZF VB : information for R-tree index in BAI file */\
+    Buffer tbi_contigs;           /* --show-bai of a TBI file: evb */\
     }; \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\

@@ -96,7 +96,6 @@ static inline bool aligner_update_best (VBlockP vb, PosType64 gpos, PosType64 pa
     if (gpos == *best_gpos) goto not_near_perfect;
     
     uint64_t genome_start_bit = (fwd ? gpos : genome_nbases-1 - (gpos + seq_bits->nbits/2 -1)) * 2;                            
-    
     int32_t distance = bits_hamming_distance (fwd ? genome : emoneg, genome_start_bit, seq_bits, 0, seq_bits->nbits);
     int32_t match_len = (uint32_t)seq_bits->nbits - distance;     
                                                                                                                                                                                                                                                  
@@ -140,7 +139,7 @@ static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pai
     // convert seq to a bitmap
     bool maybe_perfect_match;
     uint64_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
-    Bits seq_bits = aligner_seq_to_bitmap (vb, seq, seq_len, seq_bits_words, &maybe_perfect_match);
+    Bits seq_bits = aligner_seq_to_bitmap (vb, STRa(seq), seq_bits_words, &maybe_perfect_match);
     
     //ref_print_bases (&seq_bits, "\nseq_bits fwd", true);
     //ref_print_bases (&seq_bits, "seq_bits rev", false);

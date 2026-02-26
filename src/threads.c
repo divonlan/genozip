@@ -6,31 +6,12 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include <errno.h>
-#include <pthread.h>
-#include <limits.h>
-#include <string.h>
-#include <sys/types.h>
 #ifdef _WIN32
 #include <windows.h>
-#include <psapi.h>
-#pragma pack(push, imagehlp, 8)
-#include <imagehlp.h>
-// #ifdef DEBUG  
-// #include <backtrace.h> // pacman -S mingw-w64-x86_64-libbacktrace
-// #endif
-#pragma pack(pop, imagehlp)
-#else
-#include <execinfo.h>
-#include <signal.h>
-#ifdef __APPLE__
-#include <sys/sysctl.h>
-#else // LINUX
-#include <sched.h>
-#include <sys/sysinfo.h>
+#endif
+#include <errno.h>
 #include <pthread.h>
-#endif
-#endif
+#include <string.h>
 #include "genozip.h"
 #include "buffer.h"
 #include "mutex.h"
@@ -63,11 +44,7 @@ typedef struct {
     VBID vb_id;
 } ThreadEnt;
 
-// mechanism to print a specific message upon exception
-static _Thread_local rom catch_msg=0, catch_func=0;
-static _Thread_local uint32_t catch_line=0;
-
-static rom __attribute__((unused)) threads_get_task_name (void)
+rom threads_get_task_name (void)
 {
     pthread_t pthread = pthread_self();
 
@@ -77,259 +54,6 @@ static rom __attribute__((unused)) threads_get_task_name (void)
         if (ent->pthread == pthread) return ent->task_name; // note: this will also detect the writer thread
 
     return "unregistered";
-}
-
-#ifdef _WIN32
-
-// #ifdef DEBUG // requires debug info 
-
-// static void backtrace_error_cb (void *data, const char *msg, int errnum)
-// {
-//     WARN ("%s error: %s\n", (rom)data, msg);
-// }
-
-// static int frame;
-// static int backtrace_stackwalk_cb (void *data, uintptr_t pc, rom filename, int lineno, rom function)
-// {
-//     fprintf (stderr, "xxx #%u pc=%p %s at %s:%u\n", frame++, pc, function, filename, lineno);
-
-//     return 0;
-// }   
-
-// #endif
-
-// doesn't work properly yet
-static void threads_print_call_stack_do (CONTEXT thread_ctx)
-{
-// bug 985 
-// #ifdef DEBUG // requires debug info    
-//     static struct backtrace_state *state = NULL;
-//     static StrTextSuperLong exe_name; // must be static
-
-//     if (!state) {
-//         exe_name = arch_get_executable(); 
-//         state = backtrace_create_state (exe_name.s, true, backtrace_error_cb, "backtrace_create_state");
-//     }
-
-//     frame = 0;
-//     backtrace_full (state, 0, backtrace_stackwalk_cb, backtrace_error_cb, "backtrace_full");
-//     return;
-// #endif
-
-    // loosly following: https://theorangeduck.com/page/printing-stack-trace-mingw
-    // issue: shows only Windows DLL symbols, not ours
-
-    fprintf (stderr, "\nCall stack (%s thread):\n",  // note: SUBMIT is not a separate thread in Windows
-               threads_am_i_main_thread()   ? "MAIN" 
-             : threads_am_i_writer_thread() ? "WRITER"
-             :                                threads_get_task_name());
-
-//     HANDLE process = GetCurrentProcess();
-//     HANDLE thread  = GetCurrentThread();
-
-//     ASSGOTO (SymInitialize (process, NULL, true), "SymInitialize failed: %s", str_win_error());
-
-//     SymSetOptions (SymGetOptions() | SYMOPT_LOAD_LINES);
-
-// #ifdef _M_X64 // most modern Intel and AMD processors
-//     DWORD image_file = IMAGE_FILE_MACHINE_AMD64;
-//     STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rip },
-//                         .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rsp },
-//                         .AddrFrame  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rbp/* Rsp*/ } };
-
-// #elif defined _M_IA64 // Intel Itanium processors
-//     DWORD image_file = IMAGE_FILE_MACHINE_IA64;
-//     STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.StIIP },
-//                         .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.IntSp },
-//                         .AddrBStore = { .Mode = AddrModeFlat, .Offset = thread_ctx.RsBSP },
-//                         .AddrFrame  = { .Mode = AddrModeFlat, .Offset = thread_ctx.IntSp } };
-// #else
-//     fprintf (stderr, "Stack tracing not available for this CPU architecture"); // eg _M_IX86
-// #endif
-    
-//     int frame=0; 
-//     while (StackWalk64 (image_file, process, thread, &sf, &thread_ctx, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL) &&
-//            sf.AddrPC.Offset) {
-
-//         union symbol {
-//             IMAGEHLP_SYMBOL64;
-//             char data[sizeof(IMAGEHLP_SYMBOL64) + MAX_SYM_NAME-1];
-//         } symbol = { { .SizeOfStruct = sizeof (union symbol), .MaxNameLength = MAX_SYM_NAME } };
-
-//         DWORD64 displacement = 0;
-//         // ASSGOTO (
-//         SymGetSymFromAddr64 (process, sf.AddrPC.Offset, &displacement, (PIMAGEHLP_SYMBOL64)&symbol);
-//             // , "SymGetSymFromAddr64 failed: %s", str_win_error());
-
-//         IMAGEHLP_LINE64 line = { .SizeOfStruct = sizeof (IMAGEHLP_LINE64) };
-//         DWORD displacement2 = 0;
-//         // ASSGOTO (
-//         SymGetLineFromAddr64 (process, sf.AddrPC.Offset, &displacement2, &line);
-//             // , "SymGetLineFromAddr64 failed: %s", str_win_error());
-
-//         fprintf (stderr, "#%u %s at %s:%u\n", frame++, symbol.Name, line.FileName, (uint32_t)line.LineNumber);
-//     }
-
-// error: 
-//     CloseHandle (thread);
-//     SymCleanup (process);
-}
-
-void threads_print_call_stack (void) 
-{
-    fflush (stdout); fflush (stderr);
-
-#if defined _M_X64 || defined _M_IA64
-    CONTEXT current_thread_ctx = { .ContextFlags = CONTEXT_FULL };
-    RtlCaptureContext (&current_thread_ctx); // note: GetThreadContext() doesn't work for the current thread
-
-    threads_print_call_stack_do (current_thread_ctx);
-#else
-    fprintf (stderr, "Stack tracing not available for this CPU architecture"); // RtlCaptureContext not supported on _M_IX86
-#endif
-
-}
-
-static LONG WINAPI windows_exception_handler (EXCEPTION_POINTERS *ep)
-{
-    if (catch_msg) {
-        progress_newline(); 
-        fprintf (stderr, "Error in %s:%u: %s\n", catch_func, catch_line, catch_msg);
-    }
-
-    else
-        threads_print_call_stack_do (*ep->ContextRecord);
-
-    return EXCEPTION_EXECUTE_HANDLER;
-}
-
-static void threads_init_signal_handlers (void)
-{
-    SetUnhandledExceptionFilter (windows_exception_handler);
-}
-
-#else
-
-void threads_print_call_stack (void) 
-{
-    DO_ONCE {
-        fflush (stdout); fflush (stderr);
-        
-#       define STACK_DEPTH 100
-        void *array[STACK_DEPTH];
-        size_t count = backtrace (array, STACK_DEPTH);
-        
-        // note: need to pass -rdynamic to the linker in order to see function names
-        fprintf (stderr, "\nCall stack "); // separate printing, in case next fprintf hangs if stack is bad
-        fflush (stderr);
-
-        fprintf (stderr, "(%s thread):\n", 
-                am_i_submit()                ? "SUBMIT"
-              : threads_am_i_main_thread()   ? "MAIN" 
-              : threads_am_i_writer_thread() ? "WRITER"
-              :                                 threads_get_task_name());
-        fflush (stderr);
-
-        backtrace_symbols_fd (array, count, STDERR_FILENO);
-        fflush (stderr);
-    }
-}
-
-// signal handler of SIGINT (CTRL-C) - debug only 
-static void noreturn threads_sigint_handler (int signum) 
-{
-    fprintf (stderr, "\n%s process %u Received SIGINT (usually caused by Ctrl-C):", global_cmd, getpid()); 
-
-    threads_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
-
-    // look for deadlocks
-    if (!flag.show_time) fprintf (stderr, "Tip: use --show-time to see locked mutexes with Ctrl-C\n");
-
-    __atomic_thread_fence (__ATOMIC_ACQUIRE);
-    __atomic_signal_fence (__ATOMIC_ACQUIRE);
-
-    mutex_who_is_locked(); // works only if --show_time
-    buflist_who_is_locked();
-    
-    // flush remaining output (eg in genocat)
-    fflush (stdout);
-    fflush (stderr);
-
-    exit (128 + SIGINT); 
-}
-
-// signal handler of SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGSYS
-static void noreturn threads_bug_signal_handler (int signum) 
-{
-    if (catch_msg) {
-        progress_newline(); 
-        fprintf (stderr, "Error in %s:%u: %s\n", catch_func, catch_line, catch_msg);
-    }
-
-    else {
-        iprintf ("\n\nSignal \"%s\" received, exiting. Time: %s%s%s", 
-                strsignal (signum), str_time().s, cond_str(flags_command_line(), "\nCommand line: ", flags_command_line()), report_support_if_unexpected());
-        
-        threads_print_call_stack(); // this works ok on mac (in debug only), but seems to not print function names on Linux
-
-        buflist_test_overflows_all_vbs ("threads_bug_signal_handler", false);
-    }
-
-    exit (128 + signum); // convention for exit code due to signal - both Linux and MacOS
-}
-
-// signal handler of SIGUSR1 
-static void threads_sigusr1_handler (int signum) 
-{
-    __atomic_thread_fence (__ATOMIC_ACQUIRE);
-    __atomic_signal_fence (__ATOMIC_ACQUIRE);
-    
-    iprint0 ("\n\n");
-    buflist_show_memory (false, 0, 0);
-    
-    ctx_show_zctx_big_consumers (info_stream);
-}
-
-// signal handler of SIGUSR2 
-static void threads_sigusr2_handler (int signum) 
-{
-    __atomic_thread_fence (__ATOMIC_ACQUIRE);
-    __atomic_signal_fence (__ATOMIC_ACQUIRE);
-
-    iprint0 ("\n\n");
-    threads_write_log (true);
-}
-
-static void threads_init_signal_handlers (void)
-{
-    signal (SIGSEGV, threads_bug_signal_handler);
-    signal (SIGBUS,  threads_bug_signal_handler);
-    signal (SIGFPE,  threads_bug_signal_handler);
-    signal (SIGILL,  threads_bug_signal_handler);
-    signal (SIGSYS,  threads_bug_signal_handler); // used on Mac, ignored on Linux
-
-    signal (SIGUSR1, threads_sigusr1_handler);
-    signal (SIGUSR2, threads_sigusr2_handler);
-
-#ifndef santize_thread // looks like this signal handler gets called all the time when compiled with --sanitize-thread
-    if (flag.debug_or_test) 
-        signal (SIGINT, threads_sigint_handler);
-#endif
-}
-
-#endif
-
-// set the error message to be displayed in case of an exception (segfault etc)
-void catch_exception_do (rom msg, FUNCLINE)
-{
-    catch_func = func;  // note: catch_* are thread-local variables
-    catch_line = code_line; 
-    catch_msg  = msg; 
-}
-
-void uncatch_exception (void)
-{
-    catch_msg  = NULL; 
 }
 
 // called by main thread at system initialization
@@ -346,8 +70,6 @@ void threads_initialize (void)
     
     buf_set_promiscuous (&threads, "threads");
     buf_alloc (evb, &threads, 0, global_max_threads + 3, ThreadEnt, 2, NULL);
-
-    threads_init_signal_handlers();
 }
 
 void threads_finalize (void)
@@ -576,12 +298,34 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2
     *thread_id = THREAD_ID_NONE;
 }
 
-// kills all other threads
+int pthread_cancel_safe (pthread_t t)
+{
+#ifndef _WIN32             
+    return pthread_cancel (t); // note: will never terminate if waiting on mutex, and thread holding mutex is canceled 
+
+// In Windows, pthread_cancel on a live thread sometimes segfaults    
+#else
+    int ret = -1; // initialize pessimistically
+    HANDLE h = pthread_gethandle (t);
+    if (h) {
+        if (TerminateThread (h, 0)) { // always terminates
+            WaitForSingleObject (h, 100/*msec*/); // better to wait for cleanup, but limit the time to avoid hangs
+            ret = 0; // success
+        }
+        
+        CloseHandle (h);
+    }
+
+    return ret;
+#endif
+}
+
+// terminates all other threads 
+// note: on Linux (and Mac?) threads waiting on a mutex will not be canceled, but will remain blocked forever, if the thread holding the mutex is canceled
 void threads_cancel_other_threads (void)
 {
-#ifndef _WIN32 // segfaults on Windows, see bug 708
     if (!threads_am_i_main_thread())
-        pthread_cancel (main_thread);
+        pthread_cancel_safe (main_thread);
 
     mutex_lock (threads_mutex);
 
@@ -589,19 +333,14 @@ void threads_cancel_other_threads (void)
 
     // send cancellation request to all threads
     for (unsigned i=0; i < th_len; i++) 
-        if (th[i].in_use && th[i].pthread != pthread_self() && !pthread_cancel (th[i].pthread))
-            th[i].canceled = true;
-
-    // give time for all threads to terminate. note: we don't use pthread_join() here because sometimes it hangs
+        if (th[i].in_use && th[i].pthread != pthread_self()) 
+            if (!pthread_cancel_safe (th[i].pthread))
+                th[i].canceled = true;
+    
+    // give time for all threads to terminate. note: we don't use pthread_join() here because it can hang (e.g. if thread is waiting on a mutex)
+#ifndef _WIN32
     usleep (500000);
-
-    // // join all threads, which happens after cancellation is processed 
-    // for (unsigned i=0; i < th_len; i++) 
-    //     if (th[i].canceled) {
-    //         pthread_join (th[i].pthread, NULL);
-    //         th[i].in_use = th[i].canceled = false;
-    //     }
-        
-    mutex_unlock (threads_mutex);
 #endif
+
+    mutex_unlock (threads_mutex);
 }

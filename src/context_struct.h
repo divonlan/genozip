@@ -77,10 +77,11 @@ typedef struct Context {
 
     #define FIRST_BUFFER_IN_Context dict
     Buffer dict;               // ZIP/PIZ: tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
-    Buffer b250;               // ZIP: During Seg, .data contains variable-length indices into context->nodes. .count contains the number 
+    Buffer b250;               // ZIP: vctx: During Seg, .data contains variable-length indices into context->nodes. .count contains the number 
                                //      of b250s (still >1 if multiple b250s collapse with all-the-same) and .len contains the length in bytes.
                                //      In b250_zip_generate_section the "node indices" are converted into "word indices" - indices into the future context->word_list.
-                               // PIZ: .data contains the word indices (i.e. indices into word_list) in base-250
+                               //      zctx: only .count
+                               // PIZ: vctx: .data contains the word indices (i.e. indices into word_list) in base-250
     Buffer local;              // ZIP/PIZ vctx: Data private to this VB that is not in the dictionary
                                // ZIP zctx - only .len - number of fields of this type segged in the file (for stats)
     
@@ -90,7 +91,7 @@ typedef struct Context {
     Buffer alts;               // ZIP/PIZ: VCF: VCF_REFALT
     Buffer last_samples;       // ZIP/PIZ: VCF: VCF_SAMPLES: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples, entry [format_node_i,sample_i] is TxtWord of last sample sample_i (could be this line or previous line with FORMAT type format_node_i)
     Buffer sample_copied;      // ZIP/PIZ: VCF: VCF_COPY_SAMPLE: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples of bool, true if last sample_i was copied
-    Buffer lookback;           // ZIP/ZIP: VCF/SAM: vctx: lookback for contexts that use lookback
+    Buffer lookback;           // ZIP/PIZ: VCF/SAM: vctx: lookback for contexts that use lookback
     };
 
     Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
@@ -182,12 +183,11 @@ typedef struct Context {
 
         // SAM / BAM
         bool last_is_new;          // SAM_QNAME: ZIP: used in segconf.running
-        struct {
-            bool mate_copied_exactly;  // SAM_QNAME: PIZ (consumed for PRIM preprocessing by sam_load_groups_add_qname)
-        };
+        bool mate_copied_exactly;  // SAM_QNAME: PIZ (consumed for PRIM preprocessing by sam_load_groups_add_qname)
         SamFlags prev_flags;       // PIZ SAM_FLAGS: previous line's SamFlags
         PosType32 prev_pos;        // PIZ SAM_POS, SAM_PNEXT: previous line's value
         WordIndex prev_wi;         // PIZ SAM_RNAME, SAM_RNEXT: previous line's word index
+        bool please_calc;          // PIZ SAM_BIN: signal sam_cigar_special_CIGAR to calculate BIN value
         struct {                   // SAM_QUAL, OPTION_OQ_Z, FASTQ_QUAL: 
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
             bool domq_has_diverse; // ZIP vctx, DOMQ codec internal use
@@ -357,17 +357,17 @@ typedef struct Context {
 
     // ------ PIZ-only fields ------ 
     struct {
-    Buffer word_list;          // PIZ zctx: word list. an array of CtxWord - listing the snips in dictionary
+    Buffer word_list;          // PIZ: zctx (+ overlayed to vctx): word list. an array of CtxWord - listing the snips in dictionary
     Buffer per_line;           // PIZ: data copied from txt_data for fields with textual store_per_line, used in if the line was dropped
-    Buffer piz_word_list_hash; // PIZ: used by ctx_get_word_index_by_snip
-    Buffer history;            // PIZ: used if FlagsCtx.store_per_line and also for lookback (for files compressed starting with v12.0.41) - contains an array of either int64_t (if STORE_INT) or HistoryWord
+    Buffer history;            // PIZ: contains an array of either int64_t (if STORE_INT) or HistoryWord. used for: A. if FlagsCtx.store_per_line. B. for lookback (since 12.0.41) 
 
     // PIZ: context-specific buffer
     union {
         Buffer piz_ctx_specific_buf;
+        Buffer piz_word_list_hash; // PIZ: zctx of SAM_RNAME, VCF_CHROM 
         Buffer cigar_anal_history; // PIZ: used in SAM_CIGAR - items of type CigarAnalItem
         Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
-        Buffer domq_denorm;        // PIZ SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
+        Buffer domq_denorm;        // PIZ: SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
         Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec
         Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
     };
@@ -383,10 +383,10 @@ typedef struct Context {
     bool b250_uncompressed;    // PIZ: vctx: b250 has been uncompressed
     bool empty_lookup_ok;      // PIZ: 
     bool is_loaded;            // PIZ: vctx/zctx: vctx: either dict or local or b250 are loaded (not skipped) so context can be reconstructed ; zctx: dict is loaded
-    bool semaphore;            // valid within the context of reconstructing a single line. MUST be reset ahead of completing the line.
     SpecialResult special_res; // PIZ: set by a SPECIAL function in case of result for which the reconstructor needs to take further action
     }; // ------ End of PIZ-only fields ------- 
-    };
+    
+    }; // union ZIP-only and PIZ-only fields
 
 } Context;
 

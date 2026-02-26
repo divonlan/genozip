@@ -17,6 +17,7 @@
 #include "stats.h"
 #include "tip.h"
 #include "arch.h"
+#include "bai.h"
 
 // VCF standard keys
 #define HK_GENOZIP_CMD   "##genozip_command="
@@ -163,7 +164,6 @@ missing:
     ASSINP (!enforce, "missing attr %s in header line %.*s", attr, line_len, line);
 }
 
-// ZIP: VCF main component (rejects components txt headers don't have contigs)
 static void vcf_header_consume_contig (STRp (contig_name), PosType64 *LN)
 {
     WordIndex ref_index = WORD_INDEX_NONE;
@@ -376,7 +376,7 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
 
     if (!flag.reference && segconf.vcf_illum_gtyping && !flag.seg_only && has_PROBE)
         TIP ("Compressing an Illumina Genotyping VCF file using a reference file can reduce the compressed file's size by 20%%.\n"
-             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
+             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
     
     // (bug 1079) add PP and/or PL INFO lines if needed
@@ -403,7 +403,6 @@ static bool vcf_inspect_txt_header_piz (VBlockP txt_header_vb, BufferP txt_heade
         txt_header->len -= vcf_field_name_line.len; 
 
     // if genocat --samples is used, update vcf_header and vcf_num_displayed_samples
-    // note: we subset reject samples (in the header) as well - we analyze only in the rejects section
     if (flag.samples) vcf_header_subset_samples (&vcf_field_name_line);
     else              vcf_num_displayed_samples = vcf_num_samples;
 
@@ -416,6 +415,13 @@ static bool vcf_inspect_txt_header_piz (VBlockP txt_header_vb, BufferP txt_heade
 
     // add the (perhaps modified) field name (#CHROM) line
     buf_add_more (txt_header_vb, txt_header, vcf_field_name_line.data, vcf_field_name_line.len, "txt_data");
+
+    SAFE_NULB (*txt_header);
+
+    // initialize (maybe) creating a tbi index file
+    bai_initialize (B1STc(*txt_header), 0, 0); // in VCF, contigs are taken from the data, not the header
+
+    SAFE_RESTORE;
 
     return true; // all good
 }

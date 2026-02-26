@@ -167,7 +167,7 @@ rom bam_assseg_line (VBlockP vb)
         return B1STc(show_buf);
     }
     else {
-        while (1); // stall 
+        stall(); 
         return "";
     }
 }

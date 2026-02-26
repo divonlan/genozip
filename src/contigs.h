@@ -83,6 +83,8 @@ extern WordIndex contigs_get_by_ref_index (ConstContigPkgP ctgs,WordIndex ref_in
 static inline PosType64 contigs_get_LN (ConstContigPkgP ctgs, WordIndex index) { return index < ctgs->contigs.len32 ? B(Contig, ctgs->contigs, index)->max_pos : 0; }
 static inline PosType64 contigs_get_gpos (ConstContigPkgP ctgs, WordIndex index) { return B(Contig, ctgs->contigs, index)->gpos; }
 extern uint64_t contigs_get_nbases (ConstContigPkgP ctgs);
+static inline uint32_t contigs_num_contigs (ConstContigPkgP ctgs) { return ctgs ? ctgs->contigs.len : 0; }
+extern PosType64 contigs_len_of_longest_contig (ConstContigPkgP ctgs);
 
 // iterator
 typedef void (*ContigsIteratorCallback)(STRp(contig_name), PosType64 last_pos, void *callback_param);

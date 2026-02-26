@@ -85,6 +85,8 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 // main thread: called for each txt file, after reading global area, before reading txt header
 bool sam_piz_initialize (CompIType comp_i)
 {
+    ctx_get_word_index_by_snip_initialize (SAM_RNAME);
+    
     if (flag.deep && (comp_i == SAM_COMP_MAIN || comp_i == SAM_COMP_NONE/*single component or interleave*/)) 
         sam_piz_deep_initialize();
 
@@ -111,6 +113,9 @@ bool sam_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header)
     if (IS_PRIM(vb))
         VB_SAM->plsg_i = sam_piz_get_plsg_i (vb->vblock_i);
 
+    if (EXACT_VER(13))
+        segconf.is_sorted = header->flags.vb_header.sam.v13_is_sorted; // all VBs have the same value
+        
     return true; // all good
 }
 
@@ -476,7 +481,7 @@ void sam_set_MAPQ_filter (rom optarg)
     ASSERT (str_get_int_range8 (optarg, 0, 0, 255, &flag.MAPQ), MAPQ_ERR, optarg);
 }
 
-static inline void sam_piz_update_coverage (VBlockSAMP vb, const uint16_t sam_flag, uint32_t soft_clip)
+static inline void sam_piz_update_coverage (VBlockSAMP vb, SamFlags sam_flags, uint32_t soft_clip)
 {
     ARRAY (uint64_t, read_count, vb->read_count);
     ARRAY (uint64_t, coverage, vb->coverage);
@@ -485,11 +490,11 @@ static inline void sam_piz_update_coverage (VBlockSAMP vb, const uint16_t sam_fl
     WordIndex chrom_index = vb->last_index(SAM_RNAME);
 
     if (chrom_index == WORD_INDEX_NONE ||
-             sam_flag & SAM_FLAG_UNMAPPED)       { coverage_special[CVR_UNMAPPED]      += vb->seq_len; read_count_special[CVR_UNMAPPED]     ++; }
-    else if (sam_flag & SAM_FLAG_FILTERED)       { coverage_special[CVR_FAILED]        += vb->seq_len; read_count_special[CVR_FAILED]       ++; }
-    else if (sam_flag & SAM_FLAG_DUPLICATE)      { coverage_special[CVR_DUPLICATE]     += vb->seq_len; read_count_special[CVR_DUPLICATE]    ++; }
-    else if (sam_flag & SAM_FLAG_SECONDARY)      { coverage_special[CVR_SECONDARY]     += vb->seq_len; read_count_special[CVR_SECONDARY]    ++; }
-    else if (sam_flag & SAM_FLAG_SUPPLEMENTARY)  { coverage_special[CVR_SUPPLEMENTARY] += vb->seq_len; read_count_special[CVR_SUPPLEMENTARY]++; }
+             sam_flags.unmapped)      { coverage_special[CVR_UNMAPPED]      += vb->seq_len; read_count_special[CVR_UNMAPPED]     ++; }
+    else if (sam_flags.filtered)      { coverage_special[CVR_FAILED]        += vb->seq_len; read_count_special[CVR_FAILED]       ++; }
+    else if (sam_flags.duplicate)     { coverage_special[CVR_DUPLICATE]     += vb->seq_len; read_count_special[CVR_DUPLICATE]    ++; }
+    else if (sam_flags.secondary)     { coverage_special[CVR_SECONDARY]     += vb->seq_len; read_count_special[CVR_SECONDARY]    ++; }
+    else if (sam_flags.supplementary) { coverage_special[CVR_SUPPLEMENTARY] += vb->seq_len; read_count_special[CVR_SUPPLEMENTARY]++; }
     else {
         coverage_special[CVR_SOFT_CLIP] += soft_clip;
         coverage[chrom_index] += vb->seq_len - soft_clip;
@@ -502,7 +507,7 @@ static inline void sam_piz_update_coverage (VBlockSAMP vb, const uint16_t sam_fl
 // Case 2: BIN is an textual integer snip - its BIN.last_value will be set as normal and transltor will reconstruct it
 SPECIAL_RECONSTRUCTOR (bam_piz_special_BIN)
 {
-    ctx->semaphore = true; // signal to sam_cigar_special_CIGAR to calculate
+    ctx->please_calc = true; // signal to sam_cigar_special_CIGAR to calculate
     return NO_NEW_VALUE;
 }
 
@@ -755,7 +760,7 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
 
         // count coverage, if needed    
         if (flag.show_coverage)
-            sam_piz_update_coverage (vb, vb->last_int(SAM_FLAG), vb->soft_clip[0] + vb->soft_clip[1]);
+            sam_piz_update_coverage (vb, (SamFlags){ .value = vb->last_int(SAM_FLAG) }, vb->soft_clip[0] + vb->soft_clip[1]);
 
         if (flag.idxstats) {
             if (vb->last_int(SAM_FLAG) & SAM_FLAG_UNMAPPED)   
@@ -1123,7 +1128,7 @@ ValueType sam_piz_peek_OPTION (VBlockSAMP vb, ContextP option_ctx, pSTRp(txt)/*o
             return option_ctx->last_value;
         }
         else // called from reconstruction
-            return reconstruct_peek (VB, option_ctx, STRa(txt)); // xxx consume if preprocessing
+            return reconstruct_peek (VB, option_ctx, STRa(txt)); 
     }
 
     else

@@ -35,10 +35,10 @@
 static void normalize_histo (double histo[94])
 {
     double total = 0;
-    for (int i=0; i < 93; i++) total += histo[i];
+    for (int i=0; i <= 93; i++) total += histo[i];
     
     if (total)
-        for (int i=0; i < 93; i++) histo[i] /= total;
+        for (int i=0; i <= 93; i++) histo[i] /= total;
 } 
 
 static void set_stdv (double *histo, int histo_len)

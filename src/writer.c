@@ -30,6 +30,7 @@
 #include "dispatcher.h"
 #include "progress.h"
 #include "buf_list.h"
+#include "bai.h"
 
 // ---------------
 // Data structures
@@ -925,8 +926,6 @@ static void writer_write (BufferP buf, uint64_t txt_data_len)
     
     txtfile_fwrite (STRb(*buf));
     
-    txt_file->disk_so_far += buf->len;
-
     buf_free (*buf);
 
     COPY_TIMER_FULL (wvb, write, false);
@@ -943,11 +942,45 @@ static bool writer_output_one_processed_bgzf (Dispatcher dispatcher, bool blocki
     VBlockP bgzf_vb = dispatcher_get_processed_vb (dispatcher, NULL, blocking);
 
     if (bgzf_vb) {
+        if (flag.make_bai && !bgzf_vb->is_txt_header)
+            bai_finalize_one_vb (bgzf_vb); // must be before writer_write
+
         writer_write (&bgzf_vb->comp_txt_data, bgzf_vb->txt_data.len);
+            
         dispatcher_recycle_vbs (dispatcher, true);  // also release VB
     }
 
     return !!bgzf_vb;
+}
+
+// true if divvying up a large VB for BGZF compression VBs should be done on line boundaries
+static inline bool frag_on_line_boundaries (void)
+{
+    return flag.make_bai; // currently, this is the only reason
+}
+
+// calculate the size of a fragment to be bgzf-compressed aligned to line boundaries 
+static uint32_t writer_get_frag_size (VBlockP vb, uint32_t max_frag_size, uint32_t i)
+{
+    ARRAY (uint32_t, lines, vb->lines); // note: vb->lines is not set for wvb, but we don't use this function for wvb
+
+    if (Ltxt - i <= max_frag_size) return Ltxt - i; // entire remaining VB
+
+    static uint32_t line_i;
+    if (!i) line_i = 0; // initialize (per file)
+
+    uint32_t size_so_far=0;
+    while (line_i < lines_len) {
+        uint32_t line_i_len = lines[line_i+1] - lines[line_i];
+        if (size_so_far + line_i_len < max_frag_size) {
+            size_so_far += line_i_len;
+            line_i++;
+        } 
+        else
+            break;
+    }
+
+    return size_so_far;
 }
 
 static void writer_flush_vb (Dispatcher dispatcher, VBlockP vb, bool is_txt_header, bool is_last)
@@ -962,17 +995,22 @@ static void writer_flush_vb (Dispatcher dispatcher, VBlockP vb, bool is_txt_head
         // case: BGZF compression - offload compression to compute threads (a max of BGZF_FLUSH_THRESHOLD per thread)
         if (dispatcher) {
             // in case of wvb, write the entire buffer, if its "native" vb, chop it up
-            uint32_t chunk_size = (vb==wvb) ? Ltxt : BGZF_FLUSH_THRESHOLD;
+            uint32_t max_frag_size = (vb==wvb) ? Ltxt : BGZF_FLUSH_THRESHOLD, 
+                     frag_size, i=0;
 
-            for (uint32_t i=0; i < Ltxt || is_last; i += chunk_size) { // if txt_data is empty, we still do one iteration in case of is_last
+            while (i < Ltxt || is_last) { // if txt_data is empty, we still do one iteration in case of is_last
+
+                frag_size = (!is_txt_header && frag_on_line_boundaries()) ? 
+                    writer_get_frag_size (vb, max_frag_size, i) : max_frag_size;
 
                 if (vb_pool_is_full (POOL_BGZF))
                     writer_output_one_processed_bgzf (dispatcher, true); 
 
-                bgzf_dispatch_compress (dispatcher, Btxt (i), MIN_(chunk_size, Ltxt - i), vb->comp_i,
-                                        is_last && (i+chunk_size >= Ltxt));
+                bgzf_dispatch_compress (dispatcher, Btxt (i), MIN_(frag_size, Ltxt - i), vb->comp_i,
+                                        is_last && (i+frag_size >= Ltxt), is_txt_header);
             
                 is_last = false; // if is is_last, we enter the loop once if txt_data.len=0
+                i += frag_size;
             }
 
             buf_free (vb->txt_data);
@@ -1026,11 +1064,11 @@ static void writer_write_line_range (VbInfo *v, uint32_t start_line, uint32_t nu
         ASSERT (after >= start, "vb_i=%u Writing line %i (start_line=%u num_lines=%u): expecting start=%p <= after=%p", 
                 VBINFO_NUM(v), line_i, start_line, num_lines, start, after);
  
-        if (!is_dropped) { // don't output lines dropped in container_  reconstruct_do due to vb->drop_curr_line
+        if (!is_dropped) { // don't output lines dropped in container_reconstruct_do due to vb->drop_curr_line
             
-            if (writer_line_survived_downsampling(v))
+            if (writer_line_survived_downsampling(v)) 
                 buf_add_more (wvb, &wvb->txt_data, start, line_len, "txt_data");
-            
+
             txt_file->lines_written_so_far++; // increment even if downsampled-out, but not if filtered out during reconstruction (for downsampling accounting)
             v->vb->num_nondrop_lines--;       // update lines remaining to be written (initialized during reconstruction in container_reconstruct)
         }
@@ -1196,14 +1234,14 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
                     if (flag_is_show_vblocks (PIZ_TASK_NAME)) // only displayed for entire VBs, not line ranges etc 
                         iprintf ("VB_FLUSH_FULL_VB(id=%d) vb=%s/%d txt_data.len=%u\n", v->vb->id, comp_name (v->vb->comp_i), v->vb->vblock_i, v->vb->txt_data.len32);
 
-                    writer_flush_vb (dispatcher, wvb, false, false); // flush any remaining unflushed wvb lines from previous VBs
+                    writer_flush_vb (dispatcher, wvb, false, false);   // flush any remaining unflushed wvb lines from previous VBs
                     writer_flush_vb (dispatcher, v->vb, false, false); // write entire VB
                     txt_file->lines_written_so_far += v->vb->num_nondrop_lines;
                 }
                 else 
-                    writer_write_line_range (v, 0, v->num_lines); // this skips downsampled-out lines
+                    writer_write_line_range (v, 0, v->num_lines);      // this skips downsampled-out lines
 
-                dispatcher_increment_progress ("txt_write", 1); // done writing VB
+                dispatcher_increment_progress ("txt_write", 1);        // done writing VB
                 writer_release_vb (v);
                 break;
 

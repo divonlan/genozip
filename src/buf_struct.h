@@ -215,7 +215,7 @@ extern void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE);
 extern void *buf_low_level_realloc (void *p, size_t size, rom name, FUNCLINE);
 #define REALLOC(p,size,name) if (!(*(p) = buf_low_level_realloc (*(p), (size), (name), __FUNCLINE))) ABORT0 ("REALLOC failed")
 
-extern void buf_low_level_release_memory_back_to_kernel (void);
+extern void return_freed_memory_to_kernel (void);
 
 extern void buf_set_shared (BufferP buf);
 extern void buf_remove_spinlock (BufferP buf);

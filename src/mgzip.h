@@ -112,6 +112,7 @@ typedef struct {
 
 typedef struct BgzfBlockPiz {
     int32_t txt_index, txt_size; // index of uncompressed block within vb->txt_data. The first block index will be negative if there is passed-down unconsumed data
+    uint32_t compressed_index;   // index of bgzf-compressed block within vb->comp_txt_data
 } BgzfBlockPiz;
 
 // ZIP side
@@ -157,8 +158,9 @@ extern bool bgzf_read_and_uncomp_final_block (rom filename, qSTRp(uncomp));
 // PIZ side
 extern FlagsMgzip mgzip_piz_calculate_mgzip_flags (CompIType comp_i, Codec src_codec);
 extern void bgzf_piz_set_txt_file_bgzf_info (FlagsMgzip mgzip_flags, bytes codec_info);
-extern void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), CompIType comp_i, bool is_last);
+extern void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), CompIType comp_i, bool is_last, bool is_txt_header);
 extern void bgzf_write_finalize (void);
+extern void bgzf_compress_tbi (void);
 
 // misc
 extern rom bgzf_library_name (MgzipLibraryType library, bool long_name);

@@ -15,6 +15,7 @@
 #include "file.h"
 #include "codec.h"
 #include "zip_dyn_int.h"
+#include "tip.h"
 
 sSTRl(copy_qname, 16);
 sSTRl(snip_redirect_to_QNAME2, 16);
@@ -528,7 +529,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         else if (flag.debug_qname && reason) 
             iprintf ("%.*s is not %s flavor \"%s\". Reason: %s%s\n", 
                      STRf(qname), qtype_name(q), qfs->name, reasons[reason],
-                     (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split) ? ". Tip: Add --debug-split" : "");
+                     (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split) ? ". " _TIP "Add --debug-split" : "");
     }
 
     if (!segconf.qname_flavor[q]) {

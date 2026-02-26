@@ -3,6 +3,15 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.78 26/2/2026
+- --index is now default for genounzip and genocat for bam, sam.gz and vcf files, and the index files are generated natively without any performance overhead.
+- --no-bai and --no-tbi and new genounzip/genocat options for overriding the default --index
+- genozip --skip-index is a new options - skips compressing bai, tbi, csi, crai and gzi files.
+- genocat --converage and --idxstats now also works on some FASTA files (those that are essentially QUAL-less FASTQs)
+- New diagnostic option 'genozip --show-bai file.bai' and --show-tbi to see content of .bai/.tbi files. See: genozip.com/diagnostics.
+- New diagnostic option --debug-bai
+- Canceled diagnostic option --no-zriter
+
 15.0.77 10/2/2026
 - FASTA: support --bamass, --deep and --optimize as in FASTQ (but not --pair yet), 
 - Deep: new genocat --fasta option for displaying the fasta component of a Deep file with FASTA  

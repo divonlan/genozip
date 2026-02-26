@@ -16,6 +16,7 @@
 #include "piz.h"
 #include "writer.h"
 #include "lookback.h"
+#include "tip.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 //----------------------
@@ -231,9 +232,9 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
         PutLineFn fn = file_put_line (vb, recon_start, recon_len, "\nFailed line integrity check");
 
         if (OUT_DT(BAM) || OUT_DT(CRAM))
-            iprintf ("Tip: To view the dumped BAM line with:\n   genozip --show-bam %s\n\n", fn.s);
+            iprintf (_TIP "To view the dumped BAM line with:\n   genozip --show-bam %s", fn.s); // not using TIP() as it allows only one tip
 
-        iprintf ("Tip: To extract the original line for comparison use:\n   %s\n", piz_advise_biopsy_line (vb->comp_i, vb->vblock_i, vb->line_i, NULL).s);
+        TIP ("To extract the original line for comparison use:\n   %s", piz_advise_biopsy_line (vb->comp_i, vb->vblock_i, vb->line_i, NULL).s);
 
         // show data-type-specific information about defective line
         DT_FUNC (vb, piz_xtra_line_data)(vb);

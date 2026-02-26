@@ -236,6 +236,11 @@ void fasta_zip_initialize (void)
         comment_redirect_snip_len += 2;
     }
 
+    // with REF_EXTERNAL, user is telling as this is FAF.
+    // we just copy all reference contigs. this are not needed for uncompression, just for --coverage/--idxstats
+    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // single file, or first of pair (and never Deep)
+        ctx_populate_zf_ctx_from_contigs (FASTA_CONTIG, ref_get_ctgs()); 
+
     if (flag.bam_assist) {
         qname_zip_initialize(); // note: might also be called during segconf from fasta_segconf_is_qualless_fastq. no harm.
         fastq_bamass_populate();
@@ -279,13 +284,13 @@ static bool fasta_segconf_is_qualless_fastq (VBlockP vb)
     if (n_lines < 16 && !txt_file->no_more_blocks) 
         return false; // not enough lines to determine (except of segconf is the entire file) 
 
-    n_lines = ROUNDDOWN2 (n_lines) - 2; // keep whole pairs or lines, and drop last pair that might be truncated. now there are at least 4 pairs (8 lines)
+    n_lines = ROUNDDOWN2(n_lines) - 2; // keep whole pairs or lines, and drop last pair that might be truncated. now there are at least 4 pairs (8 lines)
 
     for (uint32_t i=0; i < n_lines; i += 2) 
         if (lines[i][0] != DC) 
             return false; // not all contigs are single-line of SEQ
 
-    // test first 4 seqs to make sure they are uppercase and do not contain unique amino characters
+    // test first 4 seqs to make sure they contain only characters valid FASTQ (uppercase and not amino acids)
     for (uint32_t i=1; i <= 7; i += 2) 
         if (!str_is_fastq_seq (lines[i], MIN_(256, line_lens[i]))) 
             return false; // line contains an invalid SEQ character for FASTQ  
@@ -340,7 +345,7 @@ void fasta_seg_initialize (VBlockP vb)
         ASSINP (is_fasta (STRb(vb->txt_data), NULL), "Error: %s is not a valid FASTA file. Solution: use --input generic", txt_name);
     
         // case: this FASTA looks more like a FASTQ without QUAL data - better off segged as FASTQ with reference support and QNAME handling 
-        if (!flag.make_reference && !flag.no_faf && !flag.index_txt &&
+        if (!flag.make_reference && !flag.no_faf && !flag.ext_indexing &&
             fasta_segconf_is_qualless_fastq (vb)) return;
     }
 
@@ -369,8 +374,7 @@ void fasta_seg_initialize (VBlockP vb)
 
 void fasta_segconf_finalize (VBlockP vb)
 {
-    // case: we've seen only characters that are both nucleotide and protein (as are A,C,G,T,N) - call it as nucleotide
-    if (segconf.seq_type == SQT_NUKE_OR_AMINO) segconf.seq_type = SQT_NUKE;
+    if (segconf.seq_type == SQT_UNKNOWN) segconf.seq_type = SQT_NUKE; // sequence too short to call, and no amino-only characters
     ASSINP0 (!flag.make_reference || segconf.seq_type == SQT_NUKE, "Can't use --make-reference on this file, because it contains amino acids instead of nucleotides");
 
     // decide whether the sequences in this FASTA represent contigs (in which case we want a FASTA_CONTIG dictionary
@@ -391,7 +395,7 @@ void fasta_segconf_finalize (VBlockP vb)
     // with --index, or if small enough
     #define MAX_CONTIGS_IN_FILE 10000
     segconf.fasta_has_contigs &= (num_contigs_this_vb == 1 || // the entire VB is a single contig
-                                  flag.index_txt ||
+                                  flag.ext_indexing ||
                                   est_num_contigs_in_file <= MAX_CONTIGS_IN_FILE||
                                   flag.make_reference); 
 }
@@ -472,9 +476,12 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
         chrom_seg_no_b250 (VB, STRa(chrom_name), &is_new);
 
         if (!is_new && segconf_running) {
-            // error if user explicitly requested to index but we can't
-            ASSSEG (!flag.index_txt, "Cannot index this file, because it contains duplicate contig names, for example: %.*s", STRf(chrom_name));
-
+            if (flag.ext_indexing) {
+                WARN_ONCE ("FYI: Cannot index %s, because it contains duplicate contig names, for example: %.*s", 
+                           txt_name, STRf(chrom_name));
+                flag.ext_indexing = 0;
+            }
+            
             segconf.fasta_has_contigs = false; // this FASTA is not of contigs. It might be just a multiseq (collection of variants of a sequence).
             seg_rollback (VB);
         }
@@ -503,37 +510,31 @@ static void fast_seg_comment_line (VBlockFASTAP vb, STRp (line), bool *has_13)
 }
 
 // ZIP: main thread during segconf.running
-static SeqType fasta_get_seq_type (STRp(seq))
+static void fasta_set_seq_type (VBlockFASTAP vb, STRp(seq))
 {    
-    // we determine the type by characters that discriminate between protein and nucleotides, 
-    // according to: https://www.bioinformatics.org/sms/iupac.html and https://en.wikipedia.org/wiki/FASTA_format
-    // A,C,D,G,H,K,M,N,R,S,T,V,W,Y are can be either nucleoide or protein - in particular all of A,C,G,T,N can
-    static bool uniq_amino[256]    = { ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, 
-                                       ['X']=true, ['Z']=true,  // may be protein according to the FASTA_format page
-                                       ['e']=true, ['f']=true, ['i']=true, ['l']=true, ['p']=true, ['q']=true, 
-                                       ['x']=true, ['z']=true };
-                                        
-    static bool nuke_or_amino[256] = { ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, 
-                                       ['N']=true, ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true,
-                                       ['U']=true, ['B']=true, // may be protein according to the FASTA_format page (in addition to standard nuke IUPACs)
-                                       ['a']=true, ['c']=true, ['d']=true, ['g']=true, ['h']=true, ['k']=true, ['m']=true, 
-                                       ['n']=true, ['r']=true, ['s']=true, ['t']=true, ['v']=true, ['w']=true, ['y']=true,
-                                       ['u']=true, ['b']=true };
-
-    bool evidence_of_amino=false, evidence_of_both=false;
-
-    for (uint32_t i=0; i < seq_len; i++) {
-        if (uniq_amino[(int)seq[i]])    evidence_of_amino = true;
-        if (nuke_or_amino[(int)seq[i]]) evidence_of_both = true;
-
-        segconf.seq_type_counter++;
-    }
-
-    if (evidence_of_amino) return SQT_AMINO;
-
-    if (evidence_of_both) return segconf.seq_type_counter > 10000 ? SQT_NUKE : SQT_NUKE_OR_AMINO; // A,C,G,T,N are in both - call it as NUKE if we've seen enough without evidence of unique Amino characters
+    static uint32_t n_tested;
+    if (!vb->line_i) n_tested = 0;
     
-    return segconf.seq_type; // unchanged
+    SAFE_NULT(seq);
+
+    // see: https://www.bioinformatics.org/sms/iupac.html and https://en.wikipedia.org/wiki/FASTA_format
+
+    // case: seq is only A,C,G,T,N - clearly nuke (most common case) (note: failing can still be nuke, bc nuke can also contain IUPAC characters)
+    if (seq_len > 50 && strspn (seq, "ACGTNacgtn") == seq_len)
+        segconf.seq_type = SQT_NUKE;  
+    
+    // case: seq contains characters unique to amino sequences (i.e. that are not IUPACs)
+    else if (!!strpbrk (seq, "EFILPQXZefilpqxz")) 
+        segconf.seq_type = SQT_AMINO; 
+
+    // case: no amino-only charater in the first 4K - we assume only ACTGN and IUPAC "bases" (although we didn't test explicitly)
+    else if ((n_tested += seq_len) > 4096) 
+        segconf.seq_type = SQT_NUKE;  
+
+    // we can't decide yet - wait for next seq
+    else {}
+
+    SAFE_RESTORE;
 }
 
 static void fasta_seg_seq_line_do (VBlockFASTAP vb, uint32_t line_len, bool is_first_line_in_contig)
@@ -594,8 +595,8 @@ static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line),
         vb->lines_this_contig = 0;
     }
 
-    if (segconf_running && (segconf.seq_type == SQT_UNKNOWN || segconf.seq_type == SQT_NUKE_OR_AMINO))
-        segconf.seq_type = fasta_get_seq_type (STRa(line));
+    if (segconf_running && segconf.seq_type == SQT_UNKNOWN)
+        fasta_set_seq_type (vb, STRa(line));
 
     vb->last_line = FASTA_LINE_SEQ;
 

@@ -330,22 +330,25 @@ StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout, uint3
     return stream;
 }
 
-void stream_close_pipes (StreamP stream)
+// remove the pipe from the stream without closing it
+void stream_leak_pipe (StreamP stream)
 {
-    // fclose and fail silently (pipes might be gone already after we killed the counter part process?)
-    if (stream->from_stream_stdout) FCLOSE (stream->from_stream_stdout, "stream->from_stream_stdout");
-    if (stream->from_stream_stderr) FCLOSE (stream->from_stream_stderr, "stream->from_stream_stderr");
-    if (stream->to_stream_stdin)    FCLOSE (stream->to_stream_stdin,    "stream->to_stream_stdin");
+    stream->from_stream_stdout = 
+    stream->from_stream_stderr = 
+    stream->to_stream_stdin    = 0; 
 }
 
 int stream_close (StreamP *stream, StreamCloseMode close_mode)
 {
     if (! *stream) return 0; // nothing to do
 
+    // fclose and fail silently
+    if ((*stream)->from_stream_stdout) FCLOSE ((*stream)->from_stream_stdout, "stream->from_stream_stdout");
+    if ((*stream)->from_stream_stderr) FCLOSE ((*stream)->from_stream_stderr, "stream->from_stream_stderr");
+    if ((*stream)->to_stream_stdin)    FCLOSE ((*stream)->to_stream_stdin,    "stream->to_stream_stdin");
+
     if ((*stream)->substream) 
         stream_close (&(*stream)->substream, close_mode);
-
-    stream_close_pipes (*stream);
 
     if ((*stream)->pid && close_mode == STREAM_KILL_PROCESS) 
 #ifdef _WIN32
@@ -353,7 +356,7 @@ int stream_close (StreamP *stream, StreamCloseMode close_mode)
 #else
         kill ((*stream)->pid, 9); // ignore errors
 #endif
-    
+
     int exit_code = EXIT_OK; 
     if ((*stream)->pid && close_mode != STREAM_DONT_WAIT_FOR_PROCESS)
         // TerminateProcess is asynchronous - we need to wait to make sure the process is terminated (not sure about kill)

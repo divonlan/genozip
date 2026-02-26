@@ -236,6 +236,49 @@ bool sam_is_cigar (STRp(cigar), bool allow_empty)
     return true;
 }
 
+uint32_t sam_cigar_get_ref_consumed (STRp(cigar), bool is_bam, bool min_is_one)
+{
+    uint32_t ref_consumed = 0;
+
+    if (is_bam) {
+        for (BamCigarOpP op=(BamCigarOpP)cigar; op < ((BamCigarOpP)cigar) + cigar_len; op++) 
+            if (op->op==BC_M || op->op==BC_D || op->op==BC_N || op->op==BC_X || op->op==BC_E)
+                ref_consumed += op->n;
+            
+            else 
+                ASSERT (op->op <= BC_X, "Invalid CIGAR op: %u", op->op); // out of range - corrupt data
+    }
+
+    else if (!IS_ASTERISK(cigar)) { // SAM
+        uint32_t n=0;
+        bool parsing_number = false;
+
+        for (uint32_t i=0; i < cigar_len; i++) {
+            char c = cigar[i];
+
+            if (IS_DIGIT(c)) {
+                n = n*10 + (c - '0');
+                parsing_number = true; 
+            }
+
+            else {
+                ASSERT (parsing_number, "CIGAR: missing number before op=%c CIGAR=\"%.*s\"", c, STRf(cigar)); // note: n=0 is a legal value
+
+                if (c=='M' || c=='D' || c=='N' || c=='X' || c=='=') 
+                    ref_consumed += n;
+                n = 0;
+                parsing_number = false;
+            }
+        }          
+        ASSERT (!parsing_number, "CIGAR doesn't end with an op. CIGAR=\"%.*s\"", STRf(cigar));
+    }
+
+    // For BAI index: SAM spec §4.2.1: "unmapped reads and reads whose CIGAR strings consume no reference bases at all, the alignment is treated as being of length one"
+    if (min_is_one && ref_consumed == 0) ref_consumed = 1;
+
+    return ref_consumed;
+}
+
 bool sam_cigar_textual_to_binary (VBlockP vb, STRp(cigar), BufferP binary_cigar, rom buf_name)
 {
     ASSERTNOTINUSE (*binary_cigar);
@@ -318,23 +361,26 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_i
     ARRAY (BamCigarOp, bam_ops, vb->binary_cigar);
 
     uint32_t n=0, op_i=0;
+    bool parsing_number = false;
     for (uint32_t i=0; i < cigar_len; i++) {
 
         char c = cigar[i];
 
-        if (IS_DIGIT(c)) 
+        if (IS_DIGIT(c)) {
             n = n*10 + (c - '0');
-
+            parsing_number = true; 
+        }
         else {
-            ASSINP (n, "%s: Invalid CIGAR: operation %c not preceded by a number. CIGAR=\"%.*s\"", LN_NAME, c, STRf(cigar));    
+            ASSINP (parsing_number, "%s: Invalid CIGAR: operation %c not preceded by a number. CIGAR=\"%.*s\"", LN_NAME, c, STRf(cigar));    
 
             // convert character CIGAR op to BAM cigar field op: "MIDNSHP=X" -> 012345678 ; * is our private value of BC_NONE
             bam_ops[op_i++] = (BamCigarOp){ .op = cigar_char_to_op[(uint8_t)c], .n = n };
             n = 0;
+            parsing_number = false;
         }
     }          
 
-    ASSINP (!n, "%s: Invalid CIGAR: expecting it to end with an operation character. CIGAR=\"%.*s\"", LN_NAME, STRf(cigar));
+    ASSINP (!parsing_number, "%s: Invalid CIGAR: expecting it to end with an op. CIGAR=\"%.*s\"", LN_NAME, STRf(cigar));
 
     vb->binary_cigar.len32 = op_i;
 
@@ -952,15 +998,15 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
         RECONSTRUCT (vb->binary_cigar.data, vb->binary_cigar.len * sizeof (BamCigarOp));
         LTEN_u32_buf (&vb->binary_cigar, NULL); // restore
 
-        // if BIN is SAM_SPECIAL_BIN, inst.semaphone is set by bam_piz_special_BIN - a signal to us to calculate
-        ContextP sam_bam_bin_ctx = CTX(SAM_BAM_BIN);
-        if (sam_bam_bin_ctx->semaphore) {
-            sam_bam_bin_ctx->semaphore = false;
+        // if BIN is SAM_SPECIAL_BIN, please_calc is set by bam_piz_special_BIN - a signal to us to calculate
+        ContextP bin_ctx = CTX(SAM_BAM_BIN);
+        if (bin_ctx->please_calc) {
+            bin_ctx->please_calc = false;
 
             PosType32 pos = CTX(SAM_POS)->last_value.i;
             PosType32 last_pos = last_flags.unmapped ? pos : (pos + vb->ref_consumed - 1);
             
-            uint16_t bin = bam_reg2bin (pos, last_pos); // zero-based, half-closed half-open [start,end)
+            BaiBinType bin = bai_reg2bin (pos, last_pos); 
             alignment->bin = LTEN16 (bin); // override the -1 previously set by the translator
         }
     }

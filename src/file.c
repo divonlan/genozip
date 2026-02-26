@@ -29,6 +29,7 @@
 #include "writer.h"
 #include "filename.h"
 #include "huffman.h"
+#include "tip.h"
 
 // globals
 FileP z_file   = NULL;
@@ -340,6 +341,19 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
         }
     }
 
+    // index files - best not to compress as BGZF / CRAM blocks might shift after genounzip
+    else if (file->type == BAI || file->type == CRAI || file->type == CSI || file->type == TBI || file->type == GZI) {
+        RETURNW (!flag.skip_index, true, "Skipping %s - an index file", file_printname(file));
+
+        if (file->type == BAI)
+            TIP ("It is best NOT to compress %s as genounzip generates .bai files automatically. Consider using --skip-index. See: %s", 
+                 file->name, WEBSITE_INDEXING);
+        
+        else 
+            TIP ("It is best NOT to compress %s as re-indexing is usually required after genounzip. Consider using --skip-index. See: %s", 
+                 file->name, WEBSITE_INDEXING);
+    }
+
     return false; // all good - no need to skip this file
 }
 
@@ -432,6 +446,9 @@ static void file_open_txt_read_gz (FileP file)
         txtfile_discover_specific_gz (file); // decide between GZ, BGZF and NONE
 }
 
+static bool most_recent_file_was_skipped = false;
+bool was_most_recent_file_skipped (void) { return most_recent_file_was_skipped; }
+
 FileP file_open_txt_read (rom filename)
 {
     FileP file = (FileP)CALLOC (sizeof(File));
@@ -441,6 +458,8 @@ FileP file_open_txt_read (rom filename)
     file->mode        = READ;
     file->is_remote   = filename && url_is_url (filename);
     flag.from_url     = file->is_remote;
+
+    most_recent_file_was_skipped = false;
 
     int64_t url_file_size = 0; // will be -1 if the web/ftp site does not provide the file size
     rom error = NULL;
@@ -485,8 +504,9 @@ FileP file_open_txt_read (rom filename)
 
     file->data_type = file_get_data_type_of_input_file (file->type);
 
-    // show meaningful error if file is not a supported data type
-    if (file_open_txt_read_test_valid_dt (file)) goto fail; // skip this file
+    // check if we should skip compressing this file due to various reasons
+    most_recent_file_was_skipped = file_open_txt_read_test_valid_dt (file);
+    if (most_recent_file_was_skipped) goto fail; // skip this file
     
     // open the file, based on the codec (as guessed by file extension)
     file->src_codec       = file_get_codec_by_txt_ft (file->data_type, file->type, true);
@@ -735,7 +755,7 @@ FileP file_open_z_read (rom filename)
 
     ASSINP (!flag.reading_reference || filename_has_ext (file->name, REF_GENOZIP_), 
             "You specified file \"%s\", however with --reference%s, you must specify a reference file (%s file or FASTA file)\n"
-            "Tip: To create a genozip reference file from a FASTA file, use 'genozip --make-reference myfasta.fa'",
+            _TIP "To create a genozip reference file from a FASTA file, use 'genozip --make-reference myfasta.fa'",
             file->name, IS_ZIP ? " or --REFERENCE" : "", REF_GENOZIP_);
 
     if ((!flag.seg_only && !flag.show_bam) || flag_loading_auxiliary) {
@@ -912,18 +932,6 @@ static void file_index_txt (ConstFileP file)
     StreamP indexing = NULL;
 
     switch (file->data_type) {
-        case DT_SAM:
-        case DT_BAM: 
-            RETURNW (file->effective_codec == CODEC_BGZF,, "%s: output file needs to be a .sam.gz or .bam to be indexed", global_cmd); 
-            indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "index", file->name, NULL); 
-            break;
-            
-        case DT_VCF: 
-            RETURNW (file->effective_codec == CODEC_BGZF,, "%s: output file needs to be a .vcf.gz or .bcf to be indexed", global_cmd); 
-            RETURNW (vcf_header_get_has_fileformat(),, "%s: file needs to start with ##fileformat=VCF be indexed", global_cmd); 
-            indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "bcftools", "index", file->name, NULL); 
-            break;
-
         case DT_FASTQ:
         case DT_FASTA:
             RETURNW (file->effective_codec == CODEC_BGZF || file->effective_codec == CODEC_NONE,, 
@@ -931,7 +939,7 @@ static void file_index_txt (ConstFileP file)
             indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "faidx", file->name, NULL); 
             break;
 
-        default: break; // we don't know how to create an index for other data types
+        default: break; // we don't know how to externally create an index for other data types
     }
 
     if (indexing) {
@@ -979,7 +987,7 @@ void file_close (FileP *file_p)
             FCLOSE (file->file, file_printname (file));
 
         // create an index file using samtools, bcftools etc, if applicable
-        if (file->mode == WRITE && flag.index_txt && !flag_loading_auxiliary) 
+        if (file->mode == WRITE && flag.ext_indexing && !flag_loading_auxiliary) 
             file_index_txt (file);
     }
 
@@ -1167,7 +1175,7 @@ uint64_t file_get_size (rom filename)
     struct stat64 st;
     
     int ret = stat64(filename, &st);
-    ASSERT (!ret, "stat64 failed on '%s': %s", filename, strerror(errno));
+    ASSERT (!ret, "stat64 failed on '%s': %s", filename, flag.is_windows ? str_win_error() : strerror(errno));
     
     return st.st_size;
 }
@@ -1196,11 +1204,11 @@ void file_mkdir (rom dirname)
     if (file_is_dir (dirname)) return; // already exists - that's ok
 
 #ifdef _WIN32
-    int ret = _mkdir (flag.out_dirname);
+    int ret = _mkdir (dirname); // note: errno=0 even if returning -1, need to check GetLastError
 #else
-    int ret = mkdir (flag.out_dirname, 0777);
+    int ret = mkdir (dirname, 0777);
 #endif
-    ASSERT (!ret, "mkdir(%s) failed: %s", flag.out_dirname, strerror (errno));
+    ASSERT (!ret, "mkdir(%s) failed: %s", flag.out_dirname, flag.is_windows ? str_win_error() : strerror (errno));
 }
 
 // reads an entire file into a buffer. if filename is "-", reads from stdin

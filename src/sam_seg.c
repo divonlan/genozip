@@ -877,7 +877,7 @@ void sam_segconf_finalize (VBlockP vb_)
 
     if (flag.reference == REF_INTERNAL && !txt_file->redirected && !flag.seg_only && (segconf.sam_is_unmapped && !segconf.is_long_reads))
         TIP ("Compressing this unmapped %s file using a reference would shrink it by an additional 20%%-50%%.\n"
-             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
+             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
              dt_name (txt_file->data_type), arch_get_argv0(), txt_file->name);
     
     ASSERT (!flag.debug_or_test || !segconf.has[OPTION_SA_Z] || segconf.sam_has_SA_Z || MP(LONGRANGER) || MP(UNKNOWN),
@@ -1136,8 +1136,8 @@ void sam_seg_idx_aux (VBlockSAMP vb)
     for (int16_t f = 0; f < vb->n_auxs; f++) {
         ASSSEG (vb->aux_lens[f] > (is_bam ? 3 : 5) || 
                 (!is_bam && vb->aux_lens[f] == 5 && (vb->auxs[f][3] == 'Z' || vb->auxs[f][3] == 'H')), // in SAM, Z, H can be data-less, in BAM, they are nul-terminated
-                "Invalid auxilliary field format. AUX tag #%u (0-based) has a length of %u, expecting %u: \"%.*s\"",
-                f, vb->aux_lens[f], (is_bam ? 3 : 5), MIN_(16, vb->aux_lens[f]), vb->auxs[f]);
+                "Invalid auxilliary field format. AUX tag #%u (0-based) has a length of %u, expecting at least %u: \"%.*s\"",
+                f, vb->aux_lens[f], 1 + (is_bam ? 3 : 5), MIN_(16, vb->aux_lens[f]), vb->auxs[f]);
 
         char c1 = vb->auxs[f][0];
         char c2 = vb->auxs[f][1];
@@ -1480,8 +1480,10 @@ static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), 
 
         // case: two alignments with the same QNAME, FLAG.is_first, and both are primary: usually a sign of defective BAM 
         if (vb->saggy_is_prim && !sam_is_depn (f)) {
+#ifdef DEBUG // turns out this is quite common
             WARN_ONCE ("FYI: %s file violates the SAM specification: Found two alignments with the same QNAME, FLAG.IS_FIRST, and both are non-secondary, non-supplementary: QNAME=\"%.*s\". No worries, Genozip will still compress this file correctly.",
                        dt_name (vb->data_type), STRf(qname));
+#endif
             goto no_saggy;
         }
 
@@ -1717,7 +1719,7 @@ bool sam_seg_test_biopsy_line (VBlockP vb, STRp (line))
     if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i) {
         PutLineFn fn = file_put_line (VB, STRa (line), "Line biopsy:");
 
-        if (TXT_DT(BAM)) WARN("Tip: You can view the dumped BAM line with:\n   genozip --show-bam %s", fn.s);
+        if (TXT_DT(BAM)) TIP ("To view the dumped BAM line use:\n   genozip --show-bam %s", fn.s);
         exit_ok;
     }
 

@@ -393,8 +393,15 @@ int32_t fastq_unconsumed (VBlockP vb_,
             next_line: n++;
         }
 
-    ASSINP (n < max_lines || IS_R2, "%s: Examined %d textual lines at the end of the VB and could not find a valid read, it appears that this is not a valid %s file. Last %u lines examined:\n[0]=\"%.*s\"\n[1]=\"%.*s\"\n[2]=\"%.*s\"\n[3]=\"%.*s\"\n[4]=\"%.*s\"\n",
-            VB_NAME, n, DT_NAME, MIN_(n, 5), STRfi(line,0), STRfi(line,1), STRfi(line,2), STRfi(line,3), STRfi(line,4));
+    if (n >= max_lines && !IS_R2) {
+        // can happen in BGZF with VERY long lines e.g. some nanopore files
+        if (txt_file && txt_file->effective_codec == CODEC_BGZF)
+            RESTART0 ("--no-bgzf", "could not find a valid read - this can happen in BGZF-compressed files with VERY long reads.");
+
+        else
+            ABORTINP ("%s: Examined %d textual lines at the end of the VB and could not find a valid read, it appears that this is not a valid %s file. Last %u lines examined:\n[0]=\"%.*s\"\n[1]=\"%.*s\"\n[2]=\"%.*s\"\n[3]=\"%.*s\"\n[4]=\"%.*s\"\n",
+                VB_NAME, n, DT_NAME, MIN_(n, 5), STRfi(line,0), STRfi(line,1), STRfi(line,2), STRfi(line,3), STRfi(line,4));
+    }
 
     return -1; // need more data
 }
@@ -520,11 +527,13 @@ void fastq_zip_initialize (void)
         z_file->R1_first_vb_i = z_file->num_vbs + 1; // 1 for --pair, >1 for --deep
 
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
-    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--idxstats
+    // we just copy all reference contigs. this are not needed for uncompression, just for --coverage/--idxstats
     if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // single file, or first of pair (and never Deep)
         ctx_populate_zf_ctx_from_contigs (FASTQ_CONTIG, ref_get_ctgs()); 
 
     qname_zip_initialize();
+
+    sam_MM_zip_initialize(); // in case we have an MM:Z SAUX field
 
     if (flag.deep) 
         fastq_deep_zip_initialize();
@@ -696,9 +705,9 @@ void fastq_segconf_finalize (VBlockP vb)
     if (!flag.reference && !flag.fast) 
         segconf_test_multiseq (VB, FASTQ_NONREF);
 
-    if (!segconf.multiseq && !flag.reference && !txt_file->redirected && !flag.seg_only)
+    if (!segconf.multiseq && !flag.reference && !txt_file->redirected && !flag.seg_only && !flag.restarted)
         TIP ("Compressing a %s file using a reference file can reduce the compressed file's size by an additional %s.\n"
-             "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n", 
+             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n", 
              DT_NAME, (FAF ? "60%-80%" : "20%-60%"), arch_get_argv0(), txt_file->name);
 
     // cases where aligner is available (note: called even if reference is not loaded, so that it errors in segconf_calculate)

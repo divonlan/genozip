@@ -51,9 +51,9 @@ typedef union SectionFlags {
         uint8_t has_digest       : 1;  // true if compressed with digest (i.e. not --optimize etc) (v15) 
         #define v14_bgzf has_digest    // Up to v14: Reconstruct as BGZF (user may override) (determined by the last component) (since v15, determined by SectionHeaderTxtHeader.src_codec)
         uint8_t adler            : 1;  // true if Adler32 is used, false if MD5 is used 
-        uint8_t has_gencomp      : 1;  // VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12)
-                                       // SAM/BAM: PRIM and/or DEPN components exist (v14)
-        uint8_t has_taxid        : 1;  // obsolete: each line in the file has Taxonomic ID information (v12 to 15.0.41)
+        uint8_t has_gencomp      : 1;  // SAM/BAM: PRIM and/or DEPN components exist (v14)
+                                       // v12 to 15.0.41: VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12-15.0.41)
+        uint8_t has_taxid        : 1;  // obsolete: each line in the file has Taxonomic ID information
         #define dts2_deep        dt_specific2 // SAM: this file is compressed with --deep (v15)
         #define dts2_bamass      dt_specific2 // FASTQ: this file was compressed with --bamass (15.0.77)
         uint8_t dt_specific2     : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ (v15, "unused" up to v14)

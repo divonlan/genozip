@@ -1206,7 +1206,7 @@ void ref_compress_ref (void)
 
         if (ref_pc >= 10)
             TIP ("Compressing this %s file using a reference will save at least %s (%u%%).\n"
-                 "Use: \"%s --reference 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 %s\". 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 may be a FASTA file or a .ref.genozip file.\n",
+                 "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
                  dt_name (txt_file->data_type), str_size (ref_bytes).s, ref_pc, arch_get_argv0(), txt_file->name);
     }
 

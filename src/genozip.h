@@ -66,6 +66,7 @@ typedef int32_t TaxonomyId;
 #define GENOZIP_EXT ".genozip"
 
 // envrionment variables
+#define GENOZIP_HOME      "GENOZIP_HOME"
 #define GENOZIP_REFERENCE "GENOZIP_REFERENCE" // reference file name (directory permitted for PIZ)
 #define GENOZIP_TEST      "GENOZIP_TEST"      // code testing mode, set in test.sh
 
@@ -359,12 +360,13 @@ typedef enum { SKIP_PURPOSE_RECON,    // true if this section should be skipped 
 typedef IS_SKIP ((*Skip));
 
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
-typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP=140, SHOW_HEADERS=10, TEST_AFTER_ZIP } CommandType;
+typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP=140, SHOW_HEADERS=10, SHOW_BAI=11, TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
 #define IS_ZIP  (command == ZIP)
 #define IS_PIZ  (command == PIZ)
 #define IS_LIST (command == LIST)
 #define IS_SHOW_HEADERS (command == SHOW_HEADERS)
+#define IS_SHOW_BAI     (command == SHOW_BAI)
 
 typedef enum { VB_ID_EVB=-1, VB_ID_WRITER=-2, VB_ID_SEGCONF=-3, VB_ID_SCAN_VB=-4, VB_ID_COMPRESS_DEPN=-5, VB_ID_NONE=-999 } VBID;
 #define NUM_NONPOOL_VBs 5
@@ -445,6 +447,7 @@ typedef int ThreadId;
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]
 
 #define STR(x)   rom x;        uint32_t x##_len
+#define sSTR(x)  static rom x; static uint32_t x##_len
 #define eSTR(x)  extern rom x; extern uint32_t x##_len
 #define STR0(x)  rom x=NULL;   uint32_t x##_len=0
 #define STRw(x)  char *x;      uint32_t x##_len    // writeable
@@ -468,12 +471,12 @@ typedef int ThreadId;
 #define sSTRl_ARRAY(x,n,l) static char x##s[n][l]; static uint32_t x##_lens[n]
 
 // Strings - function parameters
-#define STRp(x)  rom x,   uint32_t x##_len    
-#define STR8p(x) bytes x, uint32_t x##_len    
-#define STRc(x)  char *x, uint32_t x##_len  // string is fixed-length, but editable 
-#define STR8c(x) uint8_t *x, uint32_t x##_len  // string is fixed-length, but editable 
-#define pSTRp(x) rom *x,  uint32_t *x##_len  
-#define qSTRp(x) char *x, uint32_t *x##_len // function populates a string and updates its length
+#define STRp(x)  rom x,       uint32_t x##_len    
+#define STR8p(x) bytes x,     uint32_t x##_len    
+#define STRc(x)  char *x,     uint32_t x##_len  // string is fixed-length, but editable 
+#define STR8c(x) uint8_t *x,  uint32_t x##_len
+#define pSTRp(x) rom *x,      uint32_t *x##_len  
+#define qSTRp(x) char *x,     uint32_t *x##_len // function populates a string and updates its length
 #define qSTR8p(x) uint8_t *x, uint32_t *x##_len 
 #define STRps(x) uint32_t n_##x##s, rom *x##s, const uint32_t *x##_lens  
 
@@ -639,11 +642,11 @@ typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 typedef enum {             EXIT_OK=0, EXIT_GENERAL_ERROR=1, EXIT_INVALID_GENOZIP_FILE=2, EXIT_DOWNSTREAM_LOST=3, EXIT_SIGHUP=5, EXIT_SIGSEGV=6, EXIT_ABNORMAL=7, EXIT_STREAM=127/*value that doesn't overlap curl or wget exit codes*/, NUM_EXIT_CODES } ExitCode;
 #define EXIT_CODE_NAMES { "EXIT_OK", "EXIT_GENERAL_ERROR", "EXIT_INVALID_GENOZIP_FILE", "EXIT_DOWNSTREAM_LOST", "EXIT_SIGHUP", "EXIT_SIGSEGV", "EXIT_ABNORMAL", [EXIT_STREAM]="EXIT_STREAM" }
 
-extern void noreturn main_exit (bool show_stack, bool is_error);
-#define exit_on_error(show_stack) main_exit (show_stack, true)
-#define exit_ok                   main_exit (false, false)
+extern void noreturn error_exit (bool show_stack, bool is_error);
+#define exit_on_error(show_stack) error_exit (show_stack, true)
+#define exit_ok                   error_exit (false, false)
 
-extern void noreturn main_restart_on_error (rom add_cmd_option);
+extern void noreturn error_restart (rom add_cmd_option);
 
 extern FILE *info_stream;
 extern bool is_info_stream_terminal; // is info_stream going to a terminal
@@ -699,7 +702,7 @@ extern rom report_support_if_unexpected (void);
 #define RETURNW0(condition, ret, string)     ( { if (__builtin_expect (!(condition), 0)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
 #define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true);} )
 #define ABORT0(string)                       ABORT (string "%s", "")
-#define RESTART(add_cmd_option, format, ...) ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); main_restart_on_error(add_cmd_option);} )
+#define RESTART(add_cmd_option, format, ...) ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); error_restart(add_cmd_option);} )
 #define RESTART0(add_cmd_option, string)     RESTART (add_cmd_option, string "%s", "")
 #define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
 #define WARN0(string)                        WARN (string "%s", "")

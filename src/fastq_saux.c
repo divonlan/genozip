@@ -15,7 +15,7 @@
 
 static inline DictId fastq_get_SAM_AUX_dict_id (STRp(f)) // DICT_ID_NONE if format is invalid
 {
-    if (f_len < 5 || (f[3] == 'B' && f_len < 7))
+    if (f_len < 5 || (f[3] == 'B' && f_len < 6))
         return DICT_ID_NONE;
 
     if (f[2] != ':' || f[4] != ':' || 
@@ -24,7 +24,8 @@ static inline DictId fastq_get_SAM_AUX_dict_id (STRp(f)) // DICT_ID_NONE if form
         return DICT_ID_NONE;
 
     if (f[3] == 'B' && 
-        (f[6] != ':' || (f[5] != 'c' && f[5] != 'C' && f[5] != 's' && f[5] != 'S' && f[5] != 'i' && f[5] != 'I' && f[5] != 'f')))
+        ((f[6] != ',' && f[6] != '\t' && f[6] != '\n' && f[6] != '\r') || 
+         (f[5] != 'c' && f[5] != 'C' && f[5] != 's' && f[5] != 'S' && f[5] != 'i' && f[5] != 'I' && f[5] != 'f')))
         return DICT_ID_NONE;
 
 
@@ -46,7 +47,9 @@ bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux))
     for (int i=0; i < n_fields; i++) {
         DictId dict_id = fastq_get_SAM_AUX_dict_id (STRi(field, i));
         
-        if (!dict_id.num) return false; // invalid format - not SAUX
+        if (!dict_id.num) 
+            return false; // invalid format - not SAUX
+        
         segconf.has[ctx_get_ctx (VB, dict_id)->did_i] = true;
     }
 
@@ -62,13 +65,14 @@ bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux))
     return true;
 }
 
-static void fastq_seg_one_saux (VBlockFASTQP vb, DictId dict_id, unsigned tag_name_len, STRp(field))
+static void fastq_seg_one_saux (VBlockFASTQP vb, DictId dict_id, unsigned value_offset, STRp(field))
 {
     char sam_type = field[3];
     char array_subtype = (field[3] == 'B') ? field[5] : 0;
     
-    rom value = field + tag_name_len;
-    unsigned value_len = field_len - tag_name_len;
+    rom value = field + value_offset;
+    unsigned value_len = field_len - value_offset;
+    unsigned add_bytes = value_len + (array_subtype ? (1 + (field[6] == ',')) : 0) + 1/*preceding \t*/;
 
     ValueType numeric = {};
     if (sam_type == 'i') {
@@ -79,16 +83,22 @@ static void fastq_seg_one_saux (VBlockFASTQP vb, DictId dict_id, unsigned tag_na
     
     ContextP ctx = ctx_get_ctx (vb, dict_id);
 
-    // AGeNT Trimmer RX:Z: eg: ZA:Z:GGCT ZB:Z:CCAGT RX:Z:GGC-CCA
-    if (segconf.has_agent_trimmer && dict_id.num == _OPTION_RX_Z)
-        agilent_seg_RX (VB, ctx, STRa(value), value_len);    
+    #define COND0(condition, seg) if (condition) { seg; break; } else  
+    #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback
 
-    // AGeNT Trimmer QX:Z: eg: QX:Z:FFF FFD
-    else if (segconf.has_agent_trimmer && dict_id.num == _OPTION_QX_Z) 
-        agilent_seg_QX (VB, ctx, STRa(value), value_len);    
+    if (segconf_running)
+        segconf.has[ctx_get_ctx (VB, dict_id)->did_i]++;
 
-    else
-        sam_seg_aux_field_fallback (VB, NULL, dict_id, sam_type, array_subtype, STRa(value), numeric, value_len);
+    switch (dict_id.num) {
+        case _OPTION_RX_Z : COND (segconf.has_agent_trimmer, agilent_seg_RX (VB, ctx, STRa(value), add_bytes)); // AGeNT Trimmer eg RX:Z:GGC-CCA
+        case _OPTION_QX_Z : COND (segconf.has_agent_trimmer, agilent_seg_QX (VB, ctx, STRa(value), add_bytes)); // AGeNT Trimmer eg QX:Z:FFF FFD
+
+        // note: for now sam_seg_MM_Z is quite useless, as its benefit is predicting length by ML:B
+        case _OPTION_MM_Z : sam_seg_MM_Z (VB, STRa(value), add_bytes); break;
+
+        default: fallback:
+            sam_seg_aux_field_fallback (VB, NULL, dict_id, sam_type, array_subtype, STRa(value), numeric, add_bytes);
+    }
 
     ctx_set_encountered (VB, ctx);
     set_last_txtC (ctx, value, value_len);
@@ -116,16 +126,16 @@ void fastq_seg_saux (VBlockFASTQP vb, STRp(saux))
 
         ASSSEG (con.items[f].dict_id.num, "Malformated SAM-format field: \"%.*s\"", STRfi(field, f));
 
-        uint32_t tag_name_len = (fields[f][3] == 'B') ? 7 : 5;
+        uint32_t value_offset = (fields[f][3] == 'B') ? (6 + (fields[f][6] == ',')) : 5;
 
-        memcpy (&prefixes[prefixes_len], fields[f], tag_name_len);
-        prefixes[prefixes_len + tag_name_len] = CON_PX_SEP;
-        prefixes_len += tag_name_len + 1;
+        memcpy (&prefixes[prefixes_len], fields[f], 5); // e.g. ML:B:
+        prefixes[prefixes_len + 5] = CON_PX_SEP;
+        prefixes_len += 6;
 
-        fastq_seg_one_saux (vb, con.items[f].dict_id, tag_name_len, STRi(field,f));
+        fastq_seg_one_saux (vb, con.items[f].dict_id, value_offset, STRi(field,f));
     }
 
-    container_seg (VB, CTX(FASTQ_AUX), &con, prefixes, prefixes_len, prefixes_len - 2); // account for tags and tabs
+    container_seg (VB, CTX(FASTQ_AUX), &con, prefixes, prefixes_len, n_fields * 5); // account for tags eg 'ML:B:'
 
     COPY_TIMER (fastq_seg_saux);
 }

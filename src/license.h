@@ -28,4 +28,3 @@ extern bool license_is_academic (void);
 extern void license_prepare (rom arg);
 extern bool license_piz_prepare_genozip_header (SectionHeaderGenozipHeaderP header, FailType fail_type);
 extern StrTextLong license_academic_tip (void);
-extern bool am_i_submit (void);

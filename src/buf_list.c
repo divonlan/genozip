@@ -825,7 +825,7 @@ void buflist_show_memory (bool memory_full, unsigned max_threads, unsigned used_
     // if memory is full - only one thread needs to show this - other threads stall
     static bool once=0;
     if (memory_full && __atomic_test_and_set (&once, __ATOMIC_RELAXED)) 
-        while (1) usleep (1000000000);
+        stall();
     
     memset (stats, 0, sizeof(stats));
     num_stats = num_buffers = 0;

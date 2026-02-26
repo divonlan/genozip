@@ -318,6 +318,7 @@ void sam_MM_zip_initialize (void)
     container_prepare_snip ((ContainerP)&segconf.MM_con, 0, 0, qSTRa(segconf.MM_con_snip));
 }
 
+// SAM/BAM and FASTQ
 static bool sam_seg_MM_Z_item (VBlockP vb, ContextP ctx, 
                                STRp(mm_item),  // e.g. "C+m,5,12,0" 
                                uint32_t repeat)
@@ -330,9 +331,14 @@ static bool sam_seg_MM_Z_item (VBlockP vb, ContextP ctx,
         rom arr = comma + 1;
         uint32_t arr_len = mm_item_len + mm_item - arr;
 
-        // note: we seg MNM:Z repeats as "special" and copy them from ML:Z if confirmed to be the same
+        // note: will only use special if MM:Z has a single item (otherwise ML:B repeats are distributed between all MM:Z items)
+        uint32_t predict_num_repeats = VB_DT(FASTQ)                                ? -1 // SPECIAL not implemented yet for FASTQ
+                                     : ctx_encountered_in_line (VB, OPTION_ML_B_C) ? CTX(OPTION_ML_B_C)->last_value.i/*ML's n_repeats*/ 
+                                     :                                               -1;
+                                      
+        // note: we seg MM:Z repeats as "special" and copy them from ML:Z if confirmed to be the same
         seg_array_(vb, ctx_get_ctx (vb, segconf.MM_con.items[1].dict_id), ctx->st_did_i, STRa(arr), ',', 0, false, true, sub_dict_id (_OPTION_MM_Z, 'A'), 
-                   SAM_SPECIAL_ML_REPEATS, ctx_encountered_in_line (VB, OPTION_ML_B_C) ? CTX(OPTION_ML_B_C)->last_value.i/*ML's n_repeats*/ : -1, // note: will only use special if MM:Z has a single item (otherwise ML:B repeats are distributed between all MM:Z items)
+                   SAM_SPECIAL_ML_REPEATS, predict_num_repeats,
                    arr_len);
     }
 
@@ -347,9 +353,9 @@ static bool sam_seg_MM_Z_item (VBlockP vb, ContextP ctx,
     return true;
 }
 
-static void sam_seg_MM_Z (VBlockSAMP vb, STRp(mm), unsigned add_bytes)
+void sam_seg_MM_Z (VBlockP vb, STRp(mm), unsigned add_bytes)
 {
-    seg_array_by_callback (VB, CTX(OPTION_MM_Z), STRa(mm), ';', sam_seg_MM_Z_item, 0, 0, add_bytes);
+    seg_array_by_callback (vb, CTX(OPTION_MM_Z), STRa(mm), ';', sam_seg_MM_Z_item, 0, 0, add_bytes);
 }
 
 // used by container_reconstruct to retrieve the number of repeats of ML:B, and use that for MM:Z subcontext MNM:Z
@@ -1494,7 +1500,7 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
     else 
         seg_by_dict_id (VB, STRa(value), dict_id, add_bytes);     
 
-    ctx_set_encountered (vb, ctx); //xxx added
+    ctx_set_encountered (vb, ctx); 
 }
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
@@ -1571,7 +1577,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_UY_Z: // aliases of QX (cellranger)
         case _OPTION_QX_Z: sam_seg_QX_Z (vb, dl, STRa(value), add_bytes); break;
         case _OPTION_BC_Z: sam_seg_BC_Z (vb, dl, STRa(value), add_bytes); break;
-        case _OPTION_MM_Z: sam_seg_MM_Z (vb, STRa(value), add_bytes); break;
+        case _OPTION_MM_Z: sam_seg_MM_Z (VB,     STRa(value), add_bytes); break;
 
         case _OPTION_GP_i: COND (MP(CRDNA), sam_seg_GP_i (vb, dl, numeric.i, add_bytes));
         case _OPTION_MP_i: COND (MP(CRDNA), sam_seg_MP_i (vb, dl, numeric.i, add_bytes));

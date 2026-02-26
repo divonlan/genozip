@@ -29,8 +29,6 @@ typedef packed_enum {
     DEPN_CLIP_UNKNOWN, DEPN_CLIP_HARD, DEPN_CLIP_SOFT
 } DepnClipping;
 
-#define MAX_POS_SAM MAX_POS32 // according to SAM specification
-
 #define MIN_TLEN -0x7fffffff // according to SAM specification
 #define MAX_TLEN 0x7fffffff
 typedef int32_t SamTlenType;
@@ -140,7 +138,7 @@ typedef struct {
     int32_t QUAL_score;            // used by ms:i
     SamASType AS;
     WordIndex RNAME, RNEXT;
-    PosType32 POS, PNEXT;
+    PosType32 POS, PNEXT;          // 1-based (even in BAM)
     uint32_t seq_len_by_qname;     // set if QNAME flavor has a seq_len_dict_id      
     uint32_t seq_consumed;
     uint32_t ref_consumed;
@@ -331,7 +329,8 @@ typedef struct VBlockSAM {
 
     // stats
     uint32_t deep_stats[NUM_DEEP_STATS]; // ZIP/PIZ: stats collection regarding Deep - one entry for each in DeepStatsZip/DeepStatsPiz
-    uint32_t num_seq_by_aln;// ZIP: number of alignments segged vs reference by rname/pos/cigar (i.e. not aligner, not copy from prim/saggy, not verbatim)
+    
+    uint32_t num_seq_by_aln;       // ZIP: number of alignments segged vs reference by rname/pos/cigar (i.e. not aligner, not copy from prim/saggy, not verbatim)
     uint32_t num_vs_prim;
     uint32_t num_tlen_pred;
 } VBlockSAM, *VBlockSAMP;
@@ -492,13 +491,12 @@ extern WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom),
 extern WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom), unsigned add_bytes);
 extern void      sam_seg_MAPQ  (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes);
 extern void      sam_seg_TLEN  (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(tlen), SamTlenType tlen_value, bool is_rname_rnext_same);
-extern void      bam_seg_BIN   (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t bin, bool is_bam);
+extern void      bam_seg_BIN   (VBlockSAMP vb, ZipDataLineSAMP dl, BaiBinType bin, bool is_bam);
 
 // mismatch counters
 extern void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType NM, unsigned add_bytes);
 extern void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xm, int16_t idx, unsigned add_bytes);
 
-extern uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos);
 extern void sam_seg_verify_RNAME (VBlockSAMP vb);
 extern void sam_piz_set_sag (VBlockSAMP vb);
 extern bool sam_seg_test_biopsy_line (VBlockP vb, STRp(line));

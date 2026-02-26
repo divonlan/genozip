@@ -23,6 +23,10 @@ autocomplete.sh
 *.ora
 *.exe
 *.mac
+test-tbi.*
+*.tbi
+test-bai.*
+*.bai
 !installers/*.exe
 *.new
 *.crdownload

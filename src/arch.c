@@ -103,13 +103,19 @@ void arch_set_locale (void)
 static bool arch_is_wsl (void)
 {
 #ifdef __linux__    
+    // case: Linux executable is running in WSL
     struct utsname uts = {};
     if (uname(&uts)) return false; // uname doesn't work
-
     return (strstr (uts.release, "Microsoft"/*WSL1*/) || strstr (uts.release, "microsoft-standard"/*WSL2*/));
+
+#elif defined _WIN32
+    // case: Windows executable is called from WSL
+    rom env = getenv("WSLENV");
+    return env && env[0]; // existing and not ""
 
 #else
     return false;
+
 #endif
 }
 

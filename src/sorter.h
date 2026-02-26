@@ -16,13 +16,25 @@ typedef SORTER ((*Sorter));
 #define ASCENDING_RAW(a,b) (((a) > (b)) ? 1 : (a) < (b) ? -1 : 0)
 #define DESCENDING_RAW(a,b) (-ASCENDING_RAW((a), (b)))
 #define ASCENDING(struct_type,struct_field) ASCENDING_RAW (((struct_type *)a)->struct_field, ((struct_type *)b)->struct_field)
+#define ASCENDING_INDIRECT(struct_type,struct_field) ASCENDING_RAW ((*(struct_type **)a)->struct_field, (*(struct_type **)b)->struct_field)
 #define DESCENDING(struct_type,struct_field) (-ASCENDING(struct_type, struct_field))
-
+#define ASCENDING_ASCENDING(st,sf1,sf2) ({ int res1=ASCENDING_RAW (((st *)a)->sf1, ((st *)b)->sf1); \
+                                           res1 ? res1 : ASCENDING_RAW (((st *)a)->sf2, ((st *)b)->sf2); })
+        
+// sort an array of structs, by struct_field, ascending order
 #define ASCENDING_SORTER(func_name,struct_type,struct_field) \
     SORTER (func_name) { return ASCENDING (struct_type, struct_field); }
 
+// same, but array being sorted contains pointers to a struct, rather than the struct itself
+#define ASCENDING_SORTER_INDIRECT(func_name,struct_type,struct_field) \
+    SORTER (func_name) { return ASCENDING_INDIRECT (struct_type, struct_field); }
+
 #define DESCENDING_SORTER(func_name,struct_type,struct_field) \
     SORTER (func_name) { return DESCENDING (struct_type, struct_field); }
+
+// sort by field1, then by field2 - both ascending 
+#define ASCENDING_ASCENDING_SORTER(func_name,struct_type,sf1,sf2) \
+    SORTER (func_name) { return ASCENDING_ASCENDING (struct_type, sf1, sf2); }
 
 // declaration of binary search recursive function - array of struct, must be sorted ascending by field
 typedef enum { IfNotExact_ReturnLower, IfNotExact_ReturnHigher, IfNotExact_ReturnNULL, IfNotExact_Error } BinarySearchIfNotExact; 

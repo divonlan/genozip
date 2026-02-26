@@ -20,6 +20,7 @@
 #include "arch.h"
 #include "dispatcher.h"
 #include "threads.h"
+#include "tip.h"
 #include "zlib/zlib.h"
 #include "libdeflate_1.19/libdeflate.h"
 #include "bzlib/bzlib.h"
@@ -92,6 +93,8 @@ void txtfile_fwrite (const void *data, uint32_t size)
     // error if failed to write to file
     ASSERT (bytes == size, "Error writing to %s on filesystem=%s - requested %u bytes but wrote only %u: (%u)%s", 
             txt_file->basename, arch_get_filesystem_type (txt_file).s, size, bytes, errno, strerror (errno));
+
+    txt_file->disk_so_far += bytes;
 }
 
 static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
@@ -963,7 +966,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
         else 
             ABORT ("Reason: failed to find a full line %sin vb=%s data_type=%s txt_data.len=%u txt_file->effective_codec=%s is_last_vb_in_txt_file=%s interleaved=%s.\n"
                    "Known possible causes:\n"
-                   "- The file is %s %s. Tip: try running with --truncate\n"
+                   "- The file is %s %s. " _TIP "try running with --truncate\n"
                    "- The file is not a %s file.\n"
                    "VB dumped: %s\n",  
                    DTPT(is_binary) ? "" : "(i.e. newline-terminated) ",
@@ -1117,9 +1120,10 @@ void txtfile_read_vblock (VBlockP vb)
 
     bool is_mgzip = TXT_IS_MGZIP;
 
-    bool always_uncompress = flag.zip_uncompress_source_during_read || // segconf tells us to uncompress the data 
-                             segconf_running || // segconf doesn't have a compute thread, and doesn't attempt to uncompress txt_data
-                             !is_mgzip; // GZ, BZ2 and NONE always return uncompressed data anyway (note: segconf is always one of these too)
+    bool always_uncompress = flag.zip_uncompress_source_during_read // segconf tells us to uncompress the data 
+                          || segconf_running // segconf doesn't have a compute thread, and doesn't attempt to uncompress txt_data
+                          || !is_mgzip       // GZ, BZ2 and NONE always return uncompressed data anyway (note: segconf is always one of these too)
+                          || IS_SHOW_BAI;    // uncompressing a TBI file
 
     vb->comp_i = flag.zip_comp_i;  // needed for VB_NAME
 

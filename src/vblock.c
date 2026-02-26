@@ -137,7 +137,7 @@ void vb_dehoard_memory (bool release_to_kernel)
     buflist_destroy_vb_bufs (evb, true); // destroys all unused buffers
 
     if (release_to_kernel)
-        buf_low_level_release_memory_back_to_kernel();
+        return_freed_memory_to_kernel();
 }
 
 void vb_create_pool (VBlockPoolType type, rom name)

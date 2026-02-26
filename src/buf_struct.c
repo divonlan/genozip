@@ -790,7 +790,7 @@ void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE)
     return new;
 }
 
-void buf_low_level_release_memory_back_to_kernel (void)
+void return_freed_memory_to_kernel (void)
 {
 #ifdef __linux__
     malloc_trim (0);                        // return whole free pages to the kernel

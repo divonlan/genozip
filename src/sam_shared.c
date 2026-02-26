@@ -36,7 +36,7 @@ void sam_reset_line (VBlockP vb_)
 
     ASSERT (VB_DT(SAM) || VB_DT(BAM), "VB has wrong data type: %s", dt_name (vb->data_type));
     
-    vb->aux_con = NULL; //xxx
+    vb->aux_con = NULL; 
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
     vb->textual_seq.len = 0;
     vb->meth_call.len32 = 0;
@@ -81,26 +81,6 @@ void sam_reset_line (VBlockP vb_)
         vb->md_M_is_ref.nbits = vb->md_M_is_ref.nwords = 0;
         vb->unconverted_bitmap.nbits = vb->unconverted_bitmap.nwords = 0;
     }
-}
-
-// calculate bin given an alignment covering [first_pos_0,last_pos_0) (0-based positions, half-closed, half-open)
-// code adapted from https://samtools.github.io/hts-specs/SAMv1.pdf section 5.3
-uint16_t bam_reg2bin (int32_t first_pos, int32_t last_pos)
-{
-    int32_t first_pos_0 = first_pos - 1; // -1 to make it 0-based
-    int32_t last_pos_0  = last_pos  - 1; // -1 to make it 0-based
-
-    // Note: I found actual files where the bin was calculated by "last_pos_0=last_pos-2" but other actuals files are
-    // according to the formula above (or maybe I am missing something?)
-    // THIS SHOULD NEVER BE CORRECTED - as SAM_SPECIAL_BIN snips out there in the wild rely on this formula (even if incorrect)
-    // to reconstruct (in sam_cigar_special_CIGAR)
-
-    if (first_pos_0>>14 == last_pos_0>>14) return ((1<<15)-1)/7 + (first_pos_0>>14);
-    if (first_pos_0>>17 == last_pos_0>>17) return ((1<<12)-1)/7 + (first_pos_0>>17);
-    if (first_pos_0>>20 == last_pos_0>>20) return ((1<<9 )-1)/7 + (first_pos_0>>20);
-    if (first_pos_0>>23 == last_pos_0>>23) return ((1<<6 )-1)/7 + (first_pos_0>>23);
-    if (first_pos_0>>26 == last_pos_0>>26) return ((1<<3 )-1)/7 + (first_pos_0>>26);
-    return 0;
 }
 
 DisFlagsStr sam_dis_flags (SamFlags f)

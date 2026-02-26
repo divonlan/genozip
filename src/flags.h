@@ -107,7 +107,7 @@ typedef struct {
         to_stdout,   // set implicitly if genocat without --output
         replace, 
         test, no_test, explicit_test,       
-        index_txt,   // create an index
+        ext_indexing,// create an index file using an external indexer (samtools index etc)
         subdirs,     // recursively traversing subdirectories
         list,        // a genols option
         no_bgzf,     // if this is a GZIP file, treat as normal GZIP, not BGZF
@@ -147,11 +147,11 @@ typedef struct {
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, stats_submit, debug_submit, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
-        debug_valgrind, debug_tar, // ad-hoc debug printing in prod
+        debug_valgrind, debug_tar, debug_bai, // ad-hoc debug printing in prod
         show_compress, show_sec_gencomp, show_scan,
         no_gencomp, force_gencomp, force_reread, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, no_smux, no_faf, no_interleaved,
         force_qual_codec, verify_codec, 
-        seg_only, show_bam, xthreads,
+        seg_only, show_bam, no_index, skip_index, xthreads,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
         show_containers, show_stack, show_aligner, show_buddy,
         echo,         // show the command line in case of an error (including echo and its optional argument)
@@ -161,6 +161,7 @@ typedef struct {
     rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks, show_header_dict_name;
     int32_t dump_section_i, show_header_section_i;
     enum { SHOW_DEEP_SUMMARY=1, SHOW_DEEP_ONE_HASH=2, SHOW_DEEP_ALL=3 } show_deep;
+    enum { SHOW_BAI_NONE, SHOW_BAI_UNSORTED, SHOW_BAI_SORT, SHOW_BAI_CHUNKS, SHOW_BAI_RAW, SHOW_BAI_LINEAR } show_bai;
 
     // use __builtin_expect for show/debug flags that are tested throughout execution (i.e. not just during initialization or finalization)
     #define flag_show_deep       __builtin_expect (flag.show_deep > 0,   false)
@@ -236,6 +237,9 @@ typedef struct {
          removing_cache,     // genocat: running --no-cache with only -e 𝑟𝑒𝑓-𝑓𝑖𝑙𝑒 to remove cache
          let_OS_cleanup_on_exit, // don't release resources as we are about to exit - the OS does it faster
          reading_reference;  // system is currently reading a reference
+         
+    volatile bool make_bai;  // PIZ BAM: write .bai file (volatile, because any thread can change its value at any time)
+
     int only_headers,        // genocat --show_headers (not genounzip) show only headers (value is section_type+1 or SHOW_ALL_HEADERS)
         check_latest;        // PIZ: run with "genozip --decompress --test": ZIP passes this to PIZ upon testing of the last file
     enum { NO_PREPROC, PREPROC_RUNNING, PREPROC_FINALIZING } preprocessing; // we're currently dispatching compute threads for preprocessing (PIZ: loading SA Groups, ZIP: loading bamass ents)

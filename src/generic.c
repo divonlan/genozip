@@ -68,7 +68,8 @@ int32_t generic_is_header_done (bool is_eof)
         {} // no message
 
     else if (tar_zip_is_tar() || !txt_file->redirected) 
-        WARN_ONCE ("FYI: genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\". To suppress this warning, use \"--input generic\".", txt_name);
+        // note: tip won't be printed for index files, because another tip was already provided in file_open_txt_read_test_valid_dt
+        TIP ("genozip doesn't recognize %s file's type, so it will be compressed as GENERIC. In the future, you may specify the type with \"--input <type>\".", txt_name);
 
     else 
         ABORTINP ("to pipe data in, please use --input (or -i) to specify its type, which can be one of the following:\n%s", file_compressible_extensions (true).s);

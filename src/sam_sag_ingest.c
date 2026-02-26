@@ -56,7 +56,7 @@ void sam_gencomp_trim_memory (void)
     else if (IS_SAG_CC)   buf_trim (z_file->sag_alns, CCAln);
     else if (IS_SAG_SOLO) buf_trim (z_file->sag_alns, SoloAln);
 
-    buf_low_level_release_memory_back_to_kernel();
+    return_freed_memory_to_kernel();
 
     if (flag_show_memory) {
         iprintf ("\nSAG memory %s:\n", IS_ZIP ? "ZIP" : "PIZ");

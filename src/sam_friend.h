@@ -10,34 +10,33 @@
 
 #pragma once
 #include "genozip.h"
-
-typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
-
-// fixed-field part of a BAM alignment, see https://samtools.github.io/hts-specs/SAMv1.pdf
-typedef struct __attribute__((packed,aligned(1))) {
-    // fixed-field
-    uint32_t block_size;
-    int32_t ref_id;
-    PosType32 pos;
-    uint8_t l_read_name;
-    uint8_t mapq;
-    uint16_t bin;
-    uint16_t n_cigar_op;
-    uint16_t flag;
-    uint32_t l_seq;
-    int32_t next_ref_id;
-    PosType32 next_pos;  
-    int32_t tlen;
-
-    // variable-length fields (not included in sizeof(BAMAlignmentFixed))
-    char read_name[/*l_read_name*/]; 
-    // uint32_t cigar[n_cigar_op]
-    // uint8_t seq[(l_seq+1)/2]
-    // char qual[l_seq]
-} BAMAlignmentFixed, *BAMAlignmentFixedP;
+#include "bai.h"
 
 #define BAM_MAGIC  "BAM\1" // first 4 bytes of a BAM file
 #define CRAM_MAGIC "CRAM"  // first 4 bytes of a CRAM file
+
+typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
+
+#define MAX_POS_SAM MAX_POS32 // according to SAM specification
+
+typedef union SamFlags {
+    struct {
+        uint8_t multi_segs    : 1;
+        uint8_t is_aligned    : 1;  // passed alignment with sufficient quality (note: if false, alignment might still be mapped and have RNAME, POS, CIGAR)
+        uint8_t unmapped      : 1;  // no CIGAR (note: might still have RNAME, POS in which case spec calls it "placed unmapped")
+        uint8_t next_unmapped : 1;
+        uint8_t rev_comp      : 1;
+        uint8_t next_rev_comp : 1;
+        uint8_t is_first      : 1;
+        uint8_t is_last       : 1;
+        uint8_t secondary     : 1;
+        uint8_t filtered      : 1;
+        uint8_t duplicate     : 1;
+        uint8_t supplementary : 1;
+        uint8_t unused        : 4;    
+    };
+    uint16_t value; 
+} SamFlags;
 
 // as defined in https://samtools.github.io/hts-specs/SAMv1.pdf section 1.4.2
 #define SAM_FLAG_MULTI_SEG     ((uint16_t)0x0001) // 1     0000 0000 0001
@@ -54,24 +53,28 @@ typedef struct __attribute__((packed,aligned(1))) {
 #define SAM_FLAG_SUPPLEMENTARY ((uint16_t)0x0800) // 2048  1000 0000 0000
 #define SAM_MAX_FLAG           ((uint16_t)0x0FFF)
 
-typedef union SamFlags {
-    struct {
-        uint8_t multi_segs    : 1;
-        uint8_t is_aligned    : 1;
-        uint8_t unmapped      : 1;
-        uint8_t next_unmapped : 1;
-        uint8_t rev_comp      : 1;
-        uint8_t next_rev_comp : 1;
-        uint8_t is_first      : 1;
-        uint8_t is_last       : 1;
-        uint8_t secondary     : 1;
-        uint8_t filtered      : 1;
-        uint8_t duplicate     : 1;
-        uint8_t supplementary : 1;
-        uint8_t unused        : 4;    
-    };
-    uint16_t value;
-} SamFlags;
+// fixed-field part of a BAM alignment, see https://samtools.github.io/hts-specs/SAMv1.pdf
+typedef struct __attribute__((packed,aligned(1))) {
+    // fixed-field
+    uint32_t block_size;
+    int32_t ref_id;
+    PosType32 pos;
+    uint8_t l_read_name;
+    uint8_t mapq;
+    BaiBinType bin;
+    uint16_t n_cigar_op;
+    SamFlags flag;
+    uint32_t l_seq;
+    int32_t next_ref_id;
+    PosType32 next_pos;  
+    int32_t tlen;
+
+    // variable-length fields (not included in sizeof(BAMAlignmentFixed))
+    char read_name[/*l_read_name*/]; 
+    // uint32_t cigar[n_cigar_op]
+    // uint8_t seq[(l_seq+1)/2]
+    // char qual[l_seq]
+} BAMAlignmentFixed, *BAMAlignmentFixedP;
 
 typedef union BamCigarOp {
     struct {
@@ -97,11 +100,13 @@ extern const char cigar_op_to_char[16]; // BAM to SAM cigar op
 extern void bam_seq_to_sam (VBlockP vb, bytes bam_seq, uint32_t seq_len, bool start_mid_byte, bool test_final_nibble, BufferP out, bool is_from_zip_cb);
 extern bool sam_cigar_textual_to_binary (VBlockP vb, STRp(cigar), BufferP binary_cigar, rom buf_name);
 extern void sam_cigar_binary_to_textual (VBlockP vb, ConstBamCigarOpP cigar, uint16_t n_cigar_op, bool reverse, BufferP textual_cigar);
+extern uint32_t sam_cigar_get_ref_consumed (STRp(cigar), bool is_bam, bool min_is_one);
 extern void sam_seg_SEQ_initialize (VBlockP vb);
 extern StrTextMegaLong dis_binary_cigar (VBlockP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, Buffer *working_buf); 
 extern void sam_prepare_deep_cigar (VBlockP vb, ConstBamCigarOpP cigar, uint32_t cigar_len, bool reverse);
 extern void sam_piz_produce_trivial_solo_huffmans (void);
 extern uint64_t sam_deep_calc_hash_bits (void);
+extern WordIndex sam_get_contig_by_name (STRp(contig_name));
 
 typedef enum { 
     SQUANK_BY_MAIN         = '0', // SAM:       from the seq_len+hard_clips implied by the primary CIGARs (used for SA_CIGAR/XA_CIGAR/OA_CIGAR and up to 15.0.68 also for MC:Z)

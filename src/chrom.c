@@ -14,8 +14,8 @@
 #include "contigs.h"
 #include "b250.h"
 
-static ContextP sorter_ctx = NULL; 
-static Buffer chrom_sorter = {}; // ZIP/PIZ: index into sorter_ctx->nodes/word_list, sorted alphabetically by snip
+static ContextP sorter_zctx = NULL; 
+static Buffer chrom_sorter = {}; // ZIP/PIZ: index into sorter_zctx->nodes/word_list, sorted alphabetically by snip
 
 // the data of SEC_CHROM2REF_MAP - this is part of the Genozip file format
 typedef struct { WordIndex chrom_index, ref_index; } Chrom2Ref; 
@@ -248,11 +248,11 @@ static SORTER (chrom_create_zip_sorter)
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
 
-    CtxNode *word_a = B(CtxNode, sorter_ctx->nodes, index_a);
-    CtxNode *word_b = B(CtxNode, sorter_ctx->nodes, index_b);
+    CtxNode *word_a = B(CtxNode, sorter_zctx->nodes, index_a);
+    CtxNode *word_b = B(CtxNode, sorter_zctx->nodes, index_b);
 
-    return strcmp (Bc (sorter_ctx->dict, word_a->char_index),  
-                   Bc (sorter_ctx->dict, word_b->char_index));
+    return strcmp (Bc (sorter_zctx->dict, word_a->char_index),  
+                   Bc (sorter_zctx->dict, word_b->char_index));
 }
 
 static SORTER (chrom_create_piz_sorter)
@@ -260,18 +260,18 @@ static SORTER (chrom_create_piz_sorter)
     uint32_t index_a = *(uint32_t *)a;
     uint32_t index_b = *(uint32_t *)b;
 
-    CtxWordP word_a = B(CtxWord, sorter_ctx->word_list, index_a);
-    CtxWordP word_b = B(CtxWord, sorter_ctx->word_list, index_b);
+    CtxWordP word_a = B(CtxWord, sorter_zctx->word_list, index_a);
+    CtxWordP word_b = B(CtxWord, sorter_zctx->word_list, index_b);
     
-    return strcmp (Bc (sorter_ctx->dict, word_a->char_index),
-                   Bc (sorter_ctx->dict, word_b->char_index));
+    return strcmp (Bc (sorter_zctx->dict, word_a->char_index),
+                   Bc (sorter_zctx->dict, word_b->char_index));
 }
 
 // ZIP/PIZ MUST be run by the main thread only
 void chrom_index_by_name (Did chrom_did_i)
 {
-    sorter_ctx = ZCTX(chrom_did_i);
-    uint32_t num_words = (command==ZIP) ? sorter_ctx->nodes.len32 : sorter_ctx->word_list.len32;
+    sorter_zctx = ZCTX(chrom_did_i);
+    uint32_t num_words = (command==ZIP) ? sorter_zctx->nodes.len32 : sorter_zctx->word_list.len32;
 
     buf_free (chrom_sorter);
 
@@ -279,11 +279,11 @@ void chrom_index_by_name (Did chrom_did_i)
     buf_alloc (evb, &chrom_sorter, 0, num_words, uint32_t, 1, "chrom_sorter");
     
     if (IS_ZIP) {
-        for_buf2 (CtxNode, node, i, sorter_ctx->nodes)
+        for_buf2 (CtxNode, node, i, sorter_zctx->nodes)
             if (node->snip_len) BNXT32(chrom_sorter) = i;
     }
     else
-        for_buf2 (CtxWord, word, i, sorter_ctx->word_list)
+        for_buf2 (CtxWord, word, i, sorter_zctx->word_list)
             if (word->snip_len) BNXT32(chrom_sorter) = i;
 
     qsort (STRb(chrom_sorter), sizeof(uint32_t), IS_ZIP ? chrom_create_zip_sorter : chrom_create_piz_sorter);

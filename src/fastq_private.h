@@ -128,6 +128,10 @@ extern void agilent_seg_initialize (VBlockP vb);
 extern void agilent_seg_RX (VBlockP vb, ContextP ctx, STRp(rx), unsigned add_bytes); // RX and QX are also in sam_private.h.
 extern void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_bytes);
 
+// other SAM fields
+extern void sam_MM_zip_initialize (void);
+extern void sam_seg_MM_Z (VBlockP vb, STRp(mm), unsigned add_bytes);
+
 // SEQ
 extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deep);
 extern void fastq_update_coverage_aligned (VBlockFASTQP vb);

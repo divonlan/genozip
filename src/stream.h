@@ -23,10 +23,9 @@ extern StreamP stream_create (StreamP parent_stream, uint32_t from_stream_stdout
 
 extern void stream_set_inheritability (int fd, bool is_inheritable);
 
-extern void stream_close_pipes (StreamP stream);
-
 typedef enum { STREAM_KILL_PROCESS, STREAM_WAIT_FOR_PROCESS, STREAM_DONT_WAIT_FOR_PROCESS } StreamCloseMode;
 extern int stream_close (StreamP *stream, StreamCloseMode close_mode);
+extern void stream_leak_pipe (StreamP stream);
 
 extern int stream_wait_for_exit (StreamP stream, bool killed);
 

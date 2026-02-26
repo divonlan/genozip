@@ -28,7 +28,7 @@ typedef packed_enum { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,  
 #define TECH_NAME   {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "LS454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso",    "Capillary",    "SOLiD",              }
 #define TECH(x) (segconf.tech == TECH_##x)
 
-typedef packed_enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO, SQT_NUKE_OR_AMINO } SeqType;
+typedef packed_enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO } SeqType;
 
 typedef packed_enum { ms_NONE, ms_BIOBAMBAM, ms_MINIMAP2 } msType; // type of SAM ms:i field 
 #define ms_type_NAME { "None", "biobambam", "minimap2"}
@@ -351,7 +351,6 @@ typedef struct {
     // FASTA stuff (including FASTA embedded in GFF)
     bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
     SeqType seq_type;           // nucleotide or protein
-    unsigned seq_type_counter;  // used for calculating seq_type 
     
     // GFF stuff
     int gff_version;

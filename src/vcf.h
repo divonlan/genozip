@@ -775,6 +775,8 @@ extern bool vcf_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern bool vcf_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 
 // PIZ stuff
+extern bool vcf_piz_initialize (CompIType comp_i);
+extern void vcf_piz_finalize (bool is_last_z_file);
 extern void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
 extern bool vcf_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 extern void vcf_piz_vb_recon_init (VBlockP vb);
@@ -790,7 +792,6 @@ extern uint32_t vcf_header_get_num_samples (void);
 extern uint32_t vcf_header_get_num_contigs (void);
 extern uint64_t vcf_header_get_nbases (void);
 extern bool vcf_header_get_has_fileformat (void);
-extern void vcf_piz_finalize (bool is_last_z_file);
 
 // VBlock stuff
 extern void vcf_header_finalize(void);

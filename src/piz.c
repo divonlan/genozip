@@ -29,6 +29,7 @@
 #include "user_message.h"
 #include "huffman.h"
 #include "filename.h"
+#include "bai.h"
 
 TRANSLATOR_FUNC (piz_obsolete_translator)
 {
@@ -264,7 +265,7 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
         ContextP ctx = ctx_get_ctx (vb, header->dict_id); // gets the context (creating it if it doesn't already exist)
         
         // back comp: bug observed with E2:Z in v11.0.10: OPTION_E2_Z has LOCAL section despite being an alias to SAM_E2_Z
-        if (ctx->is_ctx_alias && !VER(12)) { 
+        if (IS_PIZ && ctx->is_ctx_alias/*PIZ-only field*/ && !VER(12)) { 
             ctx = CTX(ctx->did_i); 
             header->dict_id = ctx->dict_id; 
         }
@@ -458,7 +459,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
         ContextP zctx = ctx_get_existing_zctx ((*sec)->dict_id); 
         ASSERT (zctx, "Unexpectedly, zctx for %s was not initialized", dis_dict_id ((*sec)->dict_id).s);
         
-        ASSERT (zctx->did_i == zctx - z_file->contexts || zctx->is_ctx_alias, 
+        ASSERT (zctx->did_i == zctx - z_file->contexts || (IS_PIZ && zctx->is_ctx_alias/*PIZ-only field*/), 
                 "Unexpectedly, zctx for %s has wrong did_i=%u, expecting did_i=%u (zctx->dict_i=%s)", 
                 dis_dict_id ((*sec)->dict_id).s, zctx->did_i, (int)(zctx - z_file->contexts), dis_dict_id (zctx->dict_id).s);
         
@@ -467,7 +468,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
         bool is_b250  = !is_local;
         
         // don't assert for <=v11 due to bug (see comment in piz_uncompress_all_ctxs)
-        ASSERT (!zctx->is_ctx_alias || !VER(12), "Found a %s section of %s, this is unexpected because %s is an alias (of %s)",
+        ASSERT (!(IS_PIZ && zctx->is_ctx_alias/*PIZ-only field*/) || !VER(12), "Found a %s section of %s, this is unexpected because %s is an alias (of %s)",
                 st_name((*sec)->st), zctx->tag_name, zctx->tag_name, ZCTX(zctx->did_i)->tag_name);
 
         // if we're a FASTQ R2 VB loading R1 data, decide if we need to load this section
@@ -578,7 +579,8 @@ DataType piz_read_global_area (void)
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
         chrom_2ref_load(); 
 
-        ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
+        if (flag.reading_reference || !IS_REF_EXTERNAL) // note: up to v13 there is an empty SEC_REF_CONTIGS section if REF_EXTERNAL. careful not to load it as it would override gref.ctgs.contigs
+            ref_contigs_load_contigs(); // note: in case of REF_EXTERNAL, reference is already pre-loaded
     }
 
     // if the user wants to see only the header, we can skip regions and random access
@@ -987,7 +989,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         digest_piz_verify_one_txt_file (z_file->num_txts_so_far - 1);
 
     progress_finalize_component_time ("Done", DIGEST_NONE);
-
+        
     // --coverage and --idxstats: output results
     if (txt_file && !flag_loading_auxiliary) {
         if (flag.show_coverage) coverage_show_coverage();
@@ -1006,6 +1008,9 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
     if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
         iprintf ("Finished PIZ of %s\n", txt_file ? txt_file->name : "(no filename)");                
+
+    if (flag.make_bai)
+        bai_write();
 
     // if we're loading an aux file for ZIP - destroy VBs as contexts are unions of ZIP and PIZ
     if (primary_command == ZIP && flag_loading_auxiliary)

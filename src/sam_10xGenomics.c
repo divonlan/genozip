@@ -742,7 +742,7 @@ static bool sam_seg_TX_AN_pos (VBlockP vb, ContextP pos_ctx, STRp(pos), uint32_t
     if (lookback) {
         PosType64 lookback_pos     = lookback_get_value (vb, lb_ctx, pos_ctx,      lookback).i;
         PosType64 lookback_sam_pos = lookback_get_value (vb, lb_ctx, sam_pos_ctx,  lookback).i; 
-        bool lookback_negative   = lookback_get_index (vb, lb_ctx, negative_ctx, lookback);
+        bool lookback_negative     = lookback_get_index (vb, lb_ctx, negative_ctx, lookback);
 
         PosType64 pos_delta = this_pos - lookback_pos; // can be positive or negative
         PosType64 sam_pos_delta = this_sam_pos - lookback_sam_pos; // always non-negative         
@@ -899,6 +899,9 @@ void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned ad
 SPECIAL_RECONSTRUCTOR (sam_piz_special_crdna_GP)
 {
     new_value->i = CTX(SAM_POS)->last_value.i + VB_SAM->ref_consumed + VB_SAM->soft_clip[1] - 1;
+
+    if (reconstruct) RECONSTRUCT_INT (new_value->i);
+    
     return HAS_NEW_VALUE;
 }
 

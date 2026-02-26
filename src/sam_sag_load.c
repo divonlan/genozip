@@ -497,7 +497,7 @@ static inline WordIndex v14_chrom_node_index (VBlockSAMP vb, SAAln *prim_aln)
 {
     ctx_get_snip_by_word_index (CTX(OPTION_SA_RNAME), prim_aln->rname, vb->chrom_name);
     
-    WordIndex wi = ctx_get_word_index_by_snip (VB, CTX(SAM_RNAME), STRa(vb->chrom_name)); // convert OPTION_SA_RNAME word_index to RNAME word_index
+    WordIndex wi = ctx_get_word_index_by_snip (SAM_RNAME, STRa(vb->chrom_name)); // convert OPTION_SA_RNAME word_index to RNAME word_index
     ASSERT (wi != WORD_INDEX_NONE, "Cannot find rname=%u in context RNAME", prim_aln->rname);
 
     return wi;

@@ -30,7 +30,7 @@
         txtfile_discover_specific_gz, txtfile_read_header, txtfile_read_vblock, txtfile_get_unconsumed_callback, fastq_txtfile_sync_to_R1_by_num_lines, \
         txtfile_read_block_mgzip, txtfile_read_block_zlib, txtfile_read_block_igzip, txtfile_read_block_bz2, \
         bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread, mgzip_uncompress_vb, mgzip_copy_unconsumed_blocks, mgzip_read_block_with_bsize, \
-        bgzf_compress_one_block, bgzf_uncompress_one_prescribed_block, \
+        bgzf_compress_one_block, bgzf_uncompress_one_prescribed_block, bgzf_compress_tbi, \
         mgzip_read_block_no_bsize, \
         zip_modify, vcf_zip_modify, vcf_optimize_samples, vcf_optimize_QUAL, vcf_optimize_INFO, vcf_convert_probabilites_to_phred, \
         vcf_convert_likelihoods_to_phred, vcf_phred_optimize, optimize_float_3_sig_dig, \
@@ -48,7 +48,7 @@
         sam_seg_QX_Z, sam_seg_BC_Z, sam_seg_gene_name_id, sam_seg_fx_Z, sam_seg_other_seq, sam_seg_GR_Z, sam_seg_GY_Z,\
         sam_seg_sag_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, aligner_seg_seq, sam_header_inspect,\
         sam_header_add_contig, contigs_create_index, sam_header_zip_inspect_PG_lines, sam_header_zip_inspect_RG_lines, sam_header_zip_inspect_HD_line, \
-        sam_header_zip_inspect_SQ_lines, cram_inspect_file, \
+        sam_header_inspect_SQ_lines, cram_inspect_file, \
         sam_deep_zip_merge, sam_piz_con_item_cb, sam_piz_deep_compress, sam_piz_deep_add_qname, sam_piz_deep_add_seq, sam_piz_deep_add_qual,\
         sam_piz_deep_finalize_ents, sam_piz_deep_grab_deep_ents, fastq_seg_find_deep, \
         scan_index_qnames_preprocessing, sam_piz_sam2fastq_QUAL, sam_piz_sam2bam_QUAL,\
@@ -85,6 +85,8 @@
         piz_uncompress_all_ctxs__recon, piz_uncompress_all_ctxs__fasta_writer_init, piz_uncompress_all_ctxs__fastq_read_r1, piz_uncompress_all_ctxs__sam_load_sag,\
         gencomp_absorb_vb_gencomp_lines, gencomp_flush, gencomp_offload_DEPN_to_disk, gencomp_reread_lines_as_prescribed, gencomp_do_offload_write, \
         compress_depn_buf,  \
+        bai_write, bai_calculate_one_vb, bai_get_line, \
+        show_bai, \
         tmp1, tmp2, tmp3, tmp4, tmp5, \
         fields[MAX_DICTS]/* ZIP: compression time (all ctxs); PIZ: recon time (fields only). must be last for profiler_add. */ \
 

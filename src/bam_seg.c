@@ -121,7 +121,7 @@ static int32_t bam_unconsumed_scan_backwards (rom bam_data, uint64_t bam_data_le
         else continue;
 
         // Note: we don't use add aln->bin calculation because in some files we've seen data that doesn't
-        // agree with our formula. see comment in bam_reg2bin
+        // agree with our formula. see comment in bai_reg2bin
 
         // all tests passed - this is indeed an alignment
         if (last_aln) *last_aln = aln;
@@ -166,7 +166,7 @@ bool bam_txt_file_is_last_alignment_unmapped (void)
     bam_unconsumed_scan_backwards (STRa(uncomp), &aln);
     
     return aln && // last alignment found (note: possibly NULL (=not found) if by bad luck the final BGZF block is tiny)
-           ((LTEN16(aln->flag) & SAM_FLAG_UNMAPPED) || !aln->n_cigar_op || aln->ref_id == -1 || aln->pos == -1);
+           (aln->flag.unmapped || !aln->n_cigar_op || aln->ref_id == -1 || aln->pos == -1);
 }
 
 static rom bam_dump_alignment (VBlockSAMP vb, rom alignment, rom after)
@@ -219,14 +219,14 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
     return n_auxs;
 }
 
-void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t bin /* used only in bam */, bool is_bam)
+void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, BaiBinType bin /* used only in bam */, bool is_bam)
 {
     PosType32 this_pos = dl->POS;
     PosType32 last_pos = dl->FLAG.unmapped ? this_pos : (this_pos + vb->ref_consumed - 1); // note: it is possible to have RNAME/POS set and FLAG.unmapped. The SAM spec calls this "placed unmapped"; 
-    uint16_t reg2bin = bam_reg2bin (this_pos, last_pos); // zero-based, half-closed half-open [start,end)
+    BaiBinType reg2bin = bai_reg2bin (this_pos, last_pos); // zero-based, half-closed half-open [start,end)
 
     if (!is_bam || (last_pos <= MAX_POS_SAM && reg2bin == bin))
-        seg_special0 (VB, SAM_SPECIAL_BIN, CTX(SAM_BAM_BIN), is_bam ? sizeof (uint16_t) : 0);
+        seg_special0 (VB, SAM_SPECIAL_BIN, CTX(SAM_BAM_BIN), is_bam ? sizeof (BaiBinType) : 0);
     
     else {
 #ifdef DEBUG // we show this warning only in DEBUG because I found actual files that have edge cases that don't work with our formula (no harm though)
@@ -454,12 +454,12 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     dl->POS              = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown 
     uint8_t l_read_name  = NEXT_UINT8;               // QNAME length
     dl->MAPQ             = NEXT_UINT8;
-    uint16_t bin         = NEXT_UINT16;
+    BaiBinType bin       = NEXT_UINT16;
     uint16_t n_cigar_op  = NEXT_UINT16;
     dl->FLAG.value       = NEXT_UINT16;              // not to be confused with our global var "flag"
     uint32_t l_seq       = NEXT_UINT32;              // note: we stick with the same logic as SAM for consistency - dl->SEQ.len is determined by CIGAR 
     dl->RNEXT            = (int32_t)NEXT_UINT32;     // corresponding to contigs in the BAM header
-    PosType32 next_pos  = 1 + (int32_t)NEXT_UINT32;  // pos in BAM is 0 based, -1 for unknown
+    PosType32 next_pos   = 1 + (int32_t)NEXT_UINT32; // pos in BAM is 0 based, -1 for unknown
     SamTlenType tlen     = (SamTlenType)NEXT_UINT32;
     rom read_name        = next_field;
     dl->QNAME_len        = l_read_name-1;            // -1 don't count \0

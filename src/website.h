@@ -14,7 +14,7 @@
 #define GITHUB_RAW  "https://raw.githubusercontent.com" REPO "/master"
 #define GITHUB_REPO "https://github.com" REPO
 
-#define WEBSITE_QUICK_GUIDE  GENOZIP_URL "/compression"
+#define WEBSITE_QUICK_GUIDE  GENOZIP_URL "/compression" // also in genozip-installer.template.ifp
 #define WEBSITE_GENOZIP      GENOZIP_URL "/genozip"
 #define WEBSITE_GENOUNZIP    GENOZIP_URL "/genounzip"
 #define WEBSITE_GENOCAT      GENOZIP_URL "/genocat"
@@ -42,7 +42,7 @@
 #define WEBSITE_OPT_FASTQ    GENOZIP_URL "/fastq#optimize"
 #define WEBSITE_OPT_BAM      GENOZIP_URL "/bam#optimize"
 #define WEBSITE_OPT_VCF      GENOZIP_URL "/vcf#optimize"
-
+#define WEBSITE_INDEXING     GENOZIP_URL "/indexing"
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"
 #define EMAIL_REGISTER "register@genozip.com"

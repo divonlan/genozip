@@ -6,6 +6,9 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <getopt.h>
 #include <fcntl.h>
 #include <dirent.h>
@@ -15,7 +18,6 @@
 #include "mac_compat.h"
 #endif
 #include "genozip.h"
-#include "text_help.h"
 #include "zfile.h"
 #include "zip.h"
 #include "piz.h"
@@ -31,23 +33,19 @@
 #include "random_access.h"
 #include "codec.h"
 #include "threads.h"
-#include "bases_filter.h"
 #include "genols.h"
 #include "tar.h"
-#include "gencomp.h"
-#include "chrom.h"
-#include "dispatcher.h"
 #include "biopsy.h"
 #include "regions.h"
+#include "error.h"
+#include "website.h"
+#include "bai.h"
 
 // globals - set in main() and immutable thereafter
 char global_cmd[256]; 
 ExeType exe_type;
 
 unsigned file_i, n_files; // number of input files in the execution
-
-static int process_argc;
-static char **process_argv; // pointer to array of strings (pointers)
 
 // primary_command vs command: primary_command is what the user typed on the command line. command is what is 
 // running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and command=PIZ
@@ -59,6 +57,50 @@ static Buffer input_files_buf = { .name = "input_files" };
 
 #define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
 #define MAIN0(string)     ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
+
+static rom help_genozip[] = {
+    "",
+    "𝑇𝑟𝑦:\tgenozip myfile.bam --reference hs37d5.fa.gz                       # for BAM, --reference is optional",
+    "𝑜𝑟:\tgenozip myfile.fq.gz --reference hs37d5.fa.gz",
+    "𝑜𝑟:\tgenozip --pair myfile-R1.fq.gz myfile-R2.fq.gz --reference hs37d5.fa.gz            # co-compression™",
+    "𝑜𝑟:\tgenozip --deep myfile-R1.fq.gz myfile-R2.fq.gz myfile.bam --reference hs37d5.fa.gz # co-compression™",
+    "𝑜𝑟:\tgenozip myfile.fq.gz --reference hs37d5.fa.gz --bamass myfile.bam # consults BAM to compress FASTQ better",
+    "𝑜𝑟:\tgenozip myfile.vcf.gz",
+    "",
+    "More details: "WEBSITE_GENOZIP
+};
+
+static rom help_genounzip[] = {
+    "",
+    "𝑇𝑟𝑦:\tgenounzip myfile.bam.genozip",
+    "𝑜𝑟:\tgenounzip --replace myfile.bam.genozip",
+    "",
+    "More details: "WEBSITE_GENOUNZIP
+};
+
+static rom help_genocat[] = {
+    "",
+    "See here: "WEBSITE_GENOCAT
+};
+
+static rom help_genols[] = {
+    "",
+    "See here: the genols manual here: "WEBSITE_GENOLS
+};
+
+static rom help_attributions[] = {
+    "",
+    "See here: "WEBSITE_ATTRIBUTIONS
+};
+
+static rom help_footer[] = {
+    "",
+    "Technical questions, bug reports and feature requests: " EMAIL_SUPPORT,
+    "License inquiries: " EMAIL_SALES,
+    "",
+    "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS OR DISTRIBUTORS OF THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
+};
+
 
 rom report_support (void) { return "Please report this to " EMAIL_SUPPORT ". "; }
 rom report_support_if_unexpected (void) { return "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"; }
@@ -73,173 +115,10 @@ rom command_name (void) // see CommandType
         case HELP         : return "HELP";
         case LICENSE      : return "LICENSE";
         case SHOW_HEADERS : return "SHOW_HEADERS";
+        case SHOW_BAI     : return "SHOW_BAI";
         case NO_COMMAND   : return "NO_COMMAND";
         default           : return "Invalid command";
     }
-}
-
-noreturn void stall (void) { while (1) sleep (1); }
-
-static void main_delete_zfile_on_error (bool is_error)
-{
-    STRli (save_name, strlen (z_file->name)+1);
-
-    if (z_file && z_file->name) 
-        strcpy (save_name, z_file->name);
-
-    file_close (&z_file); // also frees file->name
-
-    // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
-    // because it can't access a z_file filed after z_file is freed, and threads_sigsegv_handler aborts
-    if (is_error && !flag.debug_or_test && file_exists (save_name)) 
-        file_remove (save_name, true);
-}
-
-static void main_free_all_on_error (void)
-{
-    flags_finalize();
-    chrom_finalize();
-    ref_finalize (true);
-    vb_destroy_pool_vbs (POOL_MAIN, true);
-    vb_destroy_pool_vbs (POOL_BGZF, true);
-    vb_destroy_vb (&evb);
-}
-
-void noreturn main_exit (bool show_stack, bool is_error) 
-{
-    DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
-
-        // case: skip freeing buffers since we're exiting any, UNLESS run under valgrind - in which case we free, so we can detect true memory leaks
-        if (!arch_is_valgrind())
-            flag.let_OS_cleanup_on_exit = true;  
-
-        if (!is_error && (IS_ZIP || (IS_PIZ && flag.check_latest)/*non-returning test after compress*/)) {
-            version_print_notice_if_has_newer();
-            tip_print();
-        }
-
-        if (is_error && flag.debug_threads)
-            threads_write_log (true);
-            
-        if (show_stack) 
-            threads_print_call_stack(); // this works ok on mac, but does not print function names on Linux (even when compiled with -g)
-
-        // this is normally blocked, it runs only with certain flags (see code)
-        buflist_test_overflows_all_vbs (is_error ? "exit_on_error" : "on_exit", true);
-
-        if (flag.log_filename) {
-            iprintf ("%s - execution ended %s\n", str_time().s, is_error ? "with an error" : "normally");
-            fclose (info_stream);
-        } 
-
-        if (is_error) {
-            close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
-            close (2);
-            url_close_remote_file_stream (NULL);  // <--- BREAKPOINT BRK
-            file_kill_external_compressors(); 
-        
-            // cancel all other compute threads before closing z_file, so other threads don't attempt to access it 
-            // (eg. z_file->data_type) and get a segmentation fault.
-            threads_cancel_other_threads();
-        }
-
-        // if we're in ZIP - delete z_file
-        if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) 
-            main_delete_zfile_on_error (is_error);
-
-        if (is_error) // call after canceling the writing threads 
-            file_put_data_abort();
-
-        fflush (stdout);
-        fflush (stderr);
-        
-        if (!is_error) MAIN0 ("Exiting : Success"); 
-
-        threads_finalize();
-
-        // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
-        if (arch_is_valgrind()) 
-            main_free_all_on_error();
-    }
-
-    else
-        sleep (10000); // wait to be killed by first thread that is executing in DO_ONCE
-
-    exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
-} 
-
-void noreturn main_restart_on_error (rom add_cmd_option)
-{
-#ifndef _WIN32s
-    if (flag.restarted) exit_on_error (true); // if this is already a restarted process - we don't restart again
-
-    DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
-
-        fprintf (stderr, "\nAttempting to recover by restarting with %s", add_cmd_option); 
-
-        // case: skip freeing buffers since we're exiting any, UNLESS run under valgrind - in which case we free, so we can detect true memory leaks
-        if (!arch_is_valgrind())
-            flag.let_OS_cleanup_on_exit = true;  
-
-        if (flag.debug_threads)
-            threads_write_log (true);
-
-        // this is normally blocked, it runs only with certain flags (see code)
-        buflist_test_overflows_all_vbs ("main_restart_on_error", true);
-
-        if (flag.log_filename) {
-            iprintf ("%s - execution errored, restarting with %s\n", str_time().s, add_cmd_option);
-            fclose (info_stream);
-        } 
-
-        // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
-        int save_stdout = dup (1);
-        int save_stderr = dup (2);
-        close (1);   
-        close (2);
-
-        url_close_remote_file_stream (NULL);  
-        file_kill_external_compressors(); 
-    
-        // cancel all other compute threads before closing z_file, so other threads don't attempt to access it 
-        // (eg. z_file->data_type) and get a segmentation fault.
-        threads_cancel_other_threads();
-
-        // if we're in ZIP - delete z_file
-        if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary)
-            main_delete_zfile_on_error (true);
-
-        file_put_data_abort();
-
-        dup2 (save_stdout, 1); // restore - inherited through execvp
-        dup2 (save_stderr, 2);
-        
-        fflush (stdout);
-        fflush (stderr);
-        
-        threads_finalize();
-
-        // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
-        if (arch_is_valgrind()) 
-            main_free_all_on_error();
-    }
-
-    else
-        sleep (10000); // wait to be killed by first thread that is executing in DO_ONCE
-
-    // restart with extra command line option(s) - but not if we are already restarted
-    rom argv[process_argc + 3];
-    memcpy (argv, process_argv, process_argc * sizeof (rom));
-    argv[process_argc]     = add_cmd_option;
-    argv[process_argc + 1] = "--restarted"; // prevent recursive restarting
-    argv[process_argc + 2] = NULL;  // list terminator
-    
-    execvp (argv[0], (char **)argv); // doesn't normally return
-    ABORT ("execvp(%s) failed: %s", argv[0], strerror (errno));
-
-#else 
-    exit_on_error (true); // Not supported on Windows yet
-#endif
 }
 
 static void main_print_help (bool explicit)
@@ -564,8 +443,8 @@ static void main_genozip (rom txt_filename,
 
     // skip this file if its size is 0 or it is a .genozip file
     if (!txt_file) {
-        // note: we already handled the .genozip file case in file_open_txt_read_test_valid_dt
-        if (!filename_has_ext (txt_filename, ".genozip")) 
+        // case for skipping not already handled in file_open_txt_read_test_valid_dt
+        if (!was_most_recent_file_skipped()) 
             WARN ("Cannot compress file %s because its size is 0 - skipping it", txt_filename);
 
         return;
@@ -818,14 +697,21 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
     RESTORE_VALUE (txt_file);
 }
 
-static void set_exe_type (rom argv0)
+static void set_exe_type (int argc, char *argv[])
 {
-    rom bn = filename_base (argv0, false, NULL, NULL, 0);
+    rom bn = filename_base (argv[0], false, NULL, NULL, 0);
     
     if      (strstr (bn, "genols"))    exe_type = EXE_GENOLS;   // captures genols-debug, genols.exe etc
     else if (strstr (bn, "genocat"))   exe_type = EXE_GENOCAT;
     else if (strstr (bn, "genounzip")) exe_type = EXE_GENOUNZIP;
-else                                   exe_type = EXE_GENOZIP; // default
+    else                               exe_type = EXE_GENOZIP; // default
+
+    if (exe_type == EXE_GENOZIP)
+        for (int i=1; i < argc; i++)
+            if (!strcmp (argv[i], "-d") || !strcmp (argv[i], "--decompress")) {
+                exe_type = EXE_GENOUNZIP;
+                break;
+            }
 
     FREE (bn);
 }
@@ -868,23 +754,20 @@ static void main_no_files (int argc)
 }
 
 int main (int argc, char *argv[])
-{      
-    process_argv = argv;
-    process_argc = argc;
-
+{     
     flag.test_i = getenv (GENOZIP_TEST);
     if (flag.test_i && !flag.test_i[0]) flag.test_i = NULL; // empty GENOZIP_TEST is the same as no GENOZIP_TEST
 
     flag.debug_or_test = flag.debug || flag.test_i;
+    error_initialize (argc, argv);
     buf_initialize(); 
-    set_exe_type (argv[0]);
+    set_exe_type (argc, argv);
 
     // When debugging with Visual Studio Code, its debugger wrapper adds 3 args: "2>CON", "1>CON", "<CON". We remove them.
     if (argc >= 4 && !strcmp (argv[argc-1], "<CON")) argc -= 3;
 
     filename_base (argv[0], true, "(executable)", global_cmd, sizeof(global_cmd)); // global var
 
-    info_stream = stdout; // may be changed during initialization
     profiler_initialize();
     arch_initialize (argv[0]);
     evb = vb_initialize_nonpool_vb (VB_ID_EVB, DT_NONE, "main_thread");
@@ -894,10 +777,6 @@ int main (int argc, char *argv[])
     dt_initialize();
 
     flags_init_from_command_line (argc, argv); // also sets command and hence IS_ZIP, IS_PIZ etc
-
-    MAIN0 ("Starting main"); // after top_debug is set
-
-    if (is_genozip && IS_PIZ) exe_type = EXE_GENOUNZIP; // treat "genozip -d" as genounzip
 
     // --make-reference might be called by genocat or genounzip from ref_fasta_to_ref - we treat it as genozip
     if (flag.make_reference) {
@@ -922,8 +801,10 @@ int main (int argc, char *argv[])
 
     unsigned num_z_files=0;
     
-    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST) 
+    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST || IS_SHOW_BAI) 
         main_get_filename_list (argc - optind, &argv[optind], &num_z_files);
+
+    MAIN0 ("Starting main"); // after explicit_quiet is set main_get_filename_list->flags_update
 
     ARRAY (rom , input_files, input_files_buf);
 
@@ -991,14 +872,16 @@ int main (int argc, char *argv[])
         if (next_input_file || !isatty (0)) { // either the user specified a file, or we are receiving input redirection
             switch (command) {
                 case ZIP  : main_genozip (next_input_file, 
-                                        (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
-                                        file_i, !next_input_file || is_last_txt_file); 
+                                          (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
+                                          file_i, !next_input_file || is_last_txt_file); 
                             break;
 
                 case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 
                             break;           
 
                 case SHOW_HEADERS : genocat_show_headers (next_input_file); break;
+                            
+                case SHOW_BAI : bai_show (next_input_file); break;
                             
                 case LIST : genols (next_input_file, false, NULL, false); break;
 
@@ -1013,7 +896,7 @@ int main (int argc, char *argv[])
                     if (arch_get_max_resident_set() > arch_get_physical_mem_size() GB / 4)
                         vb_dehoard_memory (false);
 
-                    buf_low_level_release_memory_back_to_kernel();
+                    return_freed_memory_to_kernel();
                 }
             }
         }

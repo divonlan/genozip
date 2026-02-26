@@ -584,7 +584,7 @@ bool FUNC(ConstBitsP bits, uint64_t offset, uint64_t *result) \
     uint64_t i = bitset64_wrd(offset); \
     uint64_t w = GET(bits->words[i]) & ~bitmask64(bitset64_idx(offset)); \
     \
-    while(1) { \
+    while (1) { \
         if (w > 0) { \
             uint64_t pos = i * WORD_SIZE + trailing_zeros(w); \
             if (pos < bits->nbits) { *result = pos; return true; } \

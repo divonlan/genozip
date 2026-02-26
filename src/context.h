@@ -237,7 +237,8 @@ extern StrTextMegaLong ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_in
 extern rom ctx_get_z_snip_ex (ConstContextP zctx, WordIndex z_node_index, pSTRp(snip));
 extern StrTextMegaLong ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index); 
 
-extern WordIndex ctx_get_word_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); // PIZ
+extern void ctx_get_word_index_by_snip_initialize (Did did_i); // PIZ
+extern WordIndex ctx_get_word_index_by_snip (Did did_i, STRp(snip)); // PIZ
 
 extern WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(snip)); 
 

@@ -148,8 +148,8 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #ifdef DEBUG
 #define RECONSTRUCT(_s,_s_len)                                                  \
     ({ uint32_t new_len = (uint32_t)(_s_len); /* copy in case caller uses ++ */ \
-       ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%"PRIu64" str_len=%u vb->txt_data.size=%u. vb->txt_data dumped to %s", \
-               vb->txt_data.len, new_len, (uint32_t)vb->txt_data.size, txtfile_dump_vb ((VBlockP)(vb), z_name, NULL).s);  /* leave vb->txt_data.len 64b to detect bugs */     \
+       ASSPIZ (vb->txt_data.len + new_len <= vb->txt_data.size, "RECONSTRUCT: txt_data overflow: txt_data.len=%"PRIu64" str_len=%u vb->txt_data.size=%u", \
+               vb->txt_data.len, new_len, (uint32_t)vb->txt_data.size);  /* leave vb->txt_data.len 64b to detect bugs */     \
        memcpy (BAFTtxt, (_s), new_len);                                         \
        Ltxt += new_len; })
 #else
@@ -194,3 +194,4 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #define RECONSTRUCT_BIN8(n)  RECONSTRUCT (&n, 1)
 #define RECONSTRUCT_BIN16(n) ({ uint16_t lten = (uint16_t)(n); lten = LTEN16(lten); RECONSTRUCT (&lten, sizeof (uint16_t)); })
 #define RECONSTRUCT_BIN32(n) ({ uint32_t lten = (uint32_t)(n); lten = LTEN32(lten); RECONSTRUCT (&lten, sizeof (uint32_t)); })
+#define RECONSTRUCT_BIN64(n) ({ uint64_t lten = (uint64_t)(n); lten = LTEN64(lten); RECONSTRUCT (&lten, sizeof (uint64_t)); })

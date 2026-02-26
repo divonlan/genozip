@@ -126,8 +126,8 @@ extern void noreturn ref_cache_hold (rom handle_str);
 extern void ref_cache_ls (void);
 
 // encoding of A,C,G,T to 0-3 - everything else in is 4
-static inline uint32_t nuke_encode      (char c) { return c=='A'?0 : c=='C'?1 : c=='G'?2 : c=='T'?3 : 4; }
-static inline uint32_t nuke_encode_comp (char c) { return c=='T'?0 : c=='G'?1 : c=='C'?2 : c=='A'?3 : 4; }
+static inline uint32_t nuke_encode      (char c) { return c=='A'?0 : c=='T'?3 : c=='C'?1 : c=='G'?2 : 4; } // test AT first (A,T ~30% of human genome each; G,C ~20%)
+static inline uint32_t nuke_encode_comp (char c) { return c=='T'?0 : c=='A'?3 : c=='G'?1 : c=='C'?2 : 4; }
 static inline uint32_t nuke_encode_dir (char c, bool is_forward) { return is_forward ? nuke_encode(c) : nuke_encode_comp(c); }
 
 // encoding of A,C,G,T to 0-3, encodes IUPACs to one of their bases 0-3, and everything else to 0

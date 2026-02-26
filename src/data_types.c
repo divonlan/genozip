@@ -69,8 +69,8 @@ DataType dt_get_dt_for_genozip_header (DataType dt, Codec src_codec)
 {
     return (dt == DT_VCF && src_codec == CODEC_BCF)  ? DT_BCF  // note: this goes into the GenozipHeader, but converted in piz to z_file->data_type=VCF & z_file->source_code=CODEC_BCF 
          : (dt == DT_BAM && src_codec == CODEC_CRAM) ? DT_CRAM // note: likewise
-         : (dt == DT_BAM)                               ? DT_SAM
-         :                                                dt;
+         : (dt == DT_BAM)                            ? DT_SAM
+         :                                             dt;
 }
 
 rom dt_name (DataType dt)
@@ -86,14 +86,10 @@ rom dt_name_faf (DataType dt)
 
 rom z_dt_name (void)
 {
-    return (txt_file && IS_SRC_BAM)  ? "BAM" 
-         : (txt_file && IS_SRC_CRAM) ? "CRAM"
-         : (txt_file && IS_SRC_BCF)  ? "BCF"
-         : z_file                    ? dt_name (z_file->data_type)
-         :                             "<no_z_file>";
-}
-
-rom z_dt_name_faf (void) 
-{ 
-    return (z_file && Z_DT(FASTQ) && FAF) ? "FASTA" : z_dt_name(); // in case of Deep with FAF, still report SAM/BAM
+    return (z_file && Z_DT(FASTQ) && FAF) ? "FASTA" 
+         : (txt_file && IS_SRC_BAM)       ? "BAM" 
+         : (txt_file && IS_SRC_CRAM)      ? "CRAM"
+         : (txt_file && IS_SRC_BCF)       ? "BCF"
+         : z_file                         ? dt_name (z_file->data_type)
+         :                                  "<no_z_file>";
 }

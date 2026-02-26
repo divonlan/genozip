@@ -132,7 +132,7 @@ static rom bamass_get_one_bam_aln (VBlockFASTQP vb, BAMAlignmentFixedP aln, uint
     if ((*hdr_contig)->ref_index == WORD_INDEX_NONE) 
         UNUSABLE(BA_NOT_IN_REF);
 
-    *sam_flags = (SamFlags){ .value = LTEN16(aln->flag) };
+    *sam_flags = aln->flag;
     if (sam_flags->secondary || sam_flags->supplementary) UNUSABLE(BA_NOT_PRIMARY);
     if (sam_flags->unmapped) UNUSABLE(BA_UNMAPPED);
     
@@ -594,7 +594,7 @@ void fastq_bamass_populate (void)
 
     buf_free (evb->txt_data);   // discard the header
     buf_free (evb->gz_blocks);
-
+    
     flag.preprocessing = PREPROC_RUNNING;
 
     bamass_segconf();
@@ -648,7 +648,8 @@ void fastq_bamass_populate (void)
     // return unused memory to libc
     buf_destroy (bamass_ents_bufs);
     buf_destroy (bamass_alns_bufs);
-    buf_low_level_release_memory_back_to_kernel();
+    return_freed_memory_to_kernel();
+    sam_header_finalize();
     
     COPY_TIMER_EVB (fastq_bamass_populate);
 }
@@ -890,7 +891,7 @@ StrTextLong bamass_dis_ent (VBlockP vb, const BamAssEnt *e, uint64_t qname_hash)
 void fastq_bamass_zip_finalize (bool is_last_fastq) 
 {
     if (flag_show_deep) {
-        iprintf ("\nZIP: %s%s reads breakdown by bammassability:\n", z_dt_name_faf(), IS_R2 ? " (R1+R2)" : "");
+        iprintf ("\nZIP: %s%s reads breakdown by bammassability:\n", z_dt_name(), IS_R2 ? " (R1+R2)" : "");
         
         for (int i=BA_AFTER+1; i < NUM_DEEP_STATS_ZIP; i++) 
             if (z_file->deep_stats[i])

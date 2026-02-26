@@ -714,7 +714,9 @@ static StrText comp_name_ex (CompIType comp_i, SectionType st)
 StrText vb_name (VBlockP vb)
 {
     StrText s;
-    if (vb && vb->vblock_i)
+    if (vb && vb->pool == POOL_BGZF)
+        snprintf (s.s, sizeof (s.s), "BGZF/%u", vb->vblock_i);
+    else if (vb && vb->vblock_i)
         snprintf (s.s, sizeof (s.s), "%.10s/%u", comp_name (vb->comp_i), vb->vblock_i);
     else if (vb && segconf_running)
         strcpy (s.s, "SEGCONF/0");
