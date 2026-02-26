@@ -15,6 +15,7 @@ OBJDIR_WINDOWS := objdir.windows
 OBJDIR_OSX_ARM := objdir.osx-arm
 
 architecture := $(shell uname -sm | sed -e 's/amd/x86_/')
+architecture := $(subst aarch64,arm64,$(architecture))
 
 ifeq ($(OS),Windows_NT)
 	Windows := 1
@@ -41,7 +42,7 @@ endif
 ifdef BUILD_PREFIX # conda 
 	ifdef Windows
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
-		CC=g++
+		CXX=g++
 		LDFLAGS  += -L$(PREFIX)/Library/lib
 		CFLAGS   += -I$(PREFIX)/Library/include 
 	endif
@@ -86,12 +87,14 @@ endif
 
 ifdef osx_arm64
 	noarch := 1
-	# arm64 := 1
+	# arm64 := 1 # needed for SMID .S files
 	AS = $(CC) -D__ASSEMBLY__ -c
 	DEBUGFLAGS_AS = -g 
 	DEBUGFLAGS += -fsanitize=address -Dsanitize_address -fsanitize=undefined
 	# clang flags
+ifndef BUILD_PREFIX # not conda 
 	CFLAGS += -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk 
+endif
 	ARCHS = arm64
 	VALID_ARCHS = arm64 
 endif
@@ -329,7 +332,9 @@ OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE) 
 all   : CFLAGS += $(OPTFLAGS) 
 all   : CXXFLAGS += $(OPTFLAGS) 
 all   : $(OBJDIR) $(EXECUTABLES) 
+ifndef Windows
 	@chmod +x test.sh
+endif
 
 # ifdef Windows
 # debug opt : LDFLAGS += -lbacktrace
