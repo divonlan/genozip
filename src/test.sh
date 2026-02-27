@@ -519,6 +519,9 @@ batch_special_algs()
     test_header "LONGR edge case regression test"
     $genozip ${TESTDIR}/regression.longr-issue.bam -ft || exit 1 
 
+    test_header "BAD qual disqualifies alignment from PRIM"
+    $genozip ${TESTDIR}/regression.bad-prim-qual.sam -ft || exit 1 
+
     test_header "VCF empty sample fields regression test"
     $genozip ${TESTDIR}/regression.empty-sample-fields.vcf -ft || exit 1 
 
@@ -1411,12 +1414,14 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
     fi
 
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*vcf.bz2 test.*sam* test.*bam \
-                   test.*fq* test.*fa* \
+    local files=( `cd $TESTDIR; ls -1 test.*.vcf test.*.vcf.gz test.*.vcf.bz2 \
+                   test.*.sam test.*.sam.gz test.*.sam.xz test.*.sam.bz2 test.*.bam \
+                   test.*.fq test.*.fq.gz test.*.fq.bz2 \
+                   test.*.fa test.*.fa.gz test.*.fasta test.*.fasta.gz *.fasta.xz *.fasta.zip \
                    test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
                    test.*txt* test.*pbi \
                    | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$debug_filter" \
-                   | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora"` )
+                   | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora|test-bai|text-tbi"` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 
@@ -3150,7 +3155,6 @@ case $GENOZIP_TEST in
 80)  batch_basic basic.gtf     latest  ;;
 81)  batch_basic basic.me23    latest  ;;
 82)  batch_basic basic.generic latest  ;;
-
 * ) break; # break out of loop
 
 esac

@@ -16,7 +16,7 @@
             // "program": "${workspaceFolder}/src/genounzip.exe",
             // "program": "${workspaceFolder}/src/genols-debug.exe",
 
-"args" : ["--activate"],
+            "args" : ["-fo", "bug.bam.genozip", "-X", "--biopsy=9", "private/test/test.human2.bam"],
 
             "environment": [
                 { "name": "GENOZIP_REFERENCE", "value": "c:\\Users\\divon\\genozip/public", },

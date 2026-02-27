@@ -42,7 +42,7 @@ endif
 ifdef BUILD_PREFIX # conda 
 	ifdef Windows
 		CC=gcc # in Windows, override conda's default Visual C with gcc 
-		CXX=g++
+		CXX=gcc
 		LDFLAGS  += -L$(PREFIX)/Library/lib
 		CFLAGS   += -I$(PREFIX)/Library/include 
 	endif
@@ -439,11 +439,12 @@ GENDICT_OBJS := $(addprefix $(OBJDIR)/,$(GENDICT_SRCS:.c=.o))
 # Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
 # Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
 ifdef Windows
+ifndef BUILD_PREFIX # not conda
 OB := \( # an escaped open-bracket sent as-is to egrep
 dict_id_gen.h : $(shell egrep -w "GENDICT|SPECIAL $(OB)" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
 	@./dict_id_gen.sh $(CC)
-
+endif
 endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
 
 genozip$(EXE): dict_id_gen.h $(OBJS) $(DISTOBJ)

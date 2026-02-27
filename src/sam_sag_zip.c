@@ -446,8 +446,13 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), boo
     if (comp_i == SAM_COMP_DEPN && !sam_might_have_saggies_in_other_VBs (vb, dl, n_alns)) 
         comp_i = COMP_MAIN;
 
-    if (comp_i != COMP_MAIN) {
+    // verify QUAL (a bad QUAL can be segged normally but not gencomp because it can't be huffman-compressed during ingestion)
+    if (comp_i != COMP_MAIN && 
+        (  (is_bam  && *B8(vb->txt_data, dl->QUAL.index) != 0xff && !str_is_in_range (STRtxt(dl->QUAL), 0, 93))
+        || (!is_bam && *B8(vb->txt_data, dl->QUAL.index) != '*'  && !str_is_in_range (STRtxt(dl->QUAL), 33, 126))))
+         comp_i = COMP_MAIN; // bad qual
 
+    if (comp_i != COMP_MAIN) {
         // store location where this gc line should be inserted    
         gencomp_seg_add_line (VB, comp_i, STRa(alignment));
         
