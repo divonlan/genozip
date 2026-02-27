@@ -30,15 +30,9 @@
  *          Addison-Wesley, 1983. ISBN 0-201-06672-6.
  */
 
-/* @(#) $Id$ */
-
-/* #define GEN_TREES_H */
+ /* File has been extensively modified to fit Genozip's purposes */
 
 #include "deflate.h"
-
-#ifdef ZLIB_DEBUG
-#  include <ctype.h>
-#endif
 
 /* ===========================================================================
  * Constants
@@ -157,15 +151,8 @@ local void bi_flush       OF((deflate_state *s));
 local void gen_trees_header OF((void));
 #endif
 
-#ifndef ZLIB_DEBUG
-#  define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
+#define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
    /* Send a code of the given tree. c and tree must not have side effects */
-
-#else /* !ZLIB_DEBUG */
-#  define send_code(s, c, tree) \
-     { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
-       send_bits(s, tree[c].Code, tree[c].Len); }
-#endif
 
 /* ===========================================================================
  * Output a short LSB first on the stream.
@@ -180,33 +167,6 @@ local void gen_trees_header OF((void));
  * Send a value on a given number of bits.
  * IN assertion: length <= 16 and value fits in length bits.
  */
-#ifdef ZLIB_DEBUG
-local void send_bits      OF((deflate_state *s, int value, int length));
-
-local void send_bits(s, value, length)
-    deflate_state *s;
-    int value;  /* value to send */
-    int length; /* number of bits */
-{
-    Tracevv((stderr," l %2d v %4x ", length, value));
-    Assert(length > 0 && length <= 15, "invalid length");
-    s->bits_sent += (ulg)length;
-
-    /* If not enough room in bi_buf, use (valid) bits from bi_buf and
-     * (16 - bi_valid) bits from value, leaving (width - (16-bi_valid))
-     * unused bits in value.
-     */
-    if (s->bi_valid > (int)Buf_size - length) {
-        s->bi_buf |= (ush)value << s->bi_valid;
-        put_short(s, s->bi_buf);
-        s->bi_buf = (ush)value >> (Buf_size - s->bi_valid);
-        s->bi_valid += length - Buf_size;
-    } else {
-        s->bi_buf |= (ush)value << s->bi_valid;
-        s->bi_valid += length;
-    }
-}
-#else /* !ZLIB_DEBUG */
 
 #define send_bits(s, value, length) \
 { int len = length;\
@@ -221,8 +181,6 @@ local void send_bits(s, value, length)
     s->bi_valid += len;\
   }\
 }
-#endif /* ZLIB_DEBUG */
-
 
 /* the arguments must not have side effects */
 
@@ -315,9 +273,7 @@ local void tr_static_init()
  * Genererate the file trees.h describing the static trees.
  */
 #ifdef GEN_TREES_H
-#  ifndef ZLIB_DEBUG
-#    include <stdio.h>
-#  endif
+#  include <stdio.h>
 
 #  define SEPARATOR(i, last, width) \
       ((i) == (last)? "\n};\n\n" :    \
@@ -392,10 +348,6 @@ void ZLIB_INTERNAL _tr_init(s)
 
     s->bi_buf = 0;
     s->bi_valid = 0;
-#ifdef ZLIB_DEBUG
-    s->compressed_len = 0L;
-    s->bits_sent = 0L;
-#endif
 
     /* Initialize the first block of the first file: */
     init_block(s);
@@ -872,12 +824,6 @@ void ZLIB_INTERNAL _tr_stored_block(s, buf, stored_len, last)
     put_short(s, (ush)~stored_len);
     zmemcpy(s->pending_buf + s->pending, (Bytef *)buf, stored_len);
     s->pending += stored_len;
-#ifdef ZLIB_DEBUG
-    s->compressed_len = (s->compressed_len + 3 + 7) & (ulg)~7L;
-    s->compressed_len += (stored_len + 4) << 3;
-    s->bits_sent += 2*16;
-    s->bits_sent += stored_len<<3;
-#endif
 }
 
 /* ===========================================================================
@@ -898,9 +844,7 @@ void ZLIB_INTERNAL _tr_align(s)
 {
     send_bits(s, STATIC_TREES<<1, 3);
     send_code(s, END_BLOCK, static_ltree);
-#ifdef ZLIB_DEBUG
-    s->compressed_len += 10L; /* 3 for block type, 7 for EOB */
-#endif
+
     bi_flush(s);
 }
 
@@ -978,18 +922,12 @@ void ZLIB_INTERNAL _tr_flush_block(s, buf, stored_len, last)
         send_bits(s, (STATIC_TREES<<1)+last, 3);
         compress_block(s, (const ct_data *)static_ltree,
                        (const ct_data *)static_dtree);
-#ifdef ZLIB_DEBUG
-        s->compressed_len += 3 + s->static_len;
-#endif
     } else {
         send_bits(s, (DYN_TREES<<1)+last, 3);
         send_all_trees(s, s->l_desc.max_code+1, s->d_desc.max_code+1,
                        max_blindex+1);
         compress_block(s, (const ct_data *)s->dyn_ltree,
                        (const ct_data *)s->dyn_dtree);
-#ifdef ZLIB_DEBUG
-        s->compressed_len += 3 + s->opt_len;
-#endif
     }
     Assert (s->compressed_len == s->bits_sent, "bad compressed size");
     /* The above check is made mod 2^32, for files larger than 512 MB
@@ -999,9 +937,6 @@ void ZLIB_INTERNAL _tr_flush_block(s, buf, stored_len, last)
 
     if (last) {
         bi_windup(s);
-#ifdef ZLIB_DEBUG
-        s->compressed_len += 7;  /* align on byte boundary */
-#endif
     }
     Tracev((stderr,"\ncomprlen %lu(%lu) ", s->compressed_len>>3,
            s->compressed_len-7*last));
@@ -1197,7 +1132,4 @@ local void bi_windup(s)
     }
     s->bi_buf = 0;
     s->bi_valid = 0;
-#ifdef ZLIB_DEBUG
-    s->bits_sent = (s->bits_sent+7) & ~7;
-#endif
 }

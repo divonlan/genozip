@@ -156,7 +156,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  vblock.c regions.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c					\
 		  version.c huffman.c user_message.c b250.c qname_filter.c
 		  
-ZLIB_SRCS  = zlib/gzlib.c zlib/zutil.c zlib/deflate.c zlib/trees.c
+ZLIB_SRCS  = zlib/zutil.c zlib/deflate.c zlib/trees.c
 
 BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
 

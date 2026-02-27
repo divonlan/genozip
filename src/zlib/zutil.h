@@ -8,10 +8,9 @@
    subject to change. Applications should only use zlib.h.
  */
 
-/* @(#) $Id$ */
+ /* File has been extensively modified to fit Genozip's purposes */
 
-#ifndef ZUTIL_H
-#define ZUTIL_H
+#pragma once
 
 #ifdef HAVE_HIDDEN
 #  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
@@ -182,24 +181,12 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
    void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
 #endif
 
-/* Diagnostic functions */
-#ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-#  define Assert(cond,msg) ASSERT0 (cond, msg)
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
-#else
 #  define Assert(cond,msg)
 #  define Trace(x)
 #  define Tracev(x)
 #  define Tracevv(x)
 #  define Tracec(c,x)
 #  define Tracecv(c,x)
-#endif
 
 #ifndef Z_SOLO
    voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
@@ -216,4 +203,3 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
                     (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
-#endif /* ZUTIL_H */

@@ -1125,7 +1125,7 @@ static void bai_show_one_bin (BinStructP bin, rom rname_s)
 
         printf ("🧬=%s\t🗑 =%u x 1\t%s=%"PRIu64"%s  "VOFF_RNG_FMT,
                 rname_s, bin->bin, 
-                IS_BAI ? "✅✅✅" : "⌬⌬⌬", bin->n_mapped, 
+                IS_BAI ? "✅✅✅" : "⌬⌬⌬ ", bin->n_mapped, 
                 cond_int (IS_BAI, " ❌❌❌=", bin->n_unmapped), 
                 VOFF_RNG_VAL(bin->contig));
         DO_ONCE if (!flag.quiet) 
