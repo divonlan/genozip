@@ -10,25 +10,26 @@
 #include "vblock.h"
 #include "file.h"
 #include "piz.h"
+#include "dyn_int.h"
 
 //------------------------------------------
 // Storing current line's value in "history"
 //------------------------------------------
 
-// upon dropping a line, we copy its textual history from txt_data to per_line
+// upon dropping a line, we copy its textual history from txt_data to dropped_txt
 void reconstruct_copy_dropped_line_history (VBlockP vb)
 {
     HistoryWord *hw;
 
-    for_ctx_that ((ctx->flags.store_per_line || ctx->flags.spl_custom) && // note: we can't test history.len as the buffer might be used for other purposes if not storing history
-                  ctx->flags.store != STORE_INT && ctx->flags.store != STORE_INDEX &&  // store textual
-                  ctx->history.len32 && // 0 if context is skipped
-                  (hw = B(HistoryWord, ctx->history, vb->line_i))->lookup == LookupTxtData) {
+    for_vctx_that ((vctx->flags.store_per_line || vctx->flags.spl_custom) && // note: we can't test history.len as the buffer might be used for other purposes if not storing history
+                  vctx->flags.store != STORE_INT && vctx->flags.store != STORE_INDEX &&  // store textual
+                  vctx->history.len32 && // 0 if context is skipped
+                  (hw = B(HistoryWord, vctx->history, vb->line_i))->lookup == LookupTxtData) {
 
-        uint32_t per_line_start = ctx->per_line.len32;
-        if (ctx->last_txt.len && hw->len) {
-            buf_add_more (vb, &ctx->per_line, Btxt (hw->index), hw->len, "per_line");
-            BNXTc (ctx->per_line) = 0; // nul-terminate
+        uint32_t per_line_start = vctx->dropped_txt.len32;
+        if (vctx->last_txt.len && hw->len) {
+            buf_add_more (vb, &vctx->dropped_txt, Btxt (hw->index), hw->len, C_DROPPED_TXT);
+            BNXTc (vctx->dropped_txt) = 0; // nul-terminate
         }
 
         hw->lookup = LookupPerLine;
@@ -41,7 +42,7 @@ void reconstruct_store_history (VBlockP vb, ContextP ctx)
 {
     switch (ctx->flags.store) {
         case STORE_INT:   
-            *B(int64_t, ctx->history, vb->line_i) = ctx->last_value.i; 
+            dyn_int_store_history (vb, ctx, ctx->last_value.i);
             break;
 
         case STORE_FLOAT:   
@@ -63,16 +64,16 @@ void reconstruct_store_history (VBlockP vb, ContextP ctx)
     }
 }
 
-// store in history (in per_line), and then rollback reconstruction
+// store in history (in dropped_txt), and then rollback reconstruction
 void reconstruct_store_history_rollback_recon (VBlockP vb, ContextP ctx, rom recon_start)
 {
     HistoryWord *hw = B(HistoryWord, ctx->history, vb->line_i);
-    *hw = (HistoryWord){ .index = ctx->per_line.len32, 
+    *hw = (HistoryWord){ .index = ctx->dropped_txt.len32, 
                          .len = (BAFTtxt - recon_start), 
                          .lookup = LookupPerLine };
 
-    buf_add_more (VB, &ctx->per_line, recon_start, hw->len, "per_line");
-    BNXTc (ctx->per_line) = 0;         // nul-terminate
+    buf_add_more (VB, &ctx->dropped_txt, recon_start, hw->len, C_DROPPED_TXT);
+    BNXTc (ctx->dropped_txt) = 0;         // nul-terminate
     Ltxt = BNUMtxt(recon_start); // remove reconstructed text from txt_data
 }
 
@@ -98,10 +99,10 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
             rom txt = BAFTtxt;
             reconstruct_one_snip (vb, ctx, wi, STRa(snip), RECON_ON, __FUNCLINE);
             
-            *hw = (HistoryWord){ .index = ctx->per_line.len32, .len = (BAFTtxt - txt), .lookup = LookupPerLine };
+            *hw = (HistoryWord){ .index = ctx->dropped_txt.len32, .len = (BAFTtxt - txt), .lookup = LookupPerLine };
 
-            buf_add_more (vb, &ctx->per_line, txt, hw->len, "per_line");
-            BNXTc (ctx->per_line) = 0; // nul-terminate
+            buf_add_more (vb, &ctx->dropped_txt, txt, hw->len, C_DROPPED_TXT);
+            BNXTc (ctx->dropped_txt) = 0; // nul-terminate
             
             Ltxt = BNUMtxt(txt);       // remove reconstructed text from txt_data
         } 
@@ -122,7 +123,7 @@ rom lookup_type_name (LookupType lookup)
 void recon_history_get_historical_snip (VBlockP vb, ContextP ctx, LineIType buddy_line_i, pSTRp(snip))
 {
     ASSPIZ (buddy_line_i != NO_LINE, "No buddy line is set for the current line, while reconstructing %s", ctx->tag_name);
-    ASSPIZ (ctx->history.len32, "ctx->history not allocated for ctx=%s, perhaps seg_initialize did't set store_per_line?", ctx->tag_name);
+    ASSPIZ (ctx->history.len32, "%s.history is not allocated, perhaps seg_initialize did't set store_per_line?", ctx->tag_name);
 
     HistoryWord word = *B(HistoryWord, ctx->history, buddy_line_i);
     BufferP buf=NULL; 
@@ -140,7 +141,7 @@ void recon_history_get_historical_snip (VBlockP vb, ContextP ctx, LineIType budd
                              char_index = B(CtxWord, ctx->word_list, word.index)->char_index; 
                              break;
         case LookupLocal   : buf = &ctx->local    ; break;
-        case LookupPerLine : buf = &ctx->per_line ; break;
+        case LookupPerLine : buf = &ctx->dropped_txt ; break;
         default : ABORT_PIZ ("Invalid value word.lookup=%d", word.lookup);
     }
 

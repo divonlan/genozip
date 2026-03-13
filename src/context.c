@@ -20,7 +20,7 @@
 #include "threads.h"
 #include "aliases.h"
 #include "b250.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 // ZIP only: set a bit in counts of a node, so it is not removed by ctx_shorten_unused_dict_words
 #define COUNT_PROTECTED_FROM_REMOVAL64 0x8000000000000000ULL 
@@ -31,19 +31,19 @@
 #define ZMUTEX(zctx) z_file->ctx_mutex[(zctx)->did_i] // ZIP only
 
 // inserts dict_id->did_i to the map, if one of the two entries is available
-static inline void set_d2d_map (DictIdtoDidMap d2d_map, DictId dict_id, Did did_i)
+static inline void set_d2d_map (ContextArrayP ca, DictId dict_id, Did did_i)
 {
     // thread safety for z_file d2d_map: we don't bother with having a mutex, in the worst case scenario, two threads will test an entry
     // as empty and then both write to it, with one of them prevailing. that's fine (+ Likely its the same did_i anyway).
 
-    if (d2d_map[dict_id.map_key[0]] == DID_NONE)    // d2d_map entry is free
-        d2d_map[dict_id.map_key[0]] = did_i;
+    if (ca->d2d_map[dict_id.map_key[0]] == DID_NONE)    // d2d_map entry is free
+        ca->d2d_map[dict_id.map_key[0]] = did_i;
 
-    else if (d2d_map[dict_id.map_key[0]] == did_i)  // already has requested value - nothing to do 
+    else if (ca->d2d_map[dict_id.map_key[0]] == did_i)  // already has requested value - nothing to do 
         {}
     
-    else if (d2d_map[ALT_KEY(dict_id)] == DID_NONE) // fallback entry is free or we can override it
-        d2d_map[ALT_KEY(dict_id)] = did_i;
+    else if (ca->d2d_map[ALT_KEY(dict_id)] == DID_NONE) // fallback entry is free or we can override it
+        ca->d2d_map[ALT_KEY(dict_id)] = did_i;
 }
 
 // ZIP: add a snip to the dictionary the first time it is encountered in the txt file.
@@ -51,7 +51,7 @@ static inline void set_d2d_map (DictIdtoDidMap d2d_map, DictId dict_id, Did did_
 typedef enum { DICT_VB, DICT_ZF } DictType;
 static inline CharIndex ctx_insert_to_dict (VBlockP vb_of_dict, ContextP ctx, DictType type, STRp(snip))
 {
-    static rom buf_name[2] = { CTX_TAG_DICT, "zctx->dict" };
+    static rom buf_name[2] = { C_DICT, Z_ C_DICT };
 
     buf_alloc (vb_of_dict, &ctx->dict, snip_len + 1, INITIAL_NUM_NODES * MIN_(10, snip_len), char, CTX_GROWTH, buf_name[type]);
 
@@ -308,7 +308,7 @@ static WordIndex ctx_commit_node (VBlockP vb, ContextP zctx, ContextP vctx, STRp
 
     // case: not singleton - we return this (new) node
     else {
-        buf_alloc_zero (evb, &zctx->counts, 1, INITIAL_NUM_NODES, uint64_t, CTX_GROWTH, "zctx->counts");
+        buf_alloc_zero (evb, &zctx->counts, 1, INITIAL_NUM_NODES, uint64_t, CTX_GROWTH, Z_ C_COUNTS);
         zctx->counts.len++; // actually assigned in ctx_merge_in_one_vctx 
 
         if (is_new) *is_new = true;
@@ -322,7 +322,7 @@ static WordIndex ctx_commit_node (VBlockP vb, ContextP zctx, ContextP vctx, STRp
 WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_new/*optional out*/)
 {
     ASSERTNOTNULL (vctx);
-    ASSERT (vctx->dict_id.num, "vctx has no dict_id (did_i=%u)", (unsigned)(vctx - vb->contexts));
+    ASSERT (vctx->dict_id.num, "vctx has no dict_id (did_i=%u)", (unsigned)(vctx - vb->ca.contexts));
     ASSERT (snip || !snip_len, "vctx=%s: snip=NULL but snip_len=%u", vctx->tag_name, snip_len);
     
     WordIndex node_index;
@@ -355,7 +355,7 @@ WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_ne
     // get the node from the hash table if it already exists, or add this snip to the hash table if not
     rom snip_in_dict; // snip address in vctx->dict or vctx->ol_dict (NULL if node is new)
     WordIndex existing_node_index = hash_get_entry_for_seg (vb, vctx, STRa(snip), &snip_in_dict);
-  
+
     if (existing_node_index != WORD_INDEX_NONE) { // existing node found
         (*B32(vctx->counts, existing_node_index))++; // note: counts.len = nodes.len + ol_nodes.len
         if (is_new) *is_new = false;
@@ -369,8 +369,8 @@ WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_ne
     }
     
     // this snip isn't in the hash table - its a new snip
-    buf_alloc (vb, &vctx->nodes,  1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, CTX_TAG_NODES);
-    buf_alloc (vb, &vctx->counts, 1, INITIAL_NUM_NODES, uint32_t,  CTX_GROWTH, CTX_TAG_COUNTS);
+    buf_alloc (vb, &vctx->nodes,  1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, C_NODES);
+    buf_alloc (vb, &vctx->counts, 1, INITIAL_NUM_NODES, uint32_t,  CTX_GROWTH, C_COUNTS);
 
     BNXT (CtxNode, vctx->nodes) = (CtxNode){
         .snip_len   = snip_len,
@@ -456,7 +456,7 @@ void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index)
 // ZIP compute thread: overlay and/or copy the current state of the global contexts to the vb, ahead of segging this vb.
 void ctx_clone (VBlockP vb)
 {
-    Did z_num_contexts = load_acquire (z_file->num_contexts);
+    Did z_num_contexts = load_acquire (z_file->ca.num_contexts);
 
     START_TIMER; // including mutex wait time
 
@@ -486,12 +486,12 @@ void ctx_clone (VBlockP vb)
 
             if (dict_ctx->dict.len) {  // there's something already in this dict
                 // overlay the global dict and nodes - these will be treated as read-only by the VB
-                buf_overlay (vb, &vctx->ol_dict,  &dict_ctx->dict,  "contexts->ol_dict");   
-                buf_overlay (vb, &vctx->ol_nodes, &dict_ctx->nodes, "contexts->ol_nodes");   
+                buf_overlay (vb, &vctx->ol_dict,  &dict_ctx->dict,  C_OL_DICT);   
+                buf_overlay (vb, &vctx->ol_nodes, &dict_ctx->nodes, C_OL_NODES);   
 
                 // overlay the hash table, that may still change by future vb's merging... this vb will only use
                 // entries that are up to this merge_num
-                buf_overlay (vb, &vctx->global_hash, &dict_ctx->global_hash, "contexts->global_hash");
+                buf_overlay (vb, &vctx->global_hash, &dict_ctx->global_hash, C_GLOBAL_HASH);
 
                 vctx->num_new_entries_prev_merged_vb = dict_ctx->num_new_entries_prev_merged_vb;
             }
@@ -520,11 +520,11 @@ void ctx_clone (VBlockP vb)
             // stuff that doesn't require mutex
         
             if (vctx->ol_nodes.len) {
-                buf_alloc_zero (vb, &vctx->counts, 0, vctx->ol_nodes.len, uint32_t, CTX_GROWTH, CTX_TAG_COUNTS);
+                buf_alloc_zero (vb, &vctx->counts, 0, vctx->ol_nodes.len, uint32_t, CTX_GROWTH, C_COUNTS);
                 vctx->counts.len = vctx->ol_nodes.len;
             }
 
-            set_d2d_map (vb->d2d_map, vctx->dict_id, did_i);
+            set_d2d_map (&vb->ca, vctx->dict_id, did_i);
 
             ctx_init_iterator (vctx);
 
@@ -536,13 +536,17 @@ void ctx_clone (VBlockP vb)
         if (!achieved_something) sched_yield(); // all the contexts we still need to clone are locked - allow context switch.
     }
 
-    vb->num_contexts = z_num_contexts;
+    vb->ca.num_contexts = z_num_contexts;
        
     COPY_TIMER (ctx_clone);
 }
 
-static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdtoDidMap d2d_map, STRp(tag_name))
+static void ctx_initialize_ctx (ContextArrayP ca, Did did_i, DictId dict_id, STRp(tag_name))
 {
+    ASSERT (did_i < MAX_DICTS, "did_i=%u ∉ [0,%u]", did_i, MAX_DICTS-1);
+
+    ContextP ctx = &ca->contexts[did_i];
+    
     // common ZIP/PIZ fields
     ctx->did_i       = did_i;
     ctx->dict_did_i  = did_i;
@@ -561,7 +565,7 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
 
     ctx_init_iterator (ctx);
     
-    set_d2d_map (d2d_map, dict_id, did_i);
+    set_d2d_map (ca, dict_id, did_i);
 
     // add a user-requested SEC_COUNTS section
     if (IS_ZIP) {
@@ -569,10 +573,10 @@ static void ctx_initialize_ctx (ContextP ctx, Did did_i, DictId dict_id, DictIdt
         ctx->tag_i    = -1;
         ctx->dict.can_be_big = true; // don't warn if dict buffers grow really big
     
-        if (flag.show_one_counts.num == dict_id_typeless (ctx->dict_id).num) 
+        if (flag_is_δ (show_counts, ctx->dict_id)) 
             ctx->counts_section = ctx->no_stons = true;
 
-        if (z_file && is_p_in_range (ctx, z_file->contexts, sizeof(ContextArray))) { // z_file context
+        if (z_file && ca == &z_file->ca) { // z_file context
             mutex_initialize (ZMUTEX(ctx));
             buf_set_shared (&ctx->dict);
             buf_set_shared (&ctx->nodes);
@@ -592,6 +596,8 @@ WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (snip),
                                WordIndex ref_index) // only relevant for CHROM
 {
     decl_zctx(dst_did_i);
+
+    ASSERT (zctx->dict_did_i == zctx->did_i, "cannot populate an alias context: %s", zctx->tag_name);
     
     // zctx is already initialized, but this is the first call to populate it with a snip
     if (!buf_is_alloc (&zctx->global_hash)) { 
@@ -617,11 +623,11 @@ WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (snip),
 // 1. when starting to zip a new file, with pre-loaded external reference, we integrate the reference's FASTA CONTIG
 //    dictionary as the chrom dictionary of the new file
 // 2. in SAM, DENOVO: after creating contigs from SQ records, we copy them to the RNAME dictionary
-void ctx_populate_zf_ctx_from_contigs (Did dst_did_i, ConstContigPkgP ctgs)
+void ctx_populate_zf_ctx_from_contigs (ConstContigPkgP ctgs)
 {
     if (!ctgs->contigs.len) return; // nothing to do
 
-    decl_zctx(dst_did_i);
+    decl_zctx(CHROM);
     
     // initialize if empty ctx. note: it might not be empty if contigs have been added already from the txt header
     if (!buf_is_alloc (&zctx->global_hash)) { 
@@ -651,16 +657,16 @@ void ctx_populate_zf_ctx_from_contigs (Did dst_did_i, ConstContigPkgP ctgs)
 // vb already inserted it to z_file
 ContextP ctx_get_existing_zctx (DictId dict_id)
 {
-    Did did_i = get_matching_did_i_from_map (z_file->contexts, z_file->d2d_map, dict_id);
+    Did did_i = get_matching_did_i_from_map (&z_file->ca, dict_id);
     
     if (did_i != DID_NONE)
-        return &z_file->contexts[did_i];
+        return &z_file->ca.contexts[did_i];
     
     else {
-        Did z_num_contexts = IS_ZIP ? load_acquire (z_file->num_contexts)
-                                    : z_file->num_contexts; // in PIZ, num_contexts is immutable after loading, and during loading only main thread accesses, so no need for atomic
+        Did z_num_contexts = IS_ZIP ? load_acquire (z_file->ca.num_contexts)
+                                    : z_file->ca.num_contexts; // in PIZ, num_contexts is immutable after loading, and during loading only main thread accesses, so no need for atomic
 
-        for (ContextP zctx=&z_file->contexts[0]; zctx < &z_file->contexts[z_num_contexts]; zctx++)
+        for (ContextP zctx=z_file->ca.contexts; zctx < &z_file->ca.contexts[z_num_contexts]; zctx++) // careful! not for_zctx, because z_file->ca.num_contexts might change by another thread
             if (dict_id.num == zctx->dict_id.num) 
                 return zctx;
     }
@@ -670,11 +676,11 @@ ContextP ctx_get_existing_zctx (DictId dict_id)
 
 static ContextP ctx_add_new_zf_ctx_do (STRp (tag_name), DictId dict_id, Did st_did_i, bool is_stats_parent)
 {
-    ASSERT (z_file->num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
+    ASSERT (z_file->ca.num_contexts+1 < MAX_DICTS, // load num_contexts - this time with mutex protection - it could have changed
             "z_file has more dict_id types than MAX_DICTS=%u", MAX_DICTS);
 
-    decl_zctx(z_file->num_contexts);
-    zctx->did_i           = z_file->num_contexts; 
+    decl_zctx(z_file->ca.num_contexts);
+    zctx->did_i           = z_file->ca.num_contexts; 
     zctx->dict_id         = dict_id;
     zctx->st_did_i        = st_did_i;
     zctx->dict_did_i      = zctx->did_i; // this is a new context -> it is not a predefined context -> it is not an alias
@@ -687,10 +693,10 @@ static ContextP ctx_add_new_zf_ctx_do (STRp (tag_name), DictId dict_id, Did st_d
 
     // only when the new entry is finalized, do we increment num_contexts, atmoically, this is because
     // other threads might access it without a mutex when searching for a dict_id
-    __atomic_fetch_add (&z_file->num_contexts, 1, __ATOMIC_ACQ_REL); 
+    __atomic_fetch_add (&z_file->ca.num_contexts, 1, __ATOMIC_ACQ_REL); 
 
     // only after updating num_contexts, we add it to the d2d_map. 
-    set_d2d_map (z_file->d2d_map, zctx->dict_id, zctx->did_i);
+    set_d2d_map (&z_file->ca, zctx->dict_id, zctx->did_i);
 
     buf_set_shared (&zctx->dict);
     buf_set_shared (&zctx->nodes);
@@ -734,10 +740,10 @@ ContextP ctx_get_zctx_from_vctx (ConstContextP vctx,
                                  bool follow_alias)      // if true, returns the ALIAS_DICT context if there is one
 {
     if (vctx->did_i < DTFZ(num_fields)) 
-        return follow_alias ? ZCTX(ZCTX(vctx->did_i)->dict_did_i) : ZCTX(vctx->did_i); // aliases only exist for predefined contexts
+        return follow_alias ? ZCTX(ZCTX(vctx->did_i)->dict_did_i) : ZCTX(vctx->did_i); // aliases can only exist for predefined contexts
     
     // check dict_id->did_i map, and if not found search linearly
-    Did did_i = ctx_get_existing_did_i_do (vctx->dict_id, z_file->contexts, z_file->d2d_map, NULL, z_file->num_contexts);
+    Did did_i = ctx_get_existing_did_i_do (vctx->dict_id, &z_file->ca);
     
     return (did_i != DID_NONE) ? ZCTX(did_i) 
          : create_if_missing   ? ctx_add_new_zf_ctx (vctx) 
@@ -965,8 +971,8 @@ static inline void add_count (uint64_t *counter, uint32_t increment)
 static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *zctx_out)
 {
     // get the zctx or create a new one. note: ctx_add_new_zf_ctx() must be called before mutex_lock() because it locks the z_file mutex (avoid a deadlock)
-    ContextP zctx       = ctx_get_zctx_from_vctx (vctx, true, true);
-    ContextP zctx_alias = ctx_get_zctx_from_vctx (vctx, true, false);
+    ContextP zctx       = ctx_get_zctx_from_vctx (vctx, true, true);   // if ALIAS_DICT: the "maps to" column in *_DICT_ID_ALIASES
+    ContextP zctx_alias = ctx_get_zctx_from_vctx (vctx, true, false);  // if ALIAS_DICT: the "alias"   column in *_DICT_ID_ALIASES
 
     if ((vb->vblock_i != 1 && load_acquire (zctx->vb_1_pending_merges)) || // let vb_i=1 merge first and sorts dictionaries, other VBs can go in arbitrary order. 
         !mutex_trylock (ZMUTEX(zctx))) // also implies locking all its aliases including zctx_alias
@@ -1116,8 +1122,8 @@ void ctx_merge_in_vb_ctx (VBlockP vb)
     bool all_merged=false;
     bool custom_merge_pending = !!DTP(zip_custom_merge);
     
-    ContextP v_did_i_to_zctx[vb->num_contexts];
-    memset (v_did_i_to_zctx, 0, vb->num_contexts * sizeof(ContextP));
+    ContextP v_did_i_to_zctx[vb->ca.num_contexts];
+    memset (v_did_i_to_zctx, 0, vb->ca.num_contexts * sizeof(ContextP));
 
     while (!all_merged) {
 
@@ -1163,77 +1169,88 @@ void ctx_merge_in_vb_ctx (VBlockP vb)
     COPY_TIMER (ctx_merge_in_vb_ctx);
 }
 
-static BINARY_SEARCHER (ctx_did_i_search, ContextIndex, uint64_t, dict_id.num, true, IfNotExact_ReturnNULL);
+static ASCENDING_SORTER (sort_by_dict_id, ContextIndex, dict_id.num)
+void ctx_create_ctx_index (VBlockP vb, ContextArrayP ca)
+{
+    ARRAY_alloc (ContextIndex, ctx_index, ca->num_contexts, false, ca->ctx_index, vb, "ctx_index");
+    
+    for_ctx(ca)
+        ctx_index[did_i] = (ContextIndex){ .did_i = did_i, .dict_id = ctx->dict_id };
+
+    qsort (ctx_index, ca->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
+}
 
 // returns an existing did_i in this vb, or DID_NONE if there isn't one
-Did ctx_get_unmapped_existing_did_i (const ContextArray contexts, ConstBufferP ctx_index, Did num_contexts, DictId dict_id)
+static BINARY_SEARCHER (ctx_did_i_search, ContextIndex, uint64_t, dict_id.num, true, IfNotExact_ReturnNULL);
+Did ctx_get_unmapped_existing_did_i (ConstContextArrayP ca, DictId dict_id)
 {
     ContextIndex *ent;
 
     // binary search if we have ctx_index (we will have it in PIZ compute threads)
-    if (ctx_index && 
-        (ent = binary_search (ctx_did_i_search, ContextIndex, *ctx_index, dict_id.num))) {
+    if (ca->ctx_index.len && 
+        (ent = binary_search (ctx_did_i_search, ContextIndex, ca->ctx_index, dict_id.num))) {
         
-        if (!IN_RANGE((int16_t)ent->did_i, 0, ctx_index->len32)) {
-            printf ("ctx_index (mapping dict_id->did_i sorted by dict_id.num). len=%"PRIu64" :", ctx_index->len);
+        if (!IN_RANGE((int16_t)ent->did_i, 0, ca->ctx_index.len32)) {
+            printf ("ctx_index (mapping dict_id->did_i sorted by dict_id.num). len=%"PRIu64" :", ca->ctx_index.len);
             
-            for_buf2 (ContextIndex, ci, i, *ctx_index)
+            for_buf2 (ContextIndex, ci, i, ca->ctx_index)
                 printf ("[%u] dict_id=%s (%"PRIu64") did_i=%u\n", i, dis_dict_id(ci->dict_id).s, ci->dict_id.num, ci->did_i);
             
-            ABORT ("did_i=%d ∉ [0,ctx_index.len=%u). dict_id=%s", ent->did_i, ctx_index->len32, dis_dict_id (dict_id).s); 
+            ABORT ("did_i=%d ∉ [0,ctx_index.len=%u). dict_id=%s", ent->did_i, ca->ctx_index.len32, dis_dict_id (dict_id).s); 
         }
 
         return ent->did_i;
     }
 
     else // linear search if not
-        for (int did_i=num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
-            if (dict_id.num == contexts[did_i].dict_id.num) 
-                return contexts[did_i].did_i; // note: in case of an alias, contexts[did_i].did_i is the dst_did_i
+        for_ctx_back (ca)
+            if (dict_id.num == ctx->dict_id.num) 
+                return ctx->did_i; // note: in case of an alias, ctx->did_i is the dst_did_i
 
     return DID_NONE; // not found
 }
 
 // gets did_id if the dictionary exists, and creates a new dictionary if its the first time dict_id is encountered
 // threads: no issues - called by PIZ for vb and zf (but dictionaries are immutable) and by Seg (ZIP) on vctx only
-ContextP ctx_get_unmapped_ctx (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, 
-                               Did *num_contexts, DictId dict_id, STRp(tag_name))
+ContextP ctx_get_unmapped_ctx (ContextArrayP ca, DataType dt, DictId dict_id, STRp(tag_name))
 {
     // search to see if this dict_id has a context, despite not in the d2d_map (due to contention). 
-    for (int/*signed*/ did_i=*num_contexts-1; did_i >= 0 ; did_i--)  // Search backwards as unmapped ctxs are more likely to be towards the end.
-        if (dict_id.num == contexts[did_i].dict_id.num) 
-            return &contexts[did_i];
+    for_ctx_back (ca) // Search backwards as unmapped ctxs are more likely to be towards the end.
+        if (dict_id.num == ctx->dict_id.num) 
+            return ctx;
 
-    ContextP ctx = &contexts[*num_contexts]; 
+    ContextP ctx = &ca->contexts[ca->num_contexts]; 
 
     //iprintf ("New context: dict_id=%s in did_i=%u \n", dis_dict_id (dict_id).s, did_i);
-    ASSERT (*num_contexts < MAX_DICTS, "cannot create a context for %.*s (dict_id=%s) because number of dictionaries would exceed MAX_DICTS=%u", 
+    ASSERT (ca->num_contexts < MAX_DICTS, "cannot create a context for %.*s (dict_id=%s) because number of dictionaries would exceed MAX_DICTS=%u", 
             tag_name_len, tag_name, dis_dict_id (dict_id).s, MAX_DICTS);
 
-    ctx_initialize_ctx (ctx, *num_contexts, dict_id, d2d_map, STRa (tag_name));
+    ctx_initialize_ctx (ca, ca->num_contexts, dict_id, STRa(tag_name));
 
     // thread safety: the increment below MUST be AFTER the initialization of ctx, bc piz_get_line_subfields
     // might be reading this data at the same time as the piz dispatcher thread adding more dictionaries
-    (*num_contexts)++;
+    ca->num_contexts++;
 
     return ctx;
+}
+
+void ca_init_d2d_map (ContextArrayP ca)
+{
+    memset (ca->d2d_map, 0xff, sizeof (ca->d2d_map)); // DID_NONE
 }
 
 // called from seg_all_data_lines (ZIP) and ctx_piz_initialize_zctxs (PIZ) to initialize all
 // primary field ctx's. these are not always used (e.g. when some are not read from disk due to genocat options)
 // but we maintain their fixed positions anyway as the code relies on it
 // Note: z_file Context Buffers are already initialized in file_initialize_z_file_data
-void ctx_initialize_predefined_ctxs (ContextArray contexts, 
-                                     DataType dt,
-                                     DictIdtoDidMap d2d_map,
-                                     Did *num_contexts)
+void ctx_initialize_predefined_ctxs (DataType dt)
 {
-    ASSERT0 (contexts == z_file->contexts, "expecting z_file contexts");
+    ASSERTNOTNULL (z_file);
     ASSERTMAINTHREAD;
 
-    *num_contexts = MAX_(dt_fields[dt].num_fields, *num_contexts);
+    MAXIMIZE (z_file->ca.num_contexts, dt_fields[dt].num_fields);
 
-    init_dict_id_to_did_map (d2d_map); // reset, in case data_type changed
+    ca_init_d2d_map (&z_file->ca); // reset, in case data_type changed
 
     ConstBufferP aliases = aliases_get(); // NULL if no aliases
     Did alias_dids[aliases->len+1]; // entry i corresponds to alias i (+1 just to avoid array of length 0 which causes an error with -fsanitize=undefined)
@@ -1260,8 +1277,7 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
 
         // initialize, but in PIZ, not if ALIAS_CTX
         if (IS_ZIP || alias_type != ALIAS_CTX)
-            ctx_initialize_ctx (&contexts[did_i], did_i, dict_id, d2d_map, 
-                                dt_fields[dt].predefined[did_i].tag_name, dt_fields[dt].predefined[did_i].tag_name_len);
+            ctx_initialize_ctx (&z_file->ca, did_i, dict_id, STRa(dt_fields[dt].predefined[did_i].tag_name));
     }
     
     // initialize alias contexts (note: all aliases and their destinations are predefined)
@@ -1274,7 +1290,7 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
                    z_name, z_dt_name()); // a missing alias_did, might mean another entry got set twice
         }
 
-        ContextP alias_ctx = &z_file->contexts[alias_dids[alias_i]];
+        ContextP alias_ctx = &z_file->ca.contexts[alias_dids[alias_i]];
         ContextP dst_ctx   = ctx_get_existing_zctx (alias->dst); 
         
         ASSERT (dst_ctx, "destination %s of alias %s->%s is missing a #pragma GENDICT", 
@@ -1288,7 +1304,7 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
                     alias_ctx->is_ctx_alias = true;
                     strcpy ((char*)alias_ctx->tag_name, dis_dict_id (alias_ctx->dict_id).s);
 
-                    set_d2d_map (d2d_map, alias->alias, dst_ctx->did_i);
+                    set_d2d_map (&z_file->ca, alias->alias, dst_ctx->did_i);
                 }
                 break;
 
@@ -1311,7 +1327,7 @@ void ctx_initialize_predefined_ctxs (ContextArray contexts,
 // while starting a larger dict/word_list on a fresh memory allocation.
 void ctx_overlay_dictionaries_to_vb (VBlockP vb)
 {
-    for (Did did_i=0; did_i < z_file->num_contexts; did_i++) {
+    for (Did did_i=0; did_i < z_file->ca.num_contexts; did_i++) {
         ContextP zctx = ZCTX(did_i);
         ContextP vctx = CTX(did_i);
 
@@ -1328,23 +1344,23 @@ void ctx_overlay_dictionaries_to_vb (VBlockP vb)
         
         memcpy ((char*)vctx->tag_name, zctx->tag_name, sizeof (vctx->tag_name));
 
-        set_d2d_map (vb->d2d_map, vctx->dict_id, did_i);
+        set_d2d_map (&vb->ca, vctx->dict_id, did_i);
 
         ctx_init_iterator (vctx);
 
         ContextP dict_ctx = ZCTX(zctx->dict_did_i); // this is either our zctx, or if we're a ALIAS_DICT - our destination's context
 
         if (buf_is_alloc (&dict_ctx->dict))
-            buf_overlay (vb, &vctx->dict, &dict_ctx->dict, CTX_TAG_DICT);    
+            buf_overlay (vb, &vctx->dict, &dict_ctx->dict, C_DICT);    
         
         if (buf_is_alloc (&dict_ctx->word_list))
-            buf_overlay (vb, &vctx->word_list, &dict_ctx->word_list, "contexts->word_list");
+            buf_overlay (vb, &vctx->word_list, &dict_ctx->word_list, C_WORD_LIST);
 
         vctx->dict_helper  = dict_ctx->dict_helper; // union with con_rep_special
         vctx->dict_flags   = dict_ctx->dict_flags;  // note: if zctx is an alias, will copy from dst of the alias
     }
 
-    vb->num_contexts = z_file->num_contexts;
+    vb->ca.num_contexts = z_file->ca.num_contexts;
 }
 
 // PIZ: get snip by normal word index (doesn't support WORD_INDEX_* - returns "")
@@ -1632,7 +1648,7 @@ void ctx_compress_counts (void)
     START_TIMER;
 
     for_zctx {
-        if (flag.show_one_counts.num == dict_id_typeless (zctx->dict_id).num) 
+        if (flag.show_counts_δ.num == dict_id_typeless (zctx->dict_id).num) 
             ctx_show_counts (zctx);
 
         if (zctx->counts_section && zctx->counts.len32) {
@@ -1685,13 +1701,13 @@ void ctx_read_all_counts (void)
 
         zctx->nodes.param = BGEN64 (header.nodes_param);
         
-        if (flag.show_one_counts.num == dict_id_typeless (sec->dict_id).num) {
+        if (flag_is_δ (show_counts, sec->dict_id)) {
             ctx_show_counts (zctx);
             counts_shown=true;
         }
     }
 
-    ASSINP (counts_shown || !flag.show_one_counts.num || !is_genocat, "There is no SEC_COUNTS section for %s", dis_dict_id (flag.show_one_counts).s);
+    ASSINP (counts_shown || !flag.show_counts_δ.num || !is_genocat, "There is no SEC_COUNTS section for %s", dis_dict_id (flag.show_counts_δ).s);
 }
 
 // --------------------------------
@@ -1735,7 +1751,7 @@ void ctx_read_all_subdicts (void)
 
         // create the contexts listed in the section
         for_buf (DictId, dict_id_p, zctx->subdicts)
-            ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts, *dict_id_p, 0, 0);
+            ctx_get_ctx_do (&z_file->ca, z_file->data_type, *dict_id_p, 0, 0);
     }
 }
 
@@ -1744,9 +1760,9 @@ void ctx_read_all_subdicts (void)
 // z_data_exists can be relied on in flags_update_piz_one_z_file and IS_SKIP functions.
 void ctx_piz_initialize_zctxs (void)
 {
-    if (z_file->num_contexts) return; // already initialized (this happens, bc zfile_read_genozip_header is called multiple times)
+    if (z_file->ca.num_contexts) return; // already initialized (this happens, bc zfile_read_genozip_header is called multiple times)
 
-    ctx_initialize_predefined_ctxs (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts);
+    ctx_initialize_predefined_ctxs (z_file->data_type);
 
     Section sec = NULL;
     while (sections_next_sec3 (&sec, SEC_B250, SEC_LOCAL, SEC_DICT)) {
@@ -1754,8 +1770,8 @@ void ctx_piz_initialize_zctxs (void)
 
         // case: first encounter in z_file with this non-predefined dict_id - initialize a ctx for it
         if (!zctx) { 
-            zctx = &z_file->contexts[z_file->num_contexts++];
-            ctx_initialize_ctx (zctx, z_file->num_contexts-1, sec->dict_id, z_file->d2d_map, 0, 0);
+            zctx = &z_file->ca.contexts[z_file->ca.num_contexts++];
+            ctx_initialize_ctx (&z_file->ca, z_file->ca.num_contexts-1, sec->dict_id, 0, 0);
         }
 
         if (!zctx->z_data_exists) // predefined not encountered before, or non-predefined just initialized
@@ -1818,8 +1834,8 @@ uint64_t ctx_get_ctx_group_z_len (VBlockP vb, Did group_did_i)
     CTX(group_did_i)->st_did_i = group_did_i; // so parent is also included in the loop
 
     uint64_t z_len = 0;
-    for_ctx_that (ctx->st_did_i == group_did_i) 
-        z_len += ctx->local_in_z_len + ctx->b250_in_z_len; 
+    for_vctx_that (vctx->st_did_i == group_did_i) 
+        z_len += vctx->local_in_z_len + vctx->b250_in_z_len; 
 
     CTX(group_did_i)->st_did_i = save;
 
@@ -1850,7 +1866,7 @@ void ctx_zip_init_promiscuous (ContextP zctx)
 {
     ASSERTMAINTHREAD;
 
-    #define INIT(buf) ({ buf_set_promiscuous (&zctx->buf, "contexts->" #buf);  })
+    #define INIT(buf) ({ buf_set_promiscuous (&zctx->buf, C_ #buf);  })
 
     // any thread can allocate these buffers (while protected by the zctx mutex)
     INIT(global_hash);
@@ -1869,9 +1885,6 @@ void ctx_zip_z_data_exist (ContextP ctx)
     if (ctx->did_i < DTFZ(num_fields)) // case: ctx is a predefined context
         store_relaxed (ZCTX(ctx->did_i)->z_data_exists, (bool)true);
 }
-
-// qsort comparison function
-ASCENDING_SORTER (sort_by_dict_id, ContextIndex, dict_id.num)
 
 #define MAX_MULTI_CTX_LEN 100
 #define SET_MULTI_CTX(parameter_before,command)         \
@@ -1948,14 +1961,6 @@ void ctx_consolidate_statsA (VBlockP vb, Did parent, ContextP ctxs[], unsigned n
         CTX(parent)->is_stats_parent = true;
 }
 
-ContextP buf_to_ctx (ContextArray ca, ConstBufferP buf) 
-{ 
-    if (is_p_in_range (buf, ca, sizeof(ContextArray))) 
-        return &ca[((rom)buf - (rom)(ca)) / ((sizeof(ContextArray)) / MAX_DICTS)]; // note "sizeof(ContextArray)) / MAX_DICTS" might be a bit bigger than sizeof(Context) due to alignment
-    else
-        return NULL;
-}
-
 // simple malloc bc we don't know which thread this is
 typedef struct {
     StrText tag_name;
@@ -1973,7 +1978,7 @@ void ctx_show_zctx_big_consumers (FILE *out)
 {
     VBlockPool *pool = vb_get_pool (POOL_MAIN, SOFT_FAIL);
 
-    uint32_t n_ctxs = z_file->num_contexts; // snapshot lest it grow
+    uint32_t n_ctxs = z_file->ca.num_contexts;  // snapshot lest it grows
     int n_bufs_per_ctx =        IS_ZIP ? 6 : 3; // zctx buffers
     if (pool) n_bufs_per_ctx += IS_ZIP ? 5 : 6; // vctx buffers
 
@@ -2004,14 +2009,14 @@ void ctx_show_zctx_big_consumers (FILE *out)
             // note: we are assuming did_i is equal in vctx and zctx - this will not be true in 
             // the first generation of VBs, so best to test mid-stream, otherwise mis-accounting will occur
             uint64_t dict=0, nodes=0, b250=0, local_hash=0, local=0, dyn_lt_order=0, 
-                     per_line=0, history=0, piz_ctx_specific_buf=0;
+                     dropped_txt=0, history=0, piz_ctx_specific_buf=0;
             LocalType ltype=0;
             uint32_t max_nodes = 0;
 
             for (VBID vb_id=0; vb_id < pool->num_vbs; vb_id++) {
                 if (!pool->vb[vb_id] || !pool->vb[vb_id]->in_use) continue;
 
-                vctx = &pool->vb[vb_id]->contexts[zctx->did_i];
+                vctx = &pool->vb[vb_id]->ca.contexts[zctx->did_i];
 
                 if (IS_ZIP) {
                     dict       += vctx->dict.size;
@@ -2031,26 +2036,26 @@ void ctx_show_zctx_big_consumers (FILE *out)
                 else { // PIZ
                     b250                 += vctx->b250.size;
                     local                += vctx->local.size;
-                    per_line             += vctx->per_line.size;
+                    dropped_txt          += vctx->dropped_txt.size;
                     history              += vctx->history.size;
                     piz_ctx_specific_buf += vctx->piz_ctx_specific_buf.size;
                 }
                 
             }
 
-            *next++ =     (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_LOCAL,      .size = local, .ltype = ltype, .dyn_lt_order = dyn_lt_order };
+            *next++ =     (BigConsumers){ .tag_name = tag, .buf_name = C_LOCAL,      .size = local, .ltype = ltype, .dyn_lt_order = dyn_lt_order };
 
             if (IS_ZIP) {
-                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_DICT,       .size = dict };
-                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_NODES,      .size = nodes };
-                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_B250,       .size = b250, .n_words = max_nodes };
-                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_LOCAL_HASH, .size = local_hash };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = C_DICT,       .size = dict };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = C_NODES,      .size = nodes };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = C_B250,       .size = b250, .n_words = max_nodes };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = C_LOCAL_HASH, .size = local_hash };
             }
             
             else {
-                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = CTX_TAG_B250,           .size = b250, .n_words = zctx->word_list.len };
-                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "per_line",             .size = per_line };
-                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "history",              .size = history };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = C_B250,           .size = b250, .n_words = zctx->word_list.len };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = C_DROPPED_TXT,    .size = dropped_txt };
+                *next++ = (BigConsumers){ .tag_name = tag, .buf_name = C_HISTORY,        .size = history };
                 *next++ = (BigConsumers){ .tag_name = tag, .buf_name = "piz_ctx_specific_buf", .size = piz_ctx_specific_buf };
             }
         }
@@ -2060,15 +2065,15 @@ void ctx_show_zctx_big_consumers (FILE *out)
 
     qsort (bc, n_ctxs * n_bufs_per_ctx, sizeof (BigConsumers), ctx_big_consumers_sorter);
 
-    #define NUM_TO_PRINT 25
+    #define NUM_TO_PRINT 40
     fprintf (out, "%u largest buffers within zctx and (sum of all vctx's):\n", NUM_TO_PRINT);
     if (IS_ZIP) fprintf (out, "Note: ideally this should be run within the ZIP main loop, at the 2nd+ generation of contexts - so not too close to the start or end of the execution\n");
 
     for (int i=0; i < NUM_TO_PRINT; i++)
-        fprintf (out, "%-*s: %-17s: %s%s%s%s\n", 
-                 Z_DT(VCF) ? 15 : 9, bc[i].tag_name.s, bc[i].buf_name, str_size (bc[i].size).s,
+        fprintf (out, "%-15s: %-17s: %s%s%s%s\n", 
+                 bc[i].tag_name.s, bc[i].buf_name, str_size (bc[i].size).s,
                  cond_int (bc[i].n_words, " n_words=", bc[i].n_words),
-                 cond_str (true, " ltype=", lt_name (bc[i].ltype)),
+                 cond_str (!strcmp (bc[i].buf_name, C_LOCAL), " ltype=", lt_name (bc[i].ltype)),
                  cond_str (bc[i].dyn_lt_order, " dyn_ltype=", dyn_int_lt_order_name (bc[i].dyn_lt_order)));
 
     FREE (bc);

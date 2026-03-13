@@ -226,18 +226,18 @@ static void sam_header_zip_inspect_HD_line (BufferP txt_header)
 
 static void sam_header_zip_build_stats_programs (rom hdr, rom after)
 {
-    #define EQ3(s1,s2) (s1[0]==s2[0] && s1[1]==s2[1] && s1[2]==s2[2])
+    #define issame3(s1,s2) (s1[0]==s2[0] && s1[1]==s2[1] && s1[2]==s2[2])
 
     while (hdr < after) {
         str_split_by_tab (hdr, after - hdr, 10, NULL, false, true, false); // also advances hdr to after the newline
-        if (!hdr || n_flds < 2 || fld_lens[0] != 3 || !EQ3(flds[0], "@PG")) break;
+        if (!hdr || n_flds < 2 || fld_lens[0] != 3 || !issame3(flds[0], "@PG")) break;
 
         int ID_i=-1, PN_i=-1;
         STRl(pg, 128) = 0;
         
         // find ID and/or PN
         for (int i=1; i < n_flds; i++) 
-            if (EQ3(flds[i], "ID:")) { // add part before first . and/or -
+            if (issame3(flds[i], "ID:")) { // add part before first . and/or -
                 ID_i = i;
                 rom dot = memchr (flds[i], '.', fld_lens[i]);
                 if (dot) fld_lens[i] = dot - flds[i];
@@ -245,7 +245,7 @@ static void sam_header_zip_build_stats_programs (rom hdr, rom after)
                 rom hyphen = memchr (flds[i], '-', fld_lens[i]);
                 if (hyphen) fld_lens[i] = hyphen - flds[i];
             }
-            else if (EQ3(flds[i], "PN:")) 
+            else if (issame3(flds[i], "PN:")) 
                 PN_i = i;
         
         // case: the (possibly truncated) ID is a prefix of PN - keep just ID
@@ -294,7 +294,7 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
             if (!sam_deep_tip.len) 
                 bufprintf (evb, &sam_deep_tip, _TIP "Use --deep to losslessly co-compress BAM and FASTQ, saving about 40%%, compared to compressing FASTQ and BAM separately. E.g.:\n"
                            "%s --reference %s --deep %s\n"
-                           "See %s for more information.",
+                           "%s",
                            arch_get_argv0(), ref_get_filename() ? ref_get_filename() : "reference-genome.fa.gz", txt_name, WEBSITE_DEEP);
 
             buf_add_moreC (evb, &sam_deep_tip, " ", NULL);

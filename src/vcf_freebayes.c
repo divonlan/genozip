@@ -8,7 +8,7 @@
 
 #include <math.h>
 #include "vcf_private.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 sSTRl(dp_minus_ro_snip,32);
 

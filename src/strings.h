@@ -218,7 +218,7 @@ extern StrText str_int_commas (int64_t n);
 extern StrText str_uint_commas_limit (uint64_t n, uint64_t limit);
 extern StrText str_int_s (int64_t n);
 extern StrTextLong str_int_s_(rom label, int64_t n);
-#define cond_int(cond, label, n) ((cond) ? str_int_s_((label), (n)).s : "") /* note: n does not evaluate if cond is false! */\
+#define cond_int(cond, label, n) ((cond) ? str_int_s_((label), (n)).s : "") // note: n does not evaluate if cond is false!
 
 extern StrTextLong str_str_s_(rom label, STRp(str));
 #define cond_str(cond, label, str)  ((cond) ? ({ rom str_=(str); str_str_s_((label), str_, strlen (str_)).s; }) : "") /* note: str evaluates once, but only if cond is true */
@@ -405,3 +405,7 @@ static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97-
 extern const uint64_t p10[]; // powers of 10
 
 extern uint64_t crc64 (uint64_t crc, bytes data, uint64_t data_len); // implementation is in crc64.c
+
+// example: #define my_buf codec_bufs[0] --> stringfy(my_buf) will generate "codec_bufs[0]"
+#define stringfy_(x) #x
+#define stringfy(x) stringfy_(x)

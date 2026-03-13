@@ -59,7 +59,7 @@ void vcf_segconf_finalize_optimizations (VBlockVCFP vb)
     segconf.optimize[FORMAT_GQ]  = segconf.has[FORMAT_GQ];
 
     // optimize all floats. note: segconf_calculate guarantees us that all segconf vctx and zctx are the same at this point
-    for (Did did_i=VCF_FIRST_OPTIONAL_DID; did_i < vb->num_contexts; did_i++) {
+    for (Did did_i=VCF_FIRST_OPTIONAL_DID; did_i < vb->ca.num_contexts; did_i++) {
         decl_zctx (did_i);
         if (segconf.has[did_i] && zctx->header_info.vcf.Type == VCF_Float)
             segconf.optimize[did_i] = true;

@@ -55,7 +55,7 @@ int32_t generic_is_header_done (bool is_eof)
         z_file->z_flags.txt_is_bin = DTPT (is_binary); // update
 
         // recreate predefined contexts
-        ctx_initialize_predefined_ctxs (z_file->contexts, new_dt, z_file->d2d_map, &z_file->num_contexts);
+        ctx_initialize_predefined_ctxs (new_dt);
 
         // note on FASTQ: effective_codec is currently GZ or BGZF. We will not try to re-discover in segconf as that is too complicated.        
         return HEADER_DATA_TYPE_CHANGED;
@@ -106,7 +106,7 @@ void generic_seg_finalize (VBlockP vb)
 {
     ContextP data_ctx = CTX(GNRIC_DATA);
     data_ctx->ltype = LT_UINT8;
-    buf_move (vb, data_ctx->local, CTX_TAG_LOCAL, vb->txt_data);
+    buf_move (vb, data_ctx->local, C_LOCAL, vb->txt_data);
     data_ctx->txt_len += data_ctx->local.len;
 
     ContextP toplevel_ctx = CTX(GNRIC_TOPLEVEL);
@@ -169,7 +169,7 @@ rom fallback_to_generic (VBlockP vb) // vb is optional
     z_file->data_type = txt_file->data_type = DT_GNRIC;
 
     // recreate predefined contexts
-    ctx_initialize_predefined_ctxs (z_file->contexts, DT_GNRIC, z_file->d2d_map, &z_file->num_contexts);
+    ctx_initialize_predefined_ctxs (DT_GNRIC);
 
     RESTORE_FLAG(quiet);
     return vb ? BAFTtxt : NULL;

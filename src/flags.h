@@ -11,6 +11,7 @@
 #include "genozip.h"
 #include "file_types.h"
 #include "endianness.h"
+#include "dict_id.h"
 
 typedef enum { 
     REF_NONE          = 0,  // ZIP (except SAM) and PIZ when user didn't specify an external reference
@@ -72,7 +73,7 @@ typedef struct {
 
     // piz options
     #define MAX_FLAG_BGZF 5
-    int32_t bgzf;   // PIZ: can be set by --bgzf, or by various other conditions. values 0-MAX_FLAG_BGZF indicate the level of libdeflate, BGZF_BY_ZFILE means use SEC_MGZIP or default level if it is absent
+    MgzipLevel bgzf;   // PIZ: can be set by --bgzf, or by various other conditions. values 0-MAX_FLAG_BGZF indicate a compress level out of bgzf_recompression_levels
     
     PADDED_FLAG(DataType, out_dt); // used to indicate the desired dt of the output txt - consumed by file_open_z, and thereafter equal to txt_file->data_type
     
@@ -141,8 +142,8 @@ typedef struct {
         show_index, show_gheader, show_reading_list, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_ranges,
         show_codec, show_cache, show_memory, show_snips, show_regions,
-        show_alleles, show_bgzf, show_gz, show_txt_contigs, show_lines, show_gz_uncomp,
-        show_threads, show_uncompress, biopsy, skip_segconf, show_data_type,
+        show_alleles, show_bgzf, show_gz, show_isizes, show_is_exactable, show_txt_contigs, show_lines, show_gz_uncomp,
+        show_threads, show_uncompress, biopsy, skip_segconf, show_data_type, debug_dyn_int,
         debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
         debug_peek, stats_submit, debug_submit, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
@@ -158,8 +159,8 @@ typedef struct {
         recover,      // PIZ: attempted recovery from data corruption
         #define SHOW_ALL_HEADERS (-1)
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
-    rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks, show_header_dict_name;
-    int32_t dump_section_i, show_header_section_i;
+    rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks, show_header_dict_name, show_flavor;
+    int32_t dump_section_i, show_header_section_i, dump_gz_block;
     enum { SHOW_DEEP_SUMMARY=1, SHOW_DEEP_ONE_HASH=2, SHOW_DEEP_ALL=3 } show_deep;
     enum { SHOW_BAI_NONE, SHOW_BAI_UNSORTED, SHOW_BAI_SORT, SHOW_BAI_CHUNKS, SHOW_BAI_RAW, SHOW_BAI_LINEAR } show_bai;
 
@@ -185,21 +186,20 @@ typedef struct {
     #define deep_or_bamass (flag.deep ? "deep" : "bamass")
 
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
-    DeepHash debug_deep_hash; // qname, seq, qual hashes
+    DeepHash debug_deep_hash;// qname, seq, qual hashes
     int deep_num_fastqs;
     
-    DictId dict_id_show_one_b250,   // argument of --show-b250-one
-           show_one_counts,
-           show_huffman_dict_id,
-           debug_huffman_dict_id,
-           show_singletons_dict_id, // argument of --show-singletons
-           dump_one_b250_dict_id,   // argument of --dump-b250-one
-           dump_one_local_dict_id,  // argument of --dump-local-one
-           dict_id_show_containers, // argument of --show-containers
-           dict_id_debug_seg;       // argument of --debug-seg
-    rom show_one_dict;              // argument of --show-dict-one
-
-    #define HAS_DEBUG_SEG(ctx) (flag.debug_seg && (!flag.dict_id_debug_seg.num || dict_id_typeless ((ctx)->dict_id).num == flag.dict_id_debug_seg.num))
+    DictId show_b250_δ,      // argument of --show-b250
+           show_counts_δ,
+           show_codec_δ,
+           show_huffman_δ,
+           debug_huffman_δ,
+           show_singletons_δ,// argument of --show-singletons
+           dump_b250_δ,      // argument of --dump-b250-one
+           dump_local_δ,     // argument of --dump-local-one
+           show_containers_δ,// argument of --show-containers
+           debug_seg_δ;      // argument of --debug-seg
+    rom show_one_dict;       // argument of --show-dict-one
 
     // undocumented command line options used with one process spawns another
     int restarted;           // this process was run as a restart after an error.
@@ -277,7 +277,7 @@ extern void flags_restore (Flags *save_flag);
     flag.bases = IUP_NONE;                                                                                                      \
     flag.interleaved = INTERLEAVE_NONE;                                                                                         \
     flag.grep = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */                                        \
-    flag.dict_id_show_one_b250 = flag.dump_one_b250_dict_id = flag.dump_one_local_dict_id = flag.show_singletons_dict_id = DICT_ID_NONE; /* DictId */ 
+    flag.show_b250_δ = flag.dump_b250_δ = flag.dump_local_δ = flag.show_singletons_δ = DICT_ID_NONE; /* DictId */ 
     
 #define SAVE_FLAG(f) typeof(flag.f) save_##f = flag.f 
 #define TEMP_FLAG(f,value) SAVE_FLAG(f) ; flag.f=(typeof(flag.f))(uint64_t)value
@@ -295,7 +295,6 @@ extern void flags_update (unsigned num_files, rom *filenames);
 extern void flags_update_zip_one_file (void);
 extern void flags_update_piz_one_z_file (int z_file_i);
 extern void flags_update_piz_no_ref_file (void);
-
 extern void flags_store_command_line (int argc, char **argv);
 extern rom flags_command_line (void);
 extern rom flags_pipe_in_process_name (void);
@@ -304,7 +303,17 @@ extern bool flags_pipe_in_process_died (void);
 extern bool flags_is_genocat_global_area_only (void);
 extern rom pair_type_name (PairType p);
 extern bool flags_writer_counts (void);
+
 static inline bool flag_is_show_vblocks (rom task)
 {
     return flag.show_vblocks && (!task || !flag.show_vblocks[0] || !strcmp (flag.show_vblocks, task));
 }
+
+static inline bool flag_is_set_(int flag_without_dict, DictId flag_with_dict, DictId dict/*may be DICT_ID_NONE*/)
+{
+    return flag_without_dict || (dict.num && flag_with_dict.num == dict_id_typeless(dict).num);    
+}
+#define flag_is_set(f, dict) flag_is_set_(flag.f, flag.f##_δ, (dict)) // true if either the "all" flag is set, or the specific dict_id (the *_δ flag)
+#define flag_is_δ(f, dict)   flag_is_set_(0, flag.f##_δ, (dict))      // checks only the dict_id (not the "all" option)
+
+#define HAS_DEBUG_SEG(ctx) flag_is_set (debug_seg, ctx->dict_id)

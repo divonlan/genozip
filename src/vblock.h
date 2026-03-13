@@ -79,7 +79,6 @@ typedef struct {
     \
     /* tracking execution */\
     uint64_t vb_position_txt_file;/* ZIP/PIZ: position of this VB's data in the plain text file (without source compression): ZIP: as read before any ZIP-side modifications ; PIZ: as reconstructed with all modifications */\
-    uint64_t vb_mgzip_i;          /* ZIP: index into txt_file->mgzip_isizes of the first MGZIP block of this VB */ \
     int32_t recon_size;           /* ZIP: actual size of txt if this VB is reconstructed in PRIMARY coordinates (inc. as ##primary_only in --luft) */\
                                   /* PIZ: expected reconstruction size */\
     int32_t txt_size;             /* ZIP: original size of of text data read from the file */ \
@@ -133,8 +132,10 @@ typedef struct {
     ProfilerRec profile; \
     \
     /* bgzf - for handling bgzf-compressed files */ \
-    void *gzip_compressor;        /* Handle into libdeflate compressor or decompressor, or zlib's z_stream. Pointer to codec_bufs[].data */ \
-    Buffer gz_blocks;             /* ZIP: an array of GzBlockZip tracking the decompression of bgzf/il1m blocks in scratch into txt_data.  */\
+    void *gz_deflate_mem;         /* memory allocation for gz compressor libraries */ \
+    void *gz_inflate_mem;         /* memory allocation for gz uncompressor libraries (note: during gz discovery, both gz_deflate_mem and gz_inflate_mem are used concurrently) */ \
+    uint64_t vb_mgzip_i;          /* ZIP: index into txt_file->mgzip_isizes of the first MGZIP block in vb->gz_blocks. This first gz_block might have been partially consumed by the previous VB (vb->gz_blocks.consumed_by_prev_vb bytes of it) */ \
+    Buffer gz_blocks;             /* ZIP: an array of GzBlockZip tracking the uncompression of BGZF/ILxM blocks in comp_txt_data into txt_data.  */\
                                   /* PIZ: an array of BgzfBlockPiz */ \
     \
     /* random access, chrom, pos */ \
@@ -165,18 +166,14 @@ typedef struct {
     Buffer optimized_txt_data;    /* ZIP: --optimized: txt_data being re-written, if it cannot be re-written in place */ \
     Buffer bai_linear;            /* PIZ BGZF VB : data for preparing BAI linear index */\
     }; \
-    Buffer txt_data;              /* ZIP: txt_data as read from disk and uncompressed - either the txt header (in evb) or the VB data lines PIZ: reconstructed data */\
+    Buffer txt_data;              /* ZIP: txt_data as read from disk and uncompressed - either the txt header (in evb) or the VB data lines */\
+                                  /* PIZ: reconstructed data */\
     Buffer comp_txt_data;         /* ZIP/PIZ: source-compressed data as read/written from/to disk */ \
     Buffer z_section_headers;     /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
     Buffer scratch;               /* helper buffer: used by many functions. before usage, assert that its free, and buf_free after. */\
     int16_t z_next_header_i;      /* next header of this VB to be encrypted or decrypted */\
     \
-    /* dictionaries stuff - we use them for 1. subfields with genotype data, 2. fields 1-9 of the VCF file 3. infos within the info field */\
-    Did num_contexts;             /* total number of dictionaries of all types */\
-    ContextArray contexts;    \
-    DictIdtoDidMap d2d_map;       /* map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map */\
-    \
-    Buffer ctx_index;             /* PIZ: sorted index into contexts for binary-search lookup if d2d_map fails */\
+    ContextArray ca;    \
     \
     /* reference range lookup caching */ \
     RangeP prev_range;            /* previous range returned by ref_seg_get_range */ \
@@ -198,19 +195,18 @@ typedef struct {
     Buffer dt_specific_vb_header_payload; /* ZIP/PIZ VBs: generic name for dt-specific data like vb_plan */ \
     Buffer vb_plan;               /* SAM MAIN: reconstruction plan for this VB */ \
     Buffer bai_chunks;            /* PIZ BGZF VB : information for R-tree index in BAI file */\
-    Buffer tbi_contigs;           /* --show-bai of a TBI file: evb */\
+    Buffer tbi_contigs;           /* SHOW_BAI evb: used if showing a TBI file */\
     }; \
     \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
-    Buffer show_headers_buf;      /* ZIP only: we collect header info, if --show-headers is requested, during compress, but show it only when the vb is written so that it appears in the same order as written to disk */\
-    Buffer show_b250_buf;         /* ZIP only: for collecting b250 during generate - so we can print at onces without threads interspersing */\
-    Buffer section_list;          /* ZIP only: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
+    Buffer show_headers_buf;      /* ZIP --show-headers VB: collects output of --show-headers during compress, displaying vb is written so that it appears in the same order as written to disk */\
+    Buffer section_list;          /* ZIP: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     union { \
-    uint32_t num_sequences;       /* ZIP only: FASTA: num DESC lines encountered in this VB */ \
-    uint32_t num_perfect_matches; /* ZIP only: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
+    uint32_t num_sequences;       /* ZIP: FASTA: num DESC lines encountered in this VB */ \
+    uint32_t num_perfect_matches; /* ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
     }; \
-    uint32_t num_aligned;         /* ZIP only: SAM/BAM/FASTQ: number of lines successfully aligned by the aligner. for stats */ \
-    uint32_t num_verbatim;        /* ZIP only: SAM/BAM/FASTQ number of lines with SEQ stored verbatim. for stats */ \
+    uint32_t num_aligned;         /* ZIP: SAM/BAM/FASTQ: number of lines successfully aligned by the aligner. for stats */ \
+    uint32_t num_verbatim;        /* ZIP: SAM/BAM/FASTQ number of lines with SEQ stored verbatim. for stats */ \
     \
     /* copies of the values in flag, for flags that may change during the execution */\
     bool preprocessing;           /* PIZ: this VB is preprocessing, not reconstructing (SAM: loading SA Groups FASTA/FASTQ: grepping) */ \

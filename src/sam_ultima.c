@@ -90,7 +90,7 @@ ARRAY_ITEM_CALLBACK (sam_seg_ULTIMA_tp)
 
     char *next[TP_NUM_BINS-1];
     for (int bin=0; bin < TP_NUM_BINS-1; bin++) {
-        buf_alloc (VB, &chan[bin]->local, tp_len, 0, int8_t, CTX_GROWTH, CTX_TAG_LOCAL);
+        buf_alloc (VB, &chan[bin]->local, tp_len, 0, int8_t, CTX_GROWTH, C_LOCAL);
         next[bin] = BAFTc(chan[bin]->local);
     }
 
@@ -381,7 +381,7 @@ void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mi), unsigned ad
 SPECIAL_RECONSTRUCTOR (sam_piz_special_ULTIMA_MI)
 {
     if (!ctx->history.len32)
-        buf_alloc_exact_255 (VB, ctx->history, MI_HISTORY_LEN, TxtWord, "history");
+        buf_alloc_exact_255 (VB, ctx->history, MI_HISTORY_LEN, TxtWord, C_HISTORY);
 
     ARRAY (TxtWord, mi_history, ctx->history);
 

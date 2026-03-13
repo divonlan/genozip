@@ -135,7 +135,7 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i)
         return Ltxt-1 - last_newline;
 
     else  // no newline found
-        return -1; // cannot find \n in the data starting first_i
+        return UNCONSUMED_NEED_MORE_DATA; // cannot find \n in the data starting first_i
 }
 
 // called from seg_all_data_lines

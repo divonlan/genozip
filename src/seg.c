@@ -19,7 +19,7 @@
 #include "mgzip.h"
 #include "dispatcher.h"
 #include "b250.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 // part of ASSSEG
@@ -611,7 +611,7 @@ bool seg_float_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_bytes
             ctx->ltype = LT_FLOAT32; // set only upon storing the first number - if there are no numbers, leave it as LT_SINGLETON so it can be used for singletons
 
         // add to local
-        buf_alloc (vb, &ctx->local, 1, vb->lines.len, float, CTX_GROWTH, CTX_TAG_LOCAL);
+        buf_alloc (vb, &ctx->local, 1, vb->lines.len, float, CTX_GROWTH, C_LOCAL);
         BNXT (float, ctx->local) = f;
         
         // add to b250
@@ -735,7 +735,7 @@ WordIndex seg_array_(VBlockP vb, ContextP container_ctx, Did stats_conslidation_
         if (!arr_dict_id.num)        
             arr_dict_id = sub_dict_id (container_ctx->dict_id, '0');
         
-        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, CTX_TAG_CON_CACHE);
+        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, C_CON_CACHE);
 
         con = B1ST (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
@@ -845,7 +845,7 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
     if (!container_ctx->con_cache.len32) {
         DictId arr_dict_id = sub_dict_id (container_ctx->dict_id, '0');
         
-        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, CTX_TAG_CON_CACHE);
+        buf_alloc (vb, &container_ctx->con_cache, 0, 1, MiniContainer, 1, C_CON_CACHE);
 
         con = B1ST (MiniContainer, container_ctx->con_cache);
         *con = (MiniContainer){ .nitems_lo = 1, 
@@ -944,7 +944,7 @@ void seg_integer_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidat
 
     // in our specific case, element i of con_index contains the node_index of the snip of the container with i repeats, or WORD_INDEX_NONE.
     if (container_ctx->con_index.len32 < n_rows+1) 
-        buf_alloc_exact_255 (vb, container_ctx->con_index, n_rows+2, WordIndex, CTX_TAG_CON_INDEX);
+        buf_alloc_exact_255 (vb, container_ctx->con_index, n_rows+2, WordIndex, C_CON_INDEX);
 
     bool use_special = (con_rep_special && n_rows == expected_num_repeats);
     uint32_t cache_index =  use_special ? 0 : (n_rows + 1);
@@ -1052,7 +1052,7 @@ bool seg_struct (VBlockP vb, ContextP ctx, MediumContainer con, STRp(snip),
 
     // finally, the Container snip itself - we attempt to use the known node_index if it is cached in con_index
 
-    buf_alloc_exact_255 (vb, ctx->con_index, 1, WordIndex, CTX_TAG_CON_INDEX);
+    buf_alloc_exact_255 (vb, ctx->con_index, 1, WordIndex, C_CON_INDEX);
 
     // count printable item separators
     unsigned num_printable_separators=0;
@@ -1146,7 +1146,7 @@ int32_t seg_array_of_struct_ (VBlockP vb, ContextP ctx,
 
     // in our specific case, element i of con_index contains the node_index of the snip of the container with i repeats, or WORD_INDEX_NONE.
     if (ctx->con_index.len32 < n_repeats+1) {
-        buf_alloc_255 (vb, &ctx->con_index, 0, n_repeats+1, WordIndex, 0, CTX_TAG_CON_INDEX);
+        buf_alloc_255 (vb, &ctx->con_index, 0, n_repeats+1, WordIndex, 0, C_CON_INDEX);
         ctx->con_index.len32 = ctx->con_index.len32 / sizeof (WordIndex);
     }
 
@@ -1254,7 +1254,7 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
             "%s: ctx %s requires ltype!=LT_SINGLETON", LN_NAME, ctx->tag_name);
 #endif
 
-    buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, CTX_TAG_LOCAL);
+    buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, C_LOCAL);
     if (data_len) buf_add (&ctx->local, STRa(data)); 
     if (add_nul) BNXTc (ctx->local) = 0;
 
@@ -1270,7 +1270,7 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
 
 void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup, unsigned add_bytes) 
 {
-    buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, CTX_TAG_LOCAL);
+    buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, C_LOCAL);
 
 #ifdef DEBUG
     ASSERT (ctx->ltype >= LT_INT8 && ctx->ltype <= LT_FLOAT64, "%s: %s.ltype=%s can be segged as fixed", 
@@ -1327,7 +1327,7 @@ void seg_diff (VBlockP vb, ContextP ctx,
         else                     goto skip_diff; // seg a "copy" snip with no diff in local
     }
 
-    buf_alloc_zero (vb, &ctx->local, value_len, 100 * value_len, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL);
+    buf_alloc_zero (vb, &ctx->local, value_len, 100 * value_len, uint8_t, CTX_GROWTH, C_LOCAL);
 
     uint8_t *diff = BAFT8 (ctx->local); 
 
@@ -1361,13 +1361,11 @@ static void seg_set_hash_hints (VBlockP vb, int third_num)
     if (third_num == 1) vb->num_lines_at_1_3 = vb->line_i + 1;
     else                vb->num_lines_at_2_3 = vb->line_i + 1;
 
-    for (Did did_i=0; did_i < vb->num_contexts; did_i++) {
+    for_vctx {
+        if (!vctx->nodes.len32 || vctx->global_hash.len32) continue; // our service is not needed - global_hash for this dict already exists or no nodes
 
-        decl_ctx (did_i);
-        if (!ctx->nodes.len32 || ctx->global_hash.len32) continue; // our service is not needed - global_hash for this dict already exists or no nodes
-
-        if (third_num == 1) ctx->nodes_len_at_1_3 = ctx->nodes.len32;
-        else                ctx->nodes_len_at_2_3 = ctx->nodes.len32;
+        if (third_num == 1) vctx->nodes_len_at_1_3 = vctx->nodes.len32;
+        else                vctx->nodes_len_at_2_3 = vctx->nodes.len32;
     }
 }
 
@@ -1386,14 +1384,14 @@ static void seg_verify_file_size (VBlockP vb)
     // sanity checks
     ASSERT (vb->recon_size >= 0, "%s: recon_size=%d is negative", VB_NAME, vb->recon_size);
 
-    for (Did sf_i=0; sf_i < vb->num_contexts; sf_i++) 
+    for (Did sf_i=0; sf_i < vb->ca.num_contexts; sf_i++) 
         recon_size += CTX(sf_i)->txt_len;
     
     if ((vb->recon_size != recon_size || flag.debug_recon_size) && !flag.show_bam) { 
 
         fprintf (stderr, "context.txt_len for vb=%s:\n", VB_NAME);
-        for_ctx_that (ctx->nodes.len || ctx->local.len || ctx->txt_len)
-            fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (ctx).s, (uint32_t)ctx->txt_len);
+        for_vctx_that (vctx->nodes.len || vctx->local.len || vctx->txt_len)
+            fprintf (stderr, "%s: %u\n", ctx_tag_name_ex (vctx).s, (uint32_t)vctx->txt_len);
 
         fprintf (stderr, "%s: reconstructed_vb_size=%s (=Σ(ctx.txt_len) after segging) but vb->recon_size=%s (initialized when reading the file and adjusted for modifications) (diff=%d) (vblock_memory=%s)\n",
                  VB_NAME, str_int_commas (recon_size).s, str_int_commas (vb->recon_size).s, 
@@ -1423,12 +1421,12 @@ static void seg_increment_progress (VBlockP vb, uint32_t bytes_so_far_this_vb, i
 static void zip_modify_verify_shrinkage (VBlockP vb, int32_t shrinkage_by_vb)
 {
     int32_t shrinkage_by_ctx = 0;
-    for_ctx shrinkage_by_ctx += ctx->txt_shrinkage;
+    for_vctx shrinkage_by_ctx += vctx->txt_shrinkage;
 
     if (shrinkage_by_vb != shrinkage_by_ctx) {
         fprintf (stderr, "\n\nShrinkage by context:\n");
-        for_ctx
-            if (ctx->txt_shrinkage) fprintf (stderr, "%s: %d\n", ctx->tag_name, (int32_t)ctx->txt_shrinkage);
+        for_vctx
+            if (vctx->txt_shrinkage) fprintf (stderr, "%s: %d\n", vctx->tag_name, (int32_t)vctx->txt_shrinkage);
 
         char fn[64];
         snprintf (fn, sizeof(fn), "optimize.vb-%u.bad", vb->vblock_i);
@@ -1633,7 +1631,7 @@ uint32_t seg_all_data_lines (VBlockP vb)
         line = next_line;
 
         // update line_bgzf_uoffset to next line
-        if (TXT_IS_BGZF && vb->comp_i == COMP_MAIN) 
+        if (TXT_IS(BGZF) && vb->comp_i == COMP_MAIN) 
             mgzip_zip_advance_index (vb, line_len);
         
         // if our estimate number of lines was too small, increase it

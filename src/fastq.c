@@ -393,17 +393,13 @@ int32_t fastq_unconsumed (VBlockP vb_,
             next_line: n++;
         }
 
-    if (n >= max_lines && !IS_R2) {
-        // can happen in BGZF with VERY long lines e.g. some nanopore files
-        if (txt_file && txt_file->effective_codec == CODEC_BGZF)
-            RESTART0 ("--no-bgzf", "could not find a valid read - this can happen in BGZF-compressed files with VERY long reads.");
+    if (n >= max_lines && !IS_R2 && 
+        !(TECH(NANOPORE) && txt_file && TXT_IS(BGZF))) // this can happen legitimately in nanopore files with BGZF that have reads (4 lines) > 64 KB - not an error in this case 
+        
+        ABORTINP ("%s: Examined %d textual lines at the end of the VB and could not find a valid read, it appears that this is not a valid %s file (tech=%s). Last %u lines examined:\n[0]=\"%.*s\"\n[1]=\"%.*s\"\n[2]=\"%.*s\"\n[3]=\"%.*s\"\n[4]=\"%.*s\"\n",
+                  VB_NAME, n, DT_NAME, tech_name (segconf.tech), MIN_(n, 5), STRfi(line,0), STRfi(line,1), STRfi(line,2), STRfi(line,3), STRfi(line,4));
 
-        else
-            ABORTINP ("%s: Examined %d textual lines at the end of the VB and could not find a valid read, it appears that this is not a valid %s file. Last %u lines examined:\n[0]=\"%.*s\"\n[1]=\"%.*s\"\n[2]=\"%.*s\"\n[3]=\"%.*s\"\n[4]=\"%.*s\"\n",
-                VB_NAME, n, DT_NAME, MIN_(n, 5), STRfi(line,0), STRfi(line,1), STRfi(line,2), STRfi(line,3), STRfi(line,4));
-    }
-
-    return -1; // need more data
+    return UNCONSUMED_NEED_MORE_DATA; 
 }
 
 void fastq_zip_set_txt_header_flags (struct FlagsTxtHeader *f)
@@ -529,7 +525,7 @@ void fastq_zip_initialize (void)
     // with REF_EXTERNAL, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for uncompression, just for --coverage/--idxstats
     if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // single file, or first of pair (and never Deep)
-        ctx_populate_zf_ctx_from_contigs (FASTQ_CONTIG, ref_get_ctgs()); 
+        ctx_populate_zf_ctx_from_contigs (ref_get_ctgs()); 
 
     qname_zip_initialize();
 
@@ -598,25 +594,25 @@ void fastq_seg_initialize (VBlockP vb_)
         
         bitmap_ctx->local_always = true;
         
-        buf_alloc (vb, &bitmap_ctx->local, 1, Ltxt / 4, uint8_t, 0, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &bitmap_ctx->local, 1, Ltxt / 4, uint8_t, 0, C_LOCAL); 
 
         for (int i=0; i < 4; i++)
-            buf_alloc (vb, &seqmis_ctx[i].local, 1, Ltxt / 128, char, 0, CTX_TAG_LOCAL); 
+            buf_alloc (vb, &seqmis_ctx[i].local, 1, Ltxt / 128, char, 0, C_LOCAL); 
 
         if (segconf.is_interleaved) {            
-            buf_alloc (vb, &gpos_ctx->local,    1, vb->lines.len / 2, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
-            buf_alloc (vb, &gpos_r2_ctx->local, 1, vb->lines.len / 2, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
-            buf_alloc (vb, &gpos_d_ctx->local,  1, vb->lines.len / 2, int16_t,  CTX_GROWTH, CTX_TAG_LOCAL); 
+            buf_alloc (vb, &gpos_ctx->local,    1, vb->lines.len / 2, uint32_t, CTX_GROWTH, C_LOCAL); 
+            buf_alloc (vb, &gpos_r2_ctx->local, 1, vb->lines.len / 2, uint32_t, CTX_GROWTH, C_LOCAL); 
+            buf_alloc (vb, &gpos_d_ctx->local,  1, vb->lines.len / 2, int16_t,  CTX_GROWTH, C_LOCAL); 
 
-            buf_alloc (vb, &strand_ctx->local,    0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, CTX_TAG_LOCAL); 
-            buf_alloc (vb, &strand_r2_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, CTX_TAG_LOCAL); 
+            buf_alloc (vb, &strand_ctx->local,    0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, C_LOCAL); 
+            buf_alloc (vb, &strand_r2_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, C_LOCAL); 
         }
         else {
-            buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
-            buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, CTX_TAG_LOCAL); 
+            buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, C_LOCAL); 
+            buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, C_LOCAL); 
 
             if (vb->R1_vb_i)
-                buf_alloc (vb, &gpos_d_ctx->local,  1, vb->lines.len, int16_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+                buf_alloc (vb, &gpos_d_ctx->local,  1, vb->lines.len, int16_t, CTX_GROWTH, C_LOCAL); 
         }
     }
 

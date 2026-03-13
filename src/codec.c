@@ -58,6 +58,12 @@ void codec_free_do (void *vb_, void *addr, FUNCLINE)
            func, code_line, vb->vblock_i, codec_name(vb->codec_using_codec_bufs), addr);
 }
 
+void codec_destroy_all (VBlockP vb)
+{
+    for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
+        buf_destroy (vb->codec_bufs[i]);
+}
+
 void codec_free_all (VBlockP vb)
 {
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
@@ -294,7 +300,7 @@ Codec codec_assign_best_codec (VBlockP vb,
     // sort codec by our selection criteria
     qsort (tests, num_tests, sizeof (CodecTest), codec_assign_sorter);
 
-    if (flag.show_codec) {
+    if (flag_is_set (show_codec, zctx ? zctx->dict_id : DICT_ID_NONE)) {
         iprintf ("%-8s %-12s %-5s %6.1fX   *[%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]\n", 
                  VB_NAME, ctx ? ctx->tag_name : &st_name (st)[4], ctx ? &st_name (st)[4] : "SECT",
                  (float)data->len / tests[0].size,
@@ -317,14 +323,16 @@ Codec codec_assign_best_codec (VBlockP vb,
     // save the assignment for future VBs, but not in --best, where each VB tests on its own.
     // note: for local (except in --fast), we don't commit for vb=1 bc less representative of data 
     // (ok for --best as we count (BEST_LOCK_IN_THREASHOLD) anyway))
-    if ((is_b250 || (is_local && (flag.best || flag.fast || vb->vblock_i > 1 || vb->is_last_vb_in_txt_file))) && *selected_codec != CODEC_UNKNOWN && zctx) 
+    if ((is_b250 || (is_local && (flag.best || flag.fast || vb->vblock_i > 1 || vb->is_last_vb_in_txt_file))) && 
+        (vb->txt_data.len > segconf.vb_size / 2 || TXT_IS_VB_SIZE_BY_MGZIP) && // don't let smaller-than-usual VBs (e.g. SAM PRIM/DEPN or final VB of the file) set the codec for everyone (rule doesn't apply to FASTQs with an MGZIP codec that dictates a variable-length VBs)
+        *selected_codec != CODEC_UNKNOWN && zctx)
         ctx_commit_codec_to_zf_ctx (vb, ctx, is_local, true);
 
 done:
-    // roll back
-    data->len                = save_data_len;
-    vb->section_list.len = save_section_list; 
-    vb->z_data_test.param    = false; // no longer testing
+    // restore
+    data->len             = save_data_len;
+    vb->section_list.len  = save_section_list; 
+    vb->z_data_test.param = false; // no longer testing
 
     COPY_TIMER (codec_assign_best_codec);
 
@@ -385,8 +393,8 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     if (codec_requires_seq && (LCODEC(PACB) || LCODEC(LONGR) || LCODEC(HOMP) || LCODEC(SMUX))) 
         *codec_requires_seq = true;
 
-    if (!qual_codec && (flag.show_codec || flag.show_qual) && ctx->lcodec) // printing aligned to the output of codec_assign_best_codec
-        iprintf ("%-8s %-12s %-5s          *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));
+    if (!qual_codec && (flag_is_set (show_codec, (DictId)_SAM_QUAL) || flag.show_qual) && ctx->lcodec) // printing aligned to the output of codec_assign_best_codec
+        iprintf ("%-8s %-12s %-5s           *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));
 }
 
 // complex codec est size - result may be recompressed with RAN, ART
@@ -439,23 +447,23 @@ void codec_qual_show_stats (void)
     uint32_t other = z_file->num_lines - domq - divr - homp - pacb - longr - normq; 
 
     iprintf ("\nQUAL codec stats (# lines): DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) LONGR=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%u (%.1f%%)\n",
-                domq,  (double)domq  / z_file->num_lines * 100, 
-                divr,  (double)divr  / z_file->num_lines * 100, 
-                homp,  (double)homp  / z_file->num_lines * 100, 
-                pacb,  (double)pacb  / z_file->num_lines * 100, 
-                longr, (double)longr / z_file->num_lines * 100, 
-                normq, (double)normq / z_file->num_lines * 100, 
-                other, (double)other / z_file->num_lines * 100);
+             domq,  (double)domq  / z_file->num_lines * 100, 
+             divr,  (double)divr  / z_file->num_lines * 100, 
+             homp,  (double)homp  / z_file->num_lines * 100, 
+             pacb,  (double)pacb  / z_file->num_lines * 100, 
+             longr, (double)longr / z_file->num_lines * 100, 
+             normq, (double)normq / z_file->num_lines * 100, 
+             other, (double)other / z_file->num_lines * 100);
 }
 
 UNCOMPRESS (codec_hapmat_uncompress)
 {
-    ABORT0 ("Support for the hapmat codec has been discontinued. To decompress this VCF file, use Genozip v14.");
+    ABORT0 ("Support for the hapmat codec has been discontinued. To unscompress this VCF file, use Genozip v14.");
 }
 
 UNCOMPRESS (codec_gtshark_uncompress)
 {
-    ABORT0 ("Support for the gtshark codec has been discontinued. To decompress VCF files compressed with --gtshark, use Genozip v11.");
+    ABORT0 ("Support for the gtshark codec has been discontinued. To uncompress VCF files compressed with --gtshark, use Genozip v11.");
 }
 
 // needs to be after all the functions as it refers to them

@@ -75,7 +75,7 @@ COMPRESS (codec_oq_compress)
     for (int q=0; q < NUM_OQ_CTXS; q++) {
         if (!count_q[q]) continue;
 
-        buf_alloc_exact (vb, ctxs[q]->local, count_q[q], char, CTX_TAG_LOCAL); 
+        buf_alloc_exact (vb, ctxs[q]->local, count_q[q], char, C_LOCAL); 
         next[q] = B1STc (ctxs[q]->local);
 
         // move stats allocation to the individual contexts

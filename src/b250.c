@@ -119,7 +119,7 @@ void b250_seg_append (VBlockP vb, ContextP ctx, WordIndex node_index)
         if (b250_seg_get_last (ctx) != node_index) { 
             int word_len = ctx->b250.len32;
 
-            buf_alloc (vb, &ctx->b250, word_len * (ctx->b250.count+1), AT_LEAST(ctx->did_i), char, CTX_GROWTH, CTX_TAG_B250); // add 1 more, meaning a total of len+1
+            buf_alloc (vb, &ctx->b250, word_len * (ctx->b250.count+1), AT_LEAST(ctx->did_i), char, CTX_GROWTH, C_B250); // add 1 more, meaning a total of len+1
         
             // add (count-1) copies of first_node to the one already existing
             for (unsigned i=0; i < ctx->b250.count - 1; i++) {
@@ -138,7 +138,7 @@ void b250_seg_append (VBlockP vb, ContextP ctx, WordIndex node_index)
         // case: this is the first entry - its all_the_same in a trivial way (still, we mark it so b250_zip_generate_section can potentially eliminate it)
         if (!ctx->b250.count) ctx->flags.all_the_same = true;
 
-        buf_alloc (vb, &ctx->b250, 4, ctx->flags.all_the_same ? 0 : AT_LEAST(ctx->did_i), char, CTX_GROWTH, CTX_TAG_B250);
+        buf_alloc (vb, &ctx->b250, 4, ctx->flags.all_the_same ? 0 : AT_LEAST(ctx->did_i), char, CTX_GROWTH, C_B250);
 
         // Logic: during seg, we encode variable length integers with the last byte (the MSB in little endian)
         // indicating the type. This is we can identify the type in b250_seg_remove_last. Then, in b250_zip_generate_one,
@@ -196,11 +196,8 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
     START_TIMER;
     bool ret = true;
 
-    ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
+    ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->b250 containing data", ctx->tag_name, (unsigned)(ctx - vb->ca.contexts));
     ASSERT (ctx->nodes_converted, "expecting nodes of %s to be converted", ctx->tag_name); // still index/len
-
-    bool show = flag.show_b250 || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_one_b250.num;
-    if (show) bufprintf (vb, &vb->show_b250_buf, "%s %s: ", VB_NAME, ctx->tag_name);
 
     // case: all-the-same b250 survived dropping (in ctx_drop_all_the_same) - we just shorten it to one entry
     if (ctx->flags.all_the_same && ctx->b250.count > 1) { 
@@ -278,14 +275,6 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
             ABORTINP (NO_PAIR_FMT_PREFIX "%s %s.b250 is not identical to R1)", txt_name, VB_NAME, ctx->tag_name);
     }
     
-    // xxx - print b250 if show_b250
-
-    if (show && ret) {
-        bufprintf (vb, &vb->show_b250_buf, "%s", "\n");
-        iprintf ("%.*s", STRfb(vb->show_b250_buf));
-    }
-
-    if (show) buf_free (vb->show_b250_buf);
     COPY_TIMER (b250_zip_generate); // codec_assign measures its own time
 
     if (ret) codec_assign_best_codec (vb, ctx, NULL, SEC_B250);

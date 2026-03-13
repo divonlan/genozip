@@ -7,6 +7,7 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
+#include "dyn_int.h"
 
 //---------
 // SEG
@@ -235,7 +236,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_TLEN_old)
 {
     ASSPIZ0 (VB_SAM->mate_line_i >= 0, "No mate line is set for the current line");
 
-    new_value->i = -*B(int64_t, ctx->history, VB_SAM->mate_line_i); // minus the buddy
+    new_value->i = -piz_get_history (ctx, VB_SAM->mate_line_i); // minus the buddy
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
 
     return true; // new value

@@ -10,7 +10,7 @@
 #include "deep.h"
 #include "huffman.h"
 #include "codec.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "reconstruct.h"
 #include "htscodecs/arith_dynamic.h"
 

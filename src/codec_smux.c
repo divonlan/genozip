@@ -209,7 +209,7 @@ COMPRESS (codec_smux_compress)
     }
 
     for (int b=0; b < 5; b++) {
-        buf_alloc_exact (vb, ctxs[b]->local, count_base[b], char, CTX_TAG_LOCAL); 
+        buf_alloc_exact (vb, ctxs[b]->local, count_base[b], char, C_LOCAL); 
         next[b] = B1STc(ctxs[b]->local);
 
         // move stats allocation to the individual contexts

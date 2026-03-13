@@ -17,7 +17,7 @@
 #include "sam_private.h"
 #include "chrom.h"
 #include "b250.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 //---------
 // SEG
@@ -396,7 +396,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
         sam_piz_special_COPY_BUDDY (VB, CTX(SAM_POS), (char[]){'0' + BUDDY_SAGGY }, 1, new_value, true); 
         RECONSTRUCT1(',');
         
-        SamFlags prim_flags = (SamFlags) {.value = *B(int64_t, CTX(SAM_FLAG)->history, vb->saggy_line_i) };
+        SamFlags prim_flags = (SamFlags) {.value = piz_get_history (CTX(SAM_FLAG), vb->saggy_line_i) };
         RECONSTRUCT1 (prim_flags.rev_comp ? '-' : '+');
         RECONSTRUCT1(',');
 
@@ -412,7 +412,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SA_main)
         // step 2: all alignments in prim SA, except the one matching this line
         HistoryWord *hw = B(HistoryWord, CTX(OPTION_SA_Z)->history, vb->saggy_line_i);
         rom prim_SA = (hw->lookup == LookupTxtData) ? Btxt (hw->index) 
-                                                    : Bc (CTX(OPTION_SA_Z)->per_line, hw->index);
+                                                    : Bc (CTX(OPTION_SA_Z)->dropped_txt, hw->index);
         
         str_split (prim_SA, hw->len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
         n_prim_alns--; // -1 due to terminal ';'

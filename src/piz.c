@@ -30,6 +30,7 @@
 #include "huffman.h"
 #include "filename.h"
 #include "bai.h"
+#include "codec.h"
 
 TRANSLATOR_FUNC (piz_obsolete_translator)
 {
@@ -199,15 +200,15 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
 
     uint64_t typeless_dnum = dict_id.num ? dict_id_typeless (dict_id).num : 1/*arbitrary number not likely to be a real dict_id*/;
     
-    // B250, LOCAL, COUNT sections
-    bool skip = is_genocat && dict_id.num != DTFZ(predefined)[CHROM].dict_id.num && (
+    // DICT, B250, LOCAL, COUNTS, SUBDICTS, HUFFMAN sections
+    bool skip = is_genocat && IS_DICTED_SEC(st) && dict_id.num != DTFZ(predefined)[CHROM].dict_id.num && (
     
     // sometimes we don't need dictionaries. but we always load CHROM.
-        (flag.genocat_no_dicts && typeless_dnum != flag.show_one_counts.num)
+        (flag.genocat_no_dicts && typeless_dnum != flag.show_counts_δ.num)
 
-    // if show_counts - we only need the requested section and CHROM (note: not true for dump_one_b250_dict_id,
+    // if show_counts - we only need the requested section and CHROM (note: not true for dump_b250_δ,
     // as we need to reconstruct to dump it)
-    ||  (flag.show_one_counts.num && typeless_dnum != flag.show_one_counts.num)
+    ||  (flag.show_counts_δ.num && typeless_dnum != flag.show_counts_δ.num)
 
     // if --counts, we filter here - TOPLEVEL only - unless there's a skip_section function which will do the filtering
     ||  (flag.count && !DTPZ(is_skip_section) && dict_id.num != DTFZ(toplevel).num) 
@@ -215,7 +216,7 @@ bool piz_default_skip_section (SectionType st, DictId dict_id)
 
     skip |= flag.dont_load_ref_file && (ST(REFERENCE) || st == SEC_REF_HASH || ST(REF_IS_SET));
 
-    if (skip && is_genocat && (typeless_dnum == flag.show_singletons_dict_id.num || typeless_dnum == flag.dump_one_local_dict_id.num))
+    if (skip && is_genocat && (typeless_dnum == flag.show_singletons_δ.num || typeless_dnum == flag.dump_local_δ.num))
         skip = false;
         
     return skip;
@@ -316,20 +317,20 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
         BufferP target_buf = uncompress_to_pair ? (is_local ? &ctx->localR1 : &ctx->b250R1)
                                                 : (is_local ? &ctx->local   : &ctx->b250);
         
-        rom target_buf_name = uncompress_to_pair ? (is_local ? "contexts->localR1" : "contexts->b250R1")
-                                                 : (is_local ? CTX_TAG_LOCAL   : CTX_TAG_B250  );
+        rom target_buf_name = uncompress_to_pair ? (is_local ? C_LOCAL"R1" : C_B250"R1")
+                                                 : (is_local ? C_LOCAL     : C_B250    );
 
         START_TIMER;
 
         zfile_uncompress_section (vb, header, target_buf, target_buf_name, BGEN32 (header->vblock_i), header->section_type); 
 
-        if (is_local && dict_id_typeless (ctx->dict_id).num == flag.show_singletons_dict_id.num && !is_pair_section) 
+        if (is_local && flag_is_δ (show_singletons, ctx->dict_id) && !is_pair_section) 
             dict_io_show_singletons (vb, ctx);
             
-        if (is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num && !is_pair_section) 
+        if (is_local && flag_is_δ (dump_local, ctx->dict_id) && !is_pair_section) 
             ctx_dump_binary (vb, ctx, true);
 
-        if (!is_local && dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num && !is_pair_section) 
+        if (!is_local && flag_is_δ (dump_b250, ctx->dict_id) && !is_pair_section) 
             ctx_dump_binary (vb, ctx, false);
 
         // BGEN32, transpose, fix len
@@ -356,23 +357,18 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
     }
 
     if (IS_PIZ) {
-        // initialize history buffer (eg for SAM buddy)
-        for_ctx_that (ctx->flags.store_per_line || ctx->flags.spl_custom) 
-            switch (ctx->flags.store) {
+        // initialize history buffers
+        for_vctx_that (vctx->flags.store_per_line || vctx->flags.spl_custom) 
+            switch (vctx->flags.store) {
                 // we zero the history, bc when seg compares to a dl value for a field that didn't exist,
                 // it sees 0. It might seg against that 0. So we need history to be 0 too.
-                case STORE_INT   : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, int64_t,     "history"); break;
-                case STORE_FLOAT : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, double,      "history"); break;
-                case STORE_INDEX : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, WordIndex,   "history"); break;
-                default          : buf_alloc_exact_zero (vb, ctx->history, vb->lines.len, HistoryWord, "history"); break;
+                case STORE_INT   : /* alloc deferred to dyn_int_resize after size of first item is known */       ; break;
+                case STORE_FLOAT : buf_alloc_exact_zero (vb, vctx->history, vb->lines.len, double,      C_HISTORY); break;
+                case STORE_INDEX : buf_alloc_exact_zero (vb, vctx->history, vb->lines.len, WordIndex,   C_HISTORY); break;
+                default          : buf_alloc_exact_zero (vb, vctx->history, vb->lines.len, HistoryWord, C_HISTORY); break;
             }
 
-        // prepare context index
-        ARRAY_alloc (ContextIndex, ctx_index, vb->num_contexts, false, vb->ctx_index, vb, "ctx_index");
-        for_ctx
-            ctx_index[ctx->did_i] = (ContextIndex){ .did_i = ctx->did_i, .dict_id = ctx->dict_id };
-
-        qsort (ctx_index, vb->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
+        ctx_create_ctx_index (vb, &vb->ca); 
     }
 
     if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
@@ -383,6 +379,8 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
         case PUR_FASTQ_READ_R1     : COPY_TIMER (piz_uncompress_all_ctxs__fastq_read_r1);     break;
         case PUR_SAM_LOAD_SAG      : COPY_TIMER (piz_uncompress_all_ctxs__sam_load_sag);      break;
     }
+
+    buf_destroy (vb->z_data); // destroy and not free: no point hoarding this memory during reconstruction (15% of all RAM consumption in some cases) 
 }
 
 // PIZ compute thread entry point
@@ -422,6 +420,15 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     if (piz_need_digest && (!z_has_gencomp || VB_DT(FASTQ)) && !(flag.deep_fq_only && !VB_DT(FASTQ)))
         digest_one_vb (vb, true, NULL); // LOOKING FOR A DEADLOCK BUG? CHECK HERE
 
+    // unhoard a bunch of memory that is not needed during the stage phase, and also not during the next read stage
+    for_vctx_that (vctx->is_loaded) {
+        buf_destroy (vctx->local);
+        buf_destroy (vctx->b250);
+        buf_destroy (vctx->history);
+        buf_destroy (vctx->piz_ctx_specific_buf);
+    }
+    codec_destroy_all (vb);
+    
     if (DTP(piz_after_recon)) DTP(piz_after_recon)(vb);
 
     vb_set_is_processed (vb); /* tell dispatcher this thread is done and can be joined. this operation needn't be atomic, but it likely is anyway */ 
@@ -459,9 +466,9 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
         ContextP zctx = ctx_get_existing_zctx ((*sec)->dict_id); 
         ASSERT (zctx, "Unexpectedly, zctx for %s was not initialized", dis_dict_id ((*sec)->dict_id).s);
         
-        ASSERT (zctx->did_i == zctx - z_file->contexts || (IS_PIZ && zctx->is_ctx_alias/*PIZ-only field*/), 
+        ASSERT (zctx->did_i == zctx - z_file->ca.contexts || (IS_PIZ && zctx->is_ctx_alias/*PIZ-only field*/), 
                 "Unexpectedly, zctx for %s has wrong did_i=%u, expecting did_i=%u (zctx->dict_i=%s)", 
-                dis_dict_id ((*sec)->dict_id).s, zctx->did_i, (int)(zctx - z_file->contexts), dis_dict_id (zctx->dict_id).s);
+                dis_dict_id ((*sec)->dict_id).s, zctx->did_i, (int)(zctx - z_file->ca.contexts), dis_dict_id (zctx->dict_id).s);
         
         ContextP vctx = CTX(zctx->did_i); // in PIZ z and vb contexts always have same did_i. This is also true for ZIP of R2, bc context was created by R1 and overlayed on this R2 VB.
         bool is_local = IS_LOCAL(*sec);
@@ -751,7 +758,12 @@ static void piz_handover_or_discard_vb (Dispatcher dispatcher, VBlockP *vb)
 
     if (!is_handed_over && !(*vb)->preprocessing &&
         (!flag.one_component || writer_does_vb_need_write ((*vb)->vblock_i)))
-        txt_file->txt_data_so_far_single += (*vb)->txt_data.len; // note: if writing (or SAM with gencomp), this is done in writer_flush_vb, caputring the processing in writer too
+        txt_file->txt_data_so_far_single += (*vb)->txt_data.len; // note: if writing (or SAM with gencomp), this is done in writer_flush_vb, capturing the processing in writer too
+
+    if (!is_handed_over) {
+        buf_destroy ((*vb)->txt_data); // destroy and not free: no point hoarding this memory until the next reconstruction beings (this saves 2-3% of RAM consumption) 
+        buf_destroy ((*vb)->lines); 
+    }
 
     dispatcher_recycle_vbs (dispatcher, !is_handed_over); // don't release VB if handed over - it will be released in writer_release_vb when writing is completed
 }

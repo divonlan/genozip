@@ -73,7 +73,7 @@ static void vcf_seg_FORMAT_GT_increase_ploidy (VBlockVCFP vb, ContextP ht_ctx, u
 {
     if (GT_USES_PBWT) {
         buf_alloc (vb, &ht_ctx->local, 0, new_ploidy * vcf_num_samples * vb->lines.len, 
-                char, CTX_GROWTH, CTX_TAG_LOCAL);
+                char, CTX_GROWTH, C_LOCAL);
 
         uint32_t num_samples = ht_ctx->HT_n_lines * vcf_num_samples + vb->sample_i; // all samples in previous lines + previous samples in current line
         char *ht_data = B1STc (ht_ctx->local);
@@ -165,7 +165,7 @@ void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(gt
         seg_by_ctx (VB, STRa(gt), ctx, gt_len);
 
     else {
-        buf_alloc (vb, &ht_ctx->local, vb->ploidy, ht_ctx->ht_per_line * vb->lines.len, char, CTX_GROWTH, CTX_TAG_LOCAL);
+        buf_alloc (vb, &ht_ctx->local, vb->ploidy, ht_ctx->ht_per_line * vb->lines.len, char, CTX_GROWTH, C_LOCAL);
 
         // note - ploidy of this sample might be smaller than vb->ploidy (eg a male sample in an X chromosesome that was preceded by a female sample, or "." sample)
         Allele *ht_data = B(Allele, ht_ctx->local, ht_ctx->HT_n_lines * ht_ctx->ht_per_line + vb->ploidy * vb->sample_i);

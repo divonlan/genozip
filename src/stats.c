@@ -171,16 +171,12 @@ static void stats_prepare_internals (StatsByLine *sbl, unsigned num_stats, uint6
 // store the sizes of dict / b250 / local in zctx->*.param, and of other sections in sbl[st].z_size
 static void stats_get_compressed_sizes (StatsByLine *sbl) 
 {
-    ARRAY_alloc (ContextIndex, ctx_index, z_file->num_contexts, false, evb->ctx_index, evb, "ctx_index");
-
-    // initialize & prepare context index
-    for (Did did_i=0; did_i < z_file->num_contexts; did_i++) {
-        ZCTX(did_i)->b250.len = ZCTX(did_i)->b250.count; // number of b250 words - move to len
-        ZCTX(did_i)->b250.count = ZCTX(did_i)->dict.count = ZCTX(did_i)->local.count = 0; 
-        ctx_index[did_i] = (ContextIndex){ .did_i = did_i, .dict_id = ZCTX(did_i)->dict_id };
+    for_zctx {
+        zctx->b250.len   = zctx->b250.count; // number of b250 words - move to len
+        zctx->b250.count = zctx->dict.count = zctx->local.count = 0; 
     }
     
-    qsort (ctx_index, z_file->num_contexts, sizeof (ContextIndex), sort_by_dict_id);
+    ctx_create_ctx_index (evb, &z_file->ca);    
 
     for (Section sec = section_next(0); sec; sec = section_next (sec)) {
 
@@ -192,7 +188,7 @@ static void stats_get_compressed_sizes (StatsByLine *sbl)
             sbl[sec->st].z_size += sec->size;
             
         else if ((flag.show_stats_comp_i == COMP_NONE || flag.show_stats_comp_i == sec->comp_i) && IS_DICTED_SEC (sec->st)) {
-            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, z_file->contexts, z_file->d2d_map, &evb->ctx_index, z_file->num_contexts);
+            Did did_i = ctx_get_existing_did_i_do (sec->dict_id, &z_file->ca);
 
             ASSERT (did_i != DID_NONE, "Cannot find zctx for %s with dict_id=%s\n", st_name(sec->st), dis_dict_id (sec->dict_id).s);
 
@@ -799,7 +795,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_local=0, all_z_size=0;
 
     // prepare data
-    #define NUM_SBL (NUM_SEC_TYPES + z_file->num_contexts + 2) // 2 for consolidated groups
+    #define NUM_SBL (NUM_SEC_TYPES + z_file->ca.num_contexts + 2) // 2 for consolidated groups
     ARRAY_alloc (StatsByLine, sbl, NUM_SBL, true, sbl_buf, evb, "stats");
 
     #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 
@@ -850,7 +846,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         all_z_size      += s->z_size;
 
         if ((Z_DT(VCF) || Z_DT(GFF)) && dict_id_type(zctx->dict_id) != DTYPE_FIELD)
-            snprintf (s->name, sizeof (s->name), "%s/%s", dtype_name_z(zctx->dict_id), zctx->tag_name);
+            snprintf (s->name, sizeof (s->name), "%s/%.*s", dtype_name_z(zctx->dict_id), MAX_TAG_LEN, zctx->tag_name);
         else  
             strcpy (s->name, zctx->tag_name);
 
@@ -921,7 +917,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     stats_consolidate_non_ctx (sbl, sbl_buf.len32, "Other", 19 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
                                "SAMPLES", "AUX", TOPLEVEL, "TOP2BAM", "TOP2NONE", "TOP2VCF", "BAM_BIN", "LINEMETA", "CONTIG", "SAG", "SAALN",
                                ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN), ST_NAME (SEC_GENCOMP),
-                               ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_MGZIP), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
+                               ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_GZ_ISIZES), ST_NAME (SEC_GZ_DIGESTS), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
         
     stats_consolidate_non_ctx (sbl, sbl_buf.len32, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     

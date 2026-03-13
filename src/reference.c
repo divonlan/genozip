@@ -602,7 +602,8 @@ static void ref_uncompress_one_range (VBlockP vb)
 
     ref_unlock (&lock);
 
-    buf_free (vb->scratch);
+    buf_destroy (vb->scratch); // this is a lot of data so better destroy than free and let it stay for the rest of the execution (10% of all RAM consumption in some cases)
+    buf_destroy (vb->z_data);
 
 finish:
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined. 
@@ -1238,7 +1239,7 @@ void ref_set_reference (rom filename, ReferenceType ref_type, bool is_explicit)
         if (!env || !env[0]) return; 
 
         bool is_dir = file_is_dir (env);
-        WARN_IF (IS_ZIP && is_dir, "Ignoring $%s=%s because it is a directory. Use --reference to override", GENOZIP_REFERENCE, env);
+        WARN_IF (IS_ZIP && is_dir, "Ignoring $%s=%s because it is a directory. "_TIP"Use --reference or set $GENOZIP_REFERENCE to a file", GENOZIP_REFERENCE, env);
 
         if (is_dir) return; // nothing to set (note: in PIZ, this will be called again with a file name after getting it from the genozip_header)        
         
@@ -1397,8 +1398,8 @@ void ref_load_external_reference (ContextP chrom_ctx)
     
     // case: we are requested the chrom context - word_list and dict
     if (chrom_ctx) {
-        buf_copy (evb, &chrom_ctx->word_list, &ZCTX(REF_CONTIG)->word_list, CtxWord, 0, 0, "contexts->word_list");
-        buf_copy (evb, &chrom_ctx->dict, &ZCTX(REF_CONTIG)->dict, char, 0, 0, "contexts->word_list");
+        buf_copy (evb, &chrom_ctx->word_list, &ZCTX(REF_CONTIG)->word_list, CtxWord, 0, 0, C_WORD_LIST);
+        buf_copy (evb, &chrom_ctx->dict, &ZCTX(REF_CONTIG)->dict, char, 0, 0, C_WORD_LIST);
     }
 
     file_close (&z_file);

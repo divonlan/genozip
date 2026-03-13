@@ -14,6 +14,7 @@ typedef union {
     // used if the digest is MD5
     uint8_t bytes[16]; 
     uint32_t words[4];
+    uint32_t w64[2];
     uint128_t w128;
 
     // used if the digest is Adler32

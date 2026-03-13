@@ -32,8 +32,9 @@ typedef enum {                 BA_TOTAL,     BA_USABLE, BA_UNMAPPED, BA_NO_SEQ, 
 #define BAMASS_STATS_NAMES   { "Alignments", "Usable",  "Unmapped",  "No_SEQ",  "Not_primary",  "Not_in_ref",  "Overflow",  "Consensus_seq", ""       }     
 
 #define LIBDEFLATE_MAX_LEVEL 12
-#define ZLIB_MAX_LEVEL 9
-#define NUM_PLAUSIBLE_LEVELS ((LIBDEFLATE_MAX_LEVEL+1)+LIBDEFLATE_MAX_LEVEL+ZLIB_MAX_LEVEL)
+#define ZLIB_MAX_LEVEL       9
+#define IGZIP_MAX_LEVEL      3
+#define NUM_PLAUSIBLE_LEVELS ((LIBDEFLATE_MAX_LEVEL+1)+LIBDEFLATE_MAX_LEVEL+ZLIB_MAX_LEVEL+(1+IGZIP_MAX_LEVEL))
 
 typedef struct File {
     void *file;
@@ -42,21 +43,21 @@ typedef struct File {
     FileMode mode;
     FileSupertype supertype;            
     FileType type;
-    bool is_remote;                    // true if file is downloaded from a url
-    bool redirected;                   // TXT_FILE: true if this file is redirected from stdin/stdout or a pipe
+    bool is_remote;                    // TXT_FILE ZIP: true if file is downloaded from a url
+    bool redirected;                   // TXT_FILE ZIP/PIZ: true if this file is redirected from stdin/stdout or a pipe
     bool no_more_blocks;               // ZIP TXT_FILE: txtfile_read_block has completed returning all the file's data (note: it is possible that we read all the data on the disk file so feof(fp)=true, but no_more_blocks=false, because some of it is waiting in buffers: gz_data or state->avail_in)
     bool is_in_tar;                    // Z_FILE: file is embedded in tar file
     DataType data_type;
     Codec src_codec;                   // TXT_FILE ZIP/PIZ: internal or external codec of txt file (eg CRAM, BAM, XZ, ZIP, BGZF, MGZF, NONE...). Passed in SectionHeaderTxtHeader.src_codec.
                                        // Z_FILE PIZ: set to CODEC_BCF or CODEC_CRAM iff GenozipHeader.data_type is DT_BCF/DT_CRAM
     Codec effective_codec;             // TXT_FILE ZIP: method with which we actually uncompress txt_file: can be different than .codec, e.g. using GZ instead of a specialized gzip codec, or using BGZF/NONE when streaming
-                                       // TXT_FILE PIZ: reconstruction codec (possibile values: NONE, BGZF, BCF, CRAM)
+                                       // TXT_FILE PIZ: reconstruction codec (possibile values: NONE, BGZF, BCF, CRAM and any exactable MGZIP codec)
     uint32_t num_EOF_blocks;           // TXT_FILE ZIP MGZIP: number of EOF blocks encountered
 
     // these relate to actual bytes on the disk
     int64_t disk_size;                 // ZIP: size of actual file on disk. 0 if not known (eg stdin or http stream). 
     int64_t disk_so_far;               // ZIP: Z/TXT_FILE & PIZ TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
-    int64_t disk_gz_uncomp_or_trunc;   // ZIP: TXT_FILE: gz-compressed data actually either decompressed or discarded due to truncate
+    int64_t disk_gz_uncomp_or_trunc;   // ZIP: TXT_FILE: gz-compressed data actually either uncompressed or discarded due to truncate
     int64_t gz_blocks_so_far;          // ZIP: TXT_FILE: number of gz blocks read from disk
     int64_t est_seggable_size;         // TXT_FILE ZIP, Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
     int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes (used for CRAM)
@@ -118,10 +119,8 @@ typedef struct File {
     
     // dictionary information used for writing GENOZIP files - can be accessed only when holding mutex
     Mutex dicts_mutex;                 // this mutex protects contexts and num_contexts from concurrent adding of a new dictionary
-    Did num_contexts;                  // length of populated subfield_ids and mtx_ctx;
     
-    DictIdtoDidMap d2d_map; // map for quick look up of did_i from dict_id : 64K for key_map, 64K for alt_map 
-    ContextArray contexts;             // Z_FILE ZIP/PIZ: a merge of dictionaries of all VBs
+    ContextArray ca;                   // Z_FILE ZIP/PIZ: a merge of dictionaries of all VBs
     Buffer ra_buf;                     // ZIP/PIZ:  RAEntry records
     
     // section list - used for READING and WRITING genozip files
@@ -131,7 +130,7 @@ typedef struct File {
     // TXT file: reading
     Buffer unconsumed_txt;             // ZIP: excess uncompressed data read from the txt file - moved to the next VB: the final part of vb->txt_data that was not consumed
     Buffer unconsumed_mgzip_blocks;    // ZIP TXT MGZIP codecs: unconsumed or partially consumed MGZIP blocks - moved to the next VB
-    Buffer gz_data;                    // ZIP TXT GZ: yet-unconsumed gz data read from disk. .comp_len/.uncomp_len refer to the first block in the buffer (in IL1M, but not BGZF, there might be additional data after the first block) 
+    Buffer gz_data;                    // ZIP TXT GZ: yet-unconsumed gz data read from disk. .comp_len/.uncomp_len refer to the first block in the buffer (in ILxM, but not BGZF, there might be additional data after the first block) 
     Buffer igzip_state;                // ZIP TXT GZ (with igzip).
     uint64_t start_gz_block;           // ZIP TXT GZ (with igzip): offset in file of start of a gz block
     uint32_t mgsp_vb_isize;            // ZIP TXT GZ (with MGSP): isize of each gz block in the VB (except for the last block that might be slightly more)
@@ -143,15 +142,18 @@ typedef struct File {
 
     // TXT_FILE: MGZIP stuff reading and writing compressed txt files 
     Mutex bgzf_discovery_mutex;        // TXT_FILE: ZIP: used to discover BGZF level
+    uint64_t orig_gz_file_size;        // PIZ: size of source gz-compressed file as passed in SectionHeaderGzDigests. Up 15.0.79: only 3 LSB of size as passed in SectionHeaderTxtHeader.OLD_gz_size_3LSB
     Buffer mgzip_isizes;               // ZIP/PIZ: MGZIP: uncompressed size of the MGZIP blocks in which this txt file is compressed
+    Buffer mgzip_digests;              // ZIP/PIZ: 32b digest of each MGZIP block
     Buffer mgzip_starts;               // ZIP: offset in txt_file of each BGZF block
-    struct FlagsMgzip bgzf_plausible_levels[NUM_PLAUSIBLE_LEVELS];      // ZIP: discovering library/level. .count = number of BGZF blocks tested so far
-    uint8_t num_plausible_levels;       // ZIP: number of bgzf_plausible_levels that have not been marked as implausible
+    FlagsMgzip bgzf_plausible_levels[NUM_PLAUSIBLE_LEVELS];      // ZIP: discovering library/level. .count = number of BGZF blocks tested so far
+    uint8_t num_plausible_levels;      // ZIP: number of bgzf_plausible_levels that have not been marked as implausible
     uint8_t num_bgzf_blocks_tested_for_level; // ZIP: number of bgzf blocks tested for discovering level
-    struct FlagsMgzip mgzip_flags;     // corresponds to SectionHeader.flags in SEC_MGZIP
-    uint8_t bgzf_signature[3];         // PIZ: 3 LSB of size of source BGZF-compressed file, as passed in SectionHeaderTxtHeader.codec_info
-    bool non_EOF_zero_block_found;     // ZIP: file contains an isize=0 block that is not identical to the EOF block, therefore we won't be able to reconstruct exactly
-     
+    FlagsMgzip mgzip_flags;     // corresponds to SectionHeader.flags in SEC_GZ_ISIZES
+    thool is_exactable;                // ZIP: is file re-compressable with --bgzf=exact
+    bool once_set_is_exactable;        // ZIP: ensure only one compute thread gets to set is_exactable
+    bool exact_failed_verification;    // PIZ: failed to recompress gz exactly
+
     // TXT_FILE: accounting for truncation when --truncate-partial-last-line is used
     uint32_t last_truncated_line_len;  // ZIP: bytes truncated due to incomplete final line. note that if file is BGZF, then this truncated data is contained in the final intact BGZF blocks, after already discarding the final incomplete BGZF block
 

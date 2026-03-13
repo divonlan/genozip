@@ -875,6 +875,19 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                 *item_lens = str - *items;
                 break;
 
+            case CI0_LAST_MATCH: { // items goes until LAST match in string of sep1
+                char sep1 = con->items[item_i].separator[1];
+                *items = str;
+
+                for (str=after_str-1; str >= *items && *str != sep1; str--);
+                ASSSPLIT (str >= *items, "item_i=%u reached end of string (LAST_MATCH) without finding separator '%c' in string \"%.*s\"", 
+                          item_i, sep, str_len, save_str);
+
+                *item_lens = str - *items;
+                str++; // skip separator
+                break;
+            }
+
             case 0: long_var_0_pad:
                 // case: no separator and next item has no prefix - goes to end of string
                 if (!(px < after_px && IS_PRINTABLE(*px))) { // make sure we don't have an implicit separator - the prefix of the next item

@@ -138,6 +138,10 @@ typedef struct DataTypeProperties {
     rom dtype_names[4];                         // the dictionary type names
 } DataTypeProperties;
 
+// return values of DataTypeProperties.unconsumed
+#define UNCONSUMED_NEED_MORE_DATA -1
+#define UNCONSUMED_TRUNCATE_VB    -2
+
 #define usz(type) ((unsigned)sizeof(type))
 #define DATA_TYPE_PROPERTIES { \
 /*                 name         is_bin \n-end use_ref txt_type   bin_type  sizeof_vb       sizeof_zip_dataline   txt_headr   hdr_contigs     1st  is_header_done          unconsumed          inspect_txt_header      is_data_type  zip_initialize          zip_after_segconf        zip_after_vbs,     zip_finalize         zip_end_of_z           zip_init_vb        zip_after_compute          zip_dts_flag          zip_set_vb_header_specific        zip_set_txt_header_flags         zip_modify        seg_initialize          seg_txt_line          assseg_line          seg_is_big            seg_is_small          seg_finalize          segconf_finalize        zip_custom_merge     seg_modifies zip_comp_cb        zip_after_compress        stats_reallocate        zip_genozip_header        piz_genozip_header        piz_after_global_area   piz_preprocess                          piz_header_init        piz_initialize          piz_finalize         piz_after_vb_header        piz_init_vb          piz_vb_recon_init           piz_init_line       piz_after_recon             piz_process_recon         piz_after_preproc_vb      piz_preproc_finalize      piz_xtra_line_data      is_skip_section             reconstruct_seq            container_filter       container_cb              con_item_cb          num_special          special          num_trans        translators         line_name        dtype_names                             */ \

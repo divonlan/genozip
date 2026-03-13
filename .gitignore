@@ -51,6 +51,7 @@ notes.txt
 to do.txt
 junk*
 meta.yaml
+gz-block.*
 src/windows/genozip-installer.ifp
 src/windows/LICENSE.for-installer.txt
 src/mac/darwinpkg/Library/genozip/*

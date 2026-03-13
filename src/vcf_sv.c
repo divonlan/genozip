@@ -7,7 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 sSTRl_ARRAY(copy_mate_snip, NUM_TWs, 30);
 sSTRl(snip_copy_cipos, 16);
@@ -38,7 +38,7 @@ void vcf_sv_seg_initialize (VBlockVCFP vb, Did *tw_dids, int num_tw_dids)
         // follow the logic of SAM_QNAME and qname_hash
         decl_ctx (VCF_ID);
         ctx->id_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clz (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
-        buf_alloc_255(vb, &ctx->id_hash, 0, (1ULL << ctx->id_hash.prm8[0]), int32_t, 1, "contexts->id_hash");
+        buf_alloc_255(vb, &ctx->id_hash, 0, (1ULL << ctx->id_hash.prm8[0]), int32_t, 1, C_"id_hash");
 
         ctx_set_store_per_line (VB, VCF_ID, DID_EOL); // note: VCF_ID is not in the TW list because we don't mux it (we can't mux it as we don't know the mate yet)
 
@@ -159,7 +159,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_MATE)
     
     // case: numeric value 
     else if (base_ctx->flags.store == STORE_INT) {
-        new_value->i = (vb->mate_line_i < base_ctx->history.len32) ? *B64(base_ctx->history, vb->mate_line_i) : 0; // note: a non-existant STORE_INT mate is taken as 0
+        new_value->i = (vb->mate_line_i < base_ctx->history.len32) ? piz_get_history (base_ctx, vb->mate_line_i) : 0; // note: a non-existant STORE_INT mate is taken as 0
         
         if (reconstruct) RECONSTRUCT_INT (new_value->i);
         

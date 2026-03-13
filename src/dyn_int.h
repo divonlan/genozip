@@ -12,8 +12,15 @@
 #include "local_type.h"
 
 extern void dyn_int_init_ctx (VBlockP vb, ContextP ctx, int64_t value);
+extern rom dyn_int_lt_order_name (uint8_t dyn_lt_order);
+
+// ZIP
 extern void dyn_int_append (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes);
 extern void dyn_int_append_nothing_char (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern LocalType dyn_int_get_ltype (ContextP ctx);
-extern rom dyn_int_lt_order_name (uint8_t dyn_lt_order);
 extern void dyn_int_transpose (VBlockP vb, ContextP ctx);
+
+// PIZ
+extern void dyn_int_store_history (VBlockP vb, ContextP ctx, int64_t value);
+extern int64_t piz_get_history (ContextP ctx, uint32_t line_i);
+

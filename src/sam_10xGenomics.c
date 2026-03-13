@@ -8,7 +8,7 @@
 
 #include "sam_private.h"
 #include "lookback.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "context.h"
 #include "huffman.h"
 

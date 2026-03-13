@@ -45,7 +45,7 @@ extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_byte
 extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes);
 
 extern WordIndex seg_integer_as_snip_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
-#define seg_integer_as_snip(vb,did_i,n,add_sizeof_n) seg_integer_as_snip_do((VBlockP)(vb), &vb->contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
+#define seg_integer_as_snip(vb,did_i,n,add_sizeof_n) seg_integer_as_snip_do((VBlockP)(vb), &vb->ca.contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length, unsigned add_bytes);

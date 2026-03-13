@@ -53,7 +53,7 @@ void sam_segconf_finalize_optimizations (void)
     segconf.optimize[OPTION_ZM_B_s] = segconf.has[OPTION_ZM_B_s] && ((MP(TMAP/*mapped file*/) || MP(TORRENT_BC/*unmapped file*/)));
 
     // set float optimizations (note: all new contexts discovered by segconf were already added to z_file->contexts)
-    for (Did did_i=SAM_FIRST_OPTIONAL_DID; did_i < z_file->num_contexts; did_i++) {
+    for (Did did_i=SAM_FIRST_OPTIONAL_DID; did_i < z_file->ca.num_contexts; did_i++) {
         #define ID(i,c) (ZCTX(did_i)->dict_id.id[i] == (c))
         if (segconf.has[did_i] && ((ID(2,':') && ID(3,'f') && ID(4,'\0')) || 
                                    (ID(2,':') && ID(3,'B') && ID(4,':') && ID(5,'f') && ID(6,'\0'))))

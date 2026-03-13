@@ -214,7 +214,7 @@ bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual)/*textual*/, unsigned add_byt
     if (dq_len != qual_len || iq_len != qual_len || sq_len != qual_len) return false;
 
     buf_alloc (VB, &diff_ctx->local, qual_len, MIN_(vb->lines.len * qual_len, Ltxt / 5/*SEQ+QUAL+dq+iq+sq*/), 
-               char, CTX_GROWTH, CTX_TAG_LOCAL);
+               char, CTX_GROWTH, C_LOCAL);
 
     char *next = BAFTc(diff_ctx->local);
 

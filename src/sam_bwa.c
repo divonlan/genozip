@@ -10,7 +10,7 @@
 #include "chrom.h"
 #include "lookback.h"
 #include "b250.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 // -------------------------------------------------------
 // XA:Z "Alternative alignments" (a BWA, gem3 feature)

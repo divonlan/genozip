@@ -10,6 +10,7 @@
 #include "random_access.h"
 #include "aligner.h"
 #include "refhash.h"
+#include "dyn_int.h"
 
 //---------------
 // Shared ZIP/PIZ
@@ -42,7 +43,7 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 po
     // if we're going to store seq for Deep, we need to record the NONREF (i.e. S, I) bases
     char *deep_nonref = NULL; 
     if (has_deep) {
-        buf_alloc_exact (vb, nonref_ctx->deep_nonref, vb->seq_len - ref_and_seq_consumed, char, "contexts->deep_nonref");
+        buf_alloc_exact (vb, nonref_ctx->deep_nonref, vb->seq_len - ref_and_seq_consumed, char, C_"deep_nonref");
         deep_nonref = is_revcomp ? BLSTc(nonref_ctx->deep_nonref) : B1STc(nonref_ctx->deep_nonref);
     }
 
@@ -199,22 +200,22 @@ void sam_seg_SEQ_initialize (VBlockP vb)
 
     // initial allocations, these might grow during segging if needed
     int factor = segconf.sam_is_unmapped ? 1 : 32; // if mapped, we allocate assuming 1 out of 32 lines is unmapped
-    buf_alloc (vb, &bitmap_ctx->local, 1, Ltxt / (4 * factor), uint8_t, 0, CTX_TAG_LOCAL); 
-    buf_alloc (vb, &strand_ctx->local, 1, roundup_bits2bytes64 (vb->lines.len / factor), uint8_t, 0, CTX_TAG_LOCAL); 
-    buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len / factor, uint32_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+    buf_alloc (vb, &bitmap_ctx->local, 1, Ltxt / (4 * factor), uint8_t, 0, C_LOCAL); 
+    buf_alloc (vb, &strand_ctx->local, 1, roundup_bits2bytes64 (vb->lines.len / factor), uint8_t, 0, C_LOCAL); 
+    buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len / factor, uint32_t, CTX_GROWTH, C_LOCAL); 
 
     if (!segconf.sam_is_unmapped || flag.aligner_available) {
-        buf_alloc (vb, &nonref_ctx->local, 0, Ltxt / 64, char, 0, CTX_TAG_LOCAL);
+        buf_alloc (vb, &nonref_ctx->local, 0, Ltxt / 64, char, 0, C_LOCAL);
 
         for (int i=0; i < 4; i++)
-            buf_alloc (vb, &seqmis_ctx[i].local, 1, Ltxt / 128, char, 0, CTX_TAG_LOCAL); 
+            buf_alloc (vb, &seqmis_ctx[i].local, 1, Ltxt / 128, char, 0, C_LOCAL); 
 
         if (segconf.use_insertion_ctxs)    
             for (int i=0; i < 4; i++) 
-                buf_alloc (vb, &seqins_ctx[i].local, Ltxt / 256, 0, char, 0, CTX_TAG_LOCAL); 
+                buf_alloc (vb, &seqins_ctx[i].local, Ltxt / 256, 0, char, 0, C_LOCAL); 
     }
     else // we store seq vertabim - no reference and no CIGAR
-        buf_alloc (vb, &nonref_ctx->local, 0, Ltxt / 3, char, 0, CTX_TAG_LOCAL);
+        buf_alloc (vb, &nonref_ctx->local, 0, Ltxt / 3, char, 0, C_LOCAL);
 }
 
 // align nonref_ctx->local to a 4-character boundary. this is because CODEC_ACGT squeezes every 4 characters into a byte,
@@ -421,7 +422,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
     }
 
     buf_alloc_bits (vb, &bitmap_ctx->local, ref_and_seq_consumed, vb->lines.len32 / 16 * segconf.std_seq_len, 
-                    SET/*initialize to "no mismatches"*/, CTX_GROWTH, CTX_TAG_LOCAL); 
+                    SET/*initialize to "no mismatches"*/, CTX_GROWTH, C_LOCAL); 
     
     if (vb->bisulfite_strand) {
         if (segconf.sam_predict_meth_call) {
@@ -437,13 +438,13 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
     }
 
     for (int i=0; i < 4; i++) 
-        buf_alloc (vb, &seqmis_ctx[i].local, ref_and_seq_consumed, 0, char, CTX_GROWTH, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &seqmis_ctx[i].local, ref_and_seq_consumed, 0, char, CTX_GROWTH, C_LOCAL); 
 
     if (segconf.use_insertion_ctxs)    
         for (int i=0; i < 4; i++) 
-            buf_alloc (vb, &seqins_ctx[i].local, vb->insertions,   0, char, CTX_GROWTH, CTX_TAG_LOCAL); 
+            buf_alloc (vb, &seqins_ctx[i].local, vb->insertions,   0, char, CTX_GROWTH, C_LOCAL); 
 
-    buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+    buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, C_LOCAL); 
 
     bitmap_ctx->local_num_words++;
 
@@ -712,7 +713,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq), unsigned
             default                 : ABORT0 ("bad value");
         }
 
-        buf_alloc (vb, &nonref_ctx->local, 3, 0, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &nonref_ctx->local, 3, 0, uint8_t, CTX_GROWTH, C_LOCAL); 
         sam_seg_SEQ_pad_nonref (VB);
 
         vb->md_verified = false;    
@@ -722,7 +723,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq), unsigned
     // case: unmapped line, no refhash: just store the sequence in nonref without an indication in the bitmap
     else if (unmapped && !aligner_ok) { 
         add_seq_verbatim:        
-        buf_alloc (vb, &nonref_ctx->local, textual_seq_len + 3, 0, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &nonref_ctx->local, textual_seq_len + 3, 0, uint8_t, CTX_GROWTH, C_LOCAL); 
         memcpy (BAFTc(nonref_ctx->local), textual_seq, textual_seq_len);
         nonref_ctx->local.len32 += textual_seq_len;
 
@@ -1016,7 +1017,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     #define adjusted(base_i) ((base_i) + (predict_meth_call ? 2 : 0))
 #ifdef DEBUG // this function is a performance hotspot, therefore this code is only a compilation, not runtime, option
     #define verify_is_set(base_i) ASSPIZ (!flag.debug || IS_REF_EXTERNAL || (adjusted(base_i) < bitmap_ctx->piz_is_set.len32 && *Bc(bitmap_ctx->piz_is_set, adjusted(base_i)) == 1), \
-                                          "Expecting POS=%u + base_i=%u to have is_set=1", (PosType32)vb->contexts[SAM_POS].last_value.i, (base_i))
+                                          "Expecting POS=%u + base_i=%u to have is_set=1", (PosType32)vb->ca.contexts[SAM_POS].last_value.i, (base_i))
     #define verify_is_set_n(ref, n) ({ for (uint32_t i=0; i < (n); i++) verify_is_set ((ref) + i); })
 #else
     #define verify_is_set(base_i)
@@ -1109,7 +1110,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
     char *deep_nonref = NULL;
     if (deep_seq_by_ref) {
-        buf_alloc_exact (vb, nonref_ctx->deep_nonref, vb->insertions + vb->soft_clip[0] + vb->soft_clip[1], char, "contexts->deep_nonref");
+        buf_alloc_exact (vb, nonref_ctx->deep_nonref, vb->insertions + vb->soft_clip[0] + vb->soft_clip[1], char, C_"deep_nonref");
         deep_nonref = B1STc (nonref_ctx->deep_nonref);
     }
 
@@ -1367,15 +1368,16 @@ static void reconstruct_SEQ_copy_saggy (VBlockSAMP vb, ContextP ctx, ReconType r
     START_TIMER;
     if (!reconstruct || !ctx->is_loaded) return;
 
-    SamFlags saggy_flags = (SamFlags){ .value = *B(int64_t, CTX(SAM_FLAG)->history, vb->saggy_line_i) };
+    SamFlags saggy_flags = (SamFlags){ .value = piz_get_history (CTX(SAM_FLAG), vb->saggy_line_i) };
     bool xstrand = saggy_flags.rev_comp != last_flags.rev_comp;
 
     HistoryWord word = *B(HistoryWord, ctx->history, vb->saggy_line_i); // SEQ is always stored as LookupTxtData or LookupPerLine
-    uint32_t seq_len = word.len - vb->hard_clip[0] - vb->hard_clip[1]; // our sequence is a sub-sequence of the saggh sequence
+    uint32_t seq_len = word.len - vb->hard_clip[0] - vb->hard_clip[1];  // our sequence is a sub-sequence of the saggy sequence
 
     char *seq = BAFTtxt;
 
-    rom saggy_seq = ((word.lookup == LookupTxtData) ? Btxt (word.index) : Bc(ctx->per_line, word.index));
+    rom saggy_seq = ((word.lookup == LookupTxtData) ? Btxt (word.index) 
+                                   /*LookupPerLine*/: Bc(ctx->dropped_txt, word.index));
 
     if (OUT_DT(SAM)) {
         if (xstrand)

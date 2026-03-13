@@ -67,7 +67,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
 
     // save FORMAT field for potential duplication on the next line - only if we are certain there is no conditional renaming
     format_ctx->last_format.len = 0; // reset 
-    buf_add_moreS (vb, &format_ctx->last_format, fmt, "contexts->last_format");
+    buf_add_moreS (vb, &format_ctx->last_format, fmt, C_"last_format");
 
     str_split (fmt, fmt_len, 0, ':', sf_name, false);
 
@@ -123,18 +123,18 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         ASSVCF (node_index == samples_ctx->format_mapper_buf.len32, 
                 "node_index=%d different than format_mapper_buf.len=%u", node_index, samples_ctx->format_mapper_buf.len32);
 
-        buf_alloc (vb, &samples_ctx->format_mapper_buf, 1, 0, Container, CTX_GROWTH, "contexts->format_mapper_buf");
+        buf_alloc (vb, &samples_ctx->format_mapper_buf, 1, 0, Container, CTX_GROWTH, C_"format_mapper_buf");
         samples_ctx->format_mapper_buf.len++;
 
-        buf_alloc (vb, &samples_ctx->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, "contexts->format_contexts");
+        buf_alloc (vb, &samples_ctx->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, C_"format_contexts");
         samples_ctx->format_contexts.len++;
 
         // one set of vcf_num_samples TxtWords for each FORMAT
         if (segconf.vcf_sample_copy) {
-            buf_alloc_zero (vb, &samples_ctx->last_samples, vcf_num_samples, 0, TxtWord, CTX_GROWTH, "contexts->last_samples");
+            buf_alloc_zero (vb, &samples_ctx->last_samples, vcf_num_samples, 0, TxtWord, CTX_GROWTH, C_"last_samples");
             samples_ctx->last_samples.len += vcf_num_samples;
 
-            buf_alloc_zero (vb, &copy_sample_ctx->sample_copied, vcf_num_samples, 0, bool, CTX_GROWTH, "contexts->sample_copied");
+            buf_alloc_zero (vb, &copy_sample_ctx->sample_copied, vcf_num_samples, 0, bool, CTX_GROWTH, C_"sample_copied");
             copy_sample_ctx->sample_copied.len += vcf_num_samples;
         }
     }    

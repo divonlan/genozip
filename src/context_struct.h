@@ -31,17 +31,33 @@ typedef packed_enum {  // PIZ: set by a SPECIAL function, as if there was a WORD
     SPEC_RES_DEFERRED     // not reconstructed - will be reconstructed from top level container callback
 } SpecialResult;              
 
-#define CTX_TAG_B250       "contexts->b250"
-#define CTX_TAG_LOCAL      "contexts->local"
-#define CTX_TAG_DICT       "contexts->dict"
-#define CTX_TAG_COUNTS     "contexts->counts"
-#define CTX_TAG_NODES      "contexts->nodes"
-#define CTX_TAG_LOCAL_HASH "contexts->local_hash"
+#define C_              "ctx->"
+#define Z_              "z"
+#define C_B250          C_"b250"
+#define C_LOCAL         C_"local"
+#define C_DICT          C_"dict"
+#define C_NODES         C_"nodes"
+#define C_OL_DICT       C_"ol_dict"
+#define C_OL_NODES      C_"ol_nodes"
+#define C_COUNTS        C_"counts"
+#define C_LOCAL_HASH    C_"local_hash"
+#define C_GLOBAL_HASH   C_"global_hash"
+#define C_STON_HASH     C_"ston_hash"
+#define C_HISTORY       C_"history"
+#define C_DROPPED_TXT   C_"dropped_txt"
+#define C_WORD_LIST     C_"word_list"
+#define C_HUFFMAN       C_"huffman"
+#define C_COUNTS        C_"counts"
+#define C_CON_INDEX     C_"con_index"
+#define C_CON_CACHE     C_"con_cache"        
+#define C_DEFERRED_SNIP C_"deferred_snip"
 
 typedef struct Context {
     // ------ common fields for ZIP & PIZ ------ 
     char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
     DictId dict_id;            // the dict_id of this context
+
+    int64_t dyn_int_min, dyn_int_max; // ZIP/PIZ vctx: if ltype=LT_DYN* - min and max values encountered in this VB so far
 
     Did did_i;                 // the index of this ctx within the array vb->contexts. PIZ: if this context is an ALIAS_CTX, did_i contains the destination context did_i
     Did dict_did_i;            // ZIP/PIZ: zctx only: normally ==did_i, but if context is a ALIAS_DICT, did_i of its destination (shared dictionary between otherwise independent contexts)
@@ -57,6 +73,7 @@ typedef struct Context {
     uint8_t dict_helper;       // ZIP zctx / PIZ zctx+vctx: context-specific value passed through SectionHeaderDictionary.dict_helper (since 15.0.42)
     uint8_t con_rep_special;   // ZIP/PIZ: zctx: SPECIAL for getting container repeats in case of CON_REPEATS_IS_SPECIAL
     };
+    
 
     LocalType ltype;           // LT_* - type of local data - included in the section header
     LocalType pair_ltype;      // LT_* - Used if this file is a PAIR_R2 - type of local data of PAIR_R1
@@ -70,10 +87,13 @@ typedef struct Context {
     Codec lsubcodec_piz;       // ZIP/PIZ: vctx: piz to decompress with this codec, AFTER decompressing with lcodec
     Codec qual_codec;          // ZIP zctx: QUAL codec selected in codec_assign_best_qual_codec
     };
-    bool z_data_exists;        // ZIP/PIZ: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
     bool is_initialized;       // ZIP/PIZ: context-specific initialization has been done
     
-    uint8_t nothing_char;      // ZIP/PIZ: if non-zero, if local integer == max_int (for its ltype), nothing_char will be reconstructed instead. In PIZ, 0xff means fallback to pre-15.0.39
+    union {
+    bool z_data_exists;        // ZIP/PIZ: zctx: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
+    uint8_t dyn_lt_order;      // ZIP/PIZ: vctx: if ltype=LT_DYN*, the current ltype order of the data in local (ZIP) or history (PIZ)
+    };
+    uint8_t nothing_char;      // ZIP/PIZ: vctx: if non-zero, if local integer == max_int (for its ltype), nothing_char will be reconstructed instead. In PIZ, 0xff means fallback to pre-15.0.39
 
     #define FIRST_BUFFER_IN_Context dict
     Buffer dict;               // ZIP/PIZ: tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
@@ -97,14 +117,12 @@ typedef struct Context {
     Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
                                // ZIP: counts.param is a context-specific global counter that gets accumulated in zctx during merge (e.g. OPTION_SA_CIGAR)
 
-    #define CTX_TAG_CON_INDEX "contexts->con_index"
     Buffer con_index;          // PIZ: use by contexts that might have containers: Array of uint32_t - index into con_cache - Each item corresponds to word_index. 
                                // ZIP: used by: 1. seg_array_of_struct
 
     // ZIP/PIZ: context specific buffer #1
     union {
         // GENERAL
-        #define CTX_TAG_CON_CACHE "contexts->con_cache"        
         Buffer con_cache;          // PIZ: vctx: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
                                    //      Each struct is truncated to used items, followed by prefixes. 
                                    // ZIP: vctx: seg_array, sam_seg_array_field_get_con cache a container.
@@ -157,7 +175,7 @@ typedef struct Context {
     // ------------------------------------------------------------------------------------------------
     // START: RECONSTRUCT STATE : copied in reconstruct_peek 
     #define reconstruct_state_start(ctx) ((char*)&(ctx)->last_value)
-    #define reconstruct_state_size_formula  ((char*)(&evb->contexts[0].last_encounter_was_reconstructed + 1) - (char*)(&evb->contexts[0].last_value))
+    #define reconstruct_state_size_formula  ((char*)(&evb->ca.contexts[0].last_encounter_was_reconstructed + 1) - (char*)(&evb->ca.contexts[0].last_value))
 
     ValueType last_value;          // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
     union {
@@ -315,8 +333,6 @@ typedef struct Context {
     ValueType rback_last_value;
     int64_t rback_last_delta, rback_ctx_spec_param;
     
-    int64_t dyn_int_min, dyn_int_max; // ZIP vctx: if ltype=LT_DYN* - min and max values encountered in this VB so far
-
     STR (last_snip);           // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated             
 
     uint32_t rback_b250_count, rback_local_num_words, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
@@ -325,7 +341,6 @@ typedef struct Context {
 
     bool local_always;         // ZIP vctx: always create a local section in zfile, even if it is empty 
     bool local_is_lten;        // ZIP vctx: if true local data is LTEN, otherwise it is the machine (native) endianity
-    uint8_t dyn_lt_order;      // ZIP vctx: if ltype=LT_DYN*, the current ltype order of the data in local
     bool dyn_transposed;       // ZIP vctx: matrix should be transposed, if possible
     bool no_drop_b250;         // ZIP: the b250 section cannot be optimized away in b250_zip_generate_section (eg if we need section header to carry a param)
     bool no_callback;          // ZIP vctx: don't use callback for compressing, despite it being defined
@@ -358,8 +373,8 @@ typedef struct Context {
     // ------ PIZ-only fields ------ 
     struct {
     Buffer word_list;          // PIZ: zctx (+ overlayed to vctx): word list. an array of CtxWord - listing the snips in dictionary
-    Buffer per_line;           // PIZ: data copied from txt_data for fields with textual store_per_line, used in if the line was dropped
-    Buffer history;            // PIZ: contains an array of either int64_t (if STORE_INT) or HistoryWord. used for: A. if FlagsCtx.store_per_line. B. for lookback (since 12.0.41) 
+    Buffer history;            // PIZ: contains an array of either int64_t (if STORE_INT) or HistoryWord (pointing into txt_data, dict or dropped_txt). used for: A. if FlagsCtx.store_per_line. B. for lookback (since 12.0.41) 
+    Buffer dropped_txt;        // PIZ: reconstructed txt that might be pointed to by ctx->history, and is absent from txt_data because: 1. the line was dropped due to genocat subsetting, 2. reconstruction of CIGAR in FASTQ
 
     // PIZ: context-specific buffer
     union {
@@ -395,11 +410,10 @@ typedef struct {
     Did did_i;
 } ContextIndex;
 
-typedef Did DictIdtoDidMap[65536 * 2];
-static inline void init_dict_id_to_did_map (DictIdtoDidMap d2d_map)
-{
-    memset (d2d_map, 0xff, sizeof (DictIdtoDidMap)); // DID_NONE
-}
-
-typedef Context ContextArray[MAX_DICTS];
-
+typedef struct ContextArray {
+    Buffer ctx_index;  // sorted index into contexts for binary-search lookup if d2d_map fails (PIZ VB / ZIP evb in stats_get_compressed_sizes)
+    Did num_contexts;             
+    Did d2d_map[65536 * 2];
+    Context contexts[MAX_DICTS];
+} ContextArray, *ContextArrayP;
+typedef const struct ContextArray *ConstContextArrayP;

@@ -205,6 +205,12 @@ enum libdeflate_result {
 	/* The data would have decompressed to more than 'out_nbytes_avail'
 	 * bytes.  */
 	LIBDEFLATE_INSUFFICIENT_SPACE = 3,
+
+	// divon's additions
+	LIBDEFLATE_INSUFFICIENT_DATA,
+	LIBDEFLATE_NOT_GZIP,
+	LIBDEFLATE_BAD_CRC,
+	LIBDEFLATE_WRONG_ISIZE
 };
 
 /*

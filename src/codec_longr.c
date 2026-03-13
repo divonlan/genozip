@@ -16,7 +16,7 @@
 #include "piz.h"
 #include "stats.h"
 
-#include "codec_longr_alg.c" // seperate source file for this, as it derived from external code with a different license
+#include "codec_longr_alg.c" // separate source file for this, as it derived from external code with a different license
 
 bool codec_longr_maybe_used (VBlockP vb, Did did_i)
 {
@@ -128,7 +128,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     memset (&value_to_bin[next_val], NUM_BINS-1, 256 - next_val); // remaining high values (with 0 in their histogram) go to the top bin
 
     // store the value-to-bin map in the file as a global SEC_COUNTS section - convert to uint64 (luckily, it is small)
-    buf_alloc (evb, &zctx->counts, 0, 256, uint64_t, 0, "zctx->counts");
+    buf_alloc (evb, &zctx->counts, 0, 256, uint64_t, 0, Z_ C_COUNTS);
     for (unsigned i=0; i < 256; i++)
         BNXT64 (zctx->counts) = value_to_bin[i];
 
@@ -202,7 +202,7 @@ COMPRESS (codec_longr_compress)
     }
     
     // we now sort the quality data by channel (reversing qual of revcomp reads)
-    buf_alloc (vb, &values_ctx->local, *uncompressed_len, 0, uint8_t, 0, CTX_TAG_LOCAL);
+    buf_alloc (vb, &values_ctx->local, *uncompressed_len, 0, uint8_t, 0, C_LOCAL);
     values_ctx->local.len = *uncompressed_len;
 
     uint8_t *sorted_qual = B1ST8 (values_ctx->local);
@@ -230,7 +230,7 @@ COMPRESS (codec_longr_compress)
 
     // channel lengths 
     lens_ctx->local.len = 0; // overwrite previous QUAL->local.len
-    buf_alloc (vb, &lens_ctx->local, LONGR_NUM_CHANNELS, 0, uint32_t, 0, CTX_TAG_LOCAL);
+    buf_alloc (vb, &lens_ctx->local, LONGR_NUM_CHANNELS, 0, uint32_t, 0, C_LOCAL);
     lens_ctx->local.len = LONGR_NUM_CHANNELS; 
 
     ARRAY (uint32_t, lens, lens_ctx->local);
@@ -330,7 +330,7 @@ static void codec_longr_reconstruct_init (VBlockP vb, ContextP lens_ctx, Context
         value_to_bin_dst[i] = value_to_bin_src[i]; // uint64 -> uint8
 
     // initialize longr state - stored in lens_ctx.longr_state
-    buf_alloc_zero (vb, &lens_ctx->longr_state, 1, 0, LongrState, 0, "contexts->longr_state"); 
+    buf_alloc_zero (vb, &lens_ctx->longr_state, 1, 0, LongrState, 0, C_"longr_state"); 
     codec_longr_alg_init (B1ST (LongrState, lens_ctx->longr_state));
 
     lens_ctx->is_initialized = true;

@@ -22,7 +22,7 @@ typedef packed_enum {
     // Illumina-style FASTQ QNAME2 flavors (also appears in Ultima, Singular...)
     QF_ILLUM_2bc, QF_ILLUM_1bc, QF_ILLUM_0bc, 
     // MGI flavors
-    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_SAP8, QF_MGI_MFT, QF_MGI_varlen, QF_MGI_r6, QF_MGI_die6, QF_MGI_r7, QF_MGI_r8, QF_MGI_ll7, QF_MGI_cl, QF_MGI_ml, QF_MGI_dl, QF_MGI_rgs8, QF_MGI_rgs8FQ,
+    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_SAP8, QF_MGI_MFT, QF_MGI_varlen, QF_MGI_R6, QF_MGI_die6, QF_MGI_R7, QF_MGI_R8, QF_MGI_R8_1bc, QF_MGI_R8_2bc, QF_MGI__varlen, QF_MGI_Rgs8, QF_MGI_Rgs8FQ,
     // PacBio flavors 
     QF_PACBIO_3, QF_PACBIO_rng, QF_PACBIO_lbl, QF_PACBIO_pln, QF_ONSO,
     // Nanopore flavors
@@ -56,6 +56,8 @@ extern QnameFlavor qname_get_optimize_qf (void);
 extern void qname_zip_initialize (void);
 extern void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i);
 extern void qname_segconf_finalize (VBlockP vb);
+
+extern void qname_show_flavor (void);
 
 typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, QTR_NOT_BARCODE2, QTR_NO_MATE, QTR_BAD_MATE, QTR_FAILED_VALIDATE_FUNC, NUM_QTRs } QnameTestResult;
 #define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE",   "BAD_MATE",  "FAILED_VALIDATE_FUNC"}

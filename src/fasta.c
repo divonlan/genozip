@@ -210,7 +210,7 @@ out_of_data:
 
     // case: a single BGZF block without newlines - test next block
     else 
-        return -1; // cannot find end-of-line in the data starting first_i
+        return UNCONSUMED_NEED_MORE_DATA; // cannot find end-of-line in the data starting first_i
 }
 
 //-------------------------
@@ -239,7 +239,7 @@ void fasta_zip_initialize (void)
     // with REF_EXTERNAL, user is telling as this is FAF.
     // we just copy all reference contigs. this are not needed for uncompression, just for --coverage/--idxstats
     if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // single file, or first of pair (and never Deep)
-        ctx_populate_zf_ctx_from_contigs (FASTA_CONTIG, ref_get_ctgs()); 
+        ctx_populate_zf_ctx_from_contigs (ref_get_ctgs()); 
 
     if (flag.bam_assist) {
         qname_zip_initialize(); // note: might also be called during segconf from fasta_segconf_is_qualless_fastq. no harm.
@@ -312,7 +312,7 @@ static bool fasta_segconf_is_qualless_fastq (VBlockP vb)
     
     if (!flag.deep) { // if --deep, already initialized as SAM
         z_file->data_type = DT_FASTQ;
-        ctx_initialize_predefined_ctxs (z_file->contexts, DT_FASTQ, z_file->d2d_map, &z_file->num_contexts);
+        ctx_initialize_predefined_ctxs (DT_FASTQ);
     }
 
     // re-initialize segconf VB

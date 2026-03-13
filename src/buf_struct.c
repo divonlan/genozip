@@ -92,17 +92,17 @@ rom buf_type_name (ConstBufferP buf)
 
 const BufDescType buf_desc (ConstBufferP buf)
 {
-    #define IS_CONTEXT(ctxs) ((rom)buf >= (rom)ctxs && (rom)buf < (rom)&ctxs[MAX_DICTS])
-    #define TAG_NAME(ctxs) ctxs[((rom)buf - (rom)ctxs) / (sizeof (ctxs) / MAX_DICTS /*note: may be different than sizeof(Context) due to word alignment*/)].tag_name
+    #define IS_CONTEXT(obj) ((rom)buf >= (rom)obj->ca.contexts && (rom)buf < (rom)&obj->ca.contexts[MAX_DICTS])
+    #define TAG_NAME(obj) obj->ca.contexts[((rom)buf - (rom)obj->ca.contexts) / (sizeof (obj->ca.contexts) / MAX_DICTS /*note: may be different than sizeof(Context) due to word alignment*/)].tag_name
 
     if (!buf) return (BufDescType){ .s = "NULL" };
 
     // case: buffer is one of the Buffers within a Context - show tag_name
     rom tag_name = NULL;
-    if (buf->vb && buf->vb != evb && IS_CONTEXT(buf->vb->contexts))
-        tag_name = TAG_NAME (buf->vb->contexts);
-    else if (buf->vb && buf->vb == evb && IS_CONTEXT(z_file->contexts))
-        tag_name = TAG_NAME (z_file->contexts);
+    if (buf->vb && buf->vb != evb && IS_CONTEXT(buf->vb))
+        tag_name = TAG_NAME (buf->vb);
+    else if (buf->vb && buf->vb == evb && IS_CONTEXT(z_file))
+        tag_name = TAG_NAME (z_file);
 
     BufDescType desc; // use static memory instead of malloc since we could be in the midst of a memory issue when this is called
     snprintf (desc.s, sizeof (desc.s), "{ \"%s\"%.20s memory=%p data=%p param=%"PRId64"(0x%016"PRIx64") len=%"PRIu64" size=%"PRId64" type=%s shared=%s%.16s promiscuous=%s spinlock=%p%.20s%.20s allocated in %s:%u%.20s }", 

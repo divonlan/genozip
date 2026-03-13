@@ -54,7 +54,7 @@ void profiler_add (ConstVBlockP vb)
     }
 
     int num_profiled = sizeof (profile.nanosecs) / sizeof (uint64_t) - MAX_DICTS + 
-                       (IS_PIZ ? vb->num_contexts : 0); 
+                       (IS_PIZ ? vb->ca.num_contexts : 0); 
     
     for (int i=0; i < num_profiled; i++) 
         if (((uint64_t *)&vb->profile.count)[i]) {
@@ -64,7 +64,7 @@ void profiler_add (ConstVBlockP vb)
 
     // ZIP: add compressor data by zctx, while collected by vctx
     if (IS_ZIP) 
-        for (int v=num_profiled; v < num_profiled + vb->num_contexts; v++) 
+        for (int v=num_profiled; v < num_profiled + vb->ca.num_contexts; v++) 
             if (((uint64_t *)&vb->profile.count)[v]) {
                 ContextP zctx = ctx_get_zctx_from_vctx (CTX(v-num_profiled), false, true);
                 if (!zctx) continue; // should never happen
@@ -398,8 +398,8 @@ void profiler_add_evb_and_print_report (void)
 
         PRINT (reconstruct_vb, 1);
         if (z_file)
-            for (Did did_i=0; did_i < z_file->num_contexts; did_i++) 
-                PRINT_(fields[did_i], ZCTX(did_i)->tag_name, 2);
+            for_ctx(&z_file->ca) // not for_zctx, so we get did_i which is different than zctx->did_i if alias
+                PRINT_(fields[did_i], ctx->tag_name, 2);
 
         PRINT (sam_piz_special_SEQ, 2);
         PRINT (sam_reconstruct_SEQ_vs_ref, 3);

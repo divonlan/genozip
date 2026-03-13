@@ -23,9 +23,9 @@ extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp
 
 // tested hash table sizes up to 5M. turns out smaller tables (up to a point) are faster, despite having longer
 // average linked lists. probably bc the CPU can store the entire hash and nodes arrays in L1 or L2
-// memory cache during segmentation
+// memory cache during segging
 #define NO_NEXT 0xffffffff
-static inline uint32_t hash_do (uint32_t hash_len, STRp(snip))
+static inline uint32_t hash_do (uint32_t hash_len, STRpរ(snip))
 {
     uint32_t hash;
     if (!hash_len) 
@@ -35,10 +35,11 @@ static inline uint32_t hash_do (uint32_t hash_len, STRp(snip))
     // across the hash table
     else {
         uint64_t result=0;
+
         for (unsigned i=0; i < snip_len; i++) 
             result = ((result << 23) | (result >> 41)) ^ (uint64_t)((uint8_t)snip[i]);
 
-        hash = result % hash_len;
+        hash = result % hash_len; // roughly 40% of the time in this function is spent on the modulu
     }
 
     return hash;

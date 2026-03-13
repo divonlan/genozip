@@ -40,6 +40,8 @@
 #include "error.h"
 #include "website.h"
 #include "bai.h"
+#include "qname.h"
+#include "mgzip.h"
 
 // globals - set in main() and immutable thereafter
 char global_cmd[256]; 
@@ -75,22 +77,22 @@ static rom help_genounzip[] = {
     "𝑇𝑟𝑦:\tgenounzip myfile.bam.genozip",
     "𝑜𝑟:\tgenounzip --replace myfile.bam.genozip",
     "",
-    "More details: "WEBSITE_GENOUNZIP
+    WEBSITE_GENOUNZIP
 };
 
 static rom help_genocat[] = {
     "",
-    "See here: "WEBSITE_GENOCAT
+    WEBSITE_GENOCAT
 };
 
 static rom help_genols[] = {
     "",
-    "See here: the genols manual here: "WEBSITE_GENOLS
+    WEBSITE_GENOLS
 };
 
 static rom help_attributions[] = {
     "",
-    "See here: "WEBSITE_ATTRIBUTIONS
+    WEBSITE_ATTRIBUTIONS
 };
 
 static rom help_footer[] = {
@@ -108,16 +110,19 @@ rom report_support_if_unexpected (void) { return "\nIf this is unexpected, pleas
 rom command_name (void) // see CommandType
 {
     switch (command) {
-        case ZIP          : return "ZIP";
-        case PIZ          : return "PIZ";
-        case LIST         : return "LIST";
-        case VERSION      : return "VERSION";
-        case HELP         : return "HELP";
-        case LICENSE      : return "LICENSE";
-        case SHOW_HEADERS : return "SHOW_HEADERS";
-        case SHOW_BAI     : return "SHOW_BAI";
-        case NO_COMMAND   : return "NO_COMMAND";
-        default           : return "Invalid command";
+        case ZIP           : return "ZIP";
+        case PIZ           : return "PIZ";
+        case LIST          : return "LIST";
+        case VERSION       : return "VERSION";
+        case HELP          : return "HELP";
+        case LICENSE       : return "LICENSE";
+        case SHOW_HEADERS  : return "SHOW_HEADERS";
+        case SHOW_BAI      : return "SHOW_BAI";
+        case SHOW_GZ       : return "SHOW_GZ";
+        case DUMP_GZ_BLOCK : return "DUMP_GZ_BLOCK";
+        case SHOW_FLAVOR   : return "SHOW_FLAVOR";
+        case NO_COMMAND    : return "NO_COMMAND";
+        default            : return "Invalid command";
     }
 }
 
@@ -787,9 +792,10 @@ int main (int argc, char *argv[])
     flags_store_command_line (argc, argv); // can only be called after --password is processed
 
     // handle all commands except for ZIP, PIZ or LIST
-    if (command == VERSION) { main_print_version();    return 0; }
-    if (command == LICENSE) { license_display (false); return 0; }
-    if (command == HELP)    { main_print_help (true);  return 0; }
+    if (command == VERSION)     { main_print_version();    return 0; }
+    if (command == LICENSE)     { license_display (false); return 0; }
+    if (command == HELP)        { main_print_help (true);  return 0; }
+    if (command == SHOW_FLAVOR) { qname_show_flavor();     return 0; }
 
     // genozip with no input filename, no output filename, and no input redirection 
     // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
@@ -801,7 +807,7 @@ int main (int argc, char *argv[])
 
     unsigned num_z_files=0;
     
-    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST || IS_SHOW_BAI) 
+    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST || IS_SHOW_BAI || IS_SHOW_GZ || IS_DUMP_GZ_BLOCK) 
         main_get_filename_list (argc - optind, &argv[optind], &num_z_files);
 
     MAIN0 ("Starting main"); // after explicit_quiet is set main_get_filename_list->flags_update
@@ -871,19 +877,23 @@ int main (int argc, char *argv[])
 
         if (next_input_file || !isatty (0)) { // either the user specified a file, or we are receiving input redirection
             switch (command) {
-                case ZIP  : main_genozip (next_input_file, 
-                                          (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
-                                          file_i, !next_input_file || is_last_txt_file); 
-                            break;
+                case ZIP           : main_genozip (next_input_file, 
+                                                   (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
+                                                   file_i, !next_input_file || is_last_txt_file); 
+                                     break;
 
-                case PIZ  : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 
-                            break;           
+                case PIZ           : main_genounzip (next_input_file, flag.out_filename, file_i, is_last_z_file); 
+                                     break;           
 
-                case SHOW_HEADERS : genocat_show_headers (next_input_file); break;
+                case SHOW_HEADERS  : genocat_show_headers (next_input_file); break;
                             
-                case SHOW_BAI : bai_show (next_input_file); break;
-                            
-                case LIST : genols (next_input_file, false, NULL, false); break;
+                case SHOW_BAI      : bai_show (next_input_file); break;
+                
+                case SHOW_GZ       : show_gz (next_input_file); break;
+
+                case DUMP_GZ_BLOCK : dump_gz_block (next_input_file); break;
+
+                case LIST          : genols (next_input_file, false, NULL, false); break;
 
                 default   : ABORTINP ("unrecognized command %c", command);
             }

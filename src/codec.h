@@ -46,6 +46,7 @@ typedef CODEC_RECONSTRUCT (CodecReconstruct);
 
 typedef struct {
     bool             is_simple;  // a simple codec is one that is compressed into a single section in one step
+    bool             is_mgzip;   // is codec a multiple-block gz codec 
     const char       *name;
     const char       *ext;       // extensions by compression type. + if it adds to the name ; - if it replaces the extension of the uncompress name
     CodecCompress    *compress;
@@ -60,48 +61,55 @@ typedef struct {
 #define NA3 codec_reconstruct_error
 #define NA4 codec_est_size_default
 #define USE_SUBCODEC NULL
-
+     
 #define CODEC_ARGS { /* aligned with Codec defined in genozip.h */ \
-/*  simp name    ext       compress                  uncompress                reconstruct                est_size                 */ \
-    { 1, "N/A",  "+",      NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 1, "NONE", "+",      codec_none_compress,      codec_none_uncompress,    NA3,                       codec_none_est_size      }, \
-    { 1, "GZ",   "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 1, "BZ2",  "+.bz2",  codec_bz2_compress,       codec_bz2_uncompress,     NA3,                       NA4                      }, \
-    { 1, "LZMA", "+",      codec_lzma_compress,      codec_lzma_uncompress,    NA3,                       codec_none_est_size      }, \
-    { 1, "BSC",  "+",      codec_bsc_compress,       codec_bsc_uncompress,     NA3,                       codec_bsc_est_size       }, \
-    { 1, "RANB", "+",      codec_RANB_compress,      codec_rans_uncompress,    NA3,                       codec_RANB_est_size      }, \
-    { 1, "RANW", "+",      codec_RANW_compress,      codec_rans_uncompress,    NA3,                       codec_RANW_est_size      }, /* STRIPE */\
-    { 1, "RANb", "+",      codec_RANb_compress,      codec_rans_uncompress,    NA3,                       codec_RANb_est_size      }, /* PACK */\
-    { 1, "RANw", "+",      codec_RANw_compress,      codec_rans_uncompress,    NA3,                       codec_RANw_est_size      }, /* STRIPE & PACK */\
-    { 0, "ACGT", "+",      codec_acgt_compress,      codec_acgt_uncompress,    NA3,                       codec_complex_est_size   }, \
-    { 0, "XCGT", "+",      USE_SUBCODEC,             codec_xcgt_uncompress,    NA3,                       NA4                      }, \
-    { 0, "HAPM", "+",      NA1,                      codec_hapmat_uncompress,  NA3,                       NA4,                     }, /* HapMat used for compressing in versions v1 to v10, and supported for decompression up to v14. Code removed 15.0.48. */ \
-    { 0, "DOMQ", "+",      codec_domq_compress,      USE_SUBCODEC,             codec_domq_reconstruct,    codec_complex_est_size,  }, \
-    { 0, "GTSH", "+",      NA1,                      codec_gtshark_uncompress, NA3,                       NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
-    { 0, "PBWT", "+",      codec_pbwt_compress,      codec_pbwt_uncompress,    codec_pbwt_reconstruct,    codec_complex_est_size   }, \
-    { 1, "ARTB", "+",      codec_ARTB_compress,      codec_arith_uncompress,   NA3,                       codec_ARTB_est_size      }, \
-    { 1, "ARTW", "+",      codec_ARTW_compress,      codec_arith_uncompress,   NA3,                       codec_ARTW_est_size      }, /* STRIPE */\
-    { 1, "ARTb", "+",      codec_ARTb_compress,      codec_arith_uncompress,   NA3,                       codec_ARTb_est_size      }, /* PACK   */\
-    { 1, "ARTw", "+",      codec_ARTw_compress,      codec_arith_uncompress,   NA3,                       codec_ARTw_est_size      }, /* STRIPE & PACK */\
-    { 0, "BGZF", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "XZ",   "+.xz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "BCF",  "-.bcf",  NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "BAM",  "-.bam",  NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "CRAM", "-.cram", NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "ZIP",  "+.zip",  NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "LNGR", "+",      codec_longr_compress,     USE_SUBCODEC,             codec_longr_reconstruct,   codec_longr_est_size     }, \
-    { 0, "NRMQ", "+",      codec_normq_compress,     USE_SUBCODEC,             codec_normq_reconstruct,   codec_complex_est_size,  }, \
-    { 0, "HOMP", "+",      codec_homp_compress,      USE_SUBCODEC,             codec_homp_reconstruct,    codec_complex_est_size,  }, \
-    { 0, "T0",   "+",      codec_t0_compress,        USE_SUBCODEC,             codec_t0_reconstruct,      codec_complex_est_size,  }, \
-    { 0, "PACB", "+",      codec_pacb_compress,      USE_SUBCODEC,             codec_pacb_reconstruct,    codec_trivial_size,      }, \
-    { 0, "SMUX", "+",      codec_smux_compress,      USE_SUBCODEC,             codec_smux_reconstruct,    codec_trivial_size,      }, \
-    { 0, "ORA",  "+.ora",  NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "OQ",   "+",      codec_oq_compress,        USE_SUBCODEC,             codec_oq_reconstruct,      codec_RANB_est_size,     }, \
-    { 0, "IL1M", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "MGZF", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "MGSP", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "EMFL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
-    { 0, "EMVL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+/*               simp mgzip name   ext       compress                  uncompress                reconstruct                est_size                 */ \
+[CODEC_UNKNOWN] = { 1, 0, "N/A",  "+",      NA1,                      NA2,                      NA3,                       NA4                      }, \
+/* src codecs - mgzip */ \
+[CODEC_BGZF   ] = { 0, 1, "BGZF", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_IL1M   ] = { 0, 1, "IL1M", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_IL4M   ] = { 0, 1, "IL4M", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_MGZF   ] = { 0, 1, "MGZF", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_MGSP   ] = { 0, 1, "MGSP", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_EMFL   ] = { 0, 1, "EMFL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_EMVL   ] = { 0, 1, "EMVL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+/* src codecs - other */ \
+[CODEC_GZ     ] = { 1, 0, "GZ",   "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_BAM    ] = { 0, 0, "BAM",  "-.bam",  NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_NONE   ] = { 1, 0, "NONE", "+",      codec_none_compress,      codec_none_uncompress,    NA3,                       codec_none_est_size      }, \
+[CODEC_BZ2    ] = { 1, 0, "BZ2",  "+.bz2",  codec_bz2_compress,       codec_bz2_uncompress,     NA3,                       NA4                      }, \
+[CODEC_XZ     ] = { 0, 0, "XZ",   "+.xz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_ZIP    ] = { 0, 0, "ZIP",  "+.zip",  NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_ORA    ] = { 0, 0, "ORA",  "+.ora",  NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_BCF    ] = { 0, 0, "BCF",  "-.bcf",  NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_CRAM   ] = { 0, 0, "CRAM", "-.cram", NA1,                      NA2,                      NA3,                       NA4                      }, \
+/* z_file codecs - simple (note: CODEC_BZ2 is also a z_file codec)*/ \
+[CODEC_LZMA   ] = { 1, 0, "LZMA", "+",      codec_lzma_compress,      codec_lzma_uncompress,    NA3,                       codec_none_est_size      }, \
+[CODEC_BSC    ] = { 1, 0, "BSC",  "+",      codec_bsc_compress,       codec_bsc_uncompress,     NA3,                       codec_bsc_est_size       }, \
+[CODEC_RANB   ] = { 1, 0, "RANB", "+",      codec_RANB_compress,      codec_rans_uncompress,    NA3,                       codec_RANB_est_size      }, \
+[CODEC_RANW   ] = { 1, 0, "RANW", "+",      codec_RANW_compress,      codec_rans_uncompress,    NA3,                       codec_RANW_est_size      }, /* STRIPE */\
+[CODEC_RANb   ] = { 1, 0, "RANb", "+",      codec_RANb_compress,      codec_rans_uncompress,    NA3,                       codec_RANb_est_size      }, /* PACK */\
+[CODEC_RANw   ] = { 1, 0, "RANw", "+",      codec_RANw_compress,      codec_rans_uncompress,    NA3,                       codec_RANw_est_size      }, /* STRIPE & PACK */\
+[CODEC_ARTB   ] = { 1, 0, "ARTB", "+",      codec_ARTB_compress,      codec_arith_uncompress,   NA3,                       codec_ARTB_est_size      }, \
+[CODEC_ARTW   ] = { 1, 0, "ARTW", "+",      codec_ARTW_compress,      codec_arith_uncompress,   NA3,                       codec_ARTW_est_size      }, /* STRIPE */\
+[CODEC_ARTb   ] = { 1, 0, "ARTb", "+",      codec_ARTb_compress,      codec_arith_uncompress,   NA3,                       codec_ARTb_est_size      }, /* PACK   */\
+[CODEC_ARTw   ] = { 1, 0, "ARTw", "+",      codec_ARTw_compress,      codec_arith_uncompress,   NA3,                       codec_ARTw_est_size      }, /* STRIPE & PACK */\
+/* zfile codecs - compound - QUAL */ \
+[CODEC_DOMQ   ] = { 0, 0, "DOMQ", "+",      codec_domq_compress,      USE_SUBCODEC,             codec_domq_reconstruct,    codec_complex_est_size,  }, \
+[CODEC_PBWT   ] = { 0, 0, "PBWT", "+",      codec_pbwt_compress,      codec_pbwt_uncompress,    codec_pbwt_reconstruct,    codec_complex_est_size   }, \
+[CODEC_LONGR  ] = { 0, 0, "LNGR", "+",      codec_longr_compress,     USE_SUBCODEC,             codec_longr_reconstruct,   codec_longr_est_size     }, \
+[CODEC_NORMQ  ] = { 0, 0, "NRMQ", "+",      codec_normq_compress,     USE_SUBCODEC,             codec_normq_reconstruct,   codec_complex_est_size,  }, \
+[CODEC_HOMP   ] = { 0, 0, "HOMP", "+",      codec_homp_compress,      USE_SUBCODEC,             codec_homp_reconstruct,    codec_complex_est_size,  }, \
+[CODEC_PACB   ] = { 0, 0, "PACB", "+",      codec_pacb_compress,      USE_SUBCODEC,             codec_pacb_reconstruct,    codec_trivial_size,      }, \
+[CODEC_SMUX   ] = { 0, 0, "SMUX", "+",      codec_smux_compress,      USE_SUBCODEC,             codec_smux_reconstruct,    codec_trivial_size,      }, \
+/* zfile codecs - compound - other */ \
+[CODEC_ACGT   ] = { 0, 0, "ACGT", "+",      codec_acgt_compress,      codec_acgt_uncompress,    NA3,                       codec_complex_est_size   }, \
+[CODEC_XCGT   ] = { 0, 0, "XCGT", "+",      USE_SUBCODEC,             codec_xcgt_uncompress,    NA3,                       NA4                      }, \
+[CODEC_T0     ] = { 0, 0, "T0",   "+",      codec_t0_compress,        USE_SUBCODEC,             codec_t0_reconstruct,      codec_complex_est_size,  }, \
+[CODEC_OQ     ] = { 0, 0, "OQ",   "+",      codec_oq_compress,        USE_SUBCODEC,             codec_oq_reconstruct,      codec_RANB_est_size,     }, \
+/* discontinued codecs - enum values and stubs kept from back comp */\
+[CODEC_HAPM   ] = { 0, 0, "HAPM", "+",      NA1,                      codec_hapmat_uncompress,  NA3,                       NA4,                     }, /* HapMat used for compressing in versions v1 to v10, and supported for decompression up to v14. Code removed 15.0.48. */ \
+[CODEC_GTSHARK] = { 0, 0, "GTSH", "+",      NA1,                      codec_gtshark_uncompress, NA3,                       NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
 }
 
 extern CodecArgs codec_args[NUM_CODECS];
@@ -136,6 +144,7 @@ extern void codec_free_do (void *vb, void *addr, FUNCLINE);
 #define codec_free(vb,addr) codec_free_do ((vb), (addr), __FUNCLINE)
 
 extern void codec_free_all (VBlockP vb);
+extern void codec_destroy_all (VBlockP vb);
 extern void codec_verify_free_all (VBlockP vb, rom op, Codec codec);
 extern void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec);
 

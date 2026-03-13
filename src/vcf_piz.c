@@ -377,7 +377,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEFER)
     // save snip for later (note: the SNIP_SPECIAL+code are already removed)
     if (snip_len) {
         ctx->deferred_snip.len32 = 0;
-        buf_add_moreS (vb, &ctx->deferred_snip, snip, "contexts->deferred_snip");
+        buf_add_moreS (vb, &ctx->deferred_snip, snip, C_DEFERRED_SNIP);
         *BAFTc (ctx->deferred_snip) = 0; // buf_add_moreS allocates room for this nul-terminator
     }
     

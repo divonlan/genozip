@@ -17,6 +17,7 @@
 #include "codec.h"
 #include "qname_filter.h"
 #include "huffman.h"
+#include "dyn_int.h"
 #include "libdeflate_1.19/libdeflate.h"
 #include "htscodecs/arith_dynamic.h"
 
@@ -129,7 +130,7 @@ void sam_piz_vb_recon_init (VBlockP vb)
     buf_alloc_zero (vb, &CTX(SAM_CIGAR)->cigar_anal_history, 0, vb->lines.len, CigarAnalItem, 0, "cigar_anal_history"); // initialize to exactly one per line.
 
     if (flag.deep) 
-        CTX(SAM_CIGAR)->deep_cigar.name = "contexts->deep_cigar"; // so sam_cigar_binary_to_textual uses the right buffer name
+        CTX(SAM_CIGAR)->deep_cigar.name = C_"deep_cigar"; // so sam_cigar_binary_to_textual uses the right buffer name
 }
 
 // PIZ main thread: after reading and uncompressing VB_HEADER
@@ -934,7 +935,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SET_BUDDY)
         if (bt & BUDDY_SAGGY) { // has saggy
             int32_t num_lines_back = reconstruct_from_local_int (VB, buddy_ctx, 0, RECON_OFF);
             vb->saggy_line_i  = vb->line_i - num_lines_back;
-            vb->saggy_is_prim = !sam_is_depn ((SamFlags){ .value = history64(SAM_FLAG, vb->saggy_line_i)});
+            vb->saggy_is_prim = !sam_is_depn ((SamFlags){ .value = piz_get_history (CTX(SAM_FLAG), vb->saggy_line_i) });
         }
 
         if (bt && flag.show_buddy) {
@@ -1010,12 +1011,12 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
             buddy_type_name(buddy_type), buddy_type_name (buddy_type), base_ctx->tag_name, ctx->tag_name);
 
     // note: a non-existant STORE_INT buddy is taken as 0 (bc in seg, dl->field is 0 is non-existent and might be segged as buddy)
-    ASSPIZ (ctx->flags.store == STORE_INT || buddy_line_i < base_ctx->history.len32, "history not set for %s, perhaps seg forgot to set store_per_line? (buddy_type=%s buddy_line_i=%d history.len=%u)", 
+    ASSPIZ (ctx->flags.store == STORE_INT || buddy_line_i < base_ctx->history.len32, "%s.history not set, perhaps seg forgot to set store_per_line? (buddy_type=%s buddy_line_i=%d history.len=%u)", 
             base_ctx->tag_name, buddy_type_name (buddy_type), buddy_line_i, base_ctx->history.len32);
 
     // case: numeric value 
     if (ctx->flags.store == STORE_INT) {
-        new_value->i = (buddy_line_i < base_ctx->history.len32) ? *B64(base_ctx->history, buddy_line_i) : 0; // note: a non-existant STORE_INT buddy is taken as 0
+        new_value->i = (buddy_line_i < base_ctx->history.len32) ? piz_get_history (base_ctx, buddy_line_i) : 0; // note: a non-existant STORE_INT buddy is taken as 0
         if (reconstruct) RECONSTRUCT_INT (new_value->i);
         return HAS_NEW_VALUE;
     }

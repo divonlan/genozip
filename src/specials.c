@@ -9,7 +9,7 @@
 #include <math.h>
 #include "seg.h"
 #include "piz.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "base64.h"
 
 // decode and store the the contexts in the first call for ctx (only one MINUS snip allowed per ctx)
@@ -214,8 +214,8 @@ void seg_textual_float (VBlockP vb, ContextP ctx, STRp(f), unsigned add_bytes)
         ctx_set_ltype (VB, LT_UINT8, frac_ctx->did_i, sign_ctx->did_i, DID_EOL);
 
         int num_per_line = (ctx->did_i < MAX_NUM_PREDEFINED) ? segconf.local_per_line[ctx->did_i] : 1;        
-        buf_alloc (vb, &frac_ctx->local, 0, vb->lines.len32 * num_per_line, uint8_t, 0, CTX_TAG_LOCAL); // initial allocation
-        buf_alloc (vb, &sign_ctx->local, 0, vb->lines.len32 * num_per_line, uint8_t, 0, CTX_TAG_LOCAL);
+        buf_alloc (vb, &frac_ctx->local, 0, vb->lines.len32 * num_per_line, uint8_t, 0, C_LOCAL); // initial allocation
+        buf_alloc (vb, &sign_ctx->local, 0, vb->lines.len32 * num_per_line, uint8_t, 0, C_LOCAL);
         
         ctx_consolidate_stats (VB, ctx->did_i, frac_ctx->did_i, sign_ctx->did_i, DID_EOL);
         ctx->is_initialized = true;

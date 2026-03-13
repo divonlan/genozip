@@ -487,6 +487,45 @@ batch_bgzf()
     fi
 }
 
+# test --bgzf=exact
+batch_bgzf_exact()
+{
+    batch_print_header
+
+    local files=( gz.bgzf.mgi.igzip⁀1.R2.fq.gz          \
+                  gz.bgzf.mgi.libdeflate19⁀7.R2.fq.gz   \
+                  gz.bgzf.mgi.libdeflate7⁀4.R2.fq.gz    \
+                  gz.bgzf.mgi.zlib⁀2.R2.fq.gz           \
+                  gz.bgzf.illumina.libdeflate7⁀6.bam    \
+                  special.3-bgzf-eof-blocks.fq.gz        \
+                )
+    
+    local recon=$OUTDIR/recon.fq.gz
+    local file
+
+    for file in ${files[@]}; do
+        test_header "--exact for $file"
+        $genozip $GZTESTDIR/$file -fXo $output || exit 1
+        $genounzip $output -fo $recon --bgzf=exact-strict || exit 1
+        cmp_2_files_exact $GZTESTDIR/$file $recon
+    done
+
+    test_header "--exact for $file - but file has 4 non-exactable gz blocks"
+    $genozip $GZTESTDIR/special.bgzf.mis-exacting.igzip⁀1.fq.gz -fXo $output || exit 1
+    $genounzip $output -fo $recon --bgzf=exact || exit 1 # should succeed, but not exact
+
+    local files=( special.human2.15.0.62.bam.genozip \
+                  special.human2.15.0.79.bam.genozip )
+
+    # back comp for the two previous versions of SEC_GZ_ISIZES/DIGESTS (one change in 15.0.63 and one in 15.0.80)
+    # note: --exact backcomp with earlier versions is in batch_real_world_backcomp
+    for file in ${files[@]}; do
+        test_header "--exact for $file"
+        $genounzip $TESTDIR/special/$file -fo $recon --bgzf=exact-strict || exit 1
+        cmp_2_files_exact $TESTDIR/test.human2.bam $recon
+    done
+}
+
 batch_subdirs()
 {
     batch_print_header
@@ -625,7 +664,7 @@ batch_iupac()
 
     # SAM - using --count
     test_header "genocat --bases ACGTN --count (SAM)"
-    local count # seperate from assignment to preserve exit code
+    local count # separate from assignment to preserve exit code
     count=`$genocat_no_echo $output -H --bases ACGTN --count -q` || exit $? 
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
@@ -719,10 +758,10 @@ batch_coverage_idxstats()
     # rudimentary regression tests for coverage
     local T=$TESTDIR/deep.human2-38
 
-    $genozip -Xf $T.R1.fq.gz -o $output -e $GRCh38 || exit 1
+    $genozip -Xf $T.R1.il1m.fq.gz -o $output -e $GRCh38 || exit 1
     verify_coverage_has_24_chromosomes "FASTQ without bamass"
 
-    $genozip -Xf $T.R1.fq.gz --bamass $T.sam -o $output -e $GRCh38 || exit 1
+    $genozip -Xf $T.R1.il1m.fq.gz --bamass $T.sam -o $output -e $GRCh38 || exit 1
     verify_coverage_has_24_chromosomes "FASTQ with bamass"
 
     $genozip -Xf $T.R1.fasta.gz -o $output -e $GRCh38 || exit 1
@@ -1080,7 +1119,7 @@ batch_grep_count_lines()
         # count
         $genozip $TESTDIR/$file -Xfo $output || exit 1
     
-        local count # seperate from assignment to preserve exit code
+        local count # separate from assignment to preserve exit code
         count=`$genocat_no_echo --quiet --count $output` || exit $? 
         if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
@@ -1210,10 +1249,10 @@ batch_real_world_1_adler32() # $1 extra genozip argument
     fi
 
     # without reference
-    local files=( `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*vcf.bz2 test.*bcf* test*.sam test*.sam.* test*.bam test*.fq* test*.fa*                \
+    local files=( `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*vcf.bz2 test.*bcf* test*.sam test*.sam.* test*.bam test*.fq* test*.fa* \
                    test.*gvf* test.*gtf* test.*gff* test.*locs* test*.bed* test.*txt* test.*.pbi                    \
                    | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$filter_bcf" | grep -v "$debug_filter" \
-                   | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora" ` )
+                   | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora" ` ) 
 
     # test genozip and genounzip --test
     echo "subsets of real world files (without reference)"
@@ -1230,8 +1269,8 @@ batch_real_world_optimize()
     cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
 
     cd $TESTDIR
-    local files=( `ls -1 test.*vcf test.*vcf.gz test.*bcf test.*sam test.*sam.gz test.*bam test.*fq test.*fq.gz |
-                   grep -v headerless` )
+    local files=( `ls -1 test.*vcf test.*vcf.gz test.*bcf test.*sam test.*sam.gz test.*bam test.*fq test.*fq.gz \
+                   | grep -v headerless` )
 
     # test genozip and genounzip --test - first 10K lines of the file should be sufficient to detect optimization issues
     echo "compressing first 10k lines with --optimize"
@@ -1264,75 +1303,59 @@ batch_mgzip_fastq()
 {
     batch_print_header
 
-    local files=( gz.bgzf.truncated.fq.gz gz.il1m.illumina.truncated.fq.gz gz.mgzf.mgi.R1.fq.gz \
-                  gz.mgsp.mgi.R1.fq.gz gz.emfl.element.fq.gz gz.emvl.element.R1.fq.gz )
+    local files=( gz.bgzf.libdeflate7⁀6.truncated.fq.gz \
+                  gz.il1m.illumina.truncated.fq.gz       \
+                  gz.il4m.illumina.truncated.fq.gz       \
+                  gz.mgzf.mgi.igzip⁀2.R1.fq.gz          \
+                  gz.mgsp.mgi.R1.fq.gz                   \
+                  gz.emfl.element.fq.gz                  \
+                  gz.emvl.element.libdeflate19⁀5.R1.fq.gz )
     local recon=$OUTDIR/recon.fq
     local truncated=$OUTDIR/truncated.fq
     local discovered_codec=$OUTDIR/discovered_codec.txt
 
-    # for f in ${files[@]}; do 
-    #     test_header "Test codec discovery $f"
-    #     local expected_codec=`echo $f | cut -d. -f2`
+    for f in ${files[@]}; do 
+        test_header "Test codec discovery $f"
+        local expected_codec=`echo $f | cut -d. -f2`
 
-    #    $genozip --show-gz $TESTDIR/$f -X | grep src_codec= |cut -d= -f2 | cut -d" " -f1 > $discovered_codec # not subshell so we can catch a genozip error
-    #    (( ${PIPESTATUS[0]} == 0 )) || exit 1
+        $genozip $GZTESTDIR/$f -ft --truncate -o $output || exit 1
+        local discovered_codec=$( $genocat --show-header=TXT_HEADER $output | tr " " "\n" | grep src_codec | cut -d= -f2 )
 
-    #     if (( "${expected_codec^^}" != "`cat $discovered_codec`")); then
-    #         echo "$f: Bad codec discovery for file: expected_codec=\"${expected_codec^^}\" discovered_codec=\"`cat $discovered_codec`\""
-    #         exit 1
-    #     fi
-    #     echo "$f is compressed with effective_codec=`cat $discovered_codec`"
+        if (( "${expected_codec^^}" != "$discovered_codec")); then
+            echo "$f: Bad codec discovery for file: expected_codec=${expected_codec^^} discovered_codec=$discovered_codec"
+            exit 1
+        fi
+        echo "$f is compressed with effective_codec=$discovered_codec"
+    done
 
-    #     test_header "$f: Test reconstruction"
-    #     if (( `echo $f | grep truncated | wc -l` == 0 )); then
-    #         $genozip -fX $TESTDIR/$f || exit 1
-    #         $genounzip $TESTDIR/${f/.gz/.genozip} -fo $recon || exit 1
-    #         cmp_2_files $TESTDIR/$f $recon
-    #     else
-    #         $genozip -fX --truncate $TESTDIR/$f || exit 1 # full gz blocks, but last block has a partial read
-    #         $genounzip $TESTDIR/${f/.gz/.genozip} -fo $recon || exit 1
-    #         $zcat $TESTDIR/$f | head -$(( `$zcat $TESTDIR/$f | wc -l` / 4 * 4 )) > $truncated
-    #         cmp_2_files $truncated $recon
-    #     fi
+    test_header "drastically different VB sizes in pair: short VBs first"
+    $genozip -ft $TESTDIR/special.human2-R2.short-seqs.fq.gz $TESTDIR/test.human2-R1.fq.gz -2 -e $hs37d5
 
+    test_header "drastically different VB sizes in pair: long VBs first"
+    $genozip -ft $TESTDIR/test.human2-R1.fq.gz $TESTDIR/special.human2-R2.short-seqs.fq.gz -2 -e $hs37d5
 
-    #     test_header "$f: --truncated: last mgzip block is truncated"
+    # two special code paths for handling truncated GZIL files, depending if the garbage last word of the file >1MB (detected during read) or <=1MB (detected during uncompress) 
+    test_header "truncated IL1M file: fake isize in last word > 1MB"
+    $genozip -tf --truncate ${TESTDIR}/special.il1m.truncated-last-word.gt.1MB.fastq.gz || exit 1 
 
-    #     local len=`ls -l $TESTDIR/$f | cut -d" " -f5`
-    #     trunc_f=$OUTDIR/truncated.$f
-    #     head -c $(( len - 10 )) $TESTDIR/$f > $trunc_f 
+    test_header "truncated IL1M file: fake isize in last word <= 1MB"
+    $genozip -tf --truncate ${TESTDIR}/special.il1m.truncated-last-word.eq.1MB.fastq.gz || exit 1 
 
-    #     $genozip -ft --truncate $trunc_f || exit 1
-    # done
-
-    # test_header "drastically different VB sizes in pair: short VBs first"
-    # $genozip -ft $TESTDIR/special.human2-R2.short-seqs.fq.gz $TESTDIR/test.human2-R1.fq.gz -2 -e $hs37d5
-
-    # test_header "drastically different VB sizes in pair: long VBs first"
-    # $genozip -ft $TESTDIR/test.human2-R1.fq.gz $TESTDIR/special.human2-R2.short-seqs.fq.gz -2 -e $hs37d5
-
-    # # two special code paths for handling truncated GZIL files, depending if the garbage last word of the file >1MB (detected during read) or <=1MB (detected during uncompress) 
-    # test_header "truncated IL1M file: fake isize in last word > 1MB"
-    # $genozip -tf --truncate ${TESTDIR}/special.il1m.truncated-last-word.gt.1MB.fastq.gz || exit 1 
-
-    # test_header "truncated IL1M file: fake isize in last word <= 1MB"
-    # $genozip -tf --truncate ${TESTDIR}/special.il1m.truncated-last-word.eq.1MB.fastq.gz || exit 1 
-
-    # local files=( gz.bgzf.truncated.fq.gz gz.il1m.illumina.truncated.fq.gz )
-    # for f in ${files[@]}; do 
-    #     test_header "$f: --truncated: Full mgzip blocks, but last read of last block is truncated"
-    #     $genozip -ft --truncate $TESTDIR/$f || exit 1
-    # done
+    local files=( gz.bgzf.libdeflate7⁀6.truncated.fq.gz gz.il1m.illumina.truncated.fq.gz )
+    for f in ${files[@]}; do 
+        test_header "$f: --truncated: Full mgzip blocks, but last read of last block is truncated"
+        $genozip -ft --truncate $GZTESTDIR/$f || exit 1
+    done
 
     # check that pair effective codecs are as intended
     if [ -z "$is_windows" ]; then # test_effective_codec_pair hand in Windows. TO DO: fix    
-        test_effective_codec_pair il1m.human2-R1.fq.gz il1m.human2-R2.fq.gz "IL1M IL1M "
+        test_effective_codec_pair il1m.human2-R1.fq.gz il1m.human2-R2.fq.gz "IL1M IL1M " # generated IL1M, not original (different library)
         test_effective_codec_pair test.human2-R1.fq.gz test.human2-R2.fq.gz "BGZF BGZF "
         test_effective_codec_pair test.human2-R1.fq.gz il1m.human2-R2.fq.gz "BGZF GZ "
-        test_effective_codec_pair gz.mgsp.mgi.R1.fq.gz gz.mgsp.mgi.R2.fq.gz "MGSP MGSP "
-        test_effective_codec_pair gz.mgzf.mgi.R1.fq.gz gz.mgzf.mgi.R2.fq.gz "MGZF MGZF "
-        test_effective_codec_pair gz.emvl.element.R1.fq.gz gz.emvl.element.R2.fq.gz "EMVL EMVL " 
-        test_effective_codec_pair gz.bgzf.mgi.R2.fq.gz gz.mgsp.mgi.R1.fq.gz "MGSP GZ " # compression is in order of R1 -> R2
+        test_effective_codec_pair mgzip/gz.mgsp.mgi.R1.fq.gz mgzip/gz.mgsp.mgi.R2.fq.gz "MGSP MGSP "
+        test_effective_codec_pair mgzip/gz.mgzf.mgi.igzip⁀2.R1.fq.gz mgzip/gz.mgzf.mgi.igzip⁀2.R2.fq.gz "MGZF MGZF "
+        test_effective_codec_pair mgzip/gz.emvl.element.libdeflate19⁀5.R1.fq.gz mgzip/gz.emvl.element.libdeflate19⁀5.R2.fq.gz "EMVL EMVL " 
+        test_effective_codec_pair mgzip/gz.bgzf.mgi.libdeflate19⁀7.R2.fq.gz mgzip/gz.mgsp.mgi.R1.fq.gz "MGSP GZ " # compression is in order of R1 -> R2
     fi
 
     # mix an IN_SYNC codec (MGSP) with a non-in-sync (BGZF)
@@ -1366,14 +1389,18 @@ batch_mgzip_fastq()
 
     # bug was: File consists of a concatenation of two IL1M files. Previously failed because final IL1M of first file is less that 1 MB 
     test_header "regression: File consists of a concatenation of two IL1M files"
-    $genozip -fX ${TESTDIR}/regression.il1m.2-files-concated.fq.gz -o $output || exit 1
+    $genozip -fX $GZTESTDIR/special.il1m-2+2-blocks.fq.gz -o $output || exit 1
 
     # bug was: non-terminal BGZF EOF blocks were not handled correctly
     test_header "regression: Non-terminal BGZF EOF block"
-    local file=${TESTDIR}/regression.defect-2024-07-03.midfile-bgzf-eof.vcf.gz
+    local file=$GZTESTDIR/regression.defect-2024-07-03.midfile-bgzf-eof.vcf.gz
     $genozip -tf $file -o $output || exit 1
     $genounzip $output -fo ${OUTDIR}/recon.vcf || exit 1
     cmp_2_files $file ${OUTDIR}/recon.vcf
+
+    # Has an empty (isize=0) BGZF block, but the payload is encoded as 01 00 00 fe ff rather than the more standard 03 00. This causes the file be unexactable but should otherwise work. 
+    test_header "Non-EOF empty BGZF block"
+    $genozip -tf $GZTESTDIR/special.non-EOF-zero-bgzf-block.vcf.gz
 }
 
 
@@ -1386,8 +1413,7 @@ batch_real_world_genounzip_single_process() # $1 extra genozip argument
                    test.*.fq.genozip test.*.fa.genozip \
                    test.*.gvf.genozip test.*.gtf.genozip test.*gff*.genozip \
                    test.*.locs.genozip test.*.bed.genozip \
-                   test.*txt.genozip test.*.pbi.genozip |
-                   grep -vF .d.vcf`)
+                   test.*txt.genozip test.*.pbi.genozip`)
 
     $genounzip ${files[@]/#/$TESTDIR/} --test || exit 1
 }
@@ -1421,7 +1447,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
                    test.*gvf* test.*gtf* test.*gff* test.*locs* test.*bed* \
                    test.*txt* test.*pbi \
                    | grep -v "$filter_xz" | grep -v "$filter_zip" | grep -v "$debug_filter" \
-                   | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora|test-bai|text-tbi"` )
+                   | grep -vE "headerless|\.genozip|\.md5|\.bad|\.ora|test-bai|text-tbi" s` )
     
     # test full genounzip (not --test), including generation of BZGF
     for f in ${files[@]}; do 
@@ -1731,9 +1757,9 @@ batch_real_world_backcomp()
         $genounzip -t $ref_option $f || exit 1
     done
 
-    test_header "backcomp $1 genounzip --bgzf=exact"
+    test_header "backcomp $1 genounzip --bgzf=exact-strict"
     local file=test.human2.bam
-    $genounzip $TESTDIR/$1/$file.genozip -fo $OUTDIR/$file --bgzf=exact || exit 1
+    $genounzip $TESTDIR/$1/$file.genozip -fo $OUTDIR/$file --bgzf=exact-strict || exit 1
     cmp_2_files_exact $TESTDIR/$file $OUTDIR/$file
 
     cleanup
@@ -1764,7 +1790,7 @@ batch_real_world_small_vbs()
 
     # test --pair and --deep with small VBs
     $genozip --vblock=100000B -2tfe $GRCh38 $TESTDIR/test.human2-R1.fq.gz $TESTDIR/test.human2-R2.fq.gz || exit 1 # 2 pairs
-    $genozip --vblock=100000B -3tfe $GRCh38 $TESTDIR/deep.human2-38.R1.fq.gz $TESTDIR/deep.human2-38.R2.fq.gz $TESTDIR/deep.human2-38.sam --not-paired || exit 1
+    $genozip --vblock=100000B -3tfe $GRCh38 $TESTDIR/deep.human2-38.R1.il1m.fq.gz $TESTDIR/deep.human2-38.R2.il1m.fq.gz $TESTDIR/deep.human2-38.sam --not-paired || exit 1
     $genozip --vblock=100000B -3tfe $GRCh38 $TESTDIR/deep.bismark.sra2.one.fq.gz $TESTDIR/deep.bismark.sra2.two.fq.gz $TESTDIR/deep.bismark.sra2.bam || exit 1
 }
 
@@ -2629,8 +2655,8 @@ batch_deep() # note: use --debug-deep for detailed tracking
     
     test_header "deep: deep.human2-38"
     local T=$TESTDIR/deep.human2-38
-    $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -o $output -3t --best --not-paired || exit 1
-    $genozip $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -o $output -3t --no-gencomp --not-paired || exit 1
+    $genozip $T.sam $T.R1.il1m.fq.gz $T.R2.il1m.fq.gz -fe $GRCh38 -o $output -3t --best --not-paired || exit 1
+    $genozip $T.sam $T.R1.il1m.fq.gz $T.R2.il1m.fq.gz -fe $GRCh38 -o $output -3t --no-gencomp --not-paired || exit 1
 
     test_header "deep: deep.human2-38 - piz single thread"
     $genounzip -t -@1 $output
@@ -2647,6 +2673,9 @@ batch_deep() # note: use --debug-deep for detailed tracking
     local T=$TESTDIR/deep.bismark.sra2
     $genozip $T.two.fq.gz $T.bam $T.one.fq.gz -fE $GRCh38 -o $output -3t || exit 1
     
+    test_header "deep: deep.bismark.sra2: exact gz-recompression (bam + 2 fastqs)"
+    $genounzip $output --bgzf=exact-strict -o $OUTDIR/
+
     test_header "deep: deep.crop-100: SAM has cropped one base at the end of every read (101 bases in FQ vs 100 in SAM)"
     local T=$TESTDIR/deep.crop-100
     $genozip $T.fq $T.sam -fe $GRCh38 -o $output -3t || exit 1
@@ -2777,7 +2806,7 @@ batch_bamass()
 
     test_header "bamass: deep.human2-38 (not paired)"
     local T=$TESTDIR/deep.human2-38
-    $genozip -A $T.sam $T.R1.fq.gz $T.R2.fq.gz -fe $GRCh38 -t || exit 1
+    $genozip -A $T.sam $T.R1.il1m.fq.gz $T.R2.il1m.fq.gz -fe $GRCh38 -t || exit 1
 
     test_header "bamass: deep.gem3.multi-fastq - gem3 (bisulfite), multiple (>2) FASTQ"
     local T=$TESTDIR/deep.gem3.multi-fastq
@@ -2888,11 +2917,11 @@ batch_faf()
 }
 
 
-# only if doing a full test (starting from 0) - delete genome and hash caches
+# only if doing a full test (starting from 0) - delete .genozip files and caches (created by older versions)
 sparkling_clean()
 {
     batch_print_header
-    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip ${TESTDIR}/*.DEPN
+    rm -f ${hg19}.*cache* ${hs37d5}.*cache* ${GRCh38}.*cache* ${TESTDIR}/*.genozip ${TESTDIR}/*.bad ${TESTDIR}/*.bad.gz ${TESTDIR}/basic-subdirs/*.genozip $GZTESTDIR/*.genozip ${TESTDIR}/*.DEPN
     unset GENOZIP_REFERENCE
 }
 
@@ -2916,6 +2945,7 @@ if [[ ! -v GENOZIP_HOME ]]; then
 fi
 
 TESTDIR=$BASEDIR/private/test
+GZTESTDIR=$TESTDIR/mgzip
 SCRIPTSDIR=$BASEDIR/private/scripts
 LICENSESDIR=$BASEDIR/private/licenses
 OUTDIR=$TESTDIR/tmp
@@ -3086,75 +3116,76 @@ case $GENOZIP_TEST in
 11)  batch_basic basic.generic         ;;
 12)  batch_precompressed               ;;
 13)  batch_bgzf                        ;;
-14)  batch_mgzip_fastq                 ;;
-15)  batch_subdirs                     ;;
-16)  batch_special_algs                ;;
-17)  batch_qual_codecs                 ;;
-18)  batch_sam_bam_translations        ;;
-19)  batch_23andMe_translations        ;;
-20)  batch_genocat_tests               ;;
-21)  batch_grep_count_lines            ;;
-22)  batch_bam_subsetting              ;;
-23)  batch_backward_compatability      ;;
-24)  batch_single_thread               ;; 
-25)  batch_copy_ref_section            ;; 
-26)  batch_iupac                       ;; 
-27)  batch_genols                      ;;
-28)  batch_tar_files_from              ;;
-29)  batch_gencomp_depn_methods        ;; 
-30)  batch_deep                        ;; 
-31)  batch_bamass                      ;; 
-32)  batch_faf                         ;;
-33)  batch_multiseq                    ;;
-34)  batch_sam_bam_cram_output         ;;
-35)  batch_vcf_bcf_output              ;;
-36)  batch_external_unzip              ;;
-37)  batch_external_ora                ;;
-38)  batch_reference_fastq             ;;
-39)  batch_reference_fasta_as_fastq    ;;
-40)  batch_reference_sam               ;;
-41)  batch_reference_vcf               ;;
-42)  batch_reference_genocat           ;;
-43)  batch_many_small_files            ;;
-44)  batch_real_world_small_vbs        ;; 
-45)  batch_real_world_1_adler32        ;; 
-46)  batch_real_world_genounzip_single_process ;; 
-47)  batch_real_world_genounzip_compare_file   ;; 
-48)  batch_real_world_1_adler32 "--best -f"    ;; 
-49)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
-50)  batch_real_world_optimize         ;;
-51)  batch_real_world_with_ref_md5     ;; 
-52)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
-53)  batch_test_bai                    ;;
-54)  batch_test_tbi                    ;;
-55)  batch_make_reference              ;;
-56)  batch_headerless_wrong_ref        ;;
-57)  batch_replace                     ;;
-58)  batch_coverage_idxstats           ;;
-59)  batch_qname_flavors               ;;
-60)  batch_piz_no_license              ;;
-61)  batch_sendto                      ;;
-62)  batch_pair_permissions            ;;
-63)  batch_deep_bamass_permissions     ;;
-64)  batch_user_message_permissions    ;;
-65)  batch_password_permissions        ;;
-66)  batch_genocat_backcomp_recon_plan ;;
-67)  batch_reference_backcomp          ;;
-68)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-69)  batch_real_world_backcomp 12.0.42 ;; 
-70)  batch_real_world_backcomp 13.0.21 ;; 
-71)  batch_real_world_backcomp 14.0.33 ;; 
-72)  batch_real_world_backcomp latest  ;;
-73)  batch_basic basic.vcf     latest  ;;
-74)  batch_basic basic.bam     latest  ;;
-75)  batch_basic basic.sam     latest  ;;
-76)  batch_basic basic.fq      latest  ;;
-77)  batch_basic basic.fa      latest  ;;
-78)  batch_basic basic.bed     latest  ;;
-79)  batch_basic basic.gvf     latest  ;;
-80)  batch_basic basic.gtf     latest  ;;
-81)  batch_basic basic.me23    latest  ;;
-82)  batch_basic basic.generic latest  ;;
+14)  batch_bgzf_exact                  ;;
+15)  batch_mgzip_fastq                 ;;
+16)  batch_subdirs                     ;;
+17)  batch_special_algs                ;;
+18)  batch_qual_codecs                 ;;
+19)  batch_sam_bam_translations        ;;
+20)  batch_23andMe_translations        ;;
+21)  batch_genocat_tests               ;;
+22)  batch_grep_count_lines            ;;
+23)  batch_bam_subsetting              ;;
+24)  batch_backward_compatability      ;;
+25)  batch_single_thread               ;; 
+26)  batch_copy_ref_section            ;; 
+27)  batch_iupac                       ;; 
+28)  batch_genols                      ;;
+29)  batch_tar_files_from              ;;
+30)  batch_gencomp_depn_methods        ;; 
+31)  batch_deep                        ;; 
+32)  batch_bamass                      ;; 
+33)  batch_faf                         ;;
+34)  batch_multiseq                    ;;
+35)  batch_sam_bam_cram_output         ;;
+36)  batch_vcf_bcf_output              ;;
+37)  batch_external_unzip              ;;
+38)  batch_external_ora                ;;
+39)  batch_reference_fastq             ;;
+40)  batch_reference_fasta_as_fastq    ;;
+41)  batch_reference_sam               ;;
+42)  batch_reference_vcf               ;;
+43)  batch_reference_genocat           ;;
+44)  batch_many_small_files            ;;
+45)  batch_real_world_small_vbs        ;; 
+46)  batch_real_world_1_adler32        ;; 
+47)  batch_real_world_genounzip_single_process ;; 
+48)  batch_real_world_genounzip_compare_file   ;; 
+49)  batch_real_world_1_adler32 "--best -f"    ;; 
+50)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
+51)  batch_real_world_optimize         ;;
+52)  batch_real_world_with_ref_md5     ;; 
+53)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 
+54)  batch_test_bai                    ;;
+55)  batch_test_tbi                    ;;
+56)  batch_make_reference              ;;
+57)  batch_headerless_wrong_ref        ;;
+58)  batch_replace                     ;;
+59)  batch_coverage_idxstats           ;;
+60)  batch_qname_flavors               ;;
+61)  batch_piz_no_license              ;;
+62)  batch_sendto                      ;;
+63)  batch_pair_permissions            ;;
+64)  batch_deep_bamass_permissions     ;;
+65)  batch_user_message_permissions    ;;
+66)  batch_password_permissions        ;;
+67)  batch_genocat_backcomp_recon_plan ;;
+68)  batch_reference_backcomp          ;;
+69)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+70)  batch_real_world_backcomp 12.0.42 ;; 
+71)  batch_real_world_backcomp 13.0.21 ;; 
+72)  batch_real_world_backcomp 14.0.33 ;; 
+73)  batch_real_world_backcomp latest  ;;
+74)  batch_basic basic.vcf     latest  ;;
+75)  batch_basic basic.bam     latest  ;;
+76)  batch_basic basic.sam     latest  ;;
+77)  batch_basic basic.fq      latest  ;;
+78)  batch_basic basic.fa      latest  ;;
+79)  batch_basic basic.bed     latest  ;;
+80)  batch_basic basic.gvf     latest  ;;
+81)  batch_basic basic.gtf     latest  ;;
+82)  batch_basic basic.me23    latest  ;;
+83)  batch_basic basic.generic latest  ;;
 * ) break; # break out of loop
 
 esac

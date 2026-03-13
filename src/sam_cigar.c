@@ -13,6 +13,7 @@
 #include "random_access.h"
 #include "chrom.h"
 #include "huffman.h"
+#include "dyn_int.h"
 #include "htscodecs/rANS_static4x16.h"
 
 static const bool cigar_valid_op[256] = { ['M']=true, ['I']=true, ['D']=true, ['N']=true, ['S']=true, ['H']=true, ['P']=true, ['=']=true, ['X']=true }; 
@@ -349,7 +350,7 @@ void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar)/* textual */, bool cigar_is_i
             cigar_len--;
         }
 
-        // store original textual CIGAR for use of sam_piz_special_MD, as in BAM it will be translated ; also cigar might point to mate data in ctx->per_line - ctx->per_line might be realloced as we store this line's CIGAR in it 
+        // store original textual CIGAR for use of sam_piz_special_MD, as in BAM it will be translated ; also cigar might point to mate data in ctx->dropped_txt - ctx->dropped_txt might be realloced as we store this line's CIGAR in it 
         if (!cigar_is_in_textual_cigar) {
             buf_add_moreS (VB, &vb->textual_cigar, cigar, "textual_cigar");
             *BAFTc (vb->textual_cigar) = 0; // nul-terminate (buf_add_more allocated space for it)
@@ -520,7 +521,7 @@ bool squank_seg (VBlockP vb, ContextP ctx, STRp(cigar), uint32_t only_if_seq_len
         return false;
     }
 
-    buf_alloc (vb, &ctx->local, cigar_len+1, 0, char, CTX_GROWTH, CTX_TAG_LOCAL);
+    buf_alloc (vb, &ctx->local, cigar_len+1, 0, char, CTX_GROWTH, C_LOCAL);
     char *next = BAFTc (ctx->local);
     
     if (segment1_len) 
@@ -904,7 +905,7 @@ void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mc), uint32_t a
 // PIZ
 //---------
 
-static uint32_t inline sam_cigar_piz_get_seq_from_qname (VBlockSAMP vb)
+static uint32_t inline sam_cigar_piz_get_seq_len_from_qname (VBlockSAMP vb)
 {
     ContextP len_ctx = ECTX(segconf.seq_len_dict_id);
 
@@ -920,7 +921,7 @@ static uint32_t inline sam_cigar_piz_get_seq_from_qname (VBlockSAMP vb)
     // case 3: QNAME is copied from a buddy - buddy_line_i is stored in QNAME.last_value.i in sam_piz_special_COPY_BUDDY
     else if (ctx_has_value_in_line_(vb, CTX(SAM_QNAME))) {
         LineIType buddy_line_i = CTX(SAM_QNAME)->last_value.i;
-        return *B64(len_ctx->history, buddy_line_i);
+        return piz_get_history (len_ctx, buddy_line_i);
     }
     
     else 
@@ -957,7 +958,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_cigar_special_CIGAR)
             buf_alloc (vb, &vb->scratch, 0, 16, char, 0, "scratch");
 
             int32_t delta = (snip_len > 1) ? atoi (&snip[1]) : 0; // introduced 15.0.69 - value if delta != 0
-            int32_t M_n = sam_cigar_piz_get_seq_from_qname (vb) - delta;
+            int32_t M_n = sam_cigar_piz_get_seq_len_from_qname (vb) - delta;
             
             vb->scratch.len32 = str_int (M_n, B1STc (vb->scratch));
             BNXTc (vb->scratch) = (snip[0] == COPY_QNAME_LENGTH) ? 'M' : '*';
@@ -1031,7 +1032,7 @@ SPECIAL_RECONSTRUCTOR (cigar_special_SQUANK) // new_value=NULL means reconstruct
     bool to_scratch = (new_value == NULL); // reconstruct to vb->scratch even if !reconstruct
 
     int32_t seq_len_plus_H = SRC(std_seq_len)  ? segconf.std_seq_len // MAIN vs the "standard" seq_len (useful for short reads in which most reads are the same length)
-                           : SRC(QNAME_length) ? sam_cigar_piz_get_seq_from_qname (VB_SAM) // peek, since length can come from either line1 or line3
+                           : SRC(QNAME_length) ? sam_cigar_piz_get_seq_len_from_qname (VB_SAM) // peek, since length can come from either line1 or line3
                            : /* MAIN */          vb->seq_len + VB_SAM->hard_clip[0] + VB_SAM->hard_clip[1]; // SA/OA/XA vs MAIN: hard-clips in the MAIN CIGAR are counted as well
 
     STR(segment1);

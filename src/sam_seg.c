@@ -20,7 +20,7 @@
 #include "deep.h"
 #include "arch.h"
 #include "threads.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "huffman.h"
 
 STRl(copy_GX_snip, 30);
@@ -113,7 +113,7 @@ void sam_zip_initialize (void)
     // encodes ref_id based on header order. Note: BAM always has header contigs (might be 0 of them, 
     // for an unaligned file), while SAM is allowed to be header-less (but then requires an external reference)
     if (z_file->num_txts_so_far == 1 && has_hdr_contigs) 
-        ctx_populate_zf_ctx_from_contigs (SAM_RNAME, sam_hdr_contigs);
+        ctx_populate_zf_ctx_from_contigs (sam_hdr_contigs);
 
     qname_zip_initialize();
 
@@ -318,7 +318,7 @@ static void sam_seg_QNAME_initialize (VBlockSAMP vb)
 
     // initial allocations based on segconf data
     ctx->qname_hash.prm8[0] = MIN_(20, MAX_(14, 32 - __builtin_clz (vb->lines.len32 * 5))); // between 14 and 20 bits - tested - no additional compression benefit beyond 20 bits
-    buf_alloc_255(vb, &ctx->qname_hash, 0, (1ULL << ctx->qname_hash.prm8[0]), int32_t, 1, "contexts->qname_hash");
+    buf_alloc_255(vb, &ctx->qname_hash, 0, (1ULL << ctx->qname_hash.prm8[0]), int32_t, 1, C_"qname_hash");
 
     // all-the-same for SAM_BUDDY
     seg_special0 (VB, SAM_SPECIAL_SET_BUDDY, CTX(SAM_BUDDY), 0);
@@ -507,7 +507,6 @@ void sam_seg_initialize (VBlockP vb_)
 
         CTX(OPTION_ms_i)->flags.spl_custom = true;  // custom store-per-line - SPECIAL will handle the storing
         CTX(OPTION_ms_i)->flags.store = STORE_INT;  // since v14 - store QUAL_score for mate ms:i (in v13 it was stored in QUAL)
-
     }
 
     seg_mux_init (vb, SAM_FLAG,    SAM_SPECIAL_DEMUX_BY_BUDDY,     false, FLAG);
@@ -601,7 +600,7 @@ static void sam_seg_toplevel (VBlockP vb)
         .is_toplevel  = true,
         .callback     = true,
         .filter_items = true,
-        .nitems_lo    = 15,
+        .nitems_lo    = 14,
         .items        = { { .dict_id = { _SAM_BUDDY    }                                                                       },
                           { .dict_id = { _SAM_RNAME    }, .separator = { CI0_TRANS_NOR                     }, SAM2BAM_RNAME    }, // Translate - output word_index instead of string
                           { .dict_id = { _SAM_POS      }, .separator = { CI0_TRANS_NOR | CI0_TRANS_MOVE, 1 }, SAM2BAM_POS      }, // Translate - output little endian POS-1
@@ -859,7 +858,7 @@ void sam_segconf_finalize (VBlockP vb_)
     // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
     // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--idxstats
     if (z_file->num_txts_so_far == 1 && (flag.aligner_available || !sam_hdr_contigs) && IS_REF_LOADED_ZIP)
-        ctx_populate_zf_ctx_from_contigs (SAM_RNAME, ref_get_ctgs());
+        ctx_populate_zf_ctx_from_contigs (ref_get_ctgs());
 
     if (TECH(PACBIO) && segconf.has[OPTION_dq_Z] == vb->lines.len32 && segconf.has[OPTION_iq_Z] == vb->lines.len32 && segconf.has[OPTION_sq_Z] == vb->lines.len32
         && flag.force_qual_codec != CODEC_PACB)
@@ -1368,7 +1367,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAMP dl)
 
         if (sam_type == 'Z')
             for (int i=0; i < value_len; i++)
-                ASSSEG (value[i] >= ' ' && value[i] <= '~', // SAM specification section 1.5
+                ASSSEG (value[i] >= ' ' && value[i] <= '~', // SAM specification §1.5
                         "Invalid character in %c%c:Z field [index=%u]: ASCII %u", tag[0], tag[1], i, (uint8_t)value[i]);
 
         else if (sam_type == 'H')

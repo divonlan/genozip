@@ -67,8 +67,9 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     if (vb->id != VB_ID_EVB) // cannot test evb, see comment in buflist_test_overflows_do
         buflist_test_overflows(vb, func); 
 
-    // verify that gzip_compressor was released after use
-    ASSERT (!vb->gzip_compressor, "vb=%s: expecting gzip_compressor=NULL", VB_NAME);
+    // verify that bgzf memory was released after use
+    ASSERTISNULL (vb->gz_inflate_mem);
+    ASSERTISNULL (vb->gz_deflate_mem);
 
     // release all buffers in vb->buffer_list, and zero the space between these buffers
     buflist_free_vb (vb); 
@@ -179,7 +180,7 @@ VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, rom task)
     vb->data_type_alloced = dt;
     vb->comp_i            = COMP_NONE;
     vb->pool              = NO_POOL;
-    init_dict_id_to_did_map (vb->d2d_map); 
+    ca_init_d2d_map (&vb->ca); 
     
     if (!vb->buffer_list.vb) {
         vb->buffer_list.name = "buffer_list";
@@ -206,7 +207,7 @@ void vb_change_datatype_nonpool_vb (VBlockP *vb_p, DataType new_dt)
     VBlockP vb = *vb_p;
 
     vb->data_type = vb->data_type_alloced = new_dt;
-    init_dict_id_to_did_map (vb->d2d_map); 
+    ca_init_d2d_map (&vb->ca); 
     
     buflist_update_vb_addr_change (vb, vb->buffer_list.vb);
 
@@ -243,7 +244,7 @@ static VBlockP vb_update_data_type (VBlockP vb, DataType dt, DataType alloc_dt, 
     return vb;
 }
 
-// allocate an unused vb from the pool. seperate pools for zip and unzip
+// allocate an unused vb from the pool. separate pools for zip and unzip
 VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompIType comp_i)
 {
     START_TIMER;
@@ -314,7 +315,7 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     vb->comp_i            = comp_i;
     vb->compute_thread_id = THREAD_ID_NONE;
     vb->compute_task      = task_name;
-    init_dict_id_to_did_map (vb->d2d_map);
+    ca_init_d2d_map (&vb->ca);
     
     if (flag_is_show_vblocks (task_name)) 
         iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d num_in_use=%u/%u%s\n", 

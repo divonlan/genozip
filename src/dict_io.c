@@ -25,9 +25,9 @@ static void dict_io_prepare_for_assign_codec (VBlockP vb)
 {
     // get next non-too-small dict
     while (next_ctx->dcodec != CODEC_UNKNOWN && 
-           next_ctx < ZCTX(z_file->num_contexts)) next_ctx++;
+           next_ctx < ZCTX(z_file->ca.num_contexts)) next_ctx++;
 
-    if (next_ctx < ZCTX(z_file->num_contexts)) {
+    if (next_ctx < ZCTX(z_file->ca.num_contexts)) {
         vb->fragment_ctx = next_ctx;
         vb->dispatch = READY_TO_COMPUTE;
         next_ctx++;
@@ -80,7 +80,7 @@ static unsigned frag_size;
 // compression and decompression
 static void dict_io_prepare_for_compress (VBlockP vb)
 {
-    while (frag_ctx < ZCTX(z_file->num_contexts)) {
+    while (frag_ctx < ZCTX(z_file->ca.num_contexts)) {
 
         if (!frag_next_node) {
             if (!frag_ctx->nodes.len ||
@@ -93,7 +93,7 @@ static void dict_io_prepare_for_compress (VBlockP vb)
             frag_next_node = B1ST (const CtxNode, frag_ctx->nodes);
 
             ASSERT (frag_next_node->char_index + frag_next_node->snip_len <= frag_ctx->dict.len, 
-                    "Corrupt nodes in ctx=%.8s did_i=%u", frag_ctx->tag_name, (int)(frag_ctx - z_file->contexts));
+                    "Corrupt nodes in ctx=%.8s did_i=%u", frag_ctx->tag_name, (int)(frag_ctx - z_file->ca.contexts));
 
             ASSERT (frag_ctx->dict_id.num, "dict_id=0 for context \"%s\" did_i=%u", frag_ctx->tag_name, (unsigned)(frag_ctx - ZCTX(0)));
 
@@ -220,7 +220,7 @@ static void dict_io_read_one_vb (VBlockP vb) // one vb = one fragment
 
     bool new_ctx = (!dict_ctx || dict_sec->dict_id.num != dict_ctx->dict_id.num);
     if (new_ctx)
-        dict_ctx = ctx_get_ctx_do (z_file->contexts, z_file->data_type, z_file->d2d_map, &z_file->num_contexts, dict_sec->dict_id, 0, 0);
+        dict_ctx = ctx_get_ctx_do (&z_file->ca, z_file->data_type, dict_sec->dict_id, 0, 0);
 
     // note: skipping a section should be mirrored in a container filter
     if (piz_is_skip_section (z_file->data_type, SEC_DICT, COMP_NONE, dict_sec->dict_id, dict_sec->flags.flags, SKIP_PURPOSE_RECON)) {
@@ -252,7 +252,7 @@ static void dict_io_read_one_vb (VBlockP vb) // one vb = one fragment
         // this allows us to calculate the frag_size with which this dictionary was compressed and hence an upper bound on the size
         uint64_t size_upper_bound = (num_fragments == 1) ? vb->fragment_len : ((uint64_t)roundup2pow (vb->fragment_len) * (uint64_t)num_fragments);
         
-        buf_alloc (evb, &dict_ctx->dict, 0, VER(9) ? size_upper_bound : v8_get_dict_size (vb, dict_sec), char, 0, "zctx->dict");
+        buf_alloc (evb, &dict_ctx->dict, 0, VER(9) ? size_upper_bound : v8_get_dict_size (vb, dict_sec), char, 0, Z_ C_DICT);
         dict_ctx->dict.prm32[0] = num_fragments;     // for error reporting
         dict_ctx->dict.prm32[1] = vb->fragment_len;
 
@@ -303,7 +303,7 @@ static void dict_io_dict_build_word_list_one (ContextP zctx)
 {
     if (!zctx->word_list.len || zctx->word_list.data) return; // skip if 1. no words, or 2. already built
 
-    buf_alloc (evb, &zctx->word_list, 0, zctx->word_list.len, CtxWord, 0, "zctx->word_list");
+    buf_alloc (evb, &zctx->word_list, 0, zctx->word_list.len, CtxWord, 0, Z_ C_WORD_LIST);
     buf_set_shared (&zctx->word_list);
 
     rom word_start = zctx->dict.data;
@@ -369,8 +369,7 @@ void dict_io_read_all_dictionaries (void)
 
     // output the dictionaries if we're asked to
     if (flag.show_dict || flag.show_one_dict || flag.show_contigs) {
-        for (uint32_t did_i=0; did_i < z_file->num_contexts; did_i++) {
-            ContextP ctx = ZCTX(did_i);
+        for_ctx (&z_file->ca) { // not for_zctx, so we have did_i which might be different that zctx->did_i if alias
             if (!ctx->dict.len) continue;
 
             if (flag.show_contigs && ctx->did_i == CHROM)

@@ -7,7 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "lookback.h"
 
 // TxtWord of last sample copied for this sample_i and FORMAT
@@ -33,8 +33,8 @@ void vcf_copy_sample_seg_initialize (VBlockVCFP vb)
 
     if (segconf.vcf_sample_copy) {
         uint32_t n_fmts = CTX(VCF_FORMAT)->ol_nodes.len;
-        buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,  n_fmts * vcf_num_samples, TxtWord, "contexts->last_samples");
-        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, n_fmts * vcf_num_samples, bool, "contexts->sample_copied");
+        buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,  n_fmts * vcf_num_samples, TxtWord, C_"last_samples");
+        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, n_fmts * vcf_num_samples, bool, C_"sample_copied");
    
         seg_mux_init (vb, FORMAT_GT, VCF_SPECIAL_MUX_BY_PREV_COPIED, false, GT);
 
@@ -44,7 +44,7 @@ void vcf_copy_sample_seg_initialize (VBlockVCFP vb)
         ctx->dyn_transposed = true;
         ctx->local_dep = DEP_L1; // transpose this matrix itself only after using it to transpose all other fields 
 
-        buf_alloc (vb, &ctx->local, 0, vb->lines.len * vcf_num_samples, bool, 0, CTX_TAG_LOCAL); // initial allocation
+        buf_alloc (vb, &ctx->local, 0, vb->lines.len * vcf_num_samples, bool, 0, C_LOCAL); // initial allocation
     }
 }
 
@@ -155,8 +155,8 @@ void vcf_sample_copy_piz_init_vb (VBlockVCFP vb)
         }
     }
 
-    buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,      vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, TxtWord, "contexts->last_samples");
-    buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, bool, "contexts->sample_copied");
+    buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,      vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, TxtWord, C_"last_samples");
+    buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, vcf_num_samples * ZCTX(VCF_FORMAT)->word_list.len, bool, C_"sample_copied");
 }
 
 void vcf_copy_sample_piz_store (VBlockVCFP vb, STRp(recon_sample))

@@ -50,14 +50,14 @@ static int32_t bam_unconsumed_scan_forwards (VBlockP vb)
 {
     ARRAY (char, txt, vb->txt_data);
     
-    if (txt_len < sizeof (BAMAlignmentFixed)) return -1; // this VB doesn't not even contain one single full alignment
+    if (txt_len < sizeof (BAMAlignmentFixed)) return UNCONSUMED_NEED_MORE_DATA; // this VB doesn't not even contain one single full alignment
 
     uint32_t aln_size=0, i;
     for (i=0 ; i < txt_len-3; i += aln_size) 
         aln_size = ((BAMAlignmentFixedP)&txt[i])->block_size + 4;
 
     if (aln_size > txt_len) 
-        return -1; // this VB doesn't not even contain one single full alignment
+        return UNCONSUMED_NEED_MORE_DATA; // this VB doesn't not even contain one single full alignment
 
     else if (i == txt_len)
         return 0;  // we will consume all data - nothing to pass to next VB
@@ -129,7 +129,7 @@ static int32_t bam_unconsumed_scan_backwards (rom bam_data, uint64_t bam_data_le
     }
 
     if (last_aln) *last_aln = NULL;
-    return -1; // we can't find any alignment - need more data (lower first_i)    
+    return UNCONSUMED_NEED_MORE_DATA; // we can't find any alignment - need more data (lower first_i)    
 }  
 
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
@@ -148,13 +148,13 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i)
     else
         result = bam_unconsumed_scan_backwards (Btxt(first_i), Ltxt - first_i, NULL); 
 
-    return result; // if -1 - we will be called again with more data
+    return result; // if UNCONSUMED_NEED_MORE_DATA - we will be called again with more data
 }
 
 bool bam_txt_file_is_last_alignment_unmapped (void)
 {
     // notes: 1. in sorted files, unmapped are at the end. 2. No implemtnation for SAM, as BGZF .sam.gz or .sam are very rare.
-    if (!segconf.is_sorted || !IS_BAM_ZIP || !TXT_IS_BGZF || 
+    if (!segconf.is_sorted || !IS_BAM_ZIP || !TXT_IS(BGZF) || 
         txt_file->redirected || txt_file->is_remote || is_read_via_ext_decompressor (txt_file)/*CRAM*/)
         return false; // we cannot test
 

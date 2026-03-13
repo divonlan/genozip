@@ -156,7 +156,7 @@ static void bai_abort (rom reason, STRp(qname), bool debug_bai_only)
 } 
 #define BAI_ABORT(reason) { bai_abort (reason, STRa(qname), false); return; }
 
-// PIZ main thread: called after reconstructing SAM header
+// PIZ main thread: called after reconstructing SAM / VCF header
 void bai_initialize (rom txt_header/*NUL-terminated*/, uint32_t num_header_contigs, PosType64 len_of_longest_contig)
 {
     ASSERTNOTNULL (txt_file); // must be called after txt_file initialized, eg from inspect_txt_header
@@ -174,10 +174,14 @@ void bai_initialize (rom txt_header/*NUL-terminated*/, uint32_t num_header_conti
 
     // give a reason if BAI is not created due to the details of the BAM file, but not if user is not likely to expect it anyway
     if (txt_file->effective_codec == CODEC_BGZF && // .sam.gz or .bam
-        !txt_file->redirected && txt_file->name && !flag.no_writer && !flag.no_index) {
+        !txt_file->redirected && txt_file->name && !flag.no_writer && !flag.no_index
+        && !(flag.deep && (OUT_DT(FASTQ) || OUT_DT(FASTA)))) {
         
-        if (flag.bgzf == BGZF_BY_ZFILE)  // too complicated to calculate BAI if bgzf=exact, because a BGZF block can span two VBs, and also original .bai is still good
+        if (flag.bgzf == BGZF_EXACT)  // too complicated to calculate BAI if bgzf=exact, because a BGZF block can span two VBs, and also original .bai is still good
             bai_abort ("using --bgzf=exact", 0, 0, false);
+
+        else if (flag.bgzf == BGZF_EXACT_STRICT) 
+            bai_abort ("using --bgzf=exact-strict", 0, 0, false);
 
         else if (Z_DT(SAM) && !num_bai_contigs)
             bai_abort ("BAM header has no SQ records", 0, 0, false);
@@ -375,6 +379,8 @@ void bai_calculate_one_vb (VBlockP vb)
 {
     START_TIMER;
 
+    ASSERT (OUT_DT(BAM) || OUT_DT(SAM) || OUT_DT(VCF), "Not supported for out_dt=%s", dt_name (flag.out_dt));
+
     // initial allocations
     buf_alloc (vb, &vb->bai_stats,  0, 10,   BaiStats,  0, "bai_stats"); 
     buf_alloc (vb, &vb->bai_linear, 0, 100,  BaiLinear, 0, "bai_linear"); 
@@ -531,19 +537,19 @@ static void bai_update_vfo_to_bgzf_offsets (VBlockP vb)
 {
     ARRAY (BgzfBlockPiz, bgzf_blocks, vb->gz_blocks);
 
-    // note: we have one extra entry at the end of bgzf_blocks with the compressed_index of the start of the next VB (see bgzf_compress_vb)
+    // note: we have one extra entry at the end of bgzf_blocks with the gz_index of the start of the next VB (see bgzf_compress_vb)
     for_buf (BaiChunk, ent, vb->bai_chunks) {
-        ent->start.bb_off_in_vb = bgzf_blocks[ent->start.bb_i_in_vb].compressed_index;
-        ent->after.bb_off_in_vb = bgzf_blocks[ent->after.bb_i_in_vb].compressed_index; 
-        ent->nxtbb.bb_off_in_vb = bgzf_blocks[ent->nxtbb.bb_i_in_vb].compressed_index;
+        ent->start.bb_off_in_vb = bgzf_blocks[ent->start.bb_i_in_vb].gz_index;
+        ent->after.bb_off_in_vb = bgzf_blocks[ent->after.bb_i_in_vb].gz_index; 
+        ent->nxtbb.bb_off_in_vb = bgzf_blocks[ent->nxtbb.bb_i_in_vb].gz_index;
     }
 
     for_buf (BaiLinear, ent, vb->bai_linear) 
-        ent->start.bb_off_in_vb = bgzf_blocks[ent->start.bb_i_in_vb].compressed_index;
+        ent->start.bb_off_in_vb = bgzf_blocks[ent->start.bb_i_in_vb].gz_index;
 
     for_buf (BaiStats, ent, vb->bai_stats) {
-        ent->ref_beg.bb_off_in_vb = bgzf_blocks[ent->ref_beg.bb_i_in_vb].compressed_index;
-        ent->ref_end.bb_off_in_vb = bgzf_blocks[ent->ref_end.bb_i_in_vb].compressed_index;
+        ent->ref_beg.bb_off_in_vb = bgzf_blocks[ent->ref_beg.bb_i_in_vb].gz_index;
+        ent->ref_end.bb_off_in_vb = bgzf_blocks[ent->ref_end.bb_i_in_vb].gz_index;
     }
 }
 

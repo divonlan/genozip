@@ -502,37 +502,35 @@ static inline uint64_t _bits_combined_word (uint64_t word_a, uint64_t word_b, ui
 
 // calculate the number of bits that are different between two Bits' at arbitrary positions (divon)
 // note: static inline because in the tight loop of aligner
-static inline uint32_t bits_hamming_distance (ConstBitsP bits_1, uint64_t index_1, 
-                                              ConstBitsP bits_2, uint64_t index_2, 
-                                              uint64_t len)
+static inline uint32_t bits_hamming_distance (ConstBitsP bits_1, // the entire bit array  
+                                              ConstBitsP bits_2, uint64_t index_2) // a subset of this one
 {
-    const uint64_t *words_1 = &bits_1->words[index_1 >> 6];
-    uint8_t shift_1 = index_1 & bitmask64(6); 
-    uint64_t *after_1 = bits_1->words + bits_1->nwords;
-
+    const uint64_t *words_1 = bits_1->words;
     const uint64_t *words_2 = &bits_2->words[index_2 >> 6];
-    uint8_t shift_2 = index_2 & bitmask64(6); 
-    uint64_t *after_2 = bits_2->words + bits_2->nwords;
-
+    const uint64_t *after_1 = words_1 + bits_1->nwords;
     uint64_t word=0;
-    uint32_t nonmatches=0; 
-    uint32_t nwords = roundup_bits2words64 (len);
+    uint32_t distance=0; // number of non-matching bits
 
-    for (uint32_t i=0; i < nwords; i++) {
-        uint64_t word_1 = _bits_combined_word (words_1[i], (&words_1[i+1] < after_1 ? words_1[i+1] : 0), shift_1);
-        uint64_t word_2 = _bits_combined_word (words_2[i], (&words_2[i+1] < after_2 ? words_2[i+1] : 0), shift_2);
-        word = word_1 ^ word_2; // xor the words - resulting in 1 in each position they differ and 0 where they're equal
+    // if bits_1 goes beyond the end of bits_2 we can't calculate distance
+    if (index_2 + bits_1->nbits > bits_2->nbits)
+        return bits_1->nbits; // maximum distance = complete misfit
 
-        // we count the number of different bits. note that identical nucleotides results in 2 equal bits while
-        // different nucleotides results in 0 or 1 equal bits (a 64 bit word contains 32 nucleotides x 2 bit each)
-        nonmatches += __builtin_popcountll (word); // note: expected to be _mm_popcnt_u64 with SSE4.2
+    // calculate distance: number of '1' bits in the xor between the two bitmaps
+    uint64_t next_w2 = *words_2; 
+    for (const uint64_t *w1=words_1, *w2=words_2; w1 < after_1; w1++, w2++) {
+        uint64_t this_w2 = next_w2;
+        next_w2 = *(w2+1);
+        // note: if last bits_1 word is partial, we still calculate it in its entirety and correct later. However, in case we reach 
+        // the end of bits_2 and have shift_2, we will access the word beyond the end of the bits_2->words. counting on words being a Buffer to not cause a segfault.
+        word = *w1 ^ _bits_combined_word (this_w2, next_w2, index_2 & 0b111111); 
+        distance += __builtin_popcountll (word); // note: expected to be _mm_popcnt_u64 with SSE4.2
     }
 
-    // remove non-matches due to the unused part of the last word
-    if (len % 64)
-        nonmatches -= __builtin_popcountll (word & ~bitmask64 (len % 64));
+    // remove distance due to the unused part of the last bits_1 word
+    if (bits_1->nbits & 0b111111)
+        distance -= __builtin_popcountll (word & ~bitmask64 (bits_1->nbits & 0b111111));
 
-    return nonmatches; // this is the "hamming distance" between the two Bits' - number of non-matches
+    return distance; // this is the "hamming distance" between the two Bits' - number of non-matches
 }
 
 // get the number of consecutive 1s at the start of a region (divon)

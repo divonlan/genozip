@@ -9,6 +9,7 @@
 #include "sam_private.h"
 #include "codec.h"
 #include "huffman.h"
+#include "dyn_int.h"
 #include "htscodecs/rANS_static4x16.h"
 #include "htscodecs/arith_dynamic.h"
 
@@ -188,7 +189,7 @@ static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(m
 
     uint32_t overlap_len = my_qual_len - flank[0] - flank[1];
 
-    buf_alloc (vb, &CTX(SAM_QUALSA)->local, overlap_len, 0, int8_t, CTX_GROWTH, CTX_TAG_LOCAL);
+    buf_alloc (vb, &CTX(SAM_QUALSA)->local, overlap_len, 0, int8_t, CTX_GROWTH, C_LOCAL);
     int8_t *diff = BAFT (int8_t, CTX(SAM_QUALSA)->local);
 
     rom overlap_my_qual = &my_qual[flank[0]];
@@ -600,8 +601,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
                 vb->hard_clip[0] + vb->hard_clip[1] + vb->seq_len == saggy_anal->hard_clip[0] + saggy_anal->hard_clip[1] + saggy_anal->seq_len; })) {
 
         HistoryWord word = *B(HistoryWord, ctx->history, vb->saggy_line_i); // QUAL is always stored as LookupTxtData or LookupPerLine
-        SamFlags saggy_flags = { .value = history64 (SAM_FLAG, vb->saggy_line_i) };
-        rom saggy_qual = (word.lookup == LookupTxtData) ? Btxt (word.index) : Bc(ctx->per_line, word.index);
+        SamFlags saggy_flags = { .value = piz_get_history (CTX(SAM_FLAG), vb->saggy_line_i) };
+        rom saggy_qual = (word.lookup == LookupTxtData) ? Btxt (word.index) 
+                                       /*LookupPerLine*/: Bc(ctx->dropped_txt, word.index);
 
         if (word.len == 1 && (uint8_t)*saggy_qual == (is_bam ? 0xff : '*'))
             goto no_diff; // in case prim has no qual - seg did not diff (the current line may or may not have qual)
@@ -656,7 +658,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     
     // calculate QUAL_score to be copied into our future mate's ms:i
     else if (CTX(OPTION_ms_i)->flags.spl_custom) // since v14 for ms_BIOBAMBAM
-        *B(int64_t, CTX(OPTION_ms_i)->history, vb->line_i) = sam_get_QUAL_score (vb, STRa(qual));
+        dyn_int_store_history (VB, CTX(OPTION_ms_i), sam_get_QUAL_score (vb, STRa(qual)));
 
     COPY_TIMER (sam_piz_special_QUAL);
 

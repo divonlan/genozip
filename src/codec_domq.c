@@ -202,7 +202,7 @@ static uint8_t codec_domq_calc_norm_table (VBlockP vb, ContextP qual_ctx, Contex
 
     // initialize
     buf_free (normalize_buf); // we can free global_hash as this function is called from seg_finalize 
-    ARRAY_alloc (uint8_t, normalize, num_doms * NUM_Qs, true, normalize_buf, vb, "contexts->normalize_buf");
+    ARRAY_alloc (uint8_t, normalize, num_doms * NUM_Qs, true, normalize_buf, vb, C_"normalize_buf");
     memset (denormalize, 0, num_doms * NUM_Qs);
 
     uint8_t num_norm_qs=0; // highest q_norm of any dom
@@ -255,7 +255,7 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, ContextP ctx, LocalGetL
 
     // get quality scores 
     buf_free (ql_buf); 
-    buf_alloc_exact_zero (vb, ql_buf, get_line_cb ? vb->lines.len : 1, DomqLine, "contexts->qual_line");
+    buf_alloc_exact_zero (vb, ql_buf, get_line_cb ? vb->lines.len : 1, DomqLine, C_"qual_line");
 
     if (get_line_cb) 
         for_buf2 (DomqLine, ql, line_i, ql_buf) 
@@ -407,9 +407,9 @@ COMPRESS (codec_domq_compress)
 
     // this is usually enough, but might not be in some edge cases
     // note: vb_qual_len is the total length of all qual lines
-    buf_alloc (vb, non_dom_buf,          0, 1 + vb_qual_len / 5,  char, 1, CTX_TAG_LOCAL); 
-    buf_alloc (vb, qdomruns_buf,         0, 1 + vb_qual_len / 10, char, 1, CTX_TAG_LOCAL);
-    buf_alloc (vb, &qualmplx_ctx->local, 0, 1 + ql_buf.len,       char, 0, CTX_TAG_LOCAL);
+    buf_alloc (vb, non_dom_buf,          0, 1 + vb_qual_len / 5,  char, 1, C_LOCAL); 
+    buf_alloc (vb, qdomruns_buf,         0, 1 + vb_qual_len / 10, char, 1, C_LOCAL);
+    buf_alloc (vb, &qualmplx_ctx->local, 0, 1 + ql_buf.len,       char, 0, C_LOCAL);
     
     // calculate exact allocation for divrqual
     if (qual_ctx->domq_has_diverse) { 
@@ -417,7 +417,7 @@ COMPRESS (codec_domq_compress)
         for_buf (DomqLine, ql, ql_buf) 
             if (ql->is_diverse) total_diverse += ql->qual_len;
 
-        buf_alloc (vb, &divrqual_ctx->local, 0, total_diverse, char, 1, CTX_TAG_LOCAL);
+        buf_alloc (vb, &divrqual_ctx->local, 0, total_diverse, char, 1, C_LOCAL);
     }
         
     uint32_t runlen=0, n_divr_lines=0;
@@ -481,7 +481,7 @@ COMPRESS (codec_domq_compress)
     }
 
     if (!get_line_cb) {
-        buf_copy (vb, qual_buf, non_dom_buf, char, 0, 0, CTX_TAG_LOCAL);
+        buf_copy (vb, qual_buf, non_dom_buf, char, 0, 0, C_LOCAL);
         buf_free (vb->scratch);
     }
 

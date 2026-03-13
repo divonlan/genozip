@@ -12,7 +12,7 @@
 #include "codec.h"
 #include "chrom.h"
 #include "stats.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 sSTRl(copy_TSTART_snip, 30);
 sSTRl(copy_TEND_snip, 30);

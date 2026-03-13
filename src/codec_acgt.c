@@ -22,7 +22,7 @@ const uint8_t acgt_encode[256] = { ['A']=0, ['C']=1, ['G']=2, ['T']=3,  // all o
                                    ['a']=0, ['c']=1, ['g']=2, ['t']=3, 
                                    
                                    // IUPAC codes are mapped to one of their bases: http://www.bioinformatics.org/sms/iupac.html
-                                   // the base to which a IUPAC is mapped, is the lowest alphanetically of its participating bases, per 1.6.1-REF in the VCF specification: https://samtools.github.io/hts-specs/VCFv4.3.pdf
+                                   // the base to which a IUPAC is mapped, is the lowest alphanetically of its participating bases, see VCF specification §1.6.1-REF
                                    ['U']=3, ['R']=0, ['Y']=1, ['S']=1,
                                    ['W']=0, ['K']=2, ['M']=0, ['B']=1,
                                    ['D']=0, ['H']=0, ['V']=0, ['N']=0,
@@ -129,7 +129,7 @@ COMPRESS (codec_acgt_compress)
         // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
         if (has_x) {
             buf_set_shared (&nonref_ctx->local);
-            buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, CTX_TAG_LOCAL);
+            buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, C_LOCAL);
         }
 
         PACK (uncompressed, *uncompressed_len); // pack into vb->scratch
@@ -144,7 +144,7 @@ COMPRESS (codec_acgt_compress)
     else if (get_line_cb) {
         ASSERT0 (has_x, "ACGT compression with get_line_cb is only support with has_X"); // we can easily add support if needed in the future
         
-        buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL);
+        buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, C_LOCAL);
         for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
 
             STRw0(data_1);

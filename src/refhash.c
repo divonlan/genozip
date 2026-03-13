@@ -140,9 +140,9 @@ static inline uint32_t refhash_get_word (ConstRangeP r, int64_t base_i)
 {
     // num_bits_this_range will be:
     // * 0 if HOOK is in this range, but all bits in next range
-    // * larger than 0, smaller than BITS_PER_HASH if HOOK is in this range, 
+    // * larger than 0, smaller than bits_per_hash if HOOK is in this range, 
     //   and some bits in this range and some in next
-    // * BITS_PER_HASH if HOOK and all bits are in this range
+    // * bits_per_hash if HOOK and all bits are in this range
     PosType64 num_bits_this_range = MIN_(bits_per_hash, (PosType64)r->ref.nbits - base_i*2);
     uint32_t refhash_word = 0;
 
@@ -336,9 +336,10 @@ static void refhash_revcomp_genome_do (VBlockP vb)
 
 
 // Generate an in-memory revcomp copy of genome. Only needed for aligner in ZIP.
-static void refhash_generate_emoneg (void)
+static void refhash_generate_emoneg (void) 
 {
     START_TIMER;
+
     if (buf_is_alloc (&emoneg_buf)) return; // already generated
 
     SAVE_FLAGS_AUX((rom)0); // silence some flags if --xthreads
@@ -357,7 +358,7 @@ static void refhash_generate_emoneg (void)
     genome = 0;
     genome_nbases = 0;
     
-    RESTORE_FLAGS;
+    RESTORE_FLAGS;    
 
     COPY_TIMER_EVB (refhash_generate_emoneg);
 }
@@ -446,11 +447,11 @@ void refhash_load (void)
 
     if (!ref_cache_is_cached ()) { // no cache, or loading to cache, but not already cached
         dispatcher_fan_out_task ("load_refhash", ref_get_filename (),
-                                0, (ref_cache_is_populating() ? "Caching reference file" : "Reading reference file"), // same message as in ref_load_stored_reference
-                                true, flag.test, false, 0, 100, true,
-                                refhash_read_one_vb, 
-                                refhash_uncompress_one_vb, 
-                                NO_CALLBACK);
+                                 0, (ref_cache_is_populating() ? "Caching reference file" : "Reading reference file"), // same message as in ref_load_stored_reference
+                                 true, flag.test, false, 0, 100, true,
+                                 refhash_read_one_vb, 
+                                 refhash_uncompress_one_vb, 
+                                 NO_CALLBACK);
     
         if (flag.show_cache) iprint0 ("show-cache: done reading refhash from disk\n");
     }
@@ -459,9 +460,9 @@ void refhash_load (void)
     // --make-reference, stored in GENOZIP_HEADER.refhash_digest
     // This is slow: for a human genome, digest takes about 0.7 seconds (adler) or 7 seconds (md5), so we test the digest sparingly. 
     // This is low risk: if refhash is corrupted, it will affect compression, but not data integrity (see bug 825)
-    if (ref_get_genozip_version() >= 15 &&              // GENOZIP_HEADER.refhash_digest is available since v15
+    if (ref_get_genozip_version() >= 15 &&             // GENOZIP_HEADER.refhash_digest is available since v15
         (!ref_cache_is_cached() || flag.show_cache) && // test only on loading from disk or on show-cache
-        !flag.fast) {                                      // skip if --fast. 
+        !flag.fast) {                                  // skip if --fast. 
 
         START_TIMER;
 

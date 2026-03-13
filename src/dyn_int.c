@@ -23,6 +23,7 @@ rom dyn_int_lt_order_name (uint8_t dyn_lt_order)
     return lt_name (lt_order[dyn_lt_order]);
 }
 
+// ZIP only
 LocalType dyn_int_get_ltype (ContextP ctx)
 {
     LocalType actual_ltype;
@@ -40,7 +41,7 @@ LocalType dyn_int_get_ltype (ContextP ctx)
     return actual_ltype;
 }
 
-// note: in PIZ, these are untransposed in eg BGEN_transpose_u32_buf
+// ZIP only. note: in PIZ, these are untransposed in eg BGEN_transpose_u32_buf
 void dyn_int_transpose (VBlockP vb, ContextP ctx)
 {
     uint32_t cols;
@@ -101,7 +102,7 @@ void dyn_int_transpose (VBlockP vb, ContextP ctx)
 
     // case: copy back transposed array: rows X cols elements
     if (!missing)
-        buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCLINE, CTX_TAG_LOCAL); // copy and not move, so we can keep local's memory for next vb
+        buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCLINE, C_LOCAL); // copy and not move, so we can keep local's memory for next vb
 
     // case: copy to local only the available data (i.e. not uninitialized scratch elements due to copied samples)
     else {
@@ -134,18 +135,28 @@ typedef void (*Resizer) (VBlockP, ContextP, LocalType, LocalType);
 #define resize(src_type, dst_size)                                                                                  \
 static inline void resize_##src_type##_to_##dst_size (VBlockP vb, ContextP ctx, LocalType src_lt, LocalType dst_lt) \
 {                                                                                                                   \
-    buf_alloc (vb, &ctx->local, 0, (ctx->local.len + 1), int##dst_size##_t, 0, CTX_TAG_LOCAL);                      \
+    BufferP buf = IS_ZIP ? &ctx->local : &ctx->history;                                                             \
+    if (IS_ZIP)                                                                                                     \
+        buf_alloc (vb, buf, 0, (buf->len + 1), int##dst_size##_t, 0, C_LOCAL);                                      \
+    else {                                                                                                          \
+        bool initialize = (buf->len == 0);                                                                          \
+        buf_alloc_exact (vb, *buf, vb->lines.len, int##dst_size##_t, C_HISTORY);                                    \
+        if (initialize) memset (buf->data, 0, buf->len * sizeof (int##dst_size##_t));                               \
+        SWAP (vb->line_i, buf->len32); /* resize only until before current line */                                  \
+    }                                                                                                               \
                                                                                                                     \
-    if (!ctx->nothing_char) {                                                                                  \
-        for_buf_tandem_back (src_type, src, ctx->local, int##dst_size##_t, dst, ctx->local)                         \
+    if (IS_PIZ || !ctx->nothing_char) {                                                                             \
+        for_buf_tandem_back (src_type, src, *buf, int##dst_size##_t, dst, *buf)                                     \
             *dst = *src;                                                                                            \
     }                                                                                                               \
     else {                                                                                                          \
         int64_t src_max = lt_max (src_lt);                                                                          \
         int64_t dst_max = lt_max (dst_lt);                                                                          \
-        for_buf_tandem_back (src_type, src, ctx->local, uint##dst_size##_t, dst, ctx->local)                        \
-            *dst = *src == src_max ? dst_max : *src; /* src/dst_max represent a period */                          \
+        for_buf_tandem_back (src_type, src, *buf, uint##dst_size##_t, dst, *buf)                                    \
+            *dst = *src == src_max ? dst_max : *src; /* src/dst_max represent a period */                           \
     }                                                                                                               \
+                                                                                                                    \
+    if (IS_PIZ) SWAP (vb->line_i, buf->len32); /* restore */                                                        \
 }
 
 resize(uint8_t,  8 )
@@ -164,16 +175,18 @@ resize(uint32_t, 32)
 resize(uint32_t, 64)
 resize(int32_t,  64)
 
+// ZIP/PIZ
 static void dyn_int_resize (VBlockP vb, ContextP ctx, LocalType old_lt, LocalType new_lt)
 {
     // if "resizing" from uint to int of the same size - no need to change local (unless period_as_int)
-    if (!ctx->nothing_char &&
+    // but we CANNOT skip ZIP is nothing_char and we CANNOT skip PIZ if not allocated yet
+    if (((IS_ZIP && !ctx->nothing_char) || (IS_PIZ && ctx->history.len)) && 
          ((old_lt == LT_UINT8  && new_lt == LT_INT8 ) ||
           (old_lt == LT_UINT16 && new_lt == LT_INT16) ||
           (old_lt == LT_UINT32 && new_lt == LT_INT32))) return;
 
     static Resizer resizers[NUM_LTYPES/*src*/][NUM_LTYPES/*dst*/] =
-        { [LT_UINT8]  = { [LT_INT8]                = resize_uint8_t_to_8,
+        { [LT_UINT8]  = { [LT_INT8  ... LT_UINT8 ] = resize_uint8_t_to_8,
                           [LT_INT16 ... LT_UINT16] = resize_uint8_t_to_16,
                           [LT_INT32 ... LT_UINT32] = resize_uint8_t_to_32,
                           [LT_INT64]               = resize_uint8_t_to_64  },
@@ -194,6 +207,7 @@ static void dyn_int_resize (VBlockP vb, ContextP ctx, LocalType old_lt, LocalTyp
     resizers[old_lt][new_lt] (vb, ctx, old_lt, new_lt);
 }
 
+// ZIP/PIZ
 void dyn_int_init_ctx (VBlockP vb, ContextP ctx, int64_t value)
 {
     if (ctx->dyn_lt_order) return; // already initialized
@@ -201,25 +215,28 @@ void dyn_int_init_ctx (VBlockP vb, ContextP ctx, int64_t value)
     ctx->dyn_lt_order = 1; // start with LT_UINT8 
     ctx->dyn_int_min = ctx->dyn_int_max = value;
 
-    // if set, segger *may* call dyn_int_append_nothing_char 
-    if (VB_DT(VCF))
-        ctx->nothing_char = '.';
+    if (IS_ZIP) {
+        // if set, segger *may* call dyn_int_append_nothing_char 
+        if (VB_DT(VCF))
+            ctx->nothing_char = '.';
 
-    ASSERT (!ctx->local.len, "%s: expecting %s.local to be empty", LN_NAME, ctx->tag_name);
+        ASSERT (!ctx->local.len, "%s: expecting %s.local to be empty", LN_NAME, ctx->tag_name);
 
-    if (ctx->ltype == LT_SINGLETON) 
-        ctx->ltype = LT_DYN_INT;
+        if (ctx->ltype == LT_SINGLETON) 
+            ctx->ltype = LT_DYN_INT;
 
-    ASSERT (IS_LT_DYN (ctx->ltype), "%s: incompatible %s.ltype=%s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
+        ASSERT (IS_LT_DYN (ctx->ltype), "%s: incompatible %s.ltype=%s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
 
-    // set STORE_INT 
-    if (ctx->flags.store != STORE_INT) {
-        ASSERT (ctx->flags.store == STORE_NONE, "%s: Incompatible %s.store_type=%s", LN_NAME, ctx->tag_name, store_type_name (ctx->flags.store));
+        // set STORE_INT 
+        if (ctx->flags.store != STORE_INT) {
+            ASSERT (ctx->flags.store == STORE_NONE, "%s: Incompatible %s.store_type=%s", LN_NAME, ctx->tag_name, store_type_name (ctx->flags.store));
 
-        ctx->flags.store = STORE_INT;
+            ctx->flags.store = STORE_INT;
+        }
     }
 }
 
+// ZIP only
 static inline void dyn_init_alloc (VBlockP vb, ContextP ctx)
 {
     #define MIN_LOCAL_ALLOCATION 1024
@@ -227,40 +244,46 @@ static inline void dyn_init_alloc (VBlockP vb, ContextP ctx)
 
     // non-initial alloc. skip the complicated computation in AT_LEAST
     if (ctx->local.len32)
-        buf_alloc (vb, &ctx->local, 1, MIN_LOCAL_ALLOCATION, int64_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &ctx->local, 1, MIN_LOCAL_ALLOCATION, int64_t, CTX_GROWTH, C_LOCAL); 
 
     // initial alloc. note: not in dyn_int_init_ctx, bc we initialize the context in seg_initialize, but then sometimes never use it
     else 
-        buf_alloc (vb, &ctx->local, 1, AT_LEAST(ctx->did_i), char, CTX_GROWTH, CTX_TAG_LOCAL); // complicated math only on first call
+        buf_alloc (vb, &ctx->local, 1, AT_LEAST(ctx->did_i), char, CTX_GROWTH, C_LOCAL); // complicated math only on first call
 }
 
-// requires setting ltype=LT_DYN_INT* in seg_initialize
-void dyn_int_append (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
+// ZIP/PIZ
+static LocalType dyn_init_prepare (VBlockP vb, ContextP ctx, int64_t value)
 {
     // initialize if needed
     if (!ctx->dyn_lt_order) 
         dyn_int_init_ctx (vb, ctx, value);
 
-    dyn_init_alloc (vb, ctx);
+    if (IS_ZIP) // note: in PIZ, history is allocated in dyn_int_resize 
+        dyn_init_alloc (vb, ctx);
 
     if      (value < ctx->dyn_int_min) ctx->dyn_int_min = value;
     else if (value > ctx->dyn_int_max) ctx->dyn_int_max = value;
 
     LocalType dyn_ltype = lt_order[ctx->dyn_lt_order]; 
 
+    uint8_t nothing_char = IS_ZIP ? ctx->nothing_char : 0; // we don't support storing nothing_char in PIZ in history, but no reason not to support if needed in the future 
+    bool is_allocated = IS_ZIP || (ctx->history.len > 0);
+
     // case: the current ltype cannot accomodate the value - we will need to resize
-    if (value < lt_min(dyn_ltype) || value > lt_max(dyn_ltype) - (ctx->nothing_char != 0)) {
+    if (value < lt_min(dyn_ltype) || value > lt_max(dyn_ltype) - (nothing_char != 0) ||
+        (IS_PIZ && !ctx->history.len)) {
         // search for the next order up, which this and all previous values can fit into
         bool resized = false;
-        for (int i=ctx->dyn_lt_order + 1; i < ARRAY_LEN(lt_order); i++) 
+        for (int i=ctx->dyn_lt_order + is_allocated; i < ARRAY_LEN(lt_order); i++) 
             if (ctx->dyn_int_min >= lt_min (lt_order[i]) && 
-                ctx->dyn_int_max <= lt_max (lt_order[i]) - (ctx->nothing_char != 0)) { // maximum is reduced by 1 if nothing_char!=0 as nothing_char is represented as max_int
+                ctx->dyn_int_max <= lt_max (lt_order[i]) - (nothing_char != 0)) { // maximum is reduced by 1 if nothing_char!=0 as nothing_char is represented as max_int
 
-                if (ctx->local.len) 
+                if (IS_PIZ || ctx->local.len) 
                     dyn_int_resize (vb, ctx, dyn_ltype, lt_order[i]); // note: we will always get here, because at least int64_t always works 
 
-                if (flag.debug_generate) 
-                    iprintf ("%s: %s[%u].local resized from %s to %s due to %"PRId64"\n", VB_NAME, ctx->tag_name, ctx->did_i,
+                if (flag.debug_dyn_int) 
+                    iprintf ("%s: %s[%u].%s resized from %s to %s due to %"PRId64"\n", 
+                            VB_NAME, ctx->tag_name, ctx->did_i, (IS_ZIP ? "local" : "history"),
                             lt_name (dyn_ltype), lt_name (lt_order[i]), value);
 
                 ctx->dyn_lt_order = i;
@@ -269,9 +292,18 @@ void dyn_int_append (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes
                 break; 
             }
 
-        ASSERT (resized, "value=%"PRId64" in ctx=%s with nothing_char=%s cannot be resized",
-                value, ctx->tag_name, char_to_printable (ctx->nothing_char).s); // expected only if nothing_char!=0 and value=LT_INT64.max_int
+        ASSERT (resized, "value=%"PRId64" in ctx=%s%s cannot be resized", // expected only if nothing_char!=0 and value=LT_INT64.max_int
+                value, ctx->tag_name, 
+                cond_str (nothing_char, " with nothing_char=", char_to_printable (ctx->nothing_char).s));
     }
+
+    return dyn_ltype;
+}
+
+// ZIP: appends ctx->local: requires setting ltype=LT_DYN_INT* in seg_initialize
+void dyn_int_append (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes)
+{
+    LocalType dyn_ltype = dyn_init_prepare (vb, ctx, value);
 
     // add value to local
     switch (dyn_ltype) {
@@ -286,6 +318,7 @@ void dyn_int_append (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes
     ctx->local_num_words++;
 }
 
+// ZIP only
 // - this MAY be called for contexts marked that have nothing_char - currently VCF samples contexts
 // - reconstruction of the period happens in reconstruct_from_local_int 
 void dyn_int_append_nothing_char (VBlockP vb, ContextP ctx, unsigned add_bytes)
@@ -311,3 +344,33 @@ void dyn_int_append_nothing_char (VBlockP vb, ContextP ctx, unsigned add_bytes)
     if (add_bytes) ctx->txt_len += add_bytes;
     ctx->local_num_words++;
 }
+
+// PIZ: store value in history
+void dyn_int_store_history (VBlockP vb, ContextP ctx, int64_t value)
+{
+    LocalType dyn_ltype = dyn_init_prepare (vb, ctx, value); // allocate / resize
+
+    // add value to local
+    switch (dyn_ltype) {
+        case LT_INT8  : case LT_UINT8  : *B(int8_t,  ctx->history, vb->line_i) = (int8_t) value; break; // note: if value >= 128, converting it to int8_t will not change its binary representation 
+        case LT_INT16 : case LT_UINT16 : *B(int16_t, ctx->history, vb->line_i) = (int16_t)value; break;
+        case LT_INT32 : case LT_UINT32 : *B(int32_t, ctx->history, vb->line_i) = (int32_t)value; break;
+        case LT_INT64 :                  *B(int64_t, ctx->history, vb->line_i) =          value; break;            
+        default : ABORT ("Unexpected dyn_ltype=%u", dyn_ltype);
+    }   
+}
+
+// PIZ: get value from history
+int64_t piz_get_history (ContextP ctx, uint32_t line_i)
+{
+    switch (lt_order[ctx->dyn_lt_order]) {
+        case LT_INT8   : return *B(int8_t,   ctx->history, line_i);
+        case LT_UINT8  : return *B(uint8_t,  ctx->history, line_i);
+        case LT_INT16  : return *B(int16_t,  ctx->history, line_i);
+        case LT_UINT16 : return *B(uint16_t, ctx->history, line_i);
+        case LT_INT32  : return *B(int32_t,  ctx->history, line_i);
+        case LT_UINT32 : return *B(uint32_t, ctx->history, line_i);
+        case LT_INT64  : return *B(int64_t,  ctx->history, line_i);
+        default : ABORT ("Unexpected dyn_lt_order=%u", ctx->dyn_lt_order);
+    }
+} 

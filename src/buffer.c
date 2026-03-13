@@ -332,21 +332,21 @@ uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits)
 // Endianity stuff
 //---------------------
 
-void interlace_d8_buf       (BufferP buf, LocalType *lt) { for_buf (int8_t,  num, *buf) *num =        (INTERLACE(int8_t,  *num)); }
-void BGEN_interlace_d16_buf (BufferP buf, LocalType *lt) { for_buf (int16_t, num, *buf) *num = BGEN16 (INTERLACE(int16_t, *num)); }
-void BGEN_interlace_d32_buf (BufferP buf, LocalType *lt) { for_buf (int32_t, num, *buf) *num = BGEN32 (INTERLACE(int32_t, *num)); }
-void BGEN_interlace_d64_buf (BufferP buf, LocalType *lt) { for_buf (int64_t, num, *buf) *num = BGEN64 (INTERLACE(int64_t, *num)); }
-void LTEN_interlace_d16_buf (BufferP buf, LocalType *lt) { for_buf (int16_t, num, *buf) *num = LTEN16 (INTERLACE(int16_t, *num)); }
-void LTEN_interlace_d32_buf (BufferP buf, LocalType *lt) { for_buf (int32_t, num, *buf) *num = LTEN32 (INTERLACE(int32_t, *num)); }
-void LTEN_interlace_d64_buf (BufferP buf, LocalType *lt) { for_buf (int64_t, num, *buf) *num = LTEN64 (INTERLACE(int64_t, *num)); }
+void interlace_d8_buf       (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int8_t,  num, *buf) *num =        (INTERLACE(int8_t,  *num)); }
+void BGEN_interlace_d16_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int16_t, num, *buf) *num = BGEN16 (INTERLACE(int16_t, *num)); }
+void BGEN_interlace_d32_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int32_t, num, *buf) *num = BGEN32 (INTERLACE(int32_t, *num)); }
+void BGEN_interlace_d64_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int64_t, num, *buf) *num = BGEN64 (INTERLACE(int64_t, *num)); }
+void LTEN_interlace_d16_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int16_t, num, *buf) *num = LTEN16 (INTERLACE(int16_t, *num)); }
+void LTEN_interlace_d32_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int32_t, num, *buf) *num = LTEN32 (INTERLACE(int32_t, *num)); }
+void LTEN_interlace_d64_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int64_t, num, *buf) *num = LTEN64 (INTERLACE(int64_t, *num)); }
 
-void BGEN_u8_buf  (BufferP buf, LocalType *lt) {}
-void BGEN_u16_buf (BufferP buf, LocalType *lt) { if ( flag.is_lten) for_buf (uint16_t, num, *buf) *num = BGEN16 (*num); }
-void BGEN_u32_buf (BufferP buf, LocalType *lt) { if ( flag.is_lten) for_buf (uint32_t, num, *buf) *num = BGEN32 (*num); }
-void BGEN_u64_buf (BufferP buf, LocalType *lt) { if ( flag.is_lten) for_buf (uint64_t, num, *buf) *num = BGEN64 (*num); }
-void LTEN_u16_buf (BufferP buf, LocalType *lt) { if (!flag.is_lten) for_buf (uint16_t, num, *buf) *num = LTEN16 (*num); }
-void LTEN_u32_buf (BufferP buf, LocalType *lt) { if (!flag.is_lten) for_buf (uint32_t, num, *buf) *num = LTEN32 (*num); }
-void LTEN_u64_buf (BufferP buf, LocalType *lt) { if (!flag.is_lten) for_buf (uint64_t, num, *buf) *num = LTEN64 (*num); }
+void BGEN_u8_buf  (Bufferរ buf, __attribute__((unused)) LocalType *lt) {}
+void BGEN_u16_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if ( flag.is_lten) for_bufរ (uint16_t, num, *buf) *num = BGEN16 (*num); }
+void BGEN_u32_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if ( flag.is_lten) for_bufរ (uint32_t, num, *buf) *num = BGEN32 (*num); }
+void BGEN_u64_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if ( flag.is_lten) for_bufរ (uint64_t, num, *buf) *num = BGEN64 (*num); }
+void LTEN_u16_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if (!flag.is_lten) for_bufរ (uint16_t, num, *buf) *num = LTEN16 (*num); }
+void LTEN_u32_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if (!flag.is_lten) for_bufរ (uint32_t, num, *buf) *num = LTEN32 (*num); }
+void LTEN_u64_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if (!flag.is_lten) for_bufរ (uint64_t, num, *buf) *num = LTEN64 (*num); }
 
 // number of columns is trasmitted in the count, except if this is a matrix of VCF samples, in which case param=0 and we take 
 // the number of columns to be the number of samples in the VCF header
@@ -377,7 +377,7 @@ void BGEN_transpose_u##n##_buf (BufferP buf, LocalType *lt)                     
             target[r * cols + c] = transposed[c * rows + r];                        \
                                                                                     \
     buf->vb->scratch.len = buf->len;                                                \
-    buf_copy (buf->vb, buf, &buf->vb->scratch, uint##n##_t, 0, 0, CTX_TAG_LOCAL); /* copy and not move, so we can keep local's memory for next vb */ \
+    buf_copy (buf->vb, buf, &buf->vb->scratch, uint##n##_t, 0, 0, C_LOCAL); /* copy and not move, so we can keep local's memory for next vb */ \
                                                                                     \
     buf_free (buf->vb->scratch);                                                    \
                                                                                     \
@@ -400,7 +400,7 @@ void BGEN_ptranspose_u##n##_buf (BufferP buf, LocalType *lt)                    
     uint32_t cols = buf->vb->lines.len;           /* cols in transposed matrix  */                      \
                                                                                                         \
     /* note: "missing" array is already untransposed as vcf_piz_init_vb hoists it untranspose first */  \
-    ARRAY (bool, missing, buf->vb->contexts[VCF_COPY_SAMPLE].local);                                    \
+    ARRAY (bool, missing, buf->vb->ca.contexts[VCF_COPY_SAMPLE].local);                                 \
     ARRAY_alloc (uint##n##_t, full, rows * cols, false, buf->vb->scratch, buf->vb, "scratch");          \
                                                                                                         \
     /* generate "full" a rows x cols matrix (still transposed) with values set from buf, and missing values left uninitialized */ \

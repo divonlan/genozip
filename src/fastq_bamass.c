@@ -235,8 +235,8 @@ static void bamass_generate_bamass_ents (VBlockP vb_)
     START_TIMER; 
 
     // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
-    if (TXT_IS_BGZF) 
-        mgzip_uncompress_vb (VB, CODEC_BGZF);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
+    if (TXT_IS(BGZF)) 
+        mgzip_uncompress_vb (VB, CODEC_BGZF); // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     rom next  = B1STtxt;
     rom after = BAFTtxt;
@@ -381,7 +381,7 @@ static void bamass_segconf (void)
     // return segconf data 
     buf_insert (evb, txt_file->unconsumed_txt, char, 0, vb->txt_data.data, vb->txt_data.len32, "txt_file->unconsumed_txt");
 
-    if (TXT_IS_BGZF) 
+    if (TXT_IS(BGZF)) 
         mgzip_return_segconf_blocks (vb); // return BGZF used by the segconf VB to the unconsumed BGZF blocks
 
     vb_destroy_vb (&vb);
@@ -1007,16 +1007,16 @@ MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(se
     RefLock lock = IS_REF_EXTERNAL ? REFLOCK_NONE : ref_lock (vb->gpos, vb->ref_consumed);
 
     buf_alloc_bits (vb, &bitmap_ctx->local, vb->ref_and_seq_consumed, vb->lines.len32 / 16 * segconf.std_seq_len,
-                    SET/*initialize to "no mismatches"*/, CTX_GROWTH, CTX_TAG_LOCAL); 
+                    SET/*initialize to "no mismatches"*/, CTX_GROWTH, C_LOCAL); 
 
     for (int i=0; i < 4; i++) 
-        buf_alloc (vb, &seqmis_ctx[i].local, vb->ref_and_seq_consumed, 0, char, CTX_GROWTH, CTX_TAG_LOCAL); 
+        buf_alloc (vb, &seqmis_ctx[i].local, vb->ref_and_seq_consumed, 0, char, CTX_GROWTH, C_LOCAL); 
 
     if (segconf.use_insertion_ctxs)    
         for (int i=0; i < 4; i++) 
-            buf_alloc (vb, &seqins_ctx[i].local, vb->insertions, 0, char, CTX_GROWTH, CTX_TAG_LOCAL); 
+            buf_alloc (vb, &seqins_ctx[i].local, vb->insertions, 0, char, CTX_GROWTH, C_LOCAL); 
 
-    buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, CTX_TAG_LOCAL); 
+    buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, C_LOCAL); 
 
     bitmap_ctx->local_num_words++;
 
@@ -1202,7 +1202,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
 
 #ifdef DEBUG // this function is a performance hotspot, therefore this code is only a compilation, not runtime, option
     #define verify_is_set(ref) ASSPIZ (!flag.debug || IS_REF_EXTERNAL || ((ref)-start_ref < bitmap_ctx->piz_is_set.len32 && *Bc(bitmap_ctx->piz_is_set, (ref)-start_ref) == 1), \
-                                       "Expecting POS=%d + base_i=%u to have is_set=1", (PosType32)vb->contexts[SAM_POS].last_value.i, (int)((ref)-start_ref))
+                                       "Expecting POS=%d + base_i=%u to have is_set=1", (PosType32)vb->ca.contexts[SAM_POS].last_value.i, (int)((ref)-start_ref))
     #define verify_is_set_n(ref, n) ({ for (uint32_t i=0; i < (n); i++) verify_is_set ((ref) + i); })
 #else
     #define verify_is_set(ref)

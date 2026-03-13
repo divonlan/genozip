@@ -7,7 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "seg.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 static inline ContextP id_fallback_ctx (VBlockP vb, ContextP ctx)
 {

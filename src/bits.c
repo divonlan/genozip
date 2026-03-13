@@ -1225,7 +1225,7 @@ void bits_reverse_complement_aligned (BitsP dst, ConstBitsP src, uint64_t src_st
 
     if (!max_num_bases) max_num_bases = src->nbits / 2; // entire Bits
 
-    static const uint64_t rev_comp_table[256] = { // 00=A 01=C 10=G 11=T
+    static const uint8_t rev_comp_table[256] = { // 00=A 01=C 10=G 11=T
         0b11111111, 0b10111111, 0b01111111, 0b00111111, 0b11101111, 0b10101111, 0b01101111, 0b00101111, 0b11011111, 0b10011111, 0b01011111, 0b00011111, 0b11001111, 0b10001111, 0b01001111, 0b00001111,
         0b11111011, 0b10111011, 0b01111011, 0b00111011, 0b11101011, 0b10101011, 0b01101011, 0b00101011, 0b11011011, 0b10011011, 0b01011011, 0b00011011, 0b11001011, 0b10001011, 0b01001011, 0b00001011,
         0b11110111, 0b10110111, 0b01110111, 0b00110111, 0b11100111, 0b10100111, 0b01100111, 0b00100111, 0b11010111, 0b10010111, 0b01010111, 0b00010111, 0b11000111, 0b10000111, 0b01000111, 0b00000111,
@@ -1251,14 +1251,14 @@ void bits_reverse_complement_aligned (BitsP dst, ConstBitsP src, uint64_t src_st
 
     ASSERT0 (src_start_base % 32 == 0 && max_num_bases % 32 == 0, "invalid start_base or num_bases");
 
-    #define REV_COMP(w) ((rev_comp_table[(w)       & 0xff] << 56) | \
-                         (rev_comp_table[(w >>  8) & 0xff] << 48) | \
-                         (rev_comp_table[(w >> 16) & 0xff] << 40) | \
-                         (rev_comp_table[(w >> 24) & 0xff] << 32) | \
-                         (rev_comp_table[(w >> 32) & 0xff] << 24) | \
-                         (rev_comp_table[(w >> 40) & 0xff] << 16) | \
-                         (rev_comp_table[(w >> 48) & 0xff] << 8)  | \
-                         (rev_comp_table[(w >> 56) & 0xff]        ))
+    #define REV_COMP(w) (((uint64_t)rev_comp_table[(w)       & 0xff] << 56) | \
+                         ((uint64_t)rev_comp_table[(w >>  8) & 0xff] << 48) | \
+                         ((uint64_t)rev_comp_table[(w >> 16) & 0xff] << 40) | \
+                         ((uint64_t)rev_comp_table[(w >> 24) & 0xff] << 32) | \
+                         ((uint64_t)rev_comp_table[(w >> 32) & 0xff] << 24) | \
+                         ((uint64_t)rev_comp_table[(w >> 40) & 0xff] << 16) | \
+                         ((uint64_t)rev_comp_table[(w >> 48) & 0xff] << 8)  | \
+                         ((uint64_t)rev_comp_table[(w >> 56) & 0xff]        ))
 
     uint64_t after_word = MIN_(src->nwords, (src_start_base + max_num_bases) / 32); // 32 nucleotides in a word
 

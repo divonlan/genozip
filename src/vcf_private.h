@@ -42,7 +42,7 @@ typedef struct {
 
 #define DATA_LINE(i) B(ZipDataLineVCF, vb->lines, i)
 
-#define ii_buf (vb->contexts[VCF_INFO].info_items)
+#define ii_buf (vb->ca.contexts[VCF_INFO].info_items)
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
 
@@ -206,7 +206,7 @@ extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
 extern VcfVersion vcf_header_get_version (void);
 
-#define BII(x) B(InfoItem, vb->contexts[VCF_INFO].info_items, vb->idx_##x)
+#define BII(x) B(InfoItem, vb->ca.contexts[VCF_INFO].info_items, vb->idx_##x)
 
 extern void vcf_seg_field_fallback (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_string (VBlockVCFP vb, ContextP ctx, STRp(value));

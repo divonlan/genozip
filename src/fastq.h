@@ -184,3 +184,4 @@ SPECIAL (FASTQ, 12, AGENT_QX,          agilent_special_AGENT_QX);             //
 SPECIAL (FASTQ, 13, qname_rng2seq_len, special_qname_rng2seq_len);            // 15.0.26
 SPECIAL (FASTQ, 14, DEMUX_by_R,        fastq_special_DEMUX_by_R);             // 15.0.58 (it it still used?)
 SPECIAL (FASTQ, 15, SEQ_by_bamass,     fastq_special_SEQ_by_bamass);          // 15.0.69
+/* if adding a SPECIAL, update dict_io_print_deep_dt_by_special() for distinguishing vs SAM special with the same number */

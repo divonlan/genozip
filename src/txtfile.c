@@ -142,26 +142,6 @@ static inline uint32_t txtfile_read_block_plain (VBlockP vb, uint32_t max_bytes)
     return (uint32_t)bytes_read;
 }
 
-rom isal_error (int ret)
-{
-    switch (ret) {
-        case ISAL_DECOMP_OK          : return "Ok";
-        case ISAL_END_INPUT          : return "EndInput";
-        case ISAL_OUT_OVERFLOW       : return "OutOverflow";
-        case ISAL_NAME_OVERFLOW      : return "NameOverflow";
-        case ISAL_COMMENT_OVERFLOW   : return "CommentOverflow";
-        case ISAL_EXTRA_OVERFLOW     : return "ExtraOverflow";
-        case ISAL_NEED_DICT          : return "NeedDict";
-        case ISAL_INVALID_BLOCK  	 : return "InvalidBlock";
-        case ISAL_INVALID_SYMBOL     : return "InvalidSymbol";
-        case ISAL_INVALID_LOOKBACK   : return "InvalidLookback";
-        case ISAL_INVALID_WRAPPER    : return "InvalidWrapper";
-        case ISAL_UNSUPPORTED_METHOD : return "UnsupportedMethod";
-        case ISAL_INCORRECT_CHECKSUM : return "IncorrectChecksum";
-        default                      : return "InvalidReturnCode";
-    }
-}
-
 // chuck size chosen to be equal to the default disk read-ahead buffer in Linux (eg /sys/block/sda/queue/read_ahead_kb) 
 // so that decompression is parallelized with disk read-ahead buffer filling (a bigger buffer would cause the disk to be idle while we are still decompressing)
 #define IGZIP_CHUNK (128 KB) 
@@ -195,10 +175,11 @@ static StrText display_gz_xfl (uint8_t xfl)
     return s;
 }
 
-StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
+StrTextLong display_gz_header_ex (STR8p(h), bool obscure_fname, uint32_t *out_h_len/*out*/)
 {
     StrTextLong s = {};
     uint32_t s_len = 0;
+    bytes save_h = h;
     #define ADVANCE_h(n) STRinc(h, n)
 
     if (h_len < 3) goto fail;
@@ -244,7 +225,7 @@ StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
 
             uint16_t id = GET_UINT16 (h);
             if (xlen == 6 && id == 0x4342 && f_len == 2)
-                SNPRINTF (s, " { BGZF BSIZE-1=%u }", GET_UINT16(&h[4]));
+                SNPRINTF (s, " { BGZF BSIZE-1=%-5u }", GET_UINT16(&h[4]));
             
             else if (xlen == 8 && id == 0x4749 && f_len == 4)
                 SNPRINTF (s, " { MGZF BSIZE=%u }", GET_UINT32(&h[4]));
@@ -288,10 +269,17 @@ StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
 
     if (flg == 8/*name*/ && mtime && xfl == 0 && os == 3)  SNPRINTF0 (s, " (gzip/pigz)");
 
+    if (out_h_len) *out_h_len = h - save_h;
+
     return s;
 
 fail:
     return (StrTextLong){ "<not enough data>" };
+}
+
+StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
+{
+    return display_gz_header_ex (STRa(h), obscure_fname, NULL);
 }
 
 uint32_t gzip_header_length (FileP file)
@@ -358,24 +346,35 @@ static bool txtfile_segconf_discover_constant_isize (STR8p(header))
     #define MAX_CONSTANT_SIZE_HEADER_LEN 255 // must be large enough for all the constant-size codecs we recognize
     if (MAX_CONSTANT_SIZE_HEADER_LEN > 255) return false; 
 
-    // isize of the first gz block followed by the header
+    // we search for the isize of the first gz block (which is its last field) followed by the constant header of a new block
     uint8_t signature[4 + header_len];
-    PUT_UINT32 (signature, txt_file->gz_data.uncomp_len);
+    PUT_UINT32 (signature, txt_file->gz_data.uncomp_len); //  this is the fixed-isize validated in mgzip_read_block_no_bsize 
     memcpy (signature + 4, header, header_len);
 
-    // find 3 more instances of "isize header" in the data with same isize
-    uint8_t *next_isize = B8(txt_file->gz_data, txt_file->gz_data.comp_len - 4);
-    for (int i=0 ; i < 3; i++) {
-        if (!(next_isize = memmem (next_isize, BAFT8(txt_file->gz_data) - next_isize, signature, 4 + header_len)))   
-            return false;
+    // find 3 more instances of isize⁀header in the data with same isize
+    bytes next_gz_block = B8(txt_file->gz_data, txt_file->gz_data.comp_len); // points to start of 2nd gz block in file
+    bytes next  = next_gz_block - 4; // point to isize of first gz block
+    bytes after = BAFT8(txt_file->gz_data);
 
-        next_isize += sizeof (signature);
+    for (int i=0 ; i < 3; i++) {
+        bytes next_isize;
+        // can't find another isize⁀header
+        if (!(next_isize = memmem (next, after - next, signature, 4 + header_len)))
+
+            // cannot find another isize⁀header: this is ok iff we read all the data of the file, and the reason memmem 
+            // can't find another isize⁀header is that there are no more headers i.e. not that the next header is preceded by an invalid isize
+            return feof ((FILE *)txt_file->file) &&      // we read the entire file
+                   after - next_gz_block <= txt_file->gz_data.uncomp_len &&  // the remaining data is less than uncomp_len (i.e. the "standard" isize) - used an upper-bound for comp_len
+                   !memmem (next, after - next, STRa(header)); // there are no more headers (note: a rare case of false positive identification of header will cause this file not to be exactable - that's ok)
+
+        next_gz_block = next_isize + 4;
+        next          = next_isize + sizeof (signature); // continue search from after the signature
     }
 
     return true; // there are at least 4 gz blocks, and the first 3 have the same isize
 }
 
-// run when open a txt file (before reading the txt_header), except for FASTQ for which it is 
+// run when opening a txt file (before reading the txt_header), except for FASTQ for which it is 
 // run at the end of segconf after segconf.tech is known.
 void txtfile_discover_specific_gz (FileP file)
 {   
@@ -386,7 +385,7 @@ void txtfile_discover_specific_gz (FileP file)
     // note: we read if even if --no-bgzf to capture the data for z_file->gz_header
     GzStatus status = mgzip_read_block_with_bsize (file, true, CODEC_BGZF);
 
-    // copy GZ header: data should be in gz_data txtfile_discover_specific_gz
+    // copy GZ header: data should be in gz_data 
     file->gz_header_len = gzip_header_length (file); 
     memcpy (file->gz_header, B1ST8 (file->gz_data), MIN_(GZ_HEADER_LEN, file->gz_header_len));
 
@@ -406,14 +405,18 @@ void txtfile_discover_specific_gz (FileP file)
         ABORTINP ("No data exists in input file %s", file->name ? file->name : FILENAME_STDIN);
     }
     
-    // case: this is non-BGZF GZIP format: test for one of the FASTQ codec
+    // case: this is non-BGZF GZIP format: test for one of the FASTQ codec. Run after segconf.
     else if (status == GZ_IS_OTHER_FORMAT && file->data_type == DT_FASTQ) {      
         #define SET_CODEC(codec) ({ file->src_codec = CODEC_##codec; \
                                     if (!flag.no_bgzf) file->effective_codec = CODEC_##codec; })
 
-        if (TECH(ILLUM) && mgzip_read_block_no_bsize (file, true, CODEC_IL1M) == GZ_SUCCESS &&
-            txtfile_segconf_discover_constant_isize (_8(IL1M_HEADER))) 
+        if (TECH(ILLUM) && mgzip_read_block_no_bsize (file, true, CODEC_IL1M) == GZ_SUCCESS
+        &&  txtfile_segconf_discover_constant_isize (_8(ILxM_PREFIX)))  // lightweight
             SET_CODEC(IL1M);
+        
+        else if (TECH(ILLUM) && mgzip_read_block_no_bsize (file, true, CODEC_IL4M) == GZ_SUCCESS
+        &&  txtfile_segconf_discover_constant_isize (_8(ILxM_PREFIX)))           
+            SET_CODEC(IL4M);
         
         else if (TECH(MGI) && mgzip_read_block_no_bsize (file, true, CODEC_MGSP) == GZ_SUCCESS &&
             txtfile_segconf_discover_constant_isize (_8(MGSP_HEADER))) {
@@ -439,7 +442,9 @@ void txtfile_discover_specific_gz (FileP file)
 
     else if (status != GZ_NOT_GZIP) generic_gz: {
         if (!keep_src_codec)file->src_codec = CODEC_GZ;
-        file->effective_codec = CODEC_GZ;        
+        file->effective_codec = CODEC_GZ;    
+        
+        mgzip_set_is_exactable (file, false, "Not an MGZIP codec");
     }
 
     // case: this is not GZIP format at all. treat as a plain file, and put the data read in vb->comp_txt_data 
@@ -510,14 +515,10 @@ void txtfile_zip_finalize_codecs (void)
 
     memcpy (z_file->comp_gz_header[flag.zip_comp_i], txt_file->gz_header, GZ_HEADER_LEN);
 
-    if (flag.show_gz || flag_show_bgzf) {
-        iprintf ("%s: src_codec=%s effective_codec=%s gz_header=%s", txt_file->basename, // same format as in txtfile_zip_finalize_codecs
+    if (flag_show_bgzf) 
+        iprintf ("%s: src_codec=%s effective_codec=%s gz_header=%s\n", txt_file->basename, // same format as in txtfile_zip_finalize_codecs
                  codec_name (txt_file->src_codec), codec_name (txt_file->effective_codec),
                  display_gz_header (z_file->comp_gz_header[flag.zip_comp_i], GZ_HEADER_LEN, false).s);
-        if (flag.show_gz) { iprint_newline(); exit_ok; };
-
-        iprintf (" effective_codec=%s\n", codec_name (txt_file->effective_codec));
-    }
 }
 
 // runs in main thread, reads and uncompressed GZ, and populates txt_data for vb
@@ -531,13 +532,13 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
 
     // save in case of realloc in txtfile_fread
     uint32_t next_in_before = state->next_in ? BNUM(txt_file->gz_data, state->next_in) : 0; 
+    uint64_t txt_index = vb->txt_data.len;
 
     // top up gz_data
     if (txt_file->gz_data.len32 < IGZIP_CHUNK) 
         txtfile_fread (txt_file, NULL, NULL, (int32_t)IGZIP_CHUNK - (int32_t)txt_file->gz_data.len32, &txt_file->disk_so_far);
     
     { START_TIMER
-
     state->next_in   = B8(txt_file->gz_data, next_in_before);
     state->avail_in  = BAFT8(txt_file->gz_data) - state->next_in;
     state->next_out  = BAFT8 (vb->txt_data);
@@ -590,9 +591,9 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
 
         if (flag_show_bgzf) {
             uint64_t bsize = decompressed_so_far - txt_file->start_gz_block;
-            iprintf ("UNCOMPRESS GZ   thread=MAIN vb=%s block_i=%"PRIu64" bsize=%"PRIu64" isize=%u%s gz_header=%s\n", 
-                     VB_NAME, txt_file->gz_blocks_so_far, bsize, 
-                     isize, (bsize > 500 MB && (double) isize / (double) bsize < 0.98) ? "(overflow)" : "", // note: this doesn't catch all overflows, for example it won't catch: bsize=1GB and isize=3GB where the true isize is 7GB
+            iprintf ("UNCOMPRESS GZ   thread=MAIN    vb=%-7s block_i=%-16"PRIu64" comp_index=%-9"PRIu64" comp_len=%-8"PRIu64" txt_index=%-9"PRIu64" txt_len=%-8u%s gz_header=%s\n", 
+                     VB_NAME, txt_file->gz_blocks_so_far, txt_file->start_gz_block, bsize, 
+                     txt_index, isize, (bsize > 500 MB && (double) isize / (double) bsize < 0.98) ? "(overflow)" : "", // note: this doesn't catch all overflows, for example it won't catch: bsize=1GB and isize=3GB where the true isize is 7GB
                      display_gz_header ((bytes)STRa(last_gz_header), false).s);
         }
 
@@ -642,19 +643,54 @@ static inline uint32_t txtfile_read_block_bz2 (VBlockP vb, uint32_t max_bytes)
     return bytes_read;
 }
 
-static noreturn void txtfile_dump_comp_txt_data (VBlockP vb, uint32_t this_block_start)
+static noreturn void txtfile_dump_comp_txt_data (VBlockP vb, uint32_t this_block_start, FUNCLINE)
 {
     char dump_fn[strlen(txt_name)+100];
     snprintf (dump_fn, sizeof (dump_fn), "%s.vb-%u.bad-%s.bad-offset-0x%x", 
-                txt_name, vb->vblock_i, codec_name (txt_file->effective_codec), this_block_start);
+              txt_name, vb->vblock_i, codec_name (txt_file->effective_codec), this_block_start);
     
     buf_dump_to_file (dump_fn, &vb->comp_txt_data, 1, false, false, true, false);
 
-    ABORT ("%s: Invalid %s block: block_comp_len=%u. Entire data of this vblock dumped to %s, bad block stats at offset 0x%x",
-            VB_NAME, codec_name (txt_file->effective_codec), txt_file->gz_data.comp_len, dump_fn, this_block_start);
+    ABORT ("called from %s:%u: %s: Invalid %s block in: block_comp_len=%u. Entire data of this vblock dumped to %s, bad block stats at offset 0x%x",
+           func, code_line,  VB_NAME, codec_name (txt_file->effective_codec), txt_file->gz_data.comp_len, dump_fn, this_block_start);
 }
 
-// Multi-block GZIP (MGZIP): we read gz data into vb->comp_txt_data - that will be decompressed now or later, depending on "uncompress". 
+// ZIP main thread: add one gz_block to mgzip_isizes and mgzip_starts
+static void txtfile_update_isizes (void)
+{
+    // since 15.0.63: EOF blocks are now in mgzip_isizes and instead set, and entries are "uint32_t isize". 
+    // before:        entries were "uint16_t isize", txt_file->mgzip_flags.has_eof_block used to indicate an a file has an EOF block, incorrectly assuming that an EOF block can only occur at the end of the file
+    // add isize to buffer that will be written to SEC_GZ_ISIZES
+    if (!txt_file->mgzip_isizes.len32) { 
+        uint64_t est_n_blocks = (txt_file->gz_data.comp_len > 10000) ? ((double)txt_file->disk_size / (double)txt_file->gz_data.comp_len * 1.1) : 0; // >10000 to avoid over-allocating due to a randomly small block
+        buf_alloc (evb, &txt_file->mgzip_isizes,  0, MAX_(10000, est_n_blocks), uint32_t, 0, "txt_file->mgzip_isizes"); 
+        buf_alloc (evb, &txt_file->mgzip_digests, 0, MAX_(10000, est_n_blocks), uint32_t, 0, "txt_file->mgzip_digests"); 
+        buf_alloc (evb, &txt_file->mgzip_starts,  0, MAX_(10000, est_n_blocks), uint64_t, 0, "txt_file->mgzip_starts");
+    }
+
+    buf_append_one (txt_file->mgzip_isizes, txt_file->gz_data.uncomp_len); // add one isize
+    buf_append_one (txt_file->mgzip_starts, txt_file->disk_so_far - txt_file->gz_data.len);
+    // note: digests are added below ⇩ 
+}
+
+// ZIP main thread: called after VB is done uncompressing all gz blocks (during which the digest is calculated)
+// might be called out-of-order in respect to VB order
+void txtfile_update_gz_digests (VBlockរ vb)
+{
+    if (!txt_file->is_exactable || 
+        !vb->gz_blocks.len/*e.g. generated component VBs*/) return;
+
+    // make sure the pre-allocated array is long enough
+    MAXIMIZE (txt_file->mgzip_digests.len, vb->vb_mgzip_i + vb->gz_blocks.len);
+    buf_alloc (evb, &txt_file->mgzip_digests, 0, txt_file->mgzip_digests.len, uint32_t, 0, "txt_file->mgzip_digests"); 
+    
+    // copy gz block digests from vb to txt_file
+    uint32_t *restrict txt_digests = B32(txt_file->mgzip_digests, vb->vb_mgzip_i);
+    for_buf2រ (GzBlockZip, bb, bb_i, vb->gz_blocks)
+        txt_digests[bb_i] = bb->gz_digest;
+}
+
+// ZIP: Multi-block GZIP (MGZIP): we read gz data into vb->comp_txt_data - that will be decompressed now or later, depending on "uncompress". 
 // We read data with a *decompressed* size up to max_uncomp. vb->comp_txt_data always contains only full MGZIP blocks
 static inline uint32_t txtfile_read_block_mgzip (VBlockP vb, 
                                                  int32_t requested_bytes, // 0 means read exactly one mgzip block
@@ -666,61 +702,82 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
     uint32_t this_uncomp_len=0;
     *is_data_read = false; // initialize
 
-    if (uncompress)
-        vb->gzip_compressor = libdeflate_alloc_decompressor(vb, __FUNCLINE);
-        
+    if (uncompress) {
+        ASSERTISNULL (vb->gz_inflate_mem);
+        vb->gz_inflate_mem = libdeflate_alloc_decompressor(vb, __FUNCLINE);
+    }
+
     int64_t start_uncomp_len = vb->comp_txt_data.uncomp_len;
     int32_t max_block_size = mgzip_get_max_block_size();
-
+   
     // comp_txt_data contains gz-compressed data; we use .uncomp_len to track its uncompress length
     buf_alloc (vb, &vb->comp_txt_data, 0, requested_bytes / 4/*typical gz ratio is 4.5-6*/, char, 0, "comp_txt_data");
 
-    while ( (   (requested_bytes && vb->comp_txt_data.uncomp_len - start_uncomp_len <= requested_bytes - max_block_size) 
-             || (!requested_bytes && !vb->comp_txt_data.uncomp_len)
-             || TXT_IS_MGSP) // MGSP: loop until broken 
-         && ( !txt_file->no_more_blocks) ) {
+    bool end_of_vb = false; // mostly MGSP uses this mechanism at the momemt
+    while (!txt_file->no_more_blocks) {
 
-        GzStatus status = (TXT_GZ_HEADER_HAS_BSIZE ? mgzip_read_block_with_bsize : mgzip_read_block_no_bsize) (txt_file, false, txt_file->effective_codec);
+        bool have_enough_data =
+            ( end_of_vb               ? true // the last block read belongs to the next VB (decided by *_is_valid_isize)
+            : (requested_bytes == 0)  ? true // no data requested, so we certainly have enough :)
+            : TXT_IS(MGSP)            ? (vb->comp_txt_data.uncomp_len && !txt_file->num_mgsp_blocks_in_vb) // MGSP: we have reached the end of the VB and hence MGSP_is_valid_isize has set num_mgsp_blocks_in_vb to 0
+            : TXT_IS_VB_SIZE_BY_BLOCK ? (vb->comp_txt_data.uncomp_len > 0) // one gz-block per VB (+ empty blocks) is all we need if TXT_IS_VB_SIZE_BY_BLOCK
+            : /*requested_bytes > 0*/   (vb->comp_txt_data.uncomp_len - start_uncomp_len > requested_bytes - max_block_size));
 
-        if (TXT_IS_MGSP && !txt_file->num_mgsp_blocks_in_vb)
-            break; // MGSP: we have reached the end of the VB and hence mgsp_is_valid_isize has set num_mgsp_blocks_in_vb to 0
+        // we break if we have enough data, but only after we have verified that the next block is not empty (if it is, we don't break so we can include it in this VB)
+        if (have_enough_data           && 
+            txt_file->gz_data.comp_len && // there is a next block waiting in gz_data...
+            txt_file->gz_data.uncomp_len) // ...and it is not an "empty block" (eg EOF)
+            break;
+
+        // read more gz data from disk into txt_file->gz_data
+        GzStatus status = txt_file->gz_data.comp_len ? GZ_SUCCESS // we have a block waiting for already
+                        : TXT_GZ_HEADER_HAS_BSIZE    ? mgzip_read_block_with_bsize (txt_file, false, txt_file->effective_codec)
+                        :                              mgzip_read_block_no_bsize   (txt_file, false, txt_file->effective_codec);
 
         uint32_t this_block_start = vb->comp_txt_data.len32;
-        buf_add_more (vb, &vb->comp_txt_data, txt_file->gz_data.data, txt_file->gz_data.comp_len, "comp_txt_data");
+        
+        // case: this block will be the first block of the next vb. In the mean time, we leave it in txt_file->gz_data
+        if (status == GZ_SUCCESS_END_OF_VB)
+            end_of_vb = true; 
 
         // check for corrupt data - at this point we've already confirm the file's codec so not expecting it to change
-        if (status != GZ_SUCCESS) 
-            txtfile_dump_comp_txt_data (vb, this_block_start);
+        else if (status != GZ_SUCCESS) {
+            buf_add_more (vb, &vb->comp_txt_data, txt_file->gz_data.data, txt_file->gz_data.comp_len, "comp_txt_data");
+            txtfile_dump_comp_txt_data (vb, this_block_start, __FUNCLINE);
+        }
 
-        // add block to list - including the EOF block (block_comp_len=BGZF_EOF_LEN block_uncomp_len=0)
-        if (txt_file->gz_data.comp_len/* note: it is 0 if truncated or EOF with no EOF block */) {
+        // add block to list: if we need more data OR if the block is empty (e.g. EOF block)
+        else if (txt_file->gz_data.comp_len && // this is 0 at the end of the file or if truncated
+            (!have_enough_data || txt_file->gz_data.uncomp_len == 0)) {
+
+            buf_add_more (vb, &vb->comp_txt_data, txt_file->gz_data.data, txt_file->gz_data.comp_len, "comp_txt_data");
+
             buf_alloc (vb, &vb->gz_blocks, 1, MAX_(1000, txt_file->max_mgzip_isize ? 1.2 * requested_bytes / txt_file->max_mgzip_isize : 0), GzBlockZip, 2, "gz_blocks");
             
             BNXT (GzBlockZip, vb->gz_blocks) = (GzBlockZip)
-                { .txt_index        = Ltxt,  // after passed-down data and all previous blocks
-                  .compressed_index = this_block_start,
-                  .txt_size         = txt_file->gz_data.uncomp_len,
-                  .comp_size        = txt_file->gz_data.comp_len,
-                  .is_uncompressed  = !txt_file->gz_data.uncomp_len, // and isize=0 block is always considered uncompressed
-                  .is_eof           = txt_file->no_more_blocks }; 
+                { .txt_index  = Ltxt,  // after passed-down data and all previous blocks
+                  .gz_index   = this_block_start,
+                  .txt_size   = txt_file->gz_data.uncomp_len,
+                  .gz_size    = txt_file->gz_data.comp_len,
+                  .is_eof     = txt_file->no_more_blocks }; 
+
+            // we add the isize at the same as adding the block to vb->gz_blocks. this is so we can rely on
+            // txt_file->mgzip_isizes.len to count the number blocks added to VBs (for calculating vb_mgzip_i)
+            txtfile_update_isizes();
 
             *is_data_read = true;
 
             if (flag_show_bgzf) {
                 GzBlockZip *bb = BLST (GzBlockZip, vb->gz_blocks);
-                iprintf ("READ       %s thread=MAIN%s block_i=%"PRIu64" bb_i=%u comp_index=%u comp_len=%u txt_index=%u txt_len=%u eof=%s%s disk_so_far=%"PRIu64"\n",
+                iprintf ("READ       %-4s thread=MAIN   %-11s block_i=%-7"PRIu64" bb_i=%-3u comp_index=%-9u comp_len=%-8u txt_index=%-9u txt_len=%-8u eof=%-5s%s disk_so_far=%"PRIu64"\n",
                          codec_name (txt_file->effective_codec), 
                          cond_str (vb->vblock_i, " vb=", VB_NAME),
                          txt_file->gz_blocks_so_far, 
-                         BNUM (vb->gz_blocks, bb), bb->compressed_index, bb->comp_size, bb->txt_index, bb->txt_size, TF(bb->is_eof),
+                         BNUM (vb->gz_blocks, bb), bb->gz_index, bb->gz_size, bb->txt_index, bb->txt_size, TF(bb->is_eof),
                          str_issame_(Bc(vb->comp_txt_data, this_block_start), txt_file->gz_data.comp_len, _S(BGZF_EOF)) ? " BGZF_EOF  " : "",
                          txt_file->disk_so_far);
             }
             txt_file->gz_blocks_so_far++; // counts blocks in entire file (note: bb_i counts within VB)
-
-            // case empty block (eg EOF block or EMVL start block): we are not going to decompress the block, so account for it here
-            if (!txt_file->gz_data.uncomp_len) 
-                inc_disk_gz_uncomp_or_trunc (txt_file, txt_file->gz_data.comp_len);
 
             MAXIMIZE (txt_file->max_mgzip_isize, txt_file->gz_data.uncomp_len);
 
@@ -735,32 +792,24 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
                 COPY_TIMER(mgzip_uncompress_during_read); 
             }
 
-            // remove the first MGZIP block from the gz_data
+            // remove the first MGZIP block from the gz_data now that its added it to vb->comp_txt_data and vb->gz_blocks
             buf_remove (txt_file->gz_data, uint8_t, 0, txt_file->gz_data.comp_len);
             txt_file->gz_data.comp_len = txt_file->gz_data.uncomp_len = 0; // note: these refer to the first block, gz_data.len might still be >0        
-
-            // case: exactly one gz block per VB (except initial empty blocks)
-            if (TXT_IS_VB_SIZE_BY_BLOCK && vb->comp_txt_data.uncomp_len)
-                break;        
         }
         
-        // case: comp_len=0 but len>0 : no more data for this VB (end of group of blocks): data in file->gz_data is for the next VB
-        else if (txt_file->gz_data.len) 
-            break;
-
         // case: no more data in the file
-        else {
+        else if (!txt_file->gz_data.len) {
             // previous block is eof. note: we miss it if previous block was in the previous VB
             if (vb->gz_blocks.len) 
                 BLST (GzBlockZip, vb->gz_blocks)->is_eof = true;
             
-            txt_file->no_more_blocks = true; // EOF without EOF block
+            txt_file->no_more_blocks = true; // EOF without EOF block (usually set it in mgzip_read_block_[with|no]_bsize )
         }
     }
 
     if (uncompress) {
         buf_free (vb->comp_txt_data); 
-        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor, __FUNCLINE);
+        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gz_inflate_mem, __FUNCLINE); // also sets gz_inflate_mem to NULL
     }
 
     COPY_TIMER (txtfile_read_block_mgzip);
@@ -781,10 +830,13 @@ int32_t def_is_header_done (bool is_eof)
             evb->lines.len++;   
 
         if (prev_char == '\n' && header[i] != DTPT (txt_header_1st_char)) {
+            
             // if we have no header, its an error if we require one
             TxtHeaderRequirement req = DTPT (txt_header_required); 
             ASSINP (i || (req != HDR_MUST && !(req == HDR_MUST_0 && evb->comp_i==0)), 
-                    "Error: %s is missing a %s header", txt_name, dt_name (txt_file->data_type));
+                    "Error: %s is missing a %s header. "_TIP"Use --input=generic to compress as a generic file.", 
+                    txt_name, dt_name (txt_file->data_type));
+
             return i; // return header length
         }
         prev_char = header[i];
@@ -809,6 +861,8 @@ void txtfile_read_header (bool is_first_txt)
     int32_t header_len;
     uint32_t bytes_read=1 /* non-zero */;
     bool is_data_read = true;
+
+    evb->vb_mgzip_i = 0; // header always starts with the first gz_block
 
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
     #define HEADER_BLOCK (256 KB) // we have no idea how big the header will be... read this much at a time
@@ -842,6 +896,8 @@ void txtfile_read_header (bool is_first_txt)
 
     txt_file->txt_data_so_far_single = txt_file->header_size = header_len; 
 
+    txtfile_update_gz_digests (evb);
+
     biopsy_take (evb);
     
     COPY_TIMER_EVB (txtfile_read_header); // same profiler entry as txtfile_read_header
@@ -856,7 +912,7 @@ int32_t def_unconsumed (VBlockP vb, uint32_t first_i)
         if (*Btxt (j) == '\n') 
             return Ltxt -1 - j;
 
-    return -1; // cannot find \n in the data starting first_i
+    return UNCONSUMED_NEED_MORE_DATA; // cannot find \n in the data starting first_i
 }
 
 static void txt_file_truncate_final_bytes (VBlockP vb, int32_t *n_bytes)
@@ -876,6 +932,7 @@ static void txt_file_truncate_final_bytes (VBlockP vb, int32_t *n_bytes)
     Ltxt -= *n_bytes; 
     *n_bytes = 0; // truncate last partial line
     segconf.zip_txt_modified = true;
+    mgzip_set_is_exactable (txt_file, false, "File is truncated");
 }
 
 static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_truncated_away)
@@ -887,21 +944,25 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
     // case: the data is multiblock-gzip-compressed in vb->comp_txt_data, except for passed down data from prev VB        
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
     if (TXT_IS_MGZIP && vb->comp_txt_data.len) {
-        vb->gzip_compressor = libdeflate_alloc_decompressor (vb, __FUNCLINE);
+        ASSERTISNULL (vb->gz_inflate_mem);
+        vb->gz_inflate_mem = libdeflate_alloc_decompressor (vb, __FUNCLINE);
 
         for_buf_back (GzBlockZip, bb, vb->gz_blocks) {
             START_TIMER;
             mgzip_uncompress_one_block (vb, bb, txt_file->effective_codec);
             COPY_TIMER(mgzip_uncompress_during_read);
 
-            // case: we dropped the bb: happens only for the final block in IL1M is truncated, and it was not detected earlier in il1m_is_valid_isize.
+            // case: we dropped the bb: happens only for the final block in ILxM is truncated, and it was not detected earlier in ILxM_is_valid_isize.
             if (!bb->is_uncompressed) {
                 vb->gz_blocks.len32--;
                 Ltxt -= bb->txt_size;
                 segconf.zip_txt_modified = true;
+                mgzip_set_is_exactable (txt_file, false, "ILxM File is truncated");
+                
+                ASSERT0 ((TXT_IS(IL1M) || TXT_IS(IL4M)) && flag.truncate, "not expecting to be here");
 
                 WARN ("FYI: %s is truncated - its final %s block in incomplete. Dropping final %u bytes of the GZ data.", 
-                      txt_name, codec_name (txt_file->effective_codec), bb->comp_size);
+                      txt_name, codec_name (txt_file->effective_codec), bb->gz_size);
             }
 
             else  {
@@ -928,13 +989,13 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
     }
 
     // case: truncate entire VB (requested by fastq_unconsumed in case this R2 VB doesn't have an R1 counterpart and we are allowed to truncate)
-    if (final_unconsumed_len == -2) {
+    if (final_unconsumed_len == UNCONSUMED_TRUNCATE_VB) {
         txt_file_truncate_final_bytes (vb, &final_unconsumed_len);       
         *R2_vb_truncated_away = true;
     }
 
     // case: there is not even one full line of text  
-    else if (final_unconsumed_len == -1) {
+    else if (final_unconsumed_len == UNCONSUMED_NEED_MORE_DATA) {
         
         // case: segconf - segconf will try again, increasing the vb_size
         if (segconf_running && !txt_file->no_more_blocks)
@@ -977,8 +1038,8 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
     }
 
 done:
-    if (vb->gzip_compressor)
-        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gzip_compressor, __FUNCLINE);
+    if (vb->gz_inflate_mem)
+        libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gz_inflate_mem, __FUNCLINE); // also sets gz_inflate_mem to NULL
     
     // pass any unconsumed data at the end of txt_data to the next vb
     if (final_unconsumed_len > 0) {
@@ -1016,7 +1077,7 @@ void txtfile_query_first_bytes_in_file (rom filename, uint32_t len)
 
 static bool seggable_size_is_modifiable (void)
 {
-    return !is_read_via_ext_decompressor (txt_file) && !TXT_IS_PLAIN;
+    return !is_read_via_ext_decompressor (txt_file) && !TXT_IS(NONE);
 }
 
 // estimate the size of the txt_data of the file - i.e. the uncompressed data excluding the header - 
@@ -1029,12 +1090,12 @@ static void txtfile_set_seggable_size (void)
     double source_comp_ratio=1;
 
     if (!is_read_via_ext_decompressor (txt_file)) {
-        if (TXT_IS_PLAIN) 
+        if (TXT_IS(NONE)) 
             source_comp_ratio = 1; 
 
         else {    
             double plain_len = txt_file->txt_data_so_far_single + txt_file->unconsumed_txt.len; //  all data that has been decompressed
-            double comp_len  = TXT_IS_BZ2                        ? BZ2_consumed ((BZFILE *)txt_file->file)
+            double comp_len  = TXT_IS(BZ2)                        ? BZ2_consumed ((BZFILE *)txt_file->file)
                              : txt_file->discover_during_segconf ? segconf.gz_comp_size 
                              :                                     txt_file->disk_so_far - txt_file->gz_data.len; // data read from disk, excluding data still awaiting decompression
             
@@ -1066,7 +1127,7 @@ static void txtfile_set_seggable_size (void)
 
 uint32_t txt_data_alloc_size (uint32_t vb_size) 
 {
-    return TXT_IS_MGSP ? MAX_(24, txt_file->max_mgsp_blocks_in_vb) * (txt_file->max_mgzip_isize + 1/*1 + for last gz block extra length*/) + TXTFILE_READ_VB_PADDING  
+    return TXT_IS(MGSP) ? MAX_(24, txt_file->max_mgsp_blocks_in_vb) * (txt_file->max_mgzip_isize + 1/*1 + for last gz block extra length*/) + TXTFILE_READ_VB_PADDING  
          : vb_size     ? vb_size + (TXT_IS_MGZIP ? txt_file->max_mgzip_isize : 0) + TXTFILE_READ_VB_PADDING 
          :               0;
 }
@@ -1083,18 +1144,18 @@ static uint32_t txtfile_read_block (VBlockP vb, uint32_t bytes_requested,
 
     uint32_t uncomp_len = 0;
 
-    if (IS_MGZIP(txt_file->effective_codec))     
+    if (TXT_IS_MGZIP)     
         uncomp_len = txtfile_read_block_mgzip (vb, bytes_requested, uncompress, is_data_read);  // note: will possibly read more bytes than requested if last mgzip block goes over
     
-    else if (IS_GZ(txt_file->effective_codec))   
+    else if (TXT_IS(GZ))   
         uncomp_len = txtfile_read_block_igzip (vb, bytes_requested, is_data_read);
 
-    else if (IS_NONE(txt_file->effective_codec)) {
+    else if (TXT_IS(NONE)) {
         uncomp_len = txtfile_read_block_plain (vb, bytes_requested); 
         *is_data_read = !!uncomp_len; 
     }
 
-    else if (IS_BZ2(txt_file->effective_codec)) {
+    else if (TXT_IS(BZ2)) {
         uncomp_len = txtfile_read_block_bz2 (vb, bytes_requested); 
         *is_data_read = !!uncomp_len; 
     }
@@ -1104,6 +1165,28 @@ static uint32_t txtfile_read_block (VBlockP vb, uint32_t bytes_requested,
 
     COPY_TIMER_EVB (read);
     return uncomp_len;
+}
+
+void txtfile_enforce_vb_large_enough_for_mgzip (uint32_t vb_size, EnforceVbSizeAction action)
+{
+    // max_block_size exists for fixed-block-size codecs: VB data read will be >= this size
+    uint32_t max_block_size = mgzip_get_max_block_size();
+
+    // VB needs be large enough to accomodate a full MGZIP block (since we can only read full blocks) plus a partial line passed 
+    // down from the previous VB. Only relevant to FASTQ files with large MGZIP blocks (which might approach small VB sizes).
+    uint32_t large_enough = max_block_size + 32 KB/*enough for a partial FASTQ read passed down*/;
+
+    if (vb_size >= large_enough) return;
+
+    switch (action) {
+        case RESTART_IF_NOT:
+            RESTART ("--no-bgzf", "%s: vblock_size=%s too small for codec=%s, needs to be at least %u bytes",
+                     txt_name, str_size(vb_size).s, codec_name(txt_file->effective_codec), large_enough);
+        
+        case RESIZE_IF_NOT: segconf.vb_size = ROUNDUP1M (large_enough); break;
+        
+        default: ABORT0 ("unknown action");
+    }
 }
 
 // ZIP main thread
@@ -1116,7 +1199,9 @@ void txtfile_read_vblock (VBlockP vb)
     ASSERT (vb == evb || IN_RANGX (segconf.vb_size, ABSOLUTE_MIN_VBLOCK_MEMORY, ABSOLUTE_MAX_VBLOCK_MEMORY) || segconf_running,
             "Invalid vb_size=%"PRIu64" comp_i(0-based)=%u", segconf.vb_size, z_file->num_txts_so_far-1);
 
-    if (txt_file->no_more_blocks && !txt_file->unconsumed_txt.len) return; // we're done
+    if (txt_file->no_more_blocks    && // nothing left on disk
+        !txt_file->unconsumed_txt.len) // no data passed down to us from previous vb
+        return; // we're done
 
     bool is_mgzip = TXT_IS_MGZIP;
 
@@ -1140,14 +1225,12 @@ void txtfile_read_vblock (VBlockP vb)
         buf_remove (txt_file->unconsumed_txt, char, 0, bytes_moved);
     }
 
-    if (is_mgzip) mgzip_zip_init_vb (vb); 
+    if (is_mgzip) {
+        mgzip_zip_init_vb (vb); 
+        txtfile_enforce_vb_large_enough_for_mgzip (my_vb_size, RESTART_IF_NOT); 
+    }
     
-    // max_block_size exists for fixed-block-size codecs: VB data read will be <= this size
-    uint32_t max_block_size = mgzip_get_max_block_size();
-
-    ASSERT (my_vb_size >= max_block_size, "%s: vblock=%s < max_block_size=%u bytes, in codec=%s. This is not supported.%s", 
-            txt_name, str_size(my_vb_size).s, max_block_size, codec_name(txt_file->effective_codec),
-            segconf_running ? "" : " Use --no-bgzf to switch codec or use --vblock set specificy a larger size");
+    uint32_t max_block_size = mgzip_get_max_block_size(); // 1 if not a fixed-block-size mgzip codec
 
     while (1) {     
         uint32_t bytes_requested = IS_R2 ? ((double)my_vb_size * 1.03 + (max_block_size - 1)) // add 3% vs R1 (VB might be slightly bigger if reads on average are a bit longer) and round up to the next full block
@@ -1165,7 +1248,7 @@ void txtfile_read_vblock (VBlockP vb)
         // if there is room left for only a partial MGZIP block (we can't read partial blocks)
         uint32_t filled_up = my_vb_size - (is_mgzip ? (max_block_size - 1) : 0);
 
-        // case: one VB per one block (or group of blocks)
+        // case: each VB contains one gz block (or group of blocks)
         if (TXT_IS_VB_SIZE_BY_MGZIP)
             break;
 

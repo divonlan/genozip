@@ -96,7 +96,7 @@ static inline bool aligner_update_best (VBlockP vb, PosType64 gpos, PosType64 pa
     if (gpos == *best_gpos) goto not_near_perfect;
     
     uint64_t genome_start_bit = (fwd ? gpos : genome_nbases-1 - (gpos + seq_bits->nbits/2 -1)) * 2;                            
-    int32_t distance = bits_hamming_distance (fwd ? genome : emoneg, genome_start_bit, seq_bits, 0, seq_bits->nbits);
+    int32_t distance = bits_hamming_distance (seq_bits, fwd ? genome : emoneg, genome_start_bit);
     int32_t match_len = (uint32_t)seq_bits->nbits - distance;     
                                                                                                                                                                                                                                                  
     if (pair_gpos != NO_GPOS && ABS(gpos-pair_gpos) > 500) match_len -= 17; // penalty for remote GPOS in 2nd pair
@@ -189,6 +189,7 @@ static inline PosType64 aligner_best_match (VBlockP vb, STRp(seq), PosType64 pai
 
         if (found != NOT_FOUND && 
             __builtin_expect (gpos >= 0 && gpos + seq_len_64 < genome_nbases, true)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
+
             finds[num_finds++] = (struct Finds){ .refhash_word = refhash_word, .i = i, .found = found };
             
             if (aligner_update_best (vb, gpos, pair_gpos, &seq_bits, seq_len, found, maybe_perfect_match, 
@@ -312,7 +313,7 @@ MappingType aligner_seg_seq (VBlockP vb, STRp(seq), bool is_pair_2, PosType64 pa
     BitsP bitmap = (BitsP)&bitmap_ctx->local;
 
     buf_alloc_bits (vb, &bitmap_ctx->local, seq_len, vb->lines.len32 / 16 * segconf.std_seq_len, 
-                    SET/*initialize to "no mismatches"*/, CTX_GROWTH, CTX_TAG_LOCAL); 
+                    SET/*initialize to "no mismatches"*/, CTX_GROWTH, C_LOCAL); 
 
     for (int i=0; i < 4; i++)
         buf_alloc (vb, &seqmis_ctx[i].local, seq_len, 64 KB, char, CTX_GROWTH, NULL); 

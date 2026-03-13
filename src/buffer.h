@@ -65,6 +65,9 @@
 #define for_buf(element_type, iterator, buf)  \
     for (element_type *iterator=B1ST(element_type, (buf)), *after_##iterator=BAFT(element_type, (buf)); iterator && iterator < after_##iterator; iterator++)
 
+#define for_bufរ(element_type, iterator, buf)  \
+    for (element_type *restrict iterator=B1ST(element_type, (buf)), *after_##iterator=BAFT(element_type, (buf)); iterator && iterator < after_##iterator; iterator++)
+
 #define for_buf_back(element_type, iterator, buf)  \
     for (element_type *iterator=BLST(element_type, (buf)), *first_##iterator=B1ST(element_type, (buf)); iterator && iterator >= first_##iterator; iterator--)
 
@@ -72,6 +75,10 @@
 #define for_buf2(element_type, iter_p, iter_i, buf) \
     for (uint32_t iter_i=0, after_##iter_i=(buf).len32; iter_i < after_##iter_i;)  \
         for (element_type *iter_p=B1ST(element_type, (buf)), *after_##iter_p=BAFT(element_type, (buf)); iter_p && iter_p < after_##iter_p; iter_p++, iter_i++)
+
+#define for_buf2រ(element_type, iter_p, iter_i, buf) \
+    for (uint32_t iter_i=0, after_##iter_i=(buf).len32; iter_i < after_##iter_i;)  \
+        for (element_type *restrict iter_p=B1ST(element_type, (buf)), *after_##iter_p=BAFT(element_type, (buf)); iter_p && iter_p < after_##iter_p; iter_p++, iter_i++)
 
 #define for_buf2_back(element_type, iter_p, iter_i, buf) \
     for (int32_t iter_i=(buf).len32-1; iter_i >= 0;)  \

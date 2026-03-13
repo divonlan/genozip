@@ -678,8 +678,8 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
     bool revcomp = dl->FLAG.rev_comp;
     uint32_t seq_len = dl->SEQ.len;
 
-    buf_alloc (vb, &CTX(SAM_SAG)->local,   1, vb->lines.len, SAGroup,  1, CTX_TAG_LOCAL);
-    buf_alloc (vb, &CTX(SAM_SAALN)->local, 1, vb->lines.len, uint16_t, 1, CTX_TAG_LOCAL);
+    buf_alloc (vb, &CTX(SAM_SAG)->local,   1, vb->lines.len, SAGroup,  1, C_LOCAL);
+    buf_alloc (vb, &CTX(SAM_SAALN)->local, 1, vb->lines.len, uint16_t, 1, C_LOCAL);
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;
@@ -751,7 +751,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
     bool revcomp = dl->FLAG.rev_comp;
     uint32_t seq_len = dl->SEQ.len;
 
-    buf_alloc (vb, &CTX(SAM_SAG)->local, 1, vb->lines.len, SAGroup, 1, CTX_TAG_LOCAL);
+    buf_alloc (vb, &CTX(SAM_SAG)->local, 1, vb->lines.len, SAGroup, 1, C_LOCAL);
 
     int64_t grp_index_i=-1;
     uint32_t qname_hash;

@@ -61,6 +61,10 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
                             unsigned add_bytes,
                             bool *is_new) // optional out
 {
+#ifdef DEBUG
+    if (con) con_verify_items (con, "container_seg_do");
+#endif
+
     ctx->no_stons = true; // we need the word index to for container caching
 
     // con=NULL means MISSING Container (see container_reconstruct)
@@ -361,6 +365,11 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
         return 1;
     }
 
+    else if (item->separator[0] == CI0_LAST_MATCH) {
+        RECONSTRUCT1 (item->separator[1]);
+        return 1;
+    }
+
     else if (item->separator[0] == CI0_FIXED_0_PAD || item->separator[0] == CI0_VAR_0_PAD) {
         int recon_len = BAFTtxt - reconstruction_start;
         int pad = (int)item->separator[1] - recon_len; // may be negative if CI0_VAR_0_PAD 
@@ -468,7 +477,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
     bool translating = vb->translation.trans_containers && !con->no_translation;
 
-    bool show_non_item = vb->show_containers && (!flag.dict_id_show_containers.num || dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
+    bool show_non_item = vb->show_containers && flag_is_set (show_containers, ctx->dict_id);
 
     if (show_non_item) // show container reconstruction (note: before container_reconstruct_prefix which modifies prefixes)
         iprintf ("%s%s%s Container(%s)=%s\n", 
@@ -548,8 +557,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
             bool trans_item = translating || IS_CI0_SET(CI0_TRANS_ALWAYS); 
             bool trans_nor = trans_item && IS_CI0_SET (CI0_TRANS_NOR); // check for prohibition on reconstructing when translating
 
-            bool show_item = vb->show_containers && item_ctx && (!flag.dict_id_show_containers.num || dict_id_typeless (item_ctx->dict_id).num == flag.dict_id_show_containers.num || 
-            dict_id_typeless (ctx->dict_id).num == flag.dict_id_show_containers.num);
+            bool show_item = vb->show_containers && item_ctx &&
+                             (flag_is_set (show_containers, item_ctx->dict_id) || flag_is_set (show_containers, ctx->dict_id));
 
             // an item filter may filter items in three ways:
             // - returns false - item is filtered out, and data is not consumed
@@ -620,7 +629,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 
             // display 10 first reconstructed characters, but all characters if just this ctx was requested 
             if (show_item) {
-                int len = flag.dict_id_show_containers.num ? (int)(BAFTtxt-reconstruction_start) : MIN_(64,(int)(BAFTtxt-reconstruction_start));
+                int len = flag.show_containers_δ.num ? (int)(BAFTtxt-reconstruction_start) : MIN_(64,(int)(BAFTtxt-reconstruction_start));
                 if (len >= 0)
                     iprintf ("%s\"%.*s\"\n", len==32 ? "[64]" : "", len, reconstruction_start);  
                 else
@@ -761,8 +770,8 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
 
         // first encounter with Container for this context - allocate the cache index
         if (!cache_exists) {
-            buf_alloc (vb, &ctx->con_index,    0, ctx->word_list.len, uint32_t, 1, CTX_TAG_CON_INDEX);
-            buf_alloc_zero (vb, &ctx->con_len, 0, ctx->word_list.len, uint16_t, 1, "contexts->con_len");
+            buf_alloc (vb, &ctx->con_index,    0, ctx->word_list.len, uint32_t, 1, C_CON_INDEX);
+            buf_alloc_zero (vb, &ctx->con_len, 0, ctx->word_list.len, uint16_t, 1, C_"con_len");
         }
 
         // case: add container to cache index - only if it is not a singleton (i.e. has word_index). 
@@ -771,7 +780,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
             *B32 (ctx->con_index, word_index) = ctx->con_cache.len32;
 
         // place Container followed by prefix in the cache (even if its a singleton)
-        buf_alloc (vb, &ctx->con_cache, con_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, CTX_TAG_CON_CACHE);
+        buf_alloc (vb, &ctx->con_cache, con_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, C_CON_CACHE);
         
         char *cached_con = BAFTc (ctx->con_cache);
         buf_add (&ctx->con_cache, (rom)&con, con_size);
@@ -829,6 +838,7 @@ static StrText item_sep_name0 (uint8_t sep)
         case CI0_VAR_0_PAD    : strcpy (s.s, "VAR_0_PAD");    break;
         case CI0_SKIP         : strcpy (s.s, "SKIP");         break;
         case CI0_DIGIT        : strcpy (s.s, "DIGIT");        break;
+        case CI0_LAST_MATCH   : strcpy (s.s, "LAST_MATCH");   break;
         default               : snprintf (s.s, sizeof (s.s), "'%.5s'", char_to_printable (sep).s); 
     }
 
@@ -909,6 +919,26 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
         SNPRINTF0 (s, " ], prefixes=N/A }");
 
     return s;
+}
+
+void con_verify_items (ConstContainerP con, rom con_name)
+{
+    for (ConstContainerItemP item=con->items; item < con->items + con_nitems(*con); item++) {
+        char sep0 = item->separator[0]; 
+        char sep1 = item->separator[1]; 
+        
+        if (!item->dict_id.num &&
+            !((item - con->items) == 0 && con->items[0].translator)) // item 0 can be a translator-only item
+            ABORT ("container %s item_i=%u has dict_id=0. Perhaps n_items is too large?", con_name, (int)(item - con->items));
+
+        if ((sep0 == CI0_LAST_MATCH && !IS_PRINTABLE(sep1)) ||
+            ((sep0 == CI0_FIXED_0_PAD || sep0 == CI0_VAR_0_PAD )&& !sep1))
+            ABORT ("container %s item_i=%u has sep0=%s, expecting sep1≠0", con_name, (int)(item - con->items), item_sep_name0(sep0).s);
+
+        if ((sep0 == CI0_DIGIT || sep0 == CI0_SKIP || sep0 == CI0_NONE || sep0 == CI0_INVISIBLE) && sep1 > CI1_LAST_SPECIAL)
+            ABORT ("container %s item_i=%u has sep0=%s, expecting sep1 ≤ CI1_LAST_SPECIAL(%u) but it is '%c'(%u)", 
+                   con_name, (int)(item - con->items), item_sep_name0(sep0).s, CI1_LAST_SPECIAL, sep1, sep1);
+    }
 }
 
 // Translators reconstructing last_value as a little endian binary

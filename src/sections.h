@@ -86,9 +86,9 @@ typedef union SectionFlags {
     } vb_header;
 
     struct FlagsMgzip {
-        uint8_t OLD_has_eof_block: 1;  // PIZ: used for files up to 15.0.62
+        uint8_t OLD_has_eof_block: 1;  // PIZ: used for files up to 15.0.62. Now an EOF appears as an isize=0 entry in this section's data (array of isizes).
         #define implausible OLD_has_eof_block // ZIP: used for level discovery (not part of file format)
-        uint8_t level            : 4;  // 0-12 for libdeflate or 0-9 for zlib level: 15 means unknown
+        uint8_t level            : 4;  // libdeflate: 0-12, zlib: 0-9, igzip: 0-3, 15=unknown
         MgzipLibraryType library : 3;  // ignored if level=15 (introduced 9.0.16)
     } mgzip;
 
@@ -312,8 +312,8 @@ typedef struct {
     uint64_t txt_data_size;            // number of bytes in the original txt file (without source compression, potentially after ZIP modifications eg --optimize)
     uint64_t txt_num_lines;            // number of data (non-header) lines in the original txt file. Concat mode: entire file for first SectionHeaderTxtHeader, and only for that txt if not first
     uint32_t max_lines_per_vb;         // upper bound on how many data lines a VB can have in this file
-    Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2, cram...)
-    uint8_t  codec_info[3];            // codec specific info: for CODEC_BGZF, these are the LSB, 2nd-LSB, 3rd-LSB of the source BGZF-compressed file size
+    Codec    src_codec;                // codec of original txt file (none, bgzf, gz, bz2, cram...). since 15.0.80 is also captures FASTQ MGZIP codecs (CODEC_IL1M etc) (previously: CODEC_GZ).
+    uint8_t  OLD_gz_size_3LSB[3];      // Up to 15.0.79: For exactable files: (gz_file_size % 16 MB) of the source gz-compressed file size (moved to SectionHeaderGzDigests)
     Digest   digest;                   // digest of original single txt file. Up to 15.0.59: 0 if modified or DVCF. v14: only if md5, not alder32 (adler32 digest, starting v14, is stored per VB) (bug in v14: this field is garbage instead of 0 for FASTQ_COMP_FQR2 if adler32)
     Digest   digest_header;            // MD5 or Adler32 of header. Up to 15.0.59: 0 if txt was modified by zip.
 #define TXT_FILENAME_LEN 256
@@ -391,6 +391,12 @@ typedef struct {
     SectionHeader;
     DictId dict_id;   
 } SectionHeaderHuffman, *SectionHeaderHuffmanP;
+
+typedef struct { // introduced 15.0.80
+    SectionHeader;
+    uint64_t gz_file_size;     // size of original gz file         
+    Codec effective_codec;
+} SectionHeaderGzDigests, *SectionHeaderGzDigestsP; 
 
 // used for SEC_LOCAL and SEC_B250
 typedef struct {
@@ -546,6 +552,7 @@ typedef union {
     SectionHeaderRefHashP ref_hash;
     SectionHeaderReconPlanP recon_plan;
     SectionHeaderHuffmanP huffman;
+    SectionHeaderGzDigestsP exact_gz;
 } SectionHeaderUnionP __attribute__((__transparent_union__));
 
 #pragma pack()
@@ -612,7 +619,7 @@ extern VBIType sections_get_num_vbs_up_to (CompIType comp_i, VBIType max_vb_i);
 extern VBIType sections_get_first_vb_i (CompIType comp_i);
 extern Section sections_get_comp_txt_header_sec (CompIType comp_i);
 extern uint32_t sections_get_recon_plan (Section *recon_sec);
-extern Section sections_get_comp_bgzf_sec (CompIType comp_i);
+extern Section sections_get_comp_GZ_ISIZES_sec (CompIType comp_i);
 extern Section sections_get_next_vb_header_sec (CompIType comp_i, Section *vb_sec);
 extern bool is_there_any_section_with_dict_id (DictId dict_id);
 extern SectionEnt *section_get_section (VBIType vb_i, SectionType st, DictId dict_id);
@@ -658,5 +665,6 @@ extern StrText comp_name_(CompIType comp_i);
 
 #define IS_DICTED_SEC(st) ((st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_DICT || (st)==SEC_COUNTS || (st) == SEC_SUBDICTS || (st) == SEC_HUFFMAN)
 #define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
-#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || (st)==SEC_TXT_HEADER || (st)==SEC_MGZIP || (st)==SEC_RECON_PLAN)
+#define IS_TXT_SEC(st)    ((st)==SEC_TXT_HEADER || (st)==SEC_GZ_ISIZES || (st)==SEC_GZ_DIGESTS || (st)==SEC_RECON_PLAN)
+#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || IS_TXT_SEC(st))
 #define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_TXT_HEADER || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 

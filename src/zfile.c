@@ -28,32 +28,60 @@
 #include "b250.h"
 #include "libdeflate_1.19/libdeflate.h"
 
-static void zfile_show_b250_section (SectionHeaderUnionP header_p, ConstBufferP b250_data)
+static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, ConstBufferP b250_data, bool detailed)
 {
     static Mutex show_b250_mutex = {}; // protect so compute thread's outputs don't get mix
 
     SectionHeaderCtxP header = header_p.ctx;
 
-    if (!flag.show_b250 && dict_id_typeless (header->dict_id).num != flag.dict_id_show_one_b250.num) return;
+    if (!flag.show_b250 && dict_id_typeless (header->dict_id).num != flag.show_b250_δ.num) return;
 
     mutex_initialize (show_b250_mutex); // possible unlikely race condition on initializing - good enough for debugging purposes
     mutex_lock (show_b250_mutex);
 
-    iprintf ("vb_i=%u %*.*s: ", BGEN32 (header->vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_typeless (header->dict_id).id);
-
     bytes data  = B1ST (const uint8_t, *b250_data);
     bytes after = BAFT (const uint8_t, *b250_data);
 
-    while (data < after) {
-        WordIndex word_index = b250_piz_decode (&data, true, header->b250_size, "zfile_show_b250_section");
-        switch (word_index) {
-            case WORD_INDEX_ONE_UP  : iprint0 ("ONE_UP " ) ; break ;
-            case WORD_INDEX_EMPTY   : iprint0 ("EMPTY "  ) ; break ;
-            case WORD_INDEX_MISSING : iprint0 ("MISSING ") ; break ;
-            default                 : iprintf ("%u ", word_index);
+    if (detailed) {
+        ContextP zctx = ZCTX(zctx_get_existing_did_i (header->dict_id));
+        zctx = CTX(zctx->dict_did_i); // ctx->did_i is different than did_i if its an ALIAS_CTX
+        
+        WordIndex last_wi = 0;
+        uint32_t count_in_vb=0; 
+        STR(snip);
+
+        while (data < after) {
+            WordIndex wi = b250_piz_decode (&data, true, header->b250_size, "zfile_show_b250_section");
+            bool one_up = (wi == WORD_INDEX_ONE_UP);
+            if (one_up) wi = last_wi + 1;
+
+            printf ("%-5u %-8s wi%s=%-*d %s %s\n", count_in_vb++, VB_NAME, 
+                    one_up?"++":"", one_up?5:7, wi,
+                    wi == WORD_INDEX_EMPTY   ? "EMPTY" 
+                  : wi == WORD_INDEX_MISSING ? "MISSING"
+                  : wi >= 0 ? ({ ctx_get_snip_by_word_index (zctx, wi, snip); str_snip_ex(vb->data_type, STRa(snip), true).s; }) : "",
+                    (data == after && header->flags.ctx.all_the_same) ? "ALL-THE-SAME" : "");
+            
+            if (wi >= 0) last_wi = wi;
         }
     }
-    iprint_newline();
+
+    else {
+        iprintf ("vb_i=%u %*.*s: ", BGEN32 (header->vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_typeless (header->dict_id).id);
+
+        while (data < after) {
+            WordIndex word_index = b250_piz_decode (&data, true, header->b250_size, "zfile_show_b250_section");
+
+            switch (word_index) {
+                case WORD_INDEX_ONE_UP  : iprint0 ("ONE_UP " ) ; break ;
+                case WORD_INDEX_EMPTY   : iprint0 ("EMPTY "  ) ; break ;
+                case WORD_INDEX_MISSING : iprint0 ("MISSING ") ; break ;
+                default                 : iprintf ("%u ", word_index);
+            }
+        }
+        
+        iprint_newline();
+    }
 
     mutex_unlock (show_b250_mutex);
 }
@@ -138,7 +166,7 @@ void zfile_uncompress_section (VBlockP vb,
     uint32_t actual_z_digest = adler32 (1, (uint8_t*)header + compressed_offset, MAX_(data_compressed_len, data_encrypted_len));
 
     if (VER(15) && expected_z_digest != actual_z_digest) {
-        sections_show_header (header_p.common, vb, vb->comp_i, 0, 'E');
+        sections_show_header (header_p.common, NULL, vb->comp_i, 0, 'E');
         ABORT ("%s:%s: Section %s data failed digest verification: expected_z_digest=%u != actual_z_digest=%u", 
                z_name, VB_NAME, st_name(header->section_type), expected_z_digest, actual_z_digest);
     }
@@ -174,8 +202,8 @@ void zfile_uncompress_section (VBlockP vb,
         }
     }
  
-    if (flag.show_b250 && expected_section_type == SEC_B250) 
-        zfile_show_b250_section (header_p, uncompressed_data);
+    if (expected_section_type == SEC_B250 && flag_is_set (show_b250, dict_id)) 
+        zfile_show_b250_section (vb, header_p, uncompressed_data, flag.show_b250_δ.num != 0);
     
     if ((flag.dump_section && !strcmp (st_name (expected_section_type), flag.dump_section)) || 
         flag.dump_section_i == header->section_i || // zfile_read_section_do replaced magic with section_i
@@ -323,22 +351,22 @@ static DESCENDING_SORTER (sort_removed_sections, RemovedSection, start)
 void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did remove_did_i)
 {
     unsigned num_rms=0;
-    RemovedSection rm[vb->num_contexts * 2];
+    RemovedSection rm[vb->ca.num_contexts * 2];
 
     // remove all contexts in the group
     CTX(remove_did_i)->st_did_i = remove_did_i; // so the loop catches it too
-    for_ctx_that (ctx->st_did_i == remove_did_i) {
-        if (ctx->b250_in_z_len) 
-            rm[num_rms++] = (RemovedSection){.start = ctx->b250_in_z, .len = ctx->b250_in_z_len };
+    for_vctx_that (vctx->st_did_i == remove_did_i) {
+        if (vctx->b250_in_z_len) 
+            rm[num_rms++] = (RemovedSection){.start = vctx->b250_in_z, .len = vctx->b250_in_z_len };
 
-        if (ctx->local_in_z_len) 
-            rm[num_rms++] = (RemovedSection){.start = ctx->local_in_z, .len = ctx->local_in_z_len};
+        if (vctx->local_in_z_len) 
+            rm[num_rms++] = (RemovedSection){.start = vctx->local_in_z, .len = vctx->local_in_z_len};
 
-        vb->recon_size -= ctx->txt_len; // it won't be reconstructed after all
+        vb->recon_size -= vctx->txt_len; // it won't be reconstructed after all
 
-        ctx_update_zctx_txt_len (vb, ctx, -(int64_t)ctx->txt_len); // substract txt_len added to zctx during merge
+        ctx_update_zctx_txt_len (vb, vctx, -(int64_t)vctx->txt_len); // substract txt_len added to zctx during merge
 
-        buflist_free_ctx (vb, ctx);
+        buflist_free_ctx (vb, vctx);
     }
 
     // update VB Header (always first in z_data) with reduced recon_size (re-encrypting it if encrypting)
@@ -488,7 +516,7 @@ int32_t zfile_read_section_do (FileP file,
             func, code_line, z_name, header_size, BGEN32 (header->v14_compressed_offset), z_file->genozip_version/*set from footer*/, st_name(header->section_type));
 
     // allocate more memory for the rest of the header + data 
-    buf_alloc (vb, data, 0, header_offset + header_size + data_len, uint8_t, 2, "zfile_read_section");
+    buf_alloc (vb, data, 0, header_offset + header_size + data_len, uint8_t, CTX_GROWTH, buf_name);
     header = (SectionHeaderP)Bc(*data, header_offset); // update after realloc
     
     data->param = 2;
@@ -994,6 +1022,7 @@ void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
     header->txt_data_size    = BGEN64 (txt_file->txt_data_so_far_single);
     header->txt_num_lines    = BGEN64 (txt_file->num_lines);
     header->max_lines_per_vb = BGEN32 (txt_file->max_lines_per_vb);
+    header->src_codec        = txt_file->src_codec; // 15.0.80. note: for FASTQ, this is set only after segconf (e.g. to I1LM) which after SEC_TXT_HEADER is already written
 
     // qname stuff
     for (QType q=0; q < NUM_QTYPES; q++)

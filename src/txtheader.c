@@ -10,13 +10,13 @@
 #include "filename.h"
 #include "txtfile.h"
 #include "zfile.h"
-#include "mgzip.h"
 #include "writer.h"
 #include "contigs.h"
 #include "piz.h"
 #include "gencomp.h"
 #include "compressor.h"
 #include "dispatcher.h"
+#include "mgzip.h"
 
 static bool is_first_txt = true; 
 
@@ -70,11 +70,11 @@ void txtheader_compress (BufferP txt_header,
 
     Codec codec = codec_assign_best_codec (evb, NULL, txt_header, SEC_TXT_HEADER);
 
+    // note: the remaining fields will be set in zfile_update_txt_header_section_header
     section_header = (SectionHeaderTxtHeader){
         .magic             = BGEN32 (GENOZIP_MAGIC),
         .section_type      = SEC_TXT_HEADER,
         .codec             = (codec == CODEC_UNKNOWN) ? CODEC_NONE : codec,
-        .src_codec         = txt_file->src_codec, 
         .digest_header     = header_digest,
         .txt_header_size   = BGEN64 (unmodified_txt_header_len), // length before zip-side modifications
     };
@@ -86,10 +86,6 @@ void txtheader_compress (BufferP txt_header,
     section_header.flags.txt_header.no_gz_ext = 
         (TXT_IS_GZIP || SRC_CODEC(BAM) || SRC_CODEC(CRAM)/*reconstructed as BAM*/) &&
         txt_file->basename && !filename_has_ext (txt_file->basename, ".gz") && !filename_has_ext (txt_file->basename, ".bgz");
-
-    // In BGZF, we store the 3 least significant bytes of the file size, so check if the reconstructed BGZF file is likely the same
-    if (TXT_IS_BGZF) 
-        bgzf_sign (txt_file->disk_size, section_header.codec_info);
         
     filename_base (txt_file->name, false, FILENAME_STDIN, section_header.txt_filename, TXT_FILENAME_LEN);
     filename_remove_codec_ext (section_header.txt_filename, txt_file->type); // eg "xx.fastq.gz -> xx.fastq"
@@ -186,7 +182,8 @@ static void txtheader_read_one_vb (VBlockP vb)
     
     zfile_read_section (z_file, vb, txtheader_sec->vblock_i, &vb->z_data, "z_data", SEC_TXT_HEADER, txtheader_sec);    
     SectionHeaderTxtHeaderP header = B1ST (SectionHeaderTxtHeader, vb->z_data);
-
+    ASSERTNOTNULL (header);
+    
     vb->fragment_len   = BGEN32 (header->data_uncompressed_len);
     vb->fragment_start = Bc (txt_header_vb->txt_data, txt_header_vb->txt_data.next);
 
@@ -365,7 +362,8 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
     // If we are reconstructing to a MGZIP codec: set recompression info
     if (needs_recon && TXT_IS_MGZIP) 
-        bgzf_piz_set_txt_file_bgzf_info (mgzip_flags, header.codec_info);
+        mgzip_piz_set_txt_file_info (mgzip_flags, 
+                                     VER2(15,80) ? 0 : GET_UINT24 (header.OLD_gz_size_3LSB));
 
     // note: this is reset for each component:
     // since v14 it is used for the commulative component-scope MD5 used for both VBs and txt file verification

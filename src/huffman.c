@@ -142,7 +142,7 @@ void huffman_start_chewing (Did did_i, STRp(master), uint8_t max_prefix_len, int
     ASSERTINRANGX (max_prefix_len, 0, HUFFMAN_MAX_MAX_PREFIX_LEN);
     if (master) ASSERTNOTZERO (max_prefix_len);
 
-    buf_alloc_exact_zero (evb, zctx->huffman, n_channels, HuffmanCodes, "contexts->huffman"); // used for both HuffmanChewer and HuffmanCodes - the latter is much bigger
+    buf_alloc_exact_zero (evb, zctx->huffman, n_channels, HuffmanCodes, C_HUFFMAN); // used for both HuffmanChewer and HuffmanCodes - the latter is much bigger
     
     for_buf2 (HuffmanChewer, chewer, i, zctx->huffman) {
         if (i==0 && master_len) {
@@ -273,7 +273,7 @@ static uint32_t huffman_generate_binary_tree (ContextP zctx, HuffmanChewerP chew
         h->roots[num_roots++] = num_nodes - 1;
     }
 
-    if (flag.debug_huffman_dict_id.num && flag.debug_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num)
+    if (flag_is_δ (debug_huffman, zctx->dict_id))
         huffman_print_tree (h, h->roots[0], 0);
 
     return num_leaves;
@@ -348,7 +348,7 @@ static void huffman_generate_codes (ContextP zctx, HuffmanCodesP h, uint32_t num
 
     huffman_set_longest_code_n_bits (h);
 
-    if (flag.show_huffman_dict_id.num && flag.show_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num) 
+    if (flag_is_δ (show_huffman, zctx->dict_id)) 
         huffman_show (h);
 }
 
@@ -465,7 +465,7 @@ uint32_t huffman_compress (VBlockP vb, Did did_i, STRp(uncomp),
 
     huffman_compress_finalize_bits (zctx, &bits, next_bit, shift, STRa(comp));
 
-    if (flag.debug_huffman_dict_id.num && flag.debug_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num)
+    if (flag_is_δ (debug_huffman, zctx->dict_id))
         iprintf ("%s: uncomp_len=%u comp_len=%u ratio=%.1f\n", zctx->tag_name, uncomp_len, *comp_len, (double)uncomp_len / (double)*comp_len);
 
     return *comp_len;
@@ -689,7 +689,7 @@ void huffman_piz_read_all (void)
             if (!VER2(15,68))  // in files compressed since 15.0.68, ZIP calculates this 
                 huffman_set_longest_code_n_bits (h); 
 
-            if (flag.show_huffman_dict_id.num == dict_id_typeless (sec->dict_id).num) {
+            if (flag_is_δ (debug_huffman, sec->dict_id)) {
                 huffman_show (h);
                 if (is_genocat) exit_ok;
             }
@@ -720,7 +720,7 @@ void huffman_piz_read_all (void)
         // we will generate the qual in huffman_piz_backcomp_produce_qual based on the first QUAL string reconstructed
         mutex_initialize (backcomp_huffman_qual_mutex);
 
-        buf_set_promiscuous (&ZCTX(SAM_QUAL)->huffman, "contexts->huffman");
+        buf_set_promiscuous (&ZCTX(SAM_QUAL)->huffman, C_HUFFMAN);
     }
 }
 
@@ -837,7 +837,7 @@ uint32_t nico_compress_cigar (VBlockP vb, Did did_i, BamCigarOpP cigar, uint32_t
 
     huffman_compress_finalize_bits (zctx, &bits, next_bit, shift, qSTRa(comp));
 
-    if (flag.debug_huffman_dict_id.num && flag.debug_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num)
+    if (flag_is_δ (debug_huffman, zctx->dict_id))
         iprintf ("%s: n_cigar_op=%u comp_len=%u ratio=%.1f\n", 
                  zctx->tag_name, n_cigar_op, comp_len, ((double)(n_cigar_op*4)+2) / (double)comp_len);
 
@@ -1036,7 +1036,7 @@ uint32_t nico_uncompress_textual_cigar (Did did_i, bytes comp, BufferP textual_c
 
 //     huffman_compress_finalize_bits (zctx, &bits, next_bit, shift, qSTRa(comp));
 
-//     if (flag.debug_huffman_dict_id.num && flag.debug_huffman_dict_id.num == dict_id_typeless (zctx->dict_id).num)
+//     if (flag_is_δ (debug_huffman, zctx->dict_id))
 //         iprintf ("QUAL (smx): qual_len=%u comp_len=%u ratio=%.1f\n", 
 //                  qual_len, comp_len, (double)qual_len / (double)comp_len);
 
@@ -1070,7 +1070,7 @@ uint32_t nico_uncompress_textual_cigar (Did did_i, bytes comp, BufferP textual_c
 #ifdef DEBUG
 void huffman_unit_test (void)
 {
-    flag.debug_huffman_dict_id.num = _SAM_QNAME;
+    flag.debug_huffman_δ.num = _SAM_QNAME;
 
     rom training_set[] = {
         "A00925:74:H25J5DSXY:1:1645:20383:5603",

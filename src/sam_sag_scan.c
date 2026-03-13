@@ -162,8 +162,8 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
     START_TIMER; 
 
     // if the txt file is compressed with BGZF, we uncompress now, in the compute thread
-    if (TXT_IS_BGZF) 
-        mgzip_uncompress_vb (vb, CODEC_BGZF);    // some of the blocks might already have been decompressed while reading - we decompress the remaining
+    if (TXT_IS(BGZF)) 
+        mgzip_uncompress_vb (vb, CODEC_BGZF); // some of the blocks might already have been decompressed while reading - we decompress the remaining
 
     rom next  = B1STtxt;
     rom after = BAFTtxt;

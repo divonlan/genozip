@@ -7,7 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 //--------
 // INFO/DP

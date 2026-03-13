@@ -192,7 +192,7 @@ COMPRESS (codec_pacb_compress)
     for (uint8_t channel_i=0; channel_i < n_channels; channel_i++) {
         ContextP subctx = subctxs[channel_i];
 
-        buf_alloc_exact (vb, subctx->local, lens[channel_i], char, CTX_TAG_LOCAL);
+        buf_alloc_exact (vb, subctx->local, lens[channel_i], char, C_LOCAL);
 
         subctx->txt_len += lens[channel_i];       // update accounting of the data to the channel context
         ctx->txt_len    -= lens[channel_i];

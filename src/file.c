@@ -246,7 +246,10 @@ static void file_ask_user_to_confirm_overwrite (rom filename)
         exit (EXIT_OK);
     }
 
-    fprintf (stderr, "\n");
+    else {
+        file_remove (filename, false); // remove now so we don't ask again upon RESTART
+        fprintf (stderr, "\n");
+    }
 }
 
 static void file_redirect_output_to_stream (FileP file, rom exec_name, 
@@ -346,11 +349,11 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
         RETURNW (!flag.skip_index, true, "Skipping %s - an index file", file_printname(file));
 
         if (file->type == BAI)
-            TIP ("It is best NOT to compress %s as genounzip generates .bai files automatically. Consider using --skip-index. See: %s", 
+            TIP ("It is best NOT to compress %s as genounzip generates .bai files automatically. Consider using --skip-index. %s", 
                  file->name, WEBSITE_INDEXING);
         
         else 
-            TIP ("It is best NOT to compress %s as re-indexing is usually required after genounzip. Consider using --skip-index. See: %s", 
+            TIP ("It is best NOT to compress %s as re-indexing is usually required after genounzip. Consider using --skip-index. %s", 
                  file->name, WEBSITE_INDEXING);
     }
 
@@ -436,14 +439,17 @@ static void file_open_txt_read_gz (FileP file)
     // case: discovery deferred to the end of segconf when we know segconf.tech
     if (file->data_type == DT_FASTQ || file->data_type == DT_FASTA) {  // note: even if --no-bgzf: so we can report correct src_codec in stats
         file->effective_codec = file->src_codec = txtfile_is_gzip (file) ? CODEC_GZ : CODEC_NONE; // based on the first 3 bytes
-        file->discover_during_segconf = (file->effective_codec == CODEC_GZ);
+        file->discover_during_segconf = !flag.no_bgzf && (file->effective_codec == CODEC_GZ);
         txtfile_initialize_igzip (file);
     }
 
     // run discovery now if not FASTQ/A. That's because other data types might have header
-    // which is read before segconf. luckily FASTQ/A don't.
+    // which is read before segconf. For FASTQ/A we will run it after segconf discovers segconf.tech
     else
         txtfile_discover_specific_gz (file); // decide between GZ, BGZF and NONE
+
+    if (file->effective_codec == CODEC_NONE || (file->effective_codec == CODEC_GZ && !file->discover_during_segconf))
+        mgzip_set_is_exactable (file, false, file->effective_codec == CODEC_NONE ? "Not GZIP" : "Not BGZF");
 }
 
 static bool most_recent_file_was_skipped = false;
@@ -453,11 +459,12 @@ FileP file_open_txt_read (rom filename)
 {
     FileP file = (FileP)CALLOC (sizeof(File));
 
-    file->supertype   = TXT_FILE;
-    file->redirected  = !filename; // later on, also CRAM, XZ, BCF will be set as redirected
-    file->mode        = READ;
-    file->is_remote   = filename && url_is_url (filename);
-    flag.from_url     = file->is_remote;
+    file->supertype    = TXT_FILE;
+    file->redirected   = !filename; // later on, also CRAM, XZ, BCF will be set as redirected
+    file->mode         = READ;
+    file->is_remote    = filename && url_is_url (filename);
+    file->is_exactable = unknown;
+    flag.from_url      = file->is_remote;
 
     most_recent_file_was_skipped = false;
 
@@ -511,6 +518,9 @@ FileP file_open_txt_read (rom filename)
     // open the file, based on the codec (as guessed by file extension)
     file->src_codec       = file_get_codec_by_txt_ft (file->data_type, file->type, true);
     file->effective_codec = file->src_codec; // initialize: can be changed if streaming or if gz variant
+
+    if (file->src_codec != CODEC_BGZF && file->src_codec != CODEC_BAM && file->src_codec != CODEC_GZ && file->src_codec != CODEC_NONE)
+        mgzip_set_is_exactable (file, false, "Not GZIP"); 
 
     switch (file->src_codec) { 
         case CODEC_GZ: case CODEC_BGZF: case CODEC_BAM: case CODEC_NONE: gz: 
@@ -603,10 +613,11 @@ FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_lev
     file->data_type  = data_type;
     file->redirected = !filename;
 
-    file->effective_codec = data_type == DT_CRAM       ? CODEC_CRAM 
-                          : data_type == DT_BCF        ? CODEC_BCF
-                          : bgzf_level != BGZF_NO_BGZF ? CODEC_BGZF // see mgzip_piz_calculate_mgzip_flags
-                          : /* BGZF_NO_BGZF */           CODEC_NONE;
+    if (!file->effective_codec) // if --exact effective_codec is set to an exactable MGZIP codec in mgzip_piz_set_txt_file_info
+        file->effective_codec = data_type == DT_CRAM       ? CODEC_CRAM 
+                              : data_type == DT_BCF        ? CODEC_BCF
+                              : bgzf_level != BGZF_NO_BGZF ? CODEC_BGZF // see mgzip_piz_calculate_mgzip_flags
+                              : /* BGZF_NO_BGZF */           CODEC_NONE;
     
     if (!file->redirected) { // not stdout
         if (file_exists (filename)   && 
@@ -666,17 +677,17 @@ FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_lev
 // compute thread to use it, causing buf_alloc to modify evb's buf_list - this is not permitted as the main 
 // thread might be doing so concurrently resulting in a corrupted evb.buf_list.
 
-static void file_initialize_z_file_data (FileP file)
+static void file_initialize_z_file_data (FileP file) 
 {
-    init_dict_id_to_did_map (file->d2d_map); 
+    ca_init_d2d_map (&file->ca); 
     profiler_new_z_file();
         
     #define Z_INIT(buf) ({ buf_set_promiscuous (&file->buf, "z_file->" #buf); })
 
     if (file->mode != READ) { // careful not to use IS_ZIP - which is set when reading aux files
         for (Did did_i=0; did_i < MAX_DICTS; did_i++) {
-            ctx_zip_init_promiscuous (&file->contexts[did_i]); // must be done from main thread
-            file->contexts[did_i].vb_1_pending_merges = -1;    // uninitialized - will be initialized in ctx_set_vb_1_pending_merges
+            ctx_zip_init_promiscuous (&file->ca.contexts[did_i]); // must be done from main thread
+            file->ca.contexts[did_i].vb_1_pending_merges = -1;    // uninitialized - will be initialized in ctx_set_vb_1_pending_merges
         }
         __atomic_thread_fence (__ATOMIC_RELEASE); // release all vb_1_pending_merges
         
@@ -694,7 +705,7 @@ static void file_initialize_z_file_data (FileP file)
         Z_INIT (deep_ents);
         Z_INIT (vb_num_deep_lines);
         Z_INIT (section_list);
-        Z_INIT (contexts[CHROM].chrom2ref_map);
+        Z_INIT (ca.contexts[CHROM].chrom2ref_map);
         Z_INIT (vb_info[SAM_COMP_MAIN]);
     }
     else { // PIZ
@@ -995,7 +1006,7 @@ void file_close (FileP *file_p)
 
         // ZIP note: we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
         if (IS_ZIP)
-            for (Did did_i=0; did_i < (IS_ZIP ? MAX_DICTS : file->num_contexts); did_i++) 
+            for (Did did_i=0; did_i < (IS_ZIP ? MAX_DICTS : file->ca.num_contexts); did_i++) 
                 mutex_destroy (file->ctx_mutex[did_i]); 
 
         if (file->is_in_tar && file->mode != READ)

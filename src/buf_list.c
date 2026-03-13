@@ -356,7 +356,7 @@ static rom buflist_locate_s (ConstBufferP buf)
 // Freers and Destroyers
 //-----------------------------
 
-// frees all buffers on vb->buffer_list, and also zeros the spaces between Buffers in the VB.
+// frees (evb) or destroys (other vbs) all buffers on vb->buffer_list, and also zeros the spaces between Buffers in the VB.
 // does not affect "fields that survive buflist_free_vb" as defined in vblock.h
 void buflist_free_vb (VBlockP vb) 
 {
@@ -389,7 +389,7 @@ void buflist_free_vb (VBlockP vb)
                 
             char *save_buf = (char *)ent->buf; // before buf_destroy changes the ent->buf pointer
 
-            if (ent->buf->shared && vb != evb)
+            if (vb != evb)
                 buf_destroy_do_do (ent, __FUNCLINE); 
             else
                 buf_free (*ent->buf);
@@ -486,7 +486,7 @@ void buflist_destroy_private_and_context_vb_bufs (VBlockP vb)
         if (!BL_IS_REMOVED(ent->buf) &&                             // not marked for removal
             is_p_in_range (ent->buf, vb, sizeof_alloced_vb) &&      // is in VB struct, but:
               (!is_p_in_range (ent->buf, vb, sizeof_common_area) || // either: not in common area
-               is_p_in_range (ent->buf, vb->contexts, sizeof (ContextArray)) || // or: context data
+               is_p_in_range (ent->buf, vb->ca.contexts, sizeof (vb->ca.contexts)) || // or: context data
                ent->buf == &vb->lines         ||                    // or: some specific buffers
                ent->buf == &vb->z_data        || 
                ent->buf == &vb->comp_txt_data ||

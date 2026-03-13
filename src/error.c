@@ -208,10 +208,10 @@ static void error_print_call_stack (void)
     }
 }
 
-// signal handler of SIGINT (CTRL-C) - debug only 
+// signal handler of SIGINT (CTRL-C) - flag.debug_or_test only 
 static void noreturn signal_handler_INT (int signum) 
 {
-    fprintf (stderr, "\n%s process %u Received SIGINT (usually caused by Ctrl-C):", global_cmd, getpid()); 
+    fprintf (stderr, "\n%s process %u Received SIGINT (usually caused by Ctrl-C)\n", global_cmd, getpid()); 
 
     error_print_call_stack(); // this works ok on mac, but seems to not print function names on Linux
 
@@ -223,7 +223,7 @@ static void noreturn signal_handler_INT (int signum)
 
     mutex_who_is_locked(); // works only if --show_time
     buflist_who_is_locked();
-    
+
     // flush remaining output (eg in genocat)
     fflush (stdout);
     fflush (stderr);
@@ -409,6 +409,16 @@ void noreturn error_restart (rom add_cmd_option)
     if (flag.restarted) exit_on_error (true); // if this is already a restarted process - we don't restart again
 
     DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
+
+        // we cannot restart if we're compressing multiple z_files - as all will be compressed again
+        int max_allowed_files_to_restart = flag.deep ? 1 GB // unlimited - single z_file
+                                         : flag.pair ? 2    // 2 files generate 1 z_file
+                                         :             1;
+        if (n_files > max_allowed_files_to_restart) {
+            fprintf (stderr, "\n"_TIP"Rerun with %s\n\n", add_cmd_option); 
+            exit_on_error(false);
+        }
+        
         fprintf (stderr, "\nRecovering by restarting with %s\n\n", add_cmd_option); 
 
         // case: skip freeing buffers since we're exiting any, UNLESS run under valgrind - in which case we free, so we can detect true memory leaks

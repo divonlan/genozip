@@ -50,7 +50,7 @@ void ref_contigs_populate_aligned_chroms (void)
             chrom_index = ctx_populate_zf_ctx (CHROM, STRa(r->chrom_name), r->range_id); 
 
         // make sure count is at least 1 for ref_contigs_compress_stored to store 
-        buf_alloc_zero (evb, &zctx->counts, 0, MAX_(chrom_index + 1, gref.ranges.len32), uint64_t, CTX_GROWTH, "zctx->counts");
+        buf_alloc_zero (evb, &zctx->counts, 0, MAX_(chrom_index + 1, gref.ranges.len32), uint64_t, CTX_GROWTH, Z_ C_COUNTS);
         *B64(zctx->counts, chrom_index) = MAX_(*B64(zctx->counts, chrom_index), 1);
     }
 }

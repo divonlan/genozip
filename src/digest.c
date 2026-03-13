@@ -73,7 +73,7 @@ static void digest_update_do (VBlockP vb, DigestContext *ctx, rom data, uint64_t
     START_TIMER;
     DigestContext before;
 
-    if (IS_ADLER) {
+    if (IS_ADLER) { // used for files up to v13 where adler digest was commulative
         if (!ctx->adler_ctx.initialized) {
             ctx->is_adler = true;
             ctx->adler_ctx.adler = 1;

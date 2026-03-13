@@ -29,10 +29,12 @@ uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 
     // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
     // minimum ~64K to prevent horrible miscalculations in edge cases that result in dramatic slow down
-    static uint32_t hash_sizes[] = { 65521, 92681, 131071, 
-                                     185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
-                                     11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
-                                     94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
+    //xxxx static uint32_t hash_sizes[] = { 65521, 92681, 131071, 
+    //                                  185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
+    //                                  11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
+    //                                  94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
+    // #define NUM_HASH_REGULAR 25
+    static uint32_t hash_sizes[] = { 64 KB, 128 KB, 256 KB  };
     #define NUM_HASH_REGULAR 25
     #define NUM_HASH_HUGE ARRAY_LEN(hash_sizes)
     #define NUM_HASH_SIZES (allow_huge ? NUM_HASH_HUGE : NUM_HASH_REGULAR)
@@ -82,7 +84,7 @@ static void hash_alloc_local (VBlockP vb, ContextP vctx)
 
     // note: we can't be too generous with the initial allocation because this memory is usually physically allocated
     // to ALL VB structures before any of them merges. Better start smaller for vb_i=1 and let it extend if needed
-    buf_alloc_exact_255 (vb, vctx->local_hash, vctx->local_hash.len, uint32_t, CTX_TAG_LOCAL_HASH);
+    buf_alloc_exact_255 (vb, vctx->local_hash, vctx->local_hash.len, uint32_t, C_LOCAL_HASH);
 }
 
 // ZIP merge: allocating the global hash for a context, when merging the first VB that encountered it
@@ -228,7 +230,7 @@ void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
     uint32_t global_hash_prime = hash_next_size_up (estimated_entries * (flag.low_memory ? 1 : 3), false);
 
     // note: we set all entries to NO_NEXT == 0xffffffff
-    buf_alloc_exact_255 (evb, zctx->global_hash, global_hash_prime, uint32_t, "zctx->global_hash");
+    buf_alloc_exact_255 (evb, zctx->global_hash, global_hash_prime, uint32_t, Z_ C_GLOBAL_HASH);
     buf_set_shared (&zctx->global_hash);
 
     hash_populate_from_nodes (zctx);
@@ -293,7 +295,7 @@ static inline void hash_stons_add_singleton (ContextP zctx, uint32_t hash, STRp(
     // case: first singleton in this zctx - allocate - set all entries to NO_NEXT == 0xffffffff
     if (!zctx->ston_hash.len32) 
         // heads of linked-lists - one for each hash value, +1 for decommissions singletons
-        buf_alloc_exact_255 (evb, zctx->ston_hash, zctx->global_hash.len + 1, uint32_t, "zctx->ston_hash"); 
+        buf_alloc_exact_255 (evb, zctx->ston_hash, zctx->global_hash.len + 1, uint32_t, Z_ C_STON_HASH); 
 
     uint32_t digest = crc32 (0, STRa(snip));
 
@@ -377,7 +379,7 @@ static inline WordIndex hash_global_add_node (ContextP zctx, uint32_t hash, uint
     }
     
     // realloc
-    buf_alloc (evb, &zctx->nodes, 1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, "zctx->nodes");
+    buf_alloc (evb, &zctx->nodes, 1, INITIAL_NUM_NODES, CtxNode, CTX_GROWTH, Z_ C_NODES);
 
     // thread safetey: we increment nodes.len here, not atomically, and before the next node is ready. that's ok,
     // because we are currently with the zctx mutex locked, and when cloning happens the zctx mutex 
@@ -405,7 +407,7 @@ static inline WordIndex hash_global_add_node (ContextP zctx, uint32_t hash, uint
 // finds or creates a node in the hash_ents or ston_ents
 // returns the word_index if node and WORD_INDEX_NONE if singleton.
 // (if NULL this is a re-commissioned singleton and snip already copied)
-WordIndex hash_global_get_entry (ContextP zctx, STRp(snip), 
+WordIndex hash_global_get_entry (ContextP zctx, STRpរ(snip), 
                                  bool allow_singleton,
                                  bool snip_is_definitely_new,
                                  CtxNodeP *please_update_index)  // out: in not NULL, caller should update char_index of new dict snip 

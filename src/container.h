@@ -35,7 +35,8 @@ typedef struct ContainerItem {
     #define CI0_SKIP         ((uint8_t)0x03) // instruct str_split to skip this item - Seg side only, needs to be removed with container_remove_skip
     #define CI0_DIGIT        ((uint8_t)0x04) // item is terminated by first digit (the digit will belong to the next item)
     #define CI0_VAR_0_PAD    ((uint8_t)0x05) // variable width, but has at least sep[1] digits, zero padded if needed (introduced 15.0.75)
-    
+    #define CI0_LAST_MATCH   ((uint8_t)0x06) // item is terminated by LAST occurance of seperator of sep[1] in the string (introduced 15.0.80)
+
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags
     #define CI0_ITEM_HAS_FLAG(item) ((uint8_t)(item)->separator[0] & 0x80)
@@ -50,7 +51,8 @@ typedef struct ContainerItem {
     #define CI1_ITEM_CB      ((uint8_t)0x01) // item callback - called after item reconstruction
     #define CI1_ITEM_PRIVATE ((uint8_t)0x02) // flag interpreted by the context logic, ignored by container code
     #define CI1_LOOKBACK     ((uint8_t)0x03) // item requires lookback initialize / insertion
-    
+    #define CI1_LAST_SPECIAL CI1_LOOKBACK
+     
     uint8_t separator[2];                    // 2 byte separator reconstructed after the item (or flags)
     
     TranslatorId translator;                 // instructions how to translate this item, if this Container is reconstructed translating from one data type to another
@@ -139,6 +141,7 @@ typedef struct { uint64_t dnum; int16_t idx; } ContainerPeekItem;
 extern void container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, ConstContainerP *con_p, bool consume);
 
 extern StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes));
+extern void con_verify_items (ConstContainerP con, rom con_name);
 
 CONTAINER_FILTER_FUNC (default_piz_filter);
 

@@ -8,7 +8,7 @@
 
 #include "sam_private.h"
 #include "chrom.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 static const StoreType aux_field_store_flag[256] = {
     ['c']=STORE_INT, ['C']=STORE_INT, 
@@ -175,7 +175,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_FLAG)
 {
     if (!VER(14)) sam_piz_set_buddy_v13 (vb); 
 
-    SamFlags flag = { .value = history64(SAM_FLAG, VB_SAM->mate_line_i) }; 
+    SamFlags flag = { .value = piz_get_history(CTX(SAM_FLAG), VB_SAM->mate_line_i) }; 
 
     // flip fields to opposite mate
     SWAPbits (flag.unmapped, flag.next_unmapped);
@@ -562,7 +562,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_HI)
     int64_t last_hi = ctx->last_value.i;
 
     new_value->i = (ctx_encountered_in_line (VB, OPTION_NH_i) && last_nh == 0)            ? 0 // NH=0 -> HI=0
-                 : (!vb->line_i || last_hi == *B(int64_t, nh_ctx->history, vb->line_i-1)) ? 1 // first in new SA Group
+                 : (!vb->line_i || last_hi == piz_get_history (nh_ctx, vb->line_i-1)) ? 1 // first in new SA Group
                  :                                                                          last_hi + 1; // next HI in current SA Group
 
     if (reconstruct)
@@ -1166,7 +1166,7 @@ static void sam_seg_initialize_for_float (VBlockSAMP vb, ContextP ctx)
     if (IS_BAM_ZIP)
         seg_special0 (VB, SAM_SPECIAL_FLOAT, ctx, 0); 
 
-    buf_alloc (VB, &ctx->local, 0, 16384, float, 0, CTX_TAG_LOCAL); // initial allocation, so we can use buf_append_one
+    buf_alloc (VB, &ctx->local, 0, 16384, float, 0, C_LOCAL); // initial allocation, so we can use buf_append_one
 } 
 
 static inline SmallContainerP sam_seg_array_one_ctx_get_con (VBlockSAMP vb, ContextP con_ctx, uint8_t type, bool is_bam,
@@ -1247,7 +1247,7 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
     bool is_int = (elem_ctx->flags.store == STORE_INT);
     if (is_int || is_bam) {
         elem_ctx->local.len *= width; // len will be calculated in bytes in this function
-        buf_alloc (vb, &elem_ctx->local, repeats * width, repeats * width * 256, char, CTX_GROWTH, CTX_TAG_LOCAL); // careful not * line.len - we can get OOM
+        buf_alloc (vb, &elem_ctx->local, repeats * width, repeats * width * 256, char, CTX_GROWTH, C_LOCAL); // careful not * line.len - we can get OOM
     }
      
     ASSERT (is_int || (type=='f' && !callback), "%s: Type not supported for SAM/BAM arrays '%c'(%u) in ctx=%s",
@@ -1397,7 +1397,7 @@ void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, ContextP con_ct
         for (uint32_t i=0; i < n_subctxs; i++) {
             ContextP item_ctx = ctx_get_ctx (vb, con->items[i+1].dict_id);
             
-            buf_insert_do (VB, &item_ctx->local, width, item_ctx->local.len, &array[i * width], 1, CTX_TAG_LOCAL, __FUNCLINE);
+            buf_insert_do (VB, &item_ctx->local, width, item_ctx->local.len, &array[i * width], 1, C_LOCAL, __FUNCLINE);
             
             item_ctx->txt_len += width;
         }
@@ -1409,7 +1409,7 @@ void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, ContextP con_ct
             ContextP item_ctx = ctx_get_ctx (vb, con->items[i+1].dict_id);
             
             // note: &items[i] contains the data because in little endian LSB comes first. TO DO: verify that value fits in width
-            buf_insert_do (VB, &item_ctx->local, width, item_ctx->local.len, &items[i], 1, CTX_TAG_LOCAL, __FUNCLINE);
+            buf_insert_do (VB, &item_ctx->local, width, item_ctx->local.len, &items[i], 1, C_LOCAL, __FUNCLINE);
         }
 
         con_ctx->txt_len += array_len; // not ideal, but saves us the need to measure lengths of the items

@@ -43,17 +43,17 @@ libdeflate_gzip_decompress_ex(struct libdeflate_decompressor *d,
 	enum libdeflate_result result;
 
 	if (in_nbytes < GZIP_MIN_OVERHEAD)
-		return LIBDEFLATE_BAD_DATA;
+		return LIBDEFLATE_INSUFFICIENT_DATA; // divon
 
 	/* ID1 */
 	if (*in_next++ != GZIP_ID1)
-		return LIBDEFLATE_BAD_DATA;
+		return LIBDEFLATE_NOT_GZIP; // divon
 	/* ID2 */
 	if (*in_next++ != GZIP_ID2)
-		return LIBDEFLATE_BAD_DATA;
+		return LIBDEFLATE_NOT_GZIP; // divon
 	/* CM */
 	if (*in_next++ != GZIP_CM_DEFLATE)
-		return LIBDEFLATE_BAD_DATA;
+		return LIBDEFLATE_NOT_GZIP; // divon
 	flg = *in_next++;
 	/* MTIME */
 	in_next += 4;
@@ -118,12 +118,12 @@ libdeflate_gzip_decompress_ex(struct libdeflate_decompressor *d,
 	/* CRC32 */
 	if (libdeflate_crc32(0, out, actual_out_nbytes) !=
 	    get_unaligned_le32(in_next))
-		return LIBDEFLATE_BAD_DATA;
+		return LIBDEFLATE_BAD_CRC; // divon
 	in_next += 4;
 
 	/* ISIZE */
 	if ((u32)actual_out_nbytes != get_unaligned_le32(in_next))
-		return LIBDEFLATE_BAD_DATA;
+		return LIBDEFLATE_WRONG_ISIZE; // divon
 	in_next += 4;
 
 	if (actual_in_nbytes_ret)

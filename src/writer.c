@@ -42,7 +42,6 @@ rom recon_plan_flavors[8] = PLAN_FLAVOR_NAMES;
 
 #define TXTINFO(comp_i) ({ ASSERTINRANGE ((comp_i), 0, txt_header_info.len); B(VbInfo, txt_header_info, (comp_i)); })
 
-// #define vb_info         z_file->vb_info[0] // we use only [0] on the PIZ side
 #define txt_header_info z_file->txt_header_info
 
 VBlockP wvb = NULL;
@@ -916,7 +915,7 @@ void writer_create_plan (CompIType comp_i)
 
 #define BGZF_FLUSH_THRESHOLD  (32 MB) 
 #define PLAIN_FLUSH_THRESHOLD (4 MB) 
-#define FLUSH_THRESHOLD (TXT_IS_BGZF ? BGZF_FLUSH_THRESHOLD : PLAIN_FLUSH_THRESHOLD)
+#define FLUSH_THRESHOLD (TXT_IS(BGZF) ? BGZF_FLUSH_THRESHOLD : PLAIN_FLUSH_THRESHOLD)
 
 static void writer_write (BufferP buf, uint64_t txt_data_len)
 {
@@ -936,7 +935,7 @@ uint32_t writer_get_max_bgzf_threads (void)
     return MIN_(global_max_threads, 10); // note: we don't need more threads than the ratio between BGZF compression speed and disk write speed
 }
 
-// if bgzf pool is full, wait for one thread to complete
+// writer thread: if bgzf pool is full, wait for one thread to complete
 static bool writer_output_one_processed_bgzf (Dispatcher dispatcher, bool blocking)
 {
     VBlockP bgzf_vb = dispatcher_get_processed_vb (dispatcher, NULL, blocking);
@@ -1185,7 +1184,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
     threads_set_writer_thread();
 
     // if we need to BGZF-compress, we will dispatch the compression workload to compute threads
-    Dispatcher dispatcher = (!flag.no_writer && TXT_IS_BGZF && txt_file->mgzip_flags.library != BGZF_EXTERNAL_LIB) ? 
+    Dispatcher dispatcher = (!flag.no_writer && TXT_IS(BGZF) && txt_file->mgzip_flags.library != BGZF_EXTERNAL_LIB) ? 
         dispatcher_init ("bgzf", NULL, POOL_BGZF, writer_get_max_bgzf_threads(), 0, false, false, NULL, 0, NULL) : NULL;
 
     // normally, we digest in the compute thread but in case gencomp lines can be inserted into the vb we digest here.

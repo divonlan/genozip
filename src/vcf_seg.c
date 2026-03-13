@@ -187,13 +187,13 @@ void vcf_seg_initialize (VBlockP vb_)
     // counts sections
     CTX(VCF_CHROM)-> counts_section = true;
 
-    buf_alloc_exact (vb, CTX(VCF_FORMAT)->sf_i, MAX_DICTS, uint16_t, "contexts->sf_i");
+    buf_alloc_exact (vb, CTX(VCF_FORMAT)->sf_i, MAX_DICTS, uint16_t, C_"sf_i");
     
     // room for already existing FORMATs from previous VBs
     ContextP samples_ctx = CTX(VCF_SAMPLES);
     uint32_t n_fmts = CTX(VCF_FORMAT)->ol_nodes.len;
-    buf_alloc_exact_zero (vb, samples_ctx->format_mapper_buf, n_fmts, Container, "contexts->format_mapper_buf");
-    buf_alloc_exact_zero (vb, samples_ctx->format_contexts, n_fmts, ContextPBlock, "contexts->format_contexts");
+    buf_alloc_exact_zero (vb, samples_ctx->format_mapper_buf, n_fmts, Container, C_"format_mapper_buf");
+    buf_alloc_exact_zero (vb, samples_ctx->format_contexts, n_fmts, ContextPBlock, C_"format_contexts");
 
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_RGQ) {
         seg_mux_init (vb, VCF_QUAL, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, QUAL);
@@ -364,10 +364,10 @@ void vcf_segconf_finalize (VBlockP vb_)
         vcf_segconf_finalize_optimizations (vb);
 
     // decide which Floats should be segged to local (note: child ctxs inherit the header_info from their parent during consolidate)
-    for_ctx_that (ctx->header_info.vcf.Type == VCF_Float && !ctx->is_stats_parent) 
-        if (ctx->nodes.len32 > ctx->b250.count / 2) {
-            ContextP parent_ctx = ctx->st_did_i == DID_NONE ? ctx : CTX(ctx->st_did_i);
-            if (parent_ctx->did_i < z_file->num_contexts)
+    for_vctx_that (vctx->header_info.vcf.Type == VCF_Float && !vctx->is_stats_parent) 
+        if (vctx->nodes.len32 > vctx->b250.count / 2) {
+            ContextP parent_ctx = vctx->st_did_i == DID_NONE ? vctx : CTX(vctx->st_did_i);
+            if (parent_ctx->did_i < z_file->ca.num_contexts)
                 ZCTX(parent_ctx->did_i)->seg_to_local = STORE_FLOAT; // note: zctx expected to exist, as it was created from the header
 #ifdef DEBUG
             else 

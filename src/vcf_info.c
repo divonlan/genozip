@@ -8,7 +8,7 @@
 
 #include "vcf_private.h"
 #include "stats.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 STRl(copy_VCF_POS_snip, 16);
 STRl(copy_VCF_ID_snip, 16);

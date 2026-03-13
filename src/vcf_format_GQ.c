@@ -8,7 +8,7 @@
 
 #include "vcf_private.h"
 #include "base64.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 
 void vcf_segconf_finalize_GQ (VBlockVCFP vb)
 {

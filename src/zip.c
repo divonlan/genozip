@@ -32,7 +32,7 @@
 #include "user_message.h"
 #include "zriter.h"
 #include "b250.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "huffman.h"
 
 static void zip_display_compression_ratio (Digest md5)
@@ -137,28 +137,28 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
 {
     START_TIMER;
 
-    for_ctx {
-        if (ctx->local.len || ctx->local_always ||  // local is not free to accept our singletons
-            ctx->no_stons  ||  // don't change to LT_SINGLETON if we were explicitly forbidden having singletons
-            ctx->ltype == LT_SUPP || // local data might be created by codec (later)
-            (VB_DT(VCF) && dict_id_is_vcf_format_sf (ctx->dict_id))) // this doesn't work for FORMAT fields
+    for_vctx {
+        if (vctx->local.len || vctx->local_always ||  // local is not free to accept our singletons
+            vctx->no_stons  ||  // don't change to LT_SINGLETON if we were explicitly forbidden having singletons
+            vctx->ltype == LT_SUPP || // local data might be created by codec (later)
+            (VB_DT(VCF) && dict_id_is_vcf_format_sf (vctx->dict_id))) // this doesn't work for FORMAT fields
             continue;
             
         // reset ltype to LT_SINGLETON so that we can use local for singletons (either here or in ctx_commit_node - subject to conditions).
         // note: ltype was possibly assigned a different value in *_seg_initialize, but then local not utilized.
-        ctx->ltype = LT_SINGLETON; 
+        vctx->ltype = LT_SINGLETON; 
 
-        if (!ctx->nodes.len                    || // no new words in this VB 
-            ctx->nodes.len != ctx->b250.count  || // not all new words in this VB are singletons
-            ctx->nodes.len < vb->lines.len / 5 || // don't bother if this is a rare field less than 20% of the lines
-            !ctx_can_have_singletons (ctx)     || // this context is not allowed to have singletons
-            ctx->b250.count == 1)                 // only one word - better to handle with all_the_same rather than singleton
+        if (!vctx->nodes.len                    || // no new words in this VB 
+            vctx->nodes.len != vctx->b250.count  || // not all new words in this VB are singletons
+            vctx->nodes.len < vb->lines.len / 5 || // don't bother if this is a rare field less than 20% of the lines
+            !ctx_can_have_singletons (vctx)     || // this context is not allowed to have singletons
+            vctx->b250.count == 1)                 // only one word - better to handle with all_the_same rather than singleton
             continue;
         
-        buf_free (ctx->local); // possibly local was allocated, but then not utilized
-        buf_move (vb, ctx->local, CTX_TAG_LOCAL, ctx->dict);
-        buf_free (ctx->nodes);
-        buf_free (ctx->b250);
+        buf_free (vctx->local); // possibly local was allocated, but then not utilized
+        buf_move (vb, vctx->local, C_LOCAL, vctx->dict);
+        buf_free (vctx->nodes);
+        buf_free (vctx->b250);
     }
 
     COPY_TIMER (zip_handle_unique_words_ctxs);
@@ -168,7 +168,7 @@ static bool zip_generate_local (VBlockP vb, ContextP ctx)
 {
     START_TIMER;
     
-    ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->local containing data", ctx->tag_name, (unsigned)(ctx - vb->contexts));
+    ASSERT (ctx->dict_id.num, "tag_name=%s did_i=%u: ctx->dict_id=0 despite ctx->local containing data", ctx->tag_name, (unsigned)(ctx - vb->ca.contexts));
 
     ctx->ltype = dyn_int_get_ltype (ctx);
 
@@ -250,23 +250,23 @@ static void zip_compress_all_contexts_b250 (VBlockP vb)
     threads_log_by_vb (vb, "zip", "START COMPRESSING B250", 0);
     
     // arrays of all contexts in this VB
-    ContextP ctxs[vb->num_contexts];
-    for (Did did_i=0; did_i < vb->num_contexts; did_i++) ctxs[did_i] = CTX(did_i);
+    ContextP ctxs[vb->ca.num_contexts];
+    for_ctx (&vb->ca) ctxs[did_i] = ctx;
 
         // in each iteration, pick a context at random and remove it from the list 
-    for (unsigned i=0; i < vb->num_contexts; i++) {
+    for (unsigned i=0; i < vb->ca.num_contexts; i++) {
  
-        int ctx_i = global_max_threads > 1 ? ((clock()+1) * (vb->vblock_i+1)) % (vb->num_contexts - i) : 0; // force predictability with single thread 
+        int ctx_i = global_max_threads > 1 ? ((clock()+1) * (vb->vblock_i+1)) % (vb->ca.num_contexts - i) : 0; // force predictability with single thread 
         
         ContextP ctx = ctxs[ctx_i];
-        memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->num_contexts - i - ctx_i - 1) * sizeof (ContextP));
+        memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->ca.num_contexts - i - ctx_i - 1) * sizeof (ContextP));
 
         if (!ctx->b250.len || ctx->b250_compressed) continue;
 
         if (!b250_zip_generate (vb, ctx))  // generate the final b250 buffers from their intermediate form
             continue; // dropped
 
-        if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_b250_dict_id.num) 
+        if (flag_is_δ (dump_b250, ctx->dict_id)) 
             ctx_dump_binary (vb, ctx, false);
 
         if (flag.show_time) codec_show_time (vb, "B250", ctx->tag_name, ctx->bcodec);
@@ -297,10 +297,10 @@ static void zip_compress_all_contexts_local (VBlockP vb)
     for (int dep_level=DEP_L0 ; dep_level < NUM_LOCAL_DEPENDENCY_LEVELS; dep_level++) {
 
         // initialize list of contexts at this dependency level that need compression
-        ContextP ctxs[vb->num_contexts];
+        ContextP ctxs[vb->ca.num_contexts];
         unsigned num_ctxs=0;
-        for_ctx_that ((ctx->local.len || ctx->local_always) && ctx->local_dep == dep_level && !ctx->local_compressed)
-            ctxs[num_ctxs++] = ctx;
+        for_vctx_that ((vctx->local.len || vctx->local_always) && vctx->local_dep == dep_level && !vctx->local_compressed)
+            ctxs[num_ctxs++] = vctx;
 
         while (num_ctxs) {
             // pick a context at "random" and remove it from the list (not random if single thread)
@@ -314,10 +314,10 @@ static void zip_compress_all_contexts_local (VBlockP vb)
             if (!zip_generate_local (vb, ctx))
                 continue; // section dropped
 
-            if (dict_id_typeless (ctx->dict_id).num == flag.show_singletons_dict_id.num) 
+            if (flag_is_δ (show_singletons, ctx->dict_id))
                 dict_io_show_singletons (vb, ctx);
 
-            if (dict_id_typeless (ctx->dict_id).num == flag.dump_one_local_dict_id.num) 
+            if (flag_is_δ (dump_local, ctx->dict_id)) 
                 ctx_dump_binary (vb, ctx, true);
 
             if (flag.show_time) codec_show_time (vb, "LOCAL", ctx->tag_name, ctx->lcodec);
@@ -377,6 +377,8 @@ static void zip_update_txt_counters (VBlockP vb)
 
     z_file->num_components = MAX_(z_file->num_components, vb->comp_i+1);
 
+    txtfile_update_gz_digests (vb);
+    
     // Note: no data-type-specific code here, instead, put in *_zip_after_compute
 }
 
@@ -673,11 +675,11 @@ static void zip_complete_processing_one_vb (VBlockP vb)
 
     // destroy some buffers of "first generation" contexts (those that didn't clone any nodes)  
     if (vb->vblock_i < 100) // don't bother checking for high vb_i 
-        for_ctx_that (ctx->nodes.len32 && !ctx->ol_nodes.len32) {
-            buf_destroy (ctx->b250);       // 1st generation likely to have excessive length due to being all-new 4B nodes
-            buf_destroy (ctx->local_hash); // 1st generation allocated based on wild guess
-            buf_destroy (ctx->nodes);      // 1st generation likely to have a lot more new nodes (+dict) that subsequent generations
-            buf_destroy (ctx->dict);       
+        for_vctx_that (vctx->nodes.len32 && !vctx->ol_nodes.len32) {
+            buf_destroy (vctx->b250);       // 1st generation likely to have excessive length due to being all-new 4B nodes
+            buf_destroy (vctx->local_hash); // 1st generation allocated based on wild guess
+            buf_destroy (vctx->nodes);      // 1st generation likely to have a lot more new nodes (+dict) that subsequent generations
+            buf_destroy (vctx->dict);       
         }
 
     dispatcher_increment_progress ("z_write", PROGRESS_UNIT); // writing done.
@@ -730,7 +732,7 @@ void zip_one_file (rom txt_basename,
     // initalize pre-defined ctxs before segconf
     // note: generic_is_header_done as well as segconf may change the data type and re-initialize the contexts
     if (z_file->num_txts_so_far == 0)  // first component of this z_file 
-        ctx_initialize_predefined_ctxs (z_file->contexts, txt_file->data_type, z_file->d2d_map, &z_file->num_contexts);
+        ctx_initialize_predefined_ctxs (txt_file->data_type);
 
     segconf_zip_initialize(); // before txtheader 
 
@@ -783,7 +785,7 @@ void zip_one_file (rom txt_basename,
 
     // verify that the entire data is either decompressed or truncated away (doesn't work for external decompressors)
     ASSERT (txt_file->disk_gz_uncomp_or_trunc == txt_file->disk_so_far || !TXT_IS_GZIP || flag_has_head,
-            "Failed to process all source data: read %s bytes from disk, but decompressed %sonly %s bytes. src_codec=%s",
+            "Failed to process all gz data: read %s bytes from disk, but uncompressed %sonly %s bytes. src_codec=%s",
             str_int_commas (txt_file->disk_so_far).s, flag.truncate ? "or truncated " : "", str_int_commas (txt_file->disk_gz_uncomp_or_trunc).s,
             txtfile_codec_name (z_file, flag.zip_comp_i, false).s);
     
@@ -793,7 +795,7 @@ void zip_one_file (rom txt_basename,
 
     dispatcher_increment_progress ("txt_header", txt_file->est_num_lines ? 3 : (txt_header_len * 3)); //  account for txt_header read, computed and written
 
-    // go back and update some fields in the txt header's section header and genozip header 
+    // go back and update some fields in the SEC_TXT_HEADER's section header
     if (txt_header_offset >= 0) // note: this will be -1 if we didn't write a SEC_TXT_HEADER section for any reason (e.g. SAM PRIM/DEPN, --make-reference...)
         zfile_update_txt_header_section_header (txt_header_offset);
 
@@ -801,7 +803,7 @@ void zip_one_file (rom txt_basename,
 
     // write the MGZIP section containing MGZIP block sizes, if this txt file is compressed with a MGZIP codec
     if (TXT_IS_MGZIP)
-        mgzip_compress_mgzip_section();
+        mgzip_compress_SEC_GZ_sections();
 
     // if this a non-bound file, or the last component of a bound file - write the genozip header, random access and dictionaries
 finish:   

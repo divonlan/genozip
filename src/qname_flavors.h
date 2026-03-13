@@ -344,7 +344,7 @@ static void seg_qname_mgi_new_cb (VBlockP vb, ContextP ctx, STRp(copy))
 static SmallContainer con_mgi_sap8 = {
     .repeats   = 1,
     .nitems_lo = 7,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":L"                   },  
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_LAST_MATCH, 'L'} },  
                    { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 2 } }, // lane
                    { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // row
                    { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // column
@@ -392,7 +392,7 @@ static SmallContainer con_mgi_mft = {
 static SmallContainer con_mgi_R##n = {  \
     .repeats             = 1,           \
     .nitems_lo           = 6,           \
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "L"                    }, /* Flow cell */ \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_LAST_MATCH, 'L'} }, /* Flow cell */ \
                              { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
                              { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
                              { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
@@ -405,9 +405,37 @@ CON_MGI_R(8);
 
 #define PX_mgi_R { "", "", "C", "R", "", PX_MATE_FIXED_0_PAD }
 
-// Variants of PX_mgi_R: can't use PX_mgi_R because 'L' of the ML or DL will terminate items[0]
-#define PX_mgi_R_ML { "ML", "", "C", "R", "", PX_MATE_FIXED_0_PAD } // Example: ML150009990L1C001R01100000061 
-#define PX_mgi_R_DL { "DL", "", "C", "R", "", PX_MATE_FIXED_0_PAD } // Example: DL100019990L4C005R00100001104
+// X385234729-23945L1C001R00400000195#ACTCCCCA
+#define CON_MGI_R_1bc(n)                 \
+static SmallContainer con_mgi_R##n##_1bc = {  \
+    .repeats             = 1,           \
+    .nitems_lo           = 7,           \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_LAST_MATCH, 'L'} }, /* Flow cell */ \
+                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
+                             { .dict_id = { _SAM_Q5NAME }, .separator = ""                     }, /* barcode 1 */ \
+                             { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } }/* Mate      */ \
+}
+#define PX_mgi_R_bc { "", "", "C", "R", "", "#" }
+CON_MGI_R_1bc(8);
+
+// X385234729-23945L1C001R00400000195#ACTCCCCA+GGTATGCA
+#define CON_MGI_R_2bc(n)                 \
+static SmallContainer con_mgi_R##n##_2bc = {  \
+    .repeats             = 1,           \
+    .nitems_lo           = 8,           \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_LAST_MATCH, 'L'} }, /* Flow cell */ \
+                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
+                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
+                             { .dict_id = { _SAM_Q5NAME }, .separator = "+"  },                   /* barcode 1 */ \
+                             { .dict_id = { _SAM_Q6NAME }, .separator = ""  },                    /* barcode 2 */ \
+                             { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } }/* Mate      */ \
+}
+CON_MGI_R_2bc(8);
 
 // Example: die1_A100004684C001R029011637
 #define CON_MGI_die(n)                   \
@@ -431,7 +459,7 @@ static SmallContainer con_mgi_Rgs##n = {    \
     .nitems_lo           = 8,               \
     .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"                    }, /* the two parts of the barcode are correletated and hence segged together */ \
                              { .dict_id = { _SAM_Q1NAME }, .separator = "|"                    },                 \
-                             { .dict_id = { _SAM_Q2NAME }, .separator = "L"                    }, /* Flow cell */ \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_LAST_MATCH, 'L'} }, /* Flow cell */ \
                              { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
                              { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
                              { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
@@ -449,7 +477,7 @@ static SmallContainer con_mgi_RgsFQ##n = {  \
     .nitems_lo           = 8,           \
     .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"                    }, /* the two parts of the barcode are correletated and hence segged together */ \
                              { .dict_id = { _SAM_Q1NAME }, .separator = "|"                    },                 \
-                             { .dict_id = { _SAM_Q2NAME }, .separator = "L"                    }, /* Flow cell */ \
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_LAST_MATCH, 'L'} }, /* Flow cell */ \
                              { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
                              { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
                              { .dict_id = { _SAM_Q5NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
@@ -464,7 +492,7 @@ CON_MGI_RgsFQ(8);
 static SmallContainer con_mgi_varlen = {  \
     .repeats             = 1,           \
     .nitems_lo           = 6,           \
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "L"                    }, /* Flow cell */ \
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_LAST_MATCH, 'L'} }, /* Flow cell */ \
                              { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
                              { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
                              { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
@@ -474,34 +502,15 @@ static SmallContainer con_mgi_varlen = {  \
 
 #define PX_mgi_varlen { "", "", "C", "R" }
 
-//--------------------------------------------------------------------------------------------------------------
-// Same as CON_MGI_R, but the first separator is two L
-//  DP8400010271TLL1C005R0511863479
-
-#define CON_MGI_LL(n) \
-static SmallContainer con_mgi_LL##n = {  \
-    .repeats             = 1,            \
-    .nitems_lo           = 6,            \
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { 'L', 'L'           } }, /* Flow cell */ \
-                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } }, /* Lane      */ \
-                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Column    */ \
-                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, /* Row       */ \
-                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, n } }, /* Tile      */ \
-                             { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } }/* Mate      */ \
-}
-CON_MGI_LL(7); // only encountered with 7 so far
-
-#define PX_mgi_LL PX_mgi_R
-
 //--------------------------------------------------------------------------------------------------------------------
-// MGI_CL format: CL, FlowCellSerialNumber[9], L, Lane[1], C, Column[3], R, Row[3], _, variable-length number
+// QF_MGI__varlen format: FlowCellSerialNumber[9], L, Lane[1], C, Column[3], R, Row[3], _, variable-length number
 //  CL100025298L1C002R050_244547 reported by https://en.wikipedia.org/wiki/File:BGI_seq_platform_read_name_description.png
 // @CL100072652L2C001R001_12/1 for FASTQ reported by https://www.biostars.org/p/395715/
 //--------------------------------------------------------------------------------------------------------------------
-static SmallContainer con_mgi_CL = {
+static SmallContainer con_mgi__varlen = {
     .repeats             = 1,
     .nitems_lo           = 6,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = "L" },                     /* Flow cell */
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_LAST_MATCH, 'L'} },                     /* Flow cell */
                              { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 1 } },  /* Lane      */
                              { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  /* Column    */
                              { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } },  /* Row       */
@@ -509,7 +518,7 @@ static SmallContainer con_mgi_CL = {
                              { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } } /* Mate      */
 };
 
-#define PX_mgi_CL { "CL", "", "C", "R", "_" } // "CL" is a prefix, and the 2nd L is seprator 
+#define PX_mgi__varlen { "", "", "C", "R", "_" } 
 
 // ULTIMA_1 format
 // Example: 004733_1-X0003-1345904491
@@ -1182,25 +1191,28 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_MGI_NEW8,    "MGI-NEW8",      { "MGI2000:001:V300053419:2:003:00100001039:00100001039" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_new8,       val_mgi_new,    0,   6,  {-1},               {1,3,4,5,6,7,-1},{4,5,6,-1},        {-1},           0,  5,6,   -1,-1, -1, -1, 7,  8,  0,  PX_mgi_new        }, // 15.0.51 
     {},  { QF_MGI_SAP8,    "MGI-SAP8",      { "SOME:2:PREFIX:L01:R001C012:0000:8199" },          
-                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_sap8,       no_validate,    0,   7,  {-1},               {1,2,3,4,5,-1}, {2,3,4,5,-1},       {-1},           0,  4,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_mgi_sap8       }, // 15.0.70
+                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_sap8,       no_validate,    0,   6,  {-1},               {1,2,3,4,5,-1}, {2,3,4,5,-1},       {-1},           0,  4,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_mgi_sap8       }, // 15.0.70
     {},  { QF_MGI_MFT,     "MGI-MFT",       { "M:0:FT100099999:1:C001R001:0:1220" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_mft,        no_validate,    0,   8,  {3,6,7,-1},         {4,5,-1},       {4,5,6,7,-1},       {-1},           0,  6,-1,  -1,-1, -1, -1, -1, -1, 0,  PX_mgi_mft        }, // 15.0.76
-    {},  { QF_MGI_varlen,  "MGI-varlen",    { "8A_V100004684L3C001R029311637", "V300046476L1C001R00110001719" },          
+    {},  { QF_MGI_varlen,  "MGI-varlen",    { "8A_V100004684L3C001R029311637", "DP8400010271TLL1C005R0511863479" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_varlen,     no_validate,    0,   3,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_varlen     },
-    {},  { QF_MGI_r6,      "MGI-R6",        { "8A_V100004684L3C001R029011637", "V300003413L4C001R016000000" },          
+    {},  { QF_MGI__varlen, "MGI-_varlen",   { "CL100025298L1C002R050_244547", "CL100072652L2C001R001_12" },           
+                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi__varlen,    no_validate,    0,   4,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi__varlen    }, 
+    {},  { QF_MGI_R6,      "MGI-R6",        { "8A_V100004684L3C001R029011637", "V300003413L4C001R016000000" },          
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R6,         no_validate,    0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R          },
     {},  { QF_MGI_die6,    "MGI-die6",      { "die1_A100004684C001R029011637" },          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_die6,       no_validate,    0,   6,  {-1},               {0,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_die        }, // 15.0.67
-    {},  { QF_MGI_r7,      "MGI-R7",        { "V300017009_8AL2C001R0030001805", "E100001117L1C001R0030000000" },         
+    {},  { QF_MGI_R7,      "MGI-R7",        { "V300017009_8AL2C001R0030001805", "E100001117L1C001R0030000000" },         
                                                                                           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R7,         no_validate,    0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R          },
-    {},  { QF_MGI_rgs8FQ,  "MGI-Rgs8FQ",    { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074" },         // must be before QF_MGI_r8
+    {},  { QF_MGI_Rgs8FQ,  "MGI-Rgs8FQ",    { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074" },         // must be before QF_MGI_R8
                                                                                           TECH_MGI,     TECH_NCBI,    QNAME1, &con_mgi_RgsFQ8,     no_validate,    0,   5,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_RgsFQ      },
-         { QF_MGI_rgs8,    "MGI-Rgs8",      { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074|2" },       
+         { QF_MGI_Rgs8,    "MGI-Rgs8",      { "CGGTCT-AACCT|ab|E200003777L1C001R00100888074|2" },       
                                                                                           TECH_MGI,     TECH_NCBI,    QSAM,   &con_mgi_Rgs8,       no_validate,    '|', 6,  {-1},               {3,4,5,6,-1},   {4,5,6,-1},         {-1},           0,  6,5,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_Rgs,       }, 
-    {},  { QF_MGI_r8,      "MGI-R8",        { "V300046476L1C001R00100001719" },           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8,         no_validate,    0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R          },
-    {},  { QF_MGI_ml,      "MGI-ML",        { "ML150009990L1C001R01100000061" },          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8,         no_validate,    0,   5,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R_ML       }, // 15.0.76
-    {},  { QF_MGI_dl,      "MGI-DL",        { "DL100019990L4C005R00100001104" },          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8,         no_validate,    0,   5,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R_DL       }, // 15.0.76
-    {},  { QF_MGI_ll7,     "MGI-LL7",       { "DP8400010271TLL1C005R0511863479" },        TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_LL7,        no_validate,    0,   4,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_LL         },
-    {},  { QF_MGI_cl,      "MGI-CL",        { "CL100025298L1C002R050_244547" },           TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_CL,         no_validate,    0,   6,  {4,-1},             {1,2,3,-1},     {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_CL         }, 
+    {},  { QF_MGI_R8,      "MGI-R8",        { "V300046476L1C001R00100001719", "ML150009990L1C001R01100000061" },           
+                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8,         no_validate,    0,   3,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R          },
+    {},  { QF_MGI_R8_2bc,  "MGI-R8_2bc",    { "X385234729-23945L1C001R00400000195#ACTCCCCA+GGTATGCA" }, // must be before QF_MGI_R8_1bc 
+                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8_2bc,     no_validate,    0,   5,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R_bc       }, // 15.0.80
+    {},  { QF_MGI_R8_1bc,  "MGI-R8_1bc",    { "X385234729-23945L1C001R00400000195#ACTCCCCA" },           
+                                                                                          TECH_MGI,     TECH_NCBI,    QANY,   &con_mgi_R8_1bc,     no_validate,    0,   4,  {-1},               {1,2,3,4,-1},   {2,3,4,-1},         {-1},           0,  4,3,   -1,-1, -1, -1, -1, -1, 0,  PX_mgi_R_bc       }, // 15.0.80
     {},  { QF_ULTIMA_a,    "Ultima-a",      { "012345_1-X0003-0072646116" },              TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_a,       no_validate,    0,   3,  {1,-1},             {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, -1, -1, -1, 25, PX_ULTIMA_A       },
     {},  { QF_ULTIMA_a_bc, "Ultima-a_bc",   { "012345_1-X0003-0072646116_TCGTCACTCGAAAACT" },         
                                                                                           TECH_ULTIMA,  TECH_NCBI,    QANY,   &con_ultima_a_bc,    no_validate,    '_', 4,  {1,-1},             {3,-1},         {1,3,-1},           {-1},           0,  -1,-1, -1,-1, -1, 4,  -1, -1, 0,  PX_ULTIMA_A_BC    },

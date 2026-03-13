@@ -19,7 +19,7 @@
 #include "mgzip.h"
 #include "tip.h"
 #include "zfile.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "sorter.h"
 
 SegConf segconf = {}; // system-wide global
@@ -163,7 +163,7 @@ void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
     else { 
         // count number of contexts used
         if (vb) // NULL if --skip-segconf
-            for_ctx_that (ctx->b250.len32 || ctx->local.len32)
+            for_vctx_that (vctx->b250.len32 || vctx->local.len32)
                 num_used_contexts++;
 
         uint64_t vcf_samples = TXT_DT(VCF) ? vcf_header_get_num_samples() : 0;
@@ -288,8 +288,8 @@ static bool segconf_get_zip_txt_modified (bool provisional)
     if (provisional)
         has_optimize = flag.optimize; // if true, we still don't know if we are really going to optimize
 
-    else
-        for (Did did_i=0; did_i < z_file->num_contexts; did_i++)
+    else 
+        for (Did did_i=0; did_i < z_file->ca.num_contexts; did_i++)
             if (segconf.optimize[did_i]) {
                 has_optimize = true;
                 break;
@@ -467,7 +467,7 @@ void segconf_calculate (void)
     vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
 
     // add to all contexts discovered in segconf to z_file->contexts
-    for (Did did_i = z_file->num_contexts; did_i < vb->num_contexts; did_i++) {
+    for (Did did_i = z_file->ca.num_contexts; did_i < vb->ca.num_contexts; did_i++) {
         ContextP zctx = ctx_add_new_zf_ctx_at_init (CTX(did_i)->tag_name, MAX_TAG_LEN-1, CTX(did_i)->dict_id);
         
         ASSERT (zctx, "failed to create zctx for \"%.*s\", perhaps because it exists. did_i=%u", 
@@ -482,9 +482,12 @@ void segconf_calculate (void)
     // finalize flag.zip_txt_modified after finalizing optimizations
     if (flag.optimize) {
         segconf_finalize_optimize(); // filter fields to be optimized based on positive or negative flags
-        segconf.zip_txt_modified |= segconf_get_zip_txt_modified (false); // note: might be already marked as modified if truncated
+        segconf.zip_txt_modified |= segconf_get_zip_txt_modified (false); // update: might be already marked as modified in segconf_zip_initialize or if truncated
     }
-
+ 
+    if (segconf.zip_txt_modified) // by any of: --optimize, --add-line-numbers, --add-seq, --head, --biopsy-line
+        mgzip_set_is_exactable (txt_file, false, "data-modifying command line options");
+    
     // true if txt_file->num_lines need to be counted at zip_init_vb instead of zip_update_txt_counters, 
     // requiring BGZF-uncompression of the VBs by the main thread instead of compute thread
     flag.zip_lines_counted_at_init_vb = (TXT_DT(FASTQ) && segconf.optimize[FASTQ_QNAME])
@@ -519,16 +522,23 @@ void segconf_calculate (void)
     if (txt_file->discover_during_segconf) {
         segconf_discover_fastq_gz();
 
-        // note: this warning won't trigger for EMVL bc first gz block is isize=0, and segconf doesn't reach the end of the gz block
-        WARN_IF (flag.vblock && TXT_IS_VB_SIZE_BY_MGZIP && segconf.vb_size < txt_file->max_mgzip_isize, 
-                 "For performance, vblocks might be larger than requested with %s. To override this, use --no-bgzf", OT("vblock", "B"));
+        // if size is too small for discovered mgzip, we adjust size. but not if user requested size expicitly (system will restart with --no-bgzf in this case)
+        if (!flag.vblock)
+            txtfile_enforce_vb_large_enough_for_mgzip (segconf.vb_size, RESIZE_IF_NOT);
+              
+        // If this is one of the codecs for which we use one VB per block, flag.vblock ignored
+        if (flag.vblock && TXT_IS_VB_SIZE_BY_MGZIP) {
+            WARN ("%s option is ignored, because this file is read from disk using the efficient %s method. " _TIP "use --no-bgzf to override this.\n", 
+                  OT("vblock", "B"), codec_name (txt_file->effective_codec));
+            flag.vblock = 0;
+        }
     }
 
     // return the data to txt_file->unconsumed_txt - squeeze it in before the passed-up data
     else {
         buf_insert (evb, txt_file->unconsumed_txt, char, 0, txt_data_copy.data, txt_data_copy.len, "txt_file->unconsumed_txt");
 
-        if (TXT_IS_BGZF) // non-FASTQ or GENERIC-cum-FASTQ
+        if (TXT_IS(BGZF)) // non-FASTQ or GENERIC-cum-FASTQ
             mgzip_return_segconf_blocks (vb); // return BGZF used by the segconf VB to the unconsumed BGZF blocks
     }
 

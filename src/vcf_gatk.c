@@ -479,7 +479,7 @@ bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP ctx, STRp(sf))
             adjustment = 0;      
             
             // snip being contructed 
-            buf_alloc (vb, &ctx->deferred_snip, 0, sf_len + 20, char, 2, "contexts->deferred_snip"); // initial value - we will increase if needed
+            buf_alloc (vb, &ctx->deferred_snip, 0, sf_len + 20, char, 2, C_DEFERRED_SNIP); // initial value - we will increase if needed
             BNXTc (ctx->deferred_snip) = SNIP_SPECIAL;
             BNXTc (ctx->deferred_snip) = VCF_SPECIAL_SF;
 
@@ -500,7 +500,7 @@ void vcf_seg_INFO_SF_one_sample (VBlockVCFP vb)
     // case: no more SF values left to compare - we ignore this sample
     while (ctx->sf.next < sf_len) {
 
-        buf_alloc (vb, &ctx->deferred_snip, 10, 0, char, 2, "contexts->deferred_snip");
+        buf_alloc (vb, &ctx->deferred_snip, 10, 0, char, 2, C_DEFERRED_SNIP);
 
         rom sf_one_value = &sf[ctx->sf.next]; 
         char *after;
@@ -548,7 +548,7 @@ static void vcf_seg_INFO_SF_seg (VBlockP vb_)
     if (CTX(INFO_SF)->sf.SF_by_GT == yes) {
         int32_t remaining_len = (int32_t)ctx->last_txt.len - (int32_t)ctx->sf.next; // -1 if all done, because we skipped a non-existing comma
         if (remaining_len > 0) {
-            buf_add_more (VB, &ctx->deferred_snip, &sf[ctx->sf.next], remaining_len, "contexts->deferred_snip");
+            buf_add_more (VB, &ctx->deferred_snip, &sf[ctx->sf.next], remaining_len, C_DEFERRED_SNIP);
             BNXTc (ctx->deferred_snip) = ','; // buf_add_more allocates one character extra
         }
 
@@ -574,11 +574,11 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_INFO_SF)
             adjustment = sample_i = snip_i = 0;
 
             // temporary place for SF
-            buf_alloc (vb, &ctx->insertion, 0, 5 * vcf_num_samples, char, 1, "contexts->insertion"); // initial estimate, we may further grow it later
+            buf_alloc (vb, &ctx->insertion, 0, 5 * vcf_num_samples, char, 1, C_"insertion"); // initial estimate, we may further grow it later
             ctx->insertion.len = 0;
 
             // save snip for later (note: the SNIP_SPECIAL+code are already removed)
-            buf_add_moreS (vb, &ctx->deferred_snip, snip, "contexts->deferred_snip");
+            buf_add_moreS (vb, &ctx->deferred_snip, snip, C_DEFERRED_SNIP);
 
             vcf_piz_defer (ctx);
         }
@@ -655,7 +655,7 @@ void vcf_piz_insert_INFO_SF (VBlockVCFP vb)
     // if there are some items remaining in the snip (values that don't appear in samples) - copy them
     if (snip_i < snip_len) {
         unsigned remaining_len = snip_len - snip_i - 1; // all except the final comma
-        buf_add_more ((VBlockP)vb, &ctx->insertion, &snip[snip_i], remaining_len, "contexts->insertion"); 
+        buf_add_more ((VBlockP)vb, &ctx->insertion, &snip[snip_i], remaining_len, C_"insertion"); 
     }
 
     // make room for the SF txt and copy it to its final location

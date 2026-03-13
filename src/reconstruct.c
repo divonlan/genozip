@@ -438,12 +438,12 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 {
     ASSERT (snip[snip_len] == 0, "expecting snip to be nul-terminated: %s", str_snip);
 
-    ValueType new_value = {};
+    ValueType new_value  = {};
     HasNewValue has_new_value = NO_NEW_VALUE;
-    int64_t prev_value = snip_ctx->last_value.i;
-    ContextP base_ctx = snip_ctx; // this will change if the snip refers us to another data source
+    int64_t prev_value   = snip_ctx->last_value.i;
+    ContextP base_ctx    = snip_ctx; // this will change if the snip refers us to another data source
     StoreType store_type = snip_ctx->flags.store;
-    bool store_delta = VER(12) && snip_ctx->flags.store_delta; // note: the flag was used for something else in v8
+    bool store_delta     = VER(12) && snip_ctx->flags.store_delta; // note: the flag was used for something else in v8
     
     if (flag_show_snips)
         iprintf ("%s %s[%u] %s%s%s%s%s%s\n", LN_NAME, snip_ctx->tag_name, snip_ctx->did_i, str_snip,
@@ -660,7 +660,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
                                  ReconType reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
                                  rom func)
 {
-    ASSPIZ (did_i < vb->num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u", func, did_i, vb->num_contexts);
+    ASSPIZ (did_i < vb->ca.num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u", func, did_i, vb->ca.num_contexts);
 
     decl_ctx (did_i);
 

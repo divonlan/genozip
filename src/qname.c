@@ -14,7 +14,7 @@
 #include "qname_flavors.h"
 #include "file.h"
 #include "codec.h"
-#include "zip_dyn_int.h"
+#include "dyn_int.h"
 #include "tip.h"
 
 sSTRl(copy_qname, 16);
@@ -124,6 +124,9 @@ void qname_zip_initialize (void)
                 *qfs = *(qfs+1);
                 qfs->con = *qfs->con_template;
 
+                // verify container dict_id and separators are valid
+                con_verify_items ((ContainerP)&qfs->con, qfs->name);
+
                 char item_sep = qfs->con.items[qfs->con.nitems_lo-1].separator[0];
                 ASSERT (item_sep == CI0_SKIP, "In flavor=\"%s\", expecting separator of %s to be I_AM_MATE since it is mated, but it is '%c'(%u)", 
                         qfs->name, dis_dict_id (qfs->con.items[qfs->con.nitems_lo-1].dict_id).s, item_sep, item_sep);
@@ -148,28 +151,30 @@ void qname_zip_initialize (void)
                 qfs->barcode_item2 = -1;
 
             // verify that the fields are consecutive Q*NAME contexts, and verify QmNAME requirements
-            ContextP expected_zctx = ZCTX(SAM_Q0NAME);
-            for (int item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
-                uint64_t dnum = qfs->con.items[item_i].dict_id.num;
+            if (!flag.show_flavor) { // no z_file in --show-flavor
+                ContextP expected_zctx = ZCTX(SAM_Q0NAME);
+                for (int item_i=0; item_i < qfs->con.nitems_lo; item_i++) {
+                    uint64_t dnum = qfs->con.items[item_i].dict_id.num;
 
-                // verify QmNAME requirements
-                if (dnum == _SAM_QmNAME) 
-                    ASSERT (item_i == qfs->con.nitems_lo - 1, "Item=%d QmNAME of %s is not the last item in the container", item_i, qfs->name);
+                    // verify QmNAME requirements
+                    if (dnum == _SAM_QmNAME) 
+                        ASSERT (item_i == qfs->con.nitems_lo - 1, "Item=%d QmNAME of %s is not the last item in the container", item_i, qfs->name);
 
-                // verify Q*NAME requirements
-                else { 
-                    ASSERT (dnum, "dnum=0 for item_i=%u in qfs=\"%s\"", item_i, qfs->name);
+                    // verify Q*NAME requirements
+                    else { 
+                        ASSERT (dnum, "dnum=0 for item_i=%u in qfs=\"%s\"", item_i, qfs->name);
 
-                    ASSERT (dnum == expected_zctx->dict_id.num, "Expecting item #%u of %s to be %s", item_i, qfs->name, expected_zctx->tag_name);
+                        ASSERT (dnum == expected_zctx->dict_id.num, "Expecting item #%u of %s to be %s", item_i, qfs->name, expected_zctx->tag_name);
 
-                    ASSERT (expected_zctx->did_i < SAM_Q0NAME + MAX_QNAME_ITEMS,
-                            "Unexpected dict_id=%s in container of flavor %s. Perhaps MAX_QNAME_ITEMS=%u needs updating?", 
-                            dis_dict_id(qfs->con.items[item_i].dict_id).s, qfs->name, MAX_QNAME_ITEMS);
+                        ASSERT (expected_zctx->did_i < SAM_Q0NAME + MAX_QNAME_ITEMS,
+                                "Unexpected dict_id=%s in container of flavor %s. Perhaps MAX_QNAME_ITEMS=%u needs updating?", 
+                                dis_dict_id(qfs->con.items[item_i].dict_id).s, qfs->name, MAX_QNAME_ITEMS);
 
-                    expected_zctx++;
+                        expected_zctx++;
+                    }
                 }
             }
-
+            
             // case: this QF needs a container prefix - generate it
             if (qfs->px_strs[0]) {
                 qfs->con_prefix[qfs->con_prefix_len++] = CON_PX_SEP; 
@@ -490,7 +495,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 
     for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
         QnameTestResult reason = QTR_SUCCESS;
-        if (!(reason = qname_test_flavor (STRa(qname), q, qfs, true))) {
+        if (!(reason = qname_test_flavor (STRa(qname), flag.show_flavor ? QANY : q, qfs, true))) {
 
             // case: first discovery: store discovered qname
             if (!segconf.qname_line0[q].s[0]) 
@@ -518,18 +523,23 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             if (qfs->seq_len_item != -1) 
                 segconf.seq_len_dict_id = qfs->con.items[qfs->seq_len_item].dict_id;
             
-            qname_seg_initialize (vb, q, DID_NONE); // so the rest of segconf.running can seg fast using the discovered container
+            if (!flag.show_flavor)
+                qname_seg_initialize (vb, q, DID_NONE); // so the rest of segconf.running can seg fast using the discovered container
 
             if (flag.debug_qname) 
                 iprintf ("%.*s is DISCOVERED as %s - for %s\n", STRf(qname), qfs->name, qtype_name(q));
             
+            if (flag.show_flavor)
+                printf ("%s\n", qfs->name);
+
             break;
         }
 
         else if (flag.debug_qname && reason) 
             iprintf ("%.*s is not %s flavor \"%s\". Reason: %s%s\n", 
                      STRf(qname), qtype_name(q), qfs->name, reasons[reason],
-                     (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split) ? ". " _TIP "Add --debug-split" : "");
+                     (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split && !flag.no_tip) 
+                     ? ({ flag.no_tip = true; ". " _TIP "Add --debug-split"; }) : "");
     }
 
     if (!segconf.qname_flavor[q]) {
@@ -540,7 +550,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
     }
 
     // set up dict id alias. need to do explicitly, because not predefined
-    if (segconf.qname_flavor[q] && segconf.qname_flavor[q]->barcode_item2 != -1) {
+    if (!flag.show_flavor && segconf.qname_flavor[q] && segconf.qname_flavor[q]->barcode_item2 != -1) {
         Did did_i_bc1 = did_by_q (q) + 1 + segconf.qname_flavor[q]->barcode_item;
         Did did_i_bc2 = did_by_q (q) + 1 + segconf.qname_flavor[q]->barcode_item2;
         ZCTX(did_i_bc2)->dict_did_i = did_i_bc1;
@@ -550,7 +560,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         segconf.is_pacbio_ccs = true;
                 
     DO_ONCE // unit test
-    if (flag.debug || flag.debug_qname)
+    if (!flag.show_flavor && (flag.debug || flag.debug_qname))
         for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
 
             for (int i=0; i < QFS_MAX_EXAMPLES; i++) {
@@ -562,6 +572,23 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             }
         }
 }
+
+void qname_show_flavor (void)
+{
+    ASSINP0 (flag.show_flavor, "--show-flavor expects an argument: a qname for which the flavor is requested");
+
+    qname_zip_initialize();
+    flag.quiet = true;
+
+    qname_segconf_discover_flavor (evb, QNAME1, flag.show_flavor, strlen (flag.show_flavor));
+
+    // if flavor not discovered, run again with debug printing
+    if (!segconf.qname_flavor[QNAME1]) {
+        flag.debug_qname = true;
+        qname_segconf_discover_flavor (evb, QNAME1, flag.show_flavor, strlen (flag.show_flavor));
+    }
+}
+
 
 // attempts to modify flavor to accommodate both qname of line_i==0 and current qname. return true if flavor has been modified.
 bool qname_segconf_rediscover_flavor (VBlockP vb, QType q, STRp(qname))

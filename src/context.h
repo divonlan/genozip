@@ -111,28 +111,26 @@ typedef struct {              // 8 bytes
         : (vb_node_index))
 
 #define CTX(did_i)   ({ Did my_did_i = (did_i); /* evaluate did_i only once */\
-                        ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u out of range", my_did_i); /* optimized out for constant did_i */ \
-                        (&vb->contexts[my_did_i]); })
+                        ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u ∉ [0,%u]", my_did_i, MAX_DICTS-1); /* optimized out for constant did_i */ \
+                        (&vb->ca.contexts[my_did_i]); })
 
 #define LOADED_CTX(did_i) ({ ContextP ctx=CTX(did_i); ASSISLOADED(ctx); ctx; })
 
 #define ZCTX(did_i)  ({ Did my_did_i = (did_i);\
-                        ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u out of range", my_did_i); /* optimized out for constant did_i */ \
-                        &z_file->contexts[my_did_i]; })
+                        ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u ∉ [0,%u]", my_did_i, MAX_DICTS-1); /* optimized out for constant did_i */ \
+                        &z_file->ca.contexts[my_did_i]; })
 
-#define last_int(did_i)     contexts[did_i].last_value.i
-#define last_index(did_i)   contexts[did_i].last_value.i
-#define last_float(did_i)   contexts[did_i].last_value.f
-#define last_delta(did_i)   contexts[did_i].last_delta
+#define last_int(did_i)     ca.contexts[did_i].last_value.i
+#define last_index(did_i)   ca.contexts[did_i].last_value.i
+#define last_float(did_i)   ca.contexts[did_i].last_value.f
+#define last_delta(did_i)   ca.contexts[did_i].last_delta
 #define last_txtx(vb, ctx)  Btxt ((ctx)->last_txt.index)
 static inline char *last_txt (VBlockP vb, Did did_i) { return last_txtx (vb, CTX(did_i)); }
-#define last_txt_len(did_i) contexts[did_i].last_txt.len
+#define last_txt_len(did_i) ca.contexts[did_i].last_txt.len
 
 #define set_last_txtC(ctx, value, value_len) (ctx)->last_txt = (TxtWord){ .index = BNUMtxt(value), .len = (value_len) }
 #define set_last_txt_(did_i, value, value_len) set_last_txtC(CTX(did_i), (value), (value_len))
 #define set_last_txt(did_i, value) set_last_txt_((did_i), value, value##_len)
-
-#define history64(did_i, line_i) (*B(int64_t, CTX(did_i)->history, (line_i)))
 
 static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt.index != INVALID_LAST_TXT_INDEX; }
 static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_issame_(STRa(str), STRlst_(ctx)); }
@@ -162,54 +160,55 @@ extern void ctx_reset_codec_commits (void);
 extern void ctx_segconf_set_hard_coded_lcodec (Did did_i, Codec codec);
 extern void ctx_get_z_codecs (ContextP zctx, Codec *lcodec, Codec *bcodec, uint8_t *lcodec_count, uint8_t *bcodec_count, bool *lcodec_hard_coded);
 
-extern ContextP ctx_get_unmapped_ctx (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts, DictId dict_id, STRp(tag_name));
+extern ContextP ctx_get_unmapped_ctx (ContextArrayP ca, DataType dt, DictId dict_id, STRp(tag_name));
 
 // returns did_i of dict_id if it is found in the map, or DID_NONE if not
-static inline Did get_matching_did_i_from_map (const ContextArray contexts, const Did *map, DictId dict_id)
+static inline Did get_matching_did_i_from_map (ConstContextArrayP ca, DictId dict_id)
 {
-    Did did_i = map[dict_id.map_key[0]];
-    if (did_i != DID_NONE && contexts[did_i].dict_id.num == dict_id.num) 
+    Did did_i = ca->d2d_map[dict_id.map_key[0]];
+    if (did_i != DID_NONE && ca->contexts[did_i].dict_id.num == dict_id.num) 
         return did_i;
 
-    did_i = map[ALT_KEY(dict_id)];
-    if (did_i != DID_NONE && contexts[did_i].dict_id.num == dict_id.num) 
+    did_i = ca->d2d_map[ALT_KEY(dict_id)];
+    if (did_i != DID_NONE && ca->contexts[did_i].dict_id.num == dict_id.num) 
         return did_i;
 
     return DID_NONE;
 }
 
 // inline function for quick operation typically called several billion times in a typical file and > 99.9% can be served by the inline
-#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->d2d_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id), 0, 0)
-#define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (((VBlockP)(vb))->contexts, ((VBlockP)(vb))->data_type, ((VBlockP)(vb))->d2d_map, &((VBlockP)(vb))->num_contexts, (DictId)(dict_id), (tag_name), (tag_name_len))
-static inline ContextP ctx_get_ctx_do (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts, DictId dict_id, STRp(tag_name))
+#define ctx_get_ctx(vb,dict_id) ctx_get_ctx_do (&(vb)->ca, (vb)->data_type, (DictId)(dict_id), 0, 0)
+#define ctx_get_ctx_tag(vb,dict_id,tag_name,tag_name_len) ctx_get_ctx_do (&(vb)->ca, (vb)->data_type, (DictId)(dict_id), (tag_name), (tag_name_len))
+static inline ContextP ctx_get_ctx_do (ContextArrayP ca, DataType dt, DictId dict_id, STRp(tag_name))
 {
-    Did did_i = get_matching_did_i_from_map (contexts, d2d_map, dict_id);
+    Did did_i = get_matching_did_i_from_map (ca, dict_id);
     if (did_i != DID_NONE) 
-        return &contexts[did_i];
+        return &ca->contexts[did_i];
     else    
-        return ctx_get_unmapped_ctx (contexts, dt, d2d_map, num_contexts, dict_id, STRa(tag_name));
+        return ctx_get_unmapped_ctx (ca, dt, dict_id, STRa(tag_name));
 }
 
-extern Did ctx_get_unmapped_existing_did_i (const ContextArray contexts, ConstBufferP ctx_index, Did num_contexts, DictId dict_id);
+extern void ctx_create_ctx_index (VBlockP vb, ContextArrayP ca);
+extern Did ctx_get_unmapped_existing_did_i (ConstContextArrayP ca, DictId dict_id);
 
-static inline Did ctx_get_existing_did_i_do (DictId dict_id, const ContextArray contexts, DictIdtoDidMap d2d_map, ConstBufferP ctx_index, Did num_contexts)
+static inline Did ctx_get_existing_did_i_do (DictId dict_id, ConstContextArrayP ca)
 {
-    Did did_i = get_matching_did_i_from_map (contexts, d2d_map, dict_id);
+    Did did_i = get_matching_did_i_from_map (ca, dict_id);
     if (did_i != DID_NONE)
         return did_i;
     else
-        return ctx_get_unmapped_existing_did_i (contexts, ctx_index, num_contexts, dict_id);
+        return ctx_get_unmapped_existing_did_i (ca, dict_id);
 }    
-#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do ((dict_id), (vb)->contexts, (vb)->d2d_map, ((vb)->ctx_index.len ? &(vb)->ctx_index : NULL), (vb)->num_contexts)
-#define zctx_get_existing_did_i(dict_id) ctx_get_existing_did_i_do ((dict_id), z_file->contexts, z_file->d2d_map, NULL, z_file->num_contexts)
+#define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do ((dict_id), &(vb)->ca)
+#define zctx_get_existing_did_i(dict_id)   ctx_get_existing_did_i_do ((dict_id), &z_file->ca)
 
 static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id, FUNCLINE)  // returns NULL if context doesn't exist
 {
     Did did_i = ctx_get_existing_did_i (vb, dict_id); 
-    ASSERT (IN_RANGE((int16_t)did_i, -1, vb->num_contexts), "%s:%u: ECTX: did_i=%d ∉ [-1,%d). dict_id=%s", 
-            func, code_line, did_i, vb->num_contexts, dis_dict_id (dict_id).s); 
+    ASSERT (IN_RANGE((int16_t)did_i, -1, vb->ca.num_contexts), "%s:%u: ECTX: did_i=%d ∉ [-1,%d). dict_id=%s", 
+            func, code_line, did_i, vb->ca.num_contexts, dis_dict_id (dict_id).s); 
 
-    return (did_i == DID_NONE) ? NULL : &vb->contexts[did_i]; 
+    return (did_i == DID_NONE) ? NULL : &vb->ca.contexts[did_i]; 
 }
 #define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id), __FUNCTION__, __LINE__)
 
@@ -244,7 +243,7 @@ extern WordIndex ctx_get_ol_node_index_by_snip (VBlockP vb, ContextP ctx, STRp(s
 
 extern CharIndex ctx_get_char_index_of_snip (ContextP zctx, STRp(snip), bool soft_fail); // ZIP
 
-extern void ctx_initialize_predefined_ctxs (ContextArray contexts, DataType dt, DictIdtoDidMap d2d_map, Did *num_contexts);
+extern void ctx_initialize_predefined_ctxs (DataType dt);
 extern void ctx_zip_init_promiscuous (ContextP zctx);
 extern void ctx_zip_z_data_exist (ContextP ctx);
 
@@ -255,7 +254,7 @@ extern void ctx_compress_counts (void);
 extern void ctx_read_all_subdicts (void);
 extern void ctx_compress_subdicts (void);
 extern rom ctx_get_snip_with_largest_count (Did did_i, int64_t *count);
-extern void ctx_populate_zf_ctx_from_contigs (Did dst_did_i, ConstContigPkgP ctgs);
+extern void ctx_populate_zf_ctx_from_contigs (ConstContigPkgP ctgs);
 extern WordIndex ctx_populate_zf_ctx (Did dst_did_i, STRp (snip), WordIndex ref_index);
 
 extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
@@ -363,16 +362,19 @@ extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
 extern void ctx_consolidate_statsA(VBlockP vb, Did parent, ContextP ctxs[], unsigned num_deps);
 extern void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con);
-extern ContextP buf_to_ctx (ContextArray ca, ConstBufferP buf);
 extern void ctx_show_zctx_big_consumers (FILE *out);
-
+extern void ca_init_d2d_map (ContextArrayP ca);
 extern rom dyn_type_name (DynType dyn_type);
 
-extern SORTER (sort_by_dict_id);
+#define for_ctx(ca) /* both ctx and did_i are available to user */ \
+    for (Did did_i=0; did_i < (ca)->num_contexts; did_i++) \
+        for (ContextP ctx=&(ca)->contexts[did_i]; ctx; ctx=NULL) /* single iteration */
 
-#define for_zctx for (ContextP zctx=ZCTX(0), fc_after=ZCTX(z_file->num_contexts); zctx < fc_after; zctx++) 
-#define for_vctx for (ContextP vctx=CTX(0),  fc_after=CTX(vb->num_contexts);      vctx < fc_after; vctx++) 
-#define for_ctx  for (ContextP ctx=CTX(0),   fc_after=CTX(vb->num_contexts);      ctx  < fc_after; ctx++) 
-#define for_zctx_that for (ContextP zctx=ZCTX(0), fc_after=ZCTX(z_file->num_contexts); zctx < fc_after; zctx++) if /* for each context for which the condition is true */
-#define for_vctx_that for (ContextP vctx=CTX(0),  fc_after=CTX(vb->num_contexts);      vctx < fc_after; vctx++) if 
-#define for_ctx_that  for (ContextP ctx=CTX(0),   fc_after=CTX(vb->num_contexts);      ctx  < fc_after; ctx++)  if 
+#define for_zctx for (ContextP zctx=z_file->ca.contexts, fc_after=&z_file->ca.contexts[z_file->ca.num_contexts]; zctx < fc_after; zctx++) 
+#define for_vctx for (ContextP vctx=vb->ca.contexts,     fc_after=&vb->ca.contexts[vb->ca.num_contexts];         vctx < fc_after; vctx++) 
+
+#define for_ctx_back(ca) for (ContextP ctx=(ContextP)&(ca)->contexts[(ca)->num_contexts-1]; ctx >= (ca)->contexts ; ctx--)  
+
+#define for_ctx_that(ca) for_ctx(ca) if
+#define for_zctx_that for_zctx if
+#define for_vctx_that for_vctx if

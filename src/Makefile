@@ -104,17 +104,22 @@ ifndef AS
 endif
 
 LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions 
+CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions
 CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc 
 OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
-ifdef x86_64
-	CFLAGS   += -DGENOZIP_ALLOW_UNALIGNED_ACCESS -march=nehalem -msse4.1 -msse4.2 # relatively low CPU for installer and conda, change to -mnative if building locally 
+ifdef x86_64 # tests show that this⇩ configuration is actually faster than -march=haswell or -march=native
+	CFLAGS   += -DGENOZIP_ALLOW_UNALIGNED_ACCESS -march=nehalem -msse4.1 -msse4.2
 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
 endif
 
-WSL_GCC_8_5 = /home_local_fs/divon/miniconda3/envs/distribution/bin/x86_64-conda-linux-gnu-gcc # path to gcc 8.5 on WSL (generate with: conda create -n distribution gcc_linux-64=8.5.0)
+# need old gcc linked to an old sysroot(=glibc) for older Linux machines
+# up to 15.0.79 used distribution-gcc.8.5 (generate with: conda create -n distribution gcc_linux-64=8.5.0)
+# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 (generated with: conda create -n distribution-gcc.12.4-sysroot.2.17 gcc_linux-64=12.4.0 gxx_linux-64=12.4.0 sysroot_linux-64=2.17)
+# To see the glibc version genozip requires: 'objdump -T genozip | grep GLIBC_' (the highest version listed)
+WSL_GCC = /home_local_fs/divon/miniconda3/envs/distribution-gcc.12.4-sysroot.2.17/bin/x86_64-conda-linux-gnu-gcc 
+
 WSL_GCC_DEFAULT = /home_local_fs/divon/miniconda3/bin/gcc
 
 DEV_DIR  = ../../genozip
@@ -128,7 +133,7 @@ LATEST_SRC = ../../genozip-latest/src
 SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
 		  htscodecs igzip igzip/aarch64 igzip/x86_64 igzip/noarch
 
-MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arch.c tip.c seg_id.c zip_dyn_int.c\
+MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arch.c tip.c seg_id.c dyn_int.c	\
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
 		  error.c 																								\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c specials.c    	\
@@ -148,13 +153,13 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c fastq_aux.c    \
 		  deep.c																								\
 		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c 									\
-		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c mgzip.c coverage.c txtheader.c  	\
+		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c mgzip.c mgzip_sections.c      	\
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c					\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
 		  codec_smux.c codec_oq.c																				\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c 			\
 		  vblock.c regions.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c					\
-		  version.c huffman.c user_message.c b250.c qname_filter.c
+		  version.c huffman.c user_message.c b250.c qname_filter.c coverage.c txtheader.c
 		  
 ZLIB_SRCS  = zlib/zutil.c zlib/deflate.c zlib/trees.c
 
@@ -164,16 +169,18 @@ LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
 BSC_C_SRCS = bsc/libsais.c
 
-BSC_CXX_SRCS   = bsc/bwt.cpp bsc/coder.cpp bsc/detectors.cpp bsc/libbsc.cpp bsc/lzp.cpp 						\
+BSC_CXX_SRCS   = bsc/bwt.cpp bsc/coder.cpp bsc/detectors.cpp bsc/libbsc.cpp bsc/lzp.cpp 													\
 		  bsc/platform.cpp bsc/preprocessing.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/adler32.cpp
 
 HTSCODECS_SRC = htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c htscodecs/arith_dynamic.c
 
 LIBDEFLATE_1_7_SRCS = libdeflate_1.7/deflate_compress.c libdeflate_1.7/utils.c  
 
-LIBDEFLATE_1_19_SRCS = libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c 					\
-		  libdeflate_1.19/utils.c libdeflate_1.19/x86/cpu_features.c libdeflate_1.19/arm/cpu_features.c 		\
+LIBDEFLATE_1_19_SRCS = libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c libdeflate_1.19/gzip_decompress.c 			\
+		  libdeflate_1.19/utils.c libdeflate_1.19/x86/cpu_features.c libdeflate_1.19/arm/cpu_features.c 									\
 		  libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c
+
+XXHASH_SRCS = xxhash/xxhash.c 
 
 CONDA_DEVS = Makefile ../.gitignore 
 
@@ -187,7 +194,7 @@ INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtf
 		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h mgzip.h coverage.h threads.h error.h local_type.h sorter.h	\
 			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h writer_private.h zriter.h bases_filter.h genols.h 		\
 			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h sam_friend.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h		\
-			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h zip_dyn_int.h qname_filter.h bai.h							\
+			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h								\
 			\
 			zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h													\
 			\
@@ -230,7 +237,9 @@ INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtf
 			igzip/aarch64/crc32_aarch64_common.h igzip/aarch64/crc32_gzip_refl_pmull.h igzip/aarch64/crc32_norm_common_pmull.h 				\
 			igzip/aarch64/crc32_refl_common_pmull.h igzip/aarch64/crc_common_pmull.h igzip/aarch64/data_struct_aarch64.h 					\
 			igzip/aarch64/huffman_aarch64.h igzip/aarch64/lz0a_const_aarch64.h igzip/aarch64/options_aarch64.h 								\
-			igzip/aarch64/stdmac_aarch64.h igzip/aarch64/crc32_common_crc_ext_cortex_a72.S igzip/aarch64/crc32_common_mix_neoverse_n1.S
+			igzip/aarch64/stdmac_aarch64.h igzip/aarch64/crc32_common_crc_ext_cortex_a72.S igzip/aarch64/crc32_common_mix_neoverse_n1.S		\
+			\
+			xxhash/xxhash.h xxhash/xxh_x86dispatch.h
 
 INSTALLERS := ../installers
 
@@ -294,13 +303,14 @@ ifdef osx
 endif
 
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) $(BSC_C_SRCS) \
-		 $(HTSCODECS_SRC) $(IGZIP_SRCS)	
+		 $(HTSCODECS_SRC) $(IGZIP_SRCS)	$(XXHASH_SRCS)
 
 CXX_SRCS = $(BSC_CXX_SRCS) 
 
-X86_SRCS = $(IGZIP_X86_ASM_SRCS) # note: these are the sources which pass to the compiler - they may include other .asm files. These other files are only included in INCLUDES.
+X86_SRCS     = xxhash/xxh_x86dispatch.c
+X86_ASM_SRCS = $(IGZIP_X86_ASM_SRCS)  # note: these are the sources which pass to the compiler - they may include other .asm files. These other files are only included in INCLUDES.
 
-ARM_SRCS = $(IGZIP_ARM_ASM_SRCS)
+ARM_ASM_SRCS = $(IGZIP_ARM_ASM_SRCS)
 
 ASFLAGS += -I$(IGZIP_ARCH_DIR)
 
@@ -309,21 +319,21 @@ ASFLAGS += -I$(IGZIP_ARCH_DIR)
 # endif
 
 ifdef x86_64
-IGZIP_DEPS   = $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.d)) 
-IGZIP_OBJS   = $(addprefix $(OBJDIR)/,$(X86_SRCS:.asm=.o))
-# BSC_OPT_OBJS = $(addprefix $(OBJDIR)/,bsc/qlfc_AVX2.o bsc/qlfc_AVX.o bsc/qlfc_SSE41.o bsc/adler32_AVX.o bsc/adler32_SSSE3.o)
+PLATFORM_DEPS = $(addprefix $(OBJDIR)/,$(X86_ASM_SRCS:.asm=.d)) $(addprefix $(OBJDIR)/,$(X86_SRCS:.c=.d))
+PLATFORM_OBJS = $(addprefix $(OBJDIR)/,$(X86_ASM_SRCS:.asm=.o)) $(addprefix $(OBJDIR)/,$(X86_SRCS:.c=.o))
+#  $(addprefix $(OBJDIR)/,bsc/qlfc_AVX2.o bsc/qlfc_AVX.o bsc/qlfc_SSE41.o bsc/adler32_AVX.o bsc/adler32_SSSE3.o)
 endif
 
 ifdef arm64
-IGZIP_DEPS   = $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.d)) 
-IGZIP_OBJS   = $(addprefix $(OBJDIR)/,$(ARM_SRCS:.S=.o))
-# BSC_OPT_OBJS = $(addprefix $(OBJDIR)/,bsc/qlfc_A64.o bsc/adler32_A64.o)
+PLATFORM_DEPS = $(addprefix $(OBJDIR)/,$(ARM_ASM_SRCS:.S=.d)) $(addprefix $(OBJDIR)/,$(ARM_SRCS:.c=.d))
+PLATFORM_OBJS = $(addprefix $(OBJDIR)/,$(ARM_ASM_SRCS:.S=.o)) $(addprefix $(OBJDIR)/,$(ARM_SRCS:.c=.o))
+#  $(addprefix $(OBJDIR)/,bsc/qlfc_A64.o bsc/adler32_A64.o)
 endif
 
-OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.o))       $(IGZIP_OBJS) $(BSC_OPT_OBJS)
-DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.debug-o)) $(IGZIP_OBJS) 
-OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(IGZIP_OBJS) $(BSC_OPT_OBJS)  # optimized but with debug info, for debugging issues that only manifest with compiler optimization
-DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.d))       $(IGZIP_DEPS)
+OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.o))       $(PLATFORM_OBJS) $(BSC_OPT_OBJS)
+DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.debug-o)) $(PLATFORM_OBJS) 
+OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(PLATFORM_OBJS) $(BSC_OPT_OBJS)  # optimized but with debug info, for debugging issues that only manifest with compiler optimization
+DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.d))       $(PLATFORM_DEPS)
 
 EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)        # autocomplete.sh
 DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)  # autocomplete-debug.sh
@@ -576,7 +586,7 @@ increment-version: # note: target name is not "version.h" so this is not invoked
 	@echo "Incrementing version.h"
 	@bash $(SCRIPTS)/increment-version.sh
 
-.archive.tar.gz : $(C_SRCS) $(X86_SRCS) $(ARM_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(INCLUDES) ../LICENSE.txt
+.archive.tar.gz : $(C_SRCS) $(X86_ASM_SRCS) $(ARM_ASM_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(INCLUDES) ../LICENSE.txt
 	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
 	@git push > /dev/null
@@ -652,10 +662,10 @@ $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC_8_5) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
+	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
 
 # get Mac files: ../installers/genozip-osx-arm.tar and objdir.mac/secure/license.o
-$(INSTALLERS)/genozip-osx-arm.tar : $(C_SRCS) $(ARM_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
+$(INSTALLERS)/genozip-osx-arm.tar : $(C_SRCS) $(ARM_ASM_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
 	@echo "getting $>"
 	@wsl mac-build-and-fetch.sh
 

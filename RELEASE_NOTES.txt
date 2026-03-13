@@ -3,6 +3,14 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.80 13/3/2026
+- Significant reduction in RAM consumption (up to 33% in some cases) in genounzip (inc. in the test phase at the end of compression)
+- Significantly faster compression of many Illumina FASTQ files due to better parallelization (IL4M)
+- Mac (Apple processor) now released via conda too.
+- New: 'genozip --is-exactable' inspects the gz-compression of a file and reports whether genounzip would be able to gz-recompress the file to the same exact gz-compression if --bgzf=exact is used.
+- New: 'genounzip --bgzf=exact-strict' option: same as --bgzf=exact, but fails if gz-recompression cannot be done exactly, instead of falling back to the default re-compression.
+- New diagnostic options: --show-flavor, --dump-gz-block. See genozip.com/diagnostics
+
 15.0.79 27/2/2026
 - Minor bug fixes
 

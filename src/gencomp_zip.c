@@ -154,7 +154,7 @@ void gencomp_seg_add_line (VBlockP vb, CompIType comp_i, STRp(line)/*pointer int
 
     // If we're might re-read depn lines from the txt file, we store their coordinates in the txt file
     if (componentsP[comp_i].type == GCT_DEPN && depn_method == DEPN_REREAD) {
-        if (TXT_IS_BGZF) {
+        if (TXT_IS(BGZF)) {
             uint64_t bb_i = vb->vb_mgzip_i + vb->gz_blocks.current_bb_i;
             ASSERT (bb_i <= MAX_BB_I, "%s: BGZF bb_i=%"PRIu64" exceeds maximum of %"PRIu64, VB_NAME, bb_i, MAX_BB_I);
 
@@ -225,7 +225,7 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
         buf_set_promiscuous (&depn.thread_data_comp, "depn.thread_data_comp");
 
         // if we cannot re-read the depn lines from the file, we will offload them to disk
-        if ((!TXT_IS_BGZF && !TXT_IS_PLAIN) || 
+        if ((!TXT_IS(BGZF) && !TXT_IS(NONE)) || 
              txt_file->redirected || txt_file->is_remote ||
              segconf.zip_txt_modified) { 
             depn_method = DEPN_OFFLOAD;
@@ -556,7 +556,7 @@ static void gencomp_compress_prescription (VBlockP vb, int32_t pres_i)
     mutex_unlock (prescriptions_mutex);
 
     // deltify
-    if (TXT_IS_BGZF)
+    if (TXT_IS(BGZF))
         for (int32_t i=pres.num_lines - 1; i >= 1; i--) {
             pres.uncomp[i].offset.bb_i -= pres.uncomp[i-1].offset.bb_i;
             if (!pres.uncomp[i].offset.bb_i) // same bb_i
@@ -798,7 +798,7 @@ static void gencomp_prescribe_reread (VBlockP vb)
 
     // undeltify
     ARRAY (RereadLine, rr, vb->reread_prescription);
-    if (TXT_IS_BGZF)
+    if (TXT_IS(BGZF))
         for (uint32_t i=1; i < rr_len; i++) {
             if (!rr[i].offset.bb_i) // same bb_i
                 rr[i].offset.uoffset += rr[i-1].offset.uoffset;
@@ -859,7 +859,7 @@ bool gencomp_get_txt_data (VBlockP vb)
     // case: finished ingesting PRIM and no more out-of-band data, and all MAIN data has been flushed (which also means txt_file reached EOF,
     // see zip_prepare_one_vb_for_dispatching) - so no more MAIN or GetQBit data will be available. time for DEPN data.
     if (sam_finished_ingesting_prim && reread_depn_vb_prescriptions.next < reread_depn_vb_prescriptions.len) 
-        RETURN (TXT_IS_BGZF ? "REREAD_BGZF" : "REREAD_PLAIN", gencomp_prescribe_reread (vb));
+        RETURN (TXT_IS(BGZF) ? "REREAD_BGZF" : "REREAD_PLAIN", gencomp_prescribe_reread (vb));
 
     // no more data exists at this point OR we have GCT_DEPN, but not finished ingesting PRIM yet
     // DEBUG_GENCOMP ("NO_DATA_AVAILABLE"); // commenting out because there are too many of
@@ -953,7 +953,7 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
         iprintf ("REREAD_DEPN(id=%d) vb=%s n_lines=%u effective_codec=%s\n", 
                  vb->id, VB_NAME, vb->reread_prescription.len32, codec_name (txt_file->effective_codec));
 
-    if (TXT_IS_BGZF) 
+    if (TXT_IS(BGZF)) 
         bgzf_reread_uncompress_vb_as_prescribed (vb, fp);
 
     else { // CODEC_NONE

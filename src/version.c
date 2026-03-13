@@ -84,7 +84,7 @@ StrText version_str (void)
 
 rom genozip_update_msg (void)
 {
-    return "Please update Genozip to the latest version. See: " WEBSITE_INSTALLING;
+    return "Please update Genozip to the latest version. " WEBSITE_INSTALLING;
 }
 
 // thread entry

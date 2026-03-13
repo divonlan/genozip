@@ -27,7 +27,7 @@ void lookback_init (VBlockP vb, ContextP lb_ctx, ContextP ctx, StoreType store_t
         ctx->is_initialized = true;
     }
 
-    buf_alloc (vb, &ctx->lookback, 0, lookback_size(lb_ctx) * (store_type == STORE_INDEX ? sizeof (WordIndex) : sizeof (ValueType)), char, 1, "contexts->lookback_buf");
+    buf_alloc (vb, &ctx->lookback, 0, lookback_size(lb_ctx) * (store_type == STORE_INDEX ? sizeof (WordIndex) : sizeof (ValueType)), char, 1, C_"lookback_buf");
  }
 
 // Seg and PIZ

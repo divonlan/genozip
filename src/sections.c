@@ -40,7 +40,8 @@ static const struct {rom name; uint32_t header_size; } abouts[NUM_SEC_TYPES] = {
     [SEC_LOCAL]           = {"SEC_LOCAL",           sizeof (SectionHeaderCtx)           }, \
     [SEC_CHROM2REF_MAP]   = {"SEC_CHROM2REF_MAP",   sizeof (SectionHeader)              }, \
     [SEC_STATS]           = {"SEC_STATS",           sizeof (SectionHeader)              }, \
-    [SEC_MGZIP]           = {"SEC_MGZIP",           sizeof (SectionHeader)              }, \
+    [SEC_GZ_ISIZES]       = {"SEC_GZ_ISIZES",       sizeof (SectionHeader)              }, \
+    [SEC_GZ_DIGESTS]      = {"SEC_GZ_DIGESTS",      sizeof (SectionHeaderGzDigests)     }, \
     [SEC_RECON_PLAN]      = {"SEC_RECON_PLAN",      sizeof (SectionHeaderReconPlan)     }, \
     [SEC_COUNTS]          = {"SEC_COUNTS",          sizeof (SectionHeaderCounts)        }, \
     [SEC_REF_IUPACS]      = {"SEC_REF_IUPACS",      sizeof (SectionHeader)              }, \
@@ -58,7 +59,7 @@ typedef struct SectionsVbIndexEnt {
 } SectionsVbIndexEnt;
 
 typedef struct {
-    int32_t txt_header_sec_i, bgzf_sec_i, recon_plan_sec_i;
+    int32_t txt_header_sec_i, gz_isizes_sec_i, recon_plan_sec_i;
     VBIType first_vb_i, last_vb_i, num_vbs; // vb_i's for each component form a linked list first_vb_i->next_vb_i->last_vb_i - vb_i's in each list are monotonously increasing, but not necessarily consecutive
 } SectionsCompIndexEnt;
 
@@ -304,7 +305,7 @@ void sections_create_index (void)
         vb_index[i].vb_header_sec_i = vb_index[i].last_sec_i = -1;
 
     for (int i=0; i < comp_index_len; i++)
-        comp_index[i].bgzf_sec_i = comp_index[i].txt_header_sec_i = 
+        comp_index[i].gz_isizes_sec_i = comp_index[i].txt_header_sec_i = 
         comp_index[i].recon_plan_sec_i = -1;
 
     memset (fl_sec_index, 0xff, fl_sec_index_len * sizeof (SectionsFirstLastIndexEnt)); // set to -1
@@ -333,8 +334,8 @@ void sections_create_index (void)
                     comp->txt_header_sec_i = sec_i; 
                 break;
             
-            case SEC_MGZIP : 
-                comp->bgzf_sec_i = sec_i; 
+            case SEC_GZ_ISIZES : 
+                comp->gz_isizes_sec_i = sec_i; 
                 break;
 
             case SEC_RECON_PLAN : {
@@ -494,8 +495,8 @@ void sections_list_memory_to_file_format (void)
     evb->scratch.len = z_file->section_list.len;
     
     // replace dict_id with the the sec_i of its first appearahce. 
-    int32_t first_appearance[z_file->num_contexts];
-    memset (first_appearance, 255, z_file->num_contexts * sizeof (int32_t));
+    int32_t first_appearance[z_file->ca.num_contexts];
+    memset (first_appearance, 255, z_file->ca.num_contexts * sizeof (int32_t));
 
     SectionEntModifiable prev_sec = {};
     uint32_t prev_num_lines = 0;
@@ -719,9 +720,9 @@ StrText vb_name (VBlockP vb)
     else if (vb && vb->vblock_i)
         snprintf (s.s, sizeof (s.s), "%.10s/%u", comp_name (vb->comp_i), vb->vblock_i);
     else if (vb && segconf_running)
-        strcpy (s.s, "SEGCONF/0");
+        strcpy (s.s, "SEGCONF");
     else
-        strcpy (s.s, "NONCOMPUTE");
+        strcpy (s.s, "MAIN");
 
     return s;
 }
@@ -780,14 +781,30 @@ uint32_t st_header_size (SectionType sec_type)
 {
     ASSERTINRANGE (sec_type, SEC_NONE, NUM_SEC_TYPES);
 
-    return sec_type == SEC_NONE ? 0 
-         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(12) ? sizeof (SectionHeaderVbHeader) - 5*sizeof(uint32_t) // in v8-11, SectionHeaderVbHeader was shorter by 5 32b words
-         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(14) ? sizeof (SectionHeaderVbHeader) - 2*sizeof(uint32_t) // in v12-13, SectionHeaderVbHeader was shorter by 2 32b word
-         : sec_type == SEC_VB_HEADER      && command != ZIP && !VER(15) ? sizeof (SectionHeaderVbHeader) - 1*sizeof(uint32_t) // in v14, SectionHeaderVbHeader was shorter by 1 32b word
-         : sec_type == SEC_TXT_HEADER     && command != ZIP && !VER(12) ? sizeof (SectionHeaderTxtHeader) - 3*sizeof(uint16_t) - sizeof(uint64_t) // in v8-11, SectionHeaderTxtHeader was shorter
-         : sec_type == SEC_TXT_HEADER     && command != ZIP && !VER(15) ? sizeof (SectionHeaderTxtHeader) - 3*sizeof(uint16_t) // in v12-14, SectionHeaderTxtHeader was shorter by 3XQnameFlavorProp
-         : sec_type == SEC_GENOZIP_HEADER && command != ZIP && !VER(12) ? sizeof (SectionHeaderGenozipHeader) - REF_FILENAME_LEN - sizeof(Digest) // in v8-11, SectionHeaderTxtHeader was shorter
-         : abouts[sec_type].header_size;
+    if (!IS_ZIP) 
+        switch (sec_type) {
+            case SEC_NONE : 
+                return 0;
+            
+            case SEC_VB_HEADER:
+                if      (!VER(12)) return sizeof (SectionHeaderVbHeader) - 5*sizeof(uint32_t);  // in v8-11, SectionHeaderVbHeader was shorter by 5 32b words
+                else if (!VER(14)) return sizeof (SectionHeaderVbHeader) - 2*sizeof(uint32_t);  // in v12-13, SectionHeaderVbHeader was shorter by 2 32b word
+                else if (!VER(15)) return sizeof (SectionHeaderVbHeader) - 1*sizeof(uint32_t);  // in v14, SectionHeaderVbHeader was shorter by 1 32b word
+                break;
+
+            case SEC_TXT_HEADER:
+                if      (!VER(12)) return sizeof (SectionHeaderTxtHeader) - 3*sizeof(uint16_t) - sizeof(uint64_t); // in v8-11, SectionHeaderTxtHeader was shorter
+                else if (!VER(15)) return sizeof (SectionHeaderTxtHeader) - 3*sizeof(uint16_t); // in v12-14, SectionHeaderTxtHeader was shorter by 3XQnameFlavorProp
+                break;
+
+            case SEC_GENOZIP_HEADER:
+                if (!VER(12)) return sizeof (SectionHeaderGenozipHeader) - REF_FILENAME_LEN - sizeof(Digest); // in v8-11, SectionHeaderTxtHeader was shorter
+                break;
+
+            default: break;
+        }
+
+    return abouts[sec_type].header_size;
 }
 
 Section section_next (Section sec)
@@ -889,9 +906,9 @@ Section sections_get_comp_txt_header_sec (CompIType comp_i)
     return Bsec(Bcompindex(comp_i)->txt_header_sec_i);
 }
 
-Section sections_get_comp_bgzf_sec (CompIType comp_i)
+Section sections_get_comp_GZ_ISIZES_sec (CompIType comp_i)
 {
-    return Bsec(Bcompindex(comp_i)->bgzf_sec_i);
+    return Bsec(Bcompindex(comp_i)->gz_isizes_sec_i);
 }
 
 // note: only files v12-15.0.63 could have a recon sec
@@ -1032,7 +1049,7 @@ FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt/*data ty
             }
             break;
 
-        case SEC_MGZIP:
+        case SEC_GZ_ISIZES:
             snprintf (str.s, sizeof (str.s), "library=%s level=%u OLD_has_eof=%u", bgzf_library_name(f.mgzip.library, false), f.mgzip.level, f.mgzip.OLD_has_eof_block); 
             break;
 
@@ -1068,11 +1085,13 @@ FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt/*data ty
 }
 
 void sections_show_header (ConstSectionHeaderP header, 
-                           VBlockP vb,       // optional if output to buffer
+                           VBlockP vb,       // optional if output to buffer (allowed only in ZIP)
                            CompIType comp_i, 
                            uint64_t offset, char rw)
 {
     #define DT(x) ((dt) == DT_##x)
+
+    ASSERTW0 (!vb || IS_ZIP, "sections_show_header: expecting vb=NULL in PIZ"); // because we dump the show_headers_buf to the terminal only in ZIP
 
     if (flag_loading_auxiliary && !flag.debug_read_ctxs) return; // don't show headers of an auxiliary file in --show-header, but show in --debug-read-ctx
 
@@ -1184,17 +1203,17 @@ void sections_show_header (ConstSectionHeaderP header,
         SectionHeaderTxtHeaderP h = (SectionHeaderTxtHeaderP)header;
         if (!VER(15))
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
-                      "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\"\n",
+                      "%ssrc_codec=%s OLD_gz_size_3LSB=%u %s txt_filename=\"%.*s\"\n",
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                       digest_display (h->digest).s, digest_display (h->digest_header).s, 
-                      SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
+                      SEC_TAB, codec_name (h->src_codec), GET_UINT24(h->OLD_gz_size_3LSB), 
                       sections_dis_flags (f, st, dt, is_r2).s, TXT_FILENAME_LEN, h->txt_filename);
         else
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
-                      "%ssrc_codec=%s (args=0x%02X.%02X.%02X) %s txt_filename=\"%.*s\" flav_prop=(has_seq_len,consensus,mated,cnn,tokenized)=[[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u]]\n",
+                      "%ssrc_codec=%s OLD_gz_size_3LSB=%u %s txt_filename=\"%.*s\" flav_prop=(has_seq_len,consensus,mated,cnn,tokenized)=[[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u]]\n",
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
                       digest_display (h->digest).s, digest_display (h->digest_header).s, 
-                      SEC_TAB, codec_name (h->src_codec), h->codec_info[0], h->codec_info[1], h->codec_info[2], 
+                      SEC_TAB, codec_name (h->src_codec), GET_UINT24(h->OLD_gz_size_3LSB),
                       sections_dis_flags (f, st, dt, is_r2).s, TXT_FILENAME_LEN, h->txt_filename,
                       h->flav_prop[0].has_seq_len, h->flav_prop[0].is_consensus, h->flav_prop[0].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[0].cnn]).s, h->flav_prop[0].is_tokenized,
                       h->flav_prop[1].has_seq_len, h->flav_prop[1].is_consensus, h->flav_prop[1].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[1].cnn]).s, h->flav_prop[1].is_tokenized,
@@ -1278,7 +1297,15 @@ void sections_show_header (ConstSectionHeaderP header,
         break;
     }
         
-    case SEC_MGZIP:
+    case SEC_GZ_DIGESTS: {
+        SectionHeaderGzDigestsP h = (SectionHeaderGzDigestsP)header;
+        snprintf (str, sizeof (str), "gz_file_size=%"PRIu64" effective_codec=%s %s\n", 
+                  BGEN64(h->gz_file_size), codec_name (h->effective_codec), sections_dis_flags (f, st, dt, 0).s); 
+        break;
+    }
+
+
+    case SEC_GZ_ISIZES:
     case SEC_RANDOM_ACCESS: {
         snprintf (str, sizeof (str), "%s%s\n", SEC_TAB, sections_dis_flags (f, st, dt, 0).s); 
         break;
@@ -1449,7 +1476,7 @@ void sections_show_section_list (DataType dt, BufferP section_list, SectionType 
                      s->vblock_i, s->offset, s->size, s->num_lines, 
                      sections_dis_flags (s->flags, s->st, dt, 0).s);
 
-        else if (IS_FRAG_SEC(s->st) || s->st == SEC_MGZIP)
+        else if (IS_FRAG_SEC(s->st) || s->st == SEC_GZ_ISIZES || s->st == SEC_GZ_DIGESTS)
             iprintf ("%5u %-20.20s\t\t\tvb=%s/%-4u offset=%-8"PRIu64"  size=%-6u  %s\n", 
                      BNUM(*section_list, s), st_name(s->st), 
                      comp_name_ex (s->comp_i, s->st).s, s->vblock_i, s->offset, s->size, sections_dis_flags (s->flags, s->st, dt, 0).s);
