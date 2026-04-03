@@ -50,12 +50,12 @@
     (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));  \
     (a) += (b);
 
-void md5_display_state (const Md5State *x) // for debugging
+static __attribute__((unused)) void md5_display_state (const Md5State *x) // for debugging
 {
     static unsigned iteration=1;
 
-    fprintf (stderr, "\n%2u: %08x %08x %08x %08x %08x %08x ", iteration, x->hi, x->lo, x->a, x->b, x->c, x->d);
-    for (unsigned i=0; i<64; i++) fprintf (stderr, "%2.2x", x->buffer.bytes[i]);
+    fprintf (stderr, "\n%2u: %-7"PRIu64" %08x %08x %08x %08x ", iteration, x->n_bytes, x->a, x->b, x->c, x->d);
+    for (unsigned i=0; i<64; i++) fprintf (stderr, "%2.2x", x->bytes[i]);
     fprintf (stderr, "\n");
 
     iteration++;
@@ -172,60 +172,49 @@ static const void *md5_transform (Md5StateP state, const void *data, uintmax_t s
     return ptr;
 }
 
-void md5_initialize (Md5StateP state)
+void md5_initialize (Md5StateP state, bool log)
 {
-#ifdef DEBUG // note: ASSERT not supported when compiled from script 
-    ASSERT0 (is_zero_struct (*state), "md5_initialize expects state to be zeros, but its not");
-#endif
+    memset (state, 0, sizeof (*state));
 
     state->a = 0x67452301;
     state->b = 0xefcdab89;
     state->c = 0x98badcfe;
     state->d = 0x10325476;
 
-    state->lo = 0;
-    state->hi = 0;
-
+    state->alg = DIGEST_MD5;
+    state->log = log;
     state->initialized = true;
 }
 
 // data must be aligned on 32-bit boundary
-void md5_update (Md5StateP state, const void *data, uint32_t len)
+void md5_update (Md5StateP state, const void *data, uint64_t len)
 {
     if (!len) return; // nothing to do
 
-    uint32_t    saved_lo;
-    uint32_t    used;
-    uint32_t    free;
+    uint64_t used = state->n_bytes & 0x3f; // data already in the 64B buffer
+    state->n_bytes += len;
 
-    saved_lo = state->lo;
-    if ((state->lo = (saved_lo + len) & 0x1fffffff) < saved_lo) 
-        state->hi++;
-    
-    state->hi += (uint32_t)(len >> 29);
-
-    used = saved_lo & 0x3f;
-
+    // top up the 64B buffer
     if (used) {
-        free = 64 - used;
+        uint64_t free = 64 - used;
 
         if (len < free) {
-            memcpy (&state->buffer.bytes[used], data, len);
+            memcpy (&state->bytes[used], data, len);
             goto finish;
         }
 
-        memcpy (&state->buffer.bytes[used], data, free);
+        memcpy (&state->bytes[used], data, free);
         data += free;
         len -= free;
-        md5_transform (state, state->buffer.bytes, 64);
+        md5_transform (state, state->bytes, 64);
     }
 
     if (len >= 64) {
-        data = md5_transform (state, data, len & ~(unsigned long)0x3f);
+        data = md5_transform (state, data, len & ~(uint64_t)0x3f);
         len &= 0x3f;
     }
 
-    memcpy (state->buffer.bytes, data, len);
+    memcpy (state->bytes, data, len); // left over for next round
 
 finish:
     //fprintf (stderr, "%s md5_update snapshot: %s\n", primary_command == ZIP ? "ZIP" : "PIZ", digest_display (digest_snapshot (state)));
@@ -235,43 +224,37 @@ finish:
 
 Digest md5_finalize (Md5StateP state)
 {
-    uint32_t    used;
-    uint32_t    free;
+    uint32_t used = state->n_bytes & 0x3f;
 
-    used = state->lo & 0x3f;
+    state->bytes[used++] = 0x80;
 
-    state->buffer.bytes[used++] = 0x80;
-
-    free = 64 - used;
+    uint32_t free = 64 - used;
 
     if (free < 8) {
-        memset (&state->buffer.bytes[used], 0, free);
-        md5_transform (state, state->buffer.bytes, 64);
+        memset (&state->bytes[used], 0, free);
+        md5_transform (state, state->bytes, 64);
         used = 0;
         free = 64;
     }
 
-    memset (&state->buffer.bytes[used], 0, free - 8);
+    memset (&state->bytes[used], 0, free - 8);
 
-    state->lo <<= 3;
-    state->buffer.words[14] = LTEN32 (state->lo);
-    state->buffer.words[15] = LTEN32 (state->hi);
+    uint64_t n_bits_lten = LTEN64 (8 * state->n_bytes);
+    memcpy (&state->words[14], &n_bits_lten, sizeof (uint64_t)); 
 
-    md5_transform (state, state->buffer.bytes, 64);
+    md5_transform (state, state->bytes, 64);
     Digest digest = { .words = { LTEN32 (state->a), LTEN32 (state->b), LTEN32 (state->c), LTEN32 (state->d) } };
 
-    memset (state, 0, sizeof (Md5State)); // return to its pre-initialized state, should it be used again
+    memset (state, 0, sizeof (Md5State)); // hygiene
 
     return digest;
 }
 
 // note: data must be aligned to the 32bit boundary (its accessed as uint32_t*)
-Digest md5_do (const void *data, uint32_t len)
+Digest md5_do (const void *data, uint64_t len)
 {
     Md5State state;
-    memset (&state, 0, sizeof(Md5State));
-
-    md5_initialize (&state);
+    md5_initialize (&state, false);
     
     md5_update (&state, data, len);
 
@@ -283,7 +266,7 @@ Digest md5_read (const char str[32])
     Digest out;
 
     for (int i=0; i < 16; i++)
-        out.bytes[i] = (HEXDIGIT2NUM(str[i*2]) << 4) | HEXDIGIT2NUM(str[i*2+1]);
+        out.md5[i] = (HEXDIGIT2NUM(str[i*2]) << 4) | HEXDIGIT2NUM(str[i*2+1]);
 
     return out;
 }

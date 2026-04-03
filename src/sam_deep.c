@@ -71,8 +71,7 @@ static void sam_deep_zip_show_index_stats (void)
         iprintf ("\nFYI: deep_index entry %u has %"PRIu64 " deep entries on its linked list. This is excessively large and might cause slowness.%s",
                  longest_len_hash, longest_len, report_support_if_unexpected()); // note: error only shows with --show-deep... not very useful
 
-    iprintf ("\ndeep_index entries used: %"PRIu64" / %"PRIu64" (%.1f%%)\n", 
-             used, index_len, 100.0 * (double)used / (double)index_len);
+    iprintf ("\ndeep_index entries used: %"PRIu64" / %"PRIu64" (%.1f%%)\n", used, index_len, percent (used, index_len));
 
     iprint0 ("\ndeep_index linked list length histogram:\n");
     for (int this_len=0; this_len < NUM_LENS; this_len++) {
@@ -103,7 +102,7 @@ static void sam_deep_zip_display_reasons (void)
 
     for (int i=0; i < NUM_DEEP_STATS_ZIP; i++) 
         if (z_file->deep_stats[i])
-            iprintf ("%-13.13s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
+            iprintf ("%-13.13s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], percent (z_file->deep_stats[i], total));
 }
 
 // main thread: Called during zip_finalize of the SAM component for a Deep compression
@@ -307,7 +306,7 @@ void sam_piz_set_deep_seq (VBlockSAMP vb,
                                   vb->piz_deep_flags.has_cigar = false; \
                                   return; }) // vb->piz_deep_flags.seq_encoding remains the default ZDEEP_SEQ_PACKED
 
-    if (gpos == NO_GPOS64) 
+    if (gpos == NO_GPOS) 
         NOT_BY_REF(EXPL_SEQ_COPY_VERBATIM);
 
     if (vb->bisulfite_strand)
@@ -662,13 +661,13 @@ static void sam_piz_deep_finalize_ents (void)
         
         for (DeepStatsPiz i=QNAME_BYTES; i <= QUAL_BYTES; i++)
             if (z_file->deep_stats[i])
-                iprintf ("%-14.14s: %s (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_PIZ[i], str_size (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)total);
+                iprintf ("%-14.14s: %s (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_PIZ[i], str_size (z_file->deep_stats[i]).s, percent (z_file->deep_stats[i], total));
 
         if (z_file->deep_stats[SEQ_PACKED_BYTES] || z_file->deep_stats[SEQ_ARITH_BYTES]) {
             iprint0 ("\nPIZ: Reasons for storing packed SEQ in deep_ents rather than a reference:\n");
             for (DeepStatsPiz i=EXPL_DEEPABLE; i < NUM_DEEP_STATS_PIZ; i++)
                 if (z_file->deep_stats[i])
-                    iprintf ("%-24.24s: %s (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_PIZ[i], str_int_commas (z_file->deep_stats[i]).s, 100.0 * (double)z_file->deep_stats[i] / (double)z_file->deep_stats[EXPL_DEEPABLE]);
+                    iprintf ("%-24.24s: %s (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_PIZ[i], str_int_commas (z_file->deep_stats[i]).s, percent (z_file->deep_stats[i], z_file->deep_stats[EXPL_DEEPABLE]));
         }
     }
 

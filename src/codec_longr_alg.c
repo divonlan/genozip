@@ -58,9 +58,7 @@
 #define Q_BITS      (QUAL_BITS + DIFQ_BITS)
 #define NCTX_BITS   (B_BITS + DIFQ_BITS + QUAL_BITS)
 
-#if (CHAN_BITS > 16)
-#error need to increase width of LongrState.base_chan
-#endif
+_Static_assert (CHAN_BITS <= 16, "need to increase width of LongrState.base_chan");
 
 #define LONGR_NUM_CHANNELS (1 << CHAN_BITS)
 

@@ -24,6 +24,7 @@
 #include "arch.h"
 #include "license.h"
 #include "progress.h"
+#include "dispatcher.h"
 
 static Buffer threads = {};
 static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
@@ -39,7 +40,7 @@ typedef struct {
     bool in_use;
     bool canceled;
     pthread_t pthread;
-    rom task_name;
+    Task task;
     VBIType vb_i;
     VBID vb_id;
 } ThreadEnt;
@@ -51,7 +52,7 @@ rom threads_get_task_name (void)
     if (pthread == main_thread) return "main";
     
     for_buf (ThreadEnt, ent, threads)
-        if (ent->pthread == pthread) return ent->task_name; // note: this will also detect the writer thread
+        if (ent->pthread == pthread) return task_name (ent->task); // note: this will also detect the writer thread
 
     return "unregistered";
 }
@@ -119,16 +120,16 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
     bool has_vb = ent->vb_i != (uint32_t)-1;
 
     if (flag_show_threads)  {
-        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
-        else        iprintf ("%s: %s: thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
+        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        else        iprintf ("%s: %s: thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), event, thread_id, (uint64_t)ent->pthread);
     }
     
     if (flag.debug_threads) {
         mutex_lock (log_mutex);
         buf_alloc (NULL, &log, 10000, 1000000, char, 2, NULL);
         
-        if (has_vb) bufprintf (NULL, &log, "%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
-        else        bufprintf (NULL, &log, "%s: %s thread_id=%d pthread=%"PRIu64"\n", ent->task_name, event, thread_id, (uint64_t)ent->pthread);
+        if (has_vb) bufprintf (NULL, &log, "%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        else        bufprintf (NULL, &log, "%s: %s thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), event, thread_id, (uint64_t)ent->pthread);
         mutex_unlock (log_mutex);
     }
 }
@@ -190,7 +191,7 @@ static void *thread_entry_caller (void *vb_)
     // wait for threads_create to complete updating VB
     mutex_wait (vb->ready_for_compute, true); 
 
-    threads_log_by_vb (vb, vb->compute_task, "STARTED", 0);
+    threads_log_by_vb (vb, task_name (vb->compute_task), "STARTED", 0);
 
     // wait for VB initialzation data to be visible to this thread
     __atomic_thread_fence (__ATOMIC_ACQUIRE); 
@@ -198,7 +199,7 @@ static void *thread_entry_caller (void *vb_)
     TimeSpecType start_time, end_time; 
     clock_gettime(CLOCK_REALTIME, &start_time); 
 
-    rom task_name = vb->compute_task; // save, as vb might be released by compute_func
+    Task task = vb->compute_task; // save, as vb might be released by compute_func
 
     // call entry point
     vb->compute_func (vb); 
@@ -206,7 +207,7 @@ static void *thread_entry_caller (void *vb_)
     clock_gettime(CLOCK_REALTIME, &end_time); 
     int time_usec = 1000000 *(end_time.tv_sec - start_time.tv_sec) + (int)((int64_t)end_time.tv_nsec - (int64_t)start_time.tv_nsec) / 1000;
 
-    threads_log_by_vb (vb, task_name, "COMPLETED", time_usec);
+    threads_log_by_vb (vb, task_name (task), "COMPLETED", time_usec);
     
     // wait for data written by this thread to be visible to other threads
     __atomic_thread_fence (__ATOMIC_RELEASE); 
@@ -217,7 +218,7 @@ static void *thread_entry_caller (void *vb_)
 // called from main thread or writer threads only
 ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 {
-    if (vb) threads_log_by_vb (vb, vb->compute_task, "ABOUT TO CREATE", 0);
+    if (vb) threads_log_by_vb (vb, task_name (vb->compute_task), "ABOUT TO CREATE", 0);
 
     mutex_lock (threads_mutex);
 
@@ -242,14 +243,14 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 
     pthread_t pthread;
     err = pthread_create (&pthread, &tattr, thread_entry_caller, vb);
-    ASSERT (!err, "pthread_create: task=\"%s\" vb_i=%d: %s", vb->compute_task, vb->vblock_i, strerror(err));
+    ASSERT (!err, "pthread_create: task=\"%s\" vb_i=%d: %s", task_name (vb->compute_task), vb->vblock_i, strerror(err));
 
     *B(ThreadEnt, threads, thread_id) = (ThreadEnt){ 
-        .in_use    = true, 
-        .task_name = vb->compute_task, 
-        .vb_i      = vb->vblock_i,
-        .vb_id     = vb->id,
-        .pthread   = pthread 
+        .in_use  = true, 
+        .task    = vb->compute_task, 
+        .vb_i    = vb->vblock_i,
+        .vb_id   = vb->id,
+        .pthread = pthread 
     };
 
     vb->compute_thread_id = thread_id; // assigned while thread_entry_caller is waiting on mutex
@@ -264,7 +265,7 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
 }
 
 // returns success if joined (which is always the case if blocking)
-void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2, rom func)
+void threads_join_do (ThreadId *thread_id, Task expected_task, rom func)
 {
     ASSERT (*thread_id != THREAD_ID_NONE, "called from %s: thread not created or already joined", func);
 
@@ -273,9 +274,9 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2
     mutex_unlock (threads_mutex);
 
     ASSERT (*thread_id < threads.len32, "called from %s: thread_id=%u ∉ [0,%u]", func, *thread_id, threads.len32);
-    ASSERT (ent.task_name, "called from %s: entry for thread_id=%u has task_name=NULL", func, *thread_id);
-    ASSERT (!strcmp (ent.task_name, expected_task) || !strcmp (ent.task_name, expected_task2), 
-            "called from %s: Expected thread_id=%u to have task=\"%s\" or task=\"%s\", but it has \"%s\"", func, *thread_id, expected_task, expected_task2, ent.task_name);
+    ASSERT (ent.task, "called from %s: entry for thread_id=%u has no task", func, *thread_id);
+    ASSERT (ent.task == expected_task, 
+            "called from %s: Expected thread_id=%u to have task=\"%s\", but it has \"%s\"", func, *thread_id, task_name (expected_task), task_name (ent.task));
 
     static ThreadId last_joining = THREAD_ID_NONE;
     if (*thread_id != last_joining) { // show only once in a busy wait
@@ -284,7 +285,7 @@ void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2
     }
 
     // wait for thread to complete (no wait if it completed already)
-    PTHREAD_JOIN (ent.pthread, ent.task_name);
+    PTHREAD_JOIN (ent.pthread, task_name (ent.task));
     
     // wait for data from this thread to arrive
     __atomic_thread_fence (__ATOMIC_ACQUIRE); 

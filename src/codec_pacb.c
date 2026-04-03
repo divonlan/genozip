@@ -159,7 +159,7 @@ COMPRESS (codec_pacb_compress)
 {
     START_TIMER;
 
-    __atomic_add_fetch (&z_file->pacb_lines, vb->lines.len, __ATOMIC_RELAXED);
+    add_relaxed (z_file->pacb_lines, vb->lines.len);
 
     uint8_t max_np = get_max_np();
     uint8_t n_channels = max_np * NUM_Ks;
@@ -301,7 +301,8 @@ CODEC_RECONSTRUCT (codec_pacb_reconstruct)
         
         char score = *next[channel_i]++;
 
-        if (score == ' ') {
+        if (score == ' ') { // can happen only in i=0
+            ASSERTISZERO (i);
             sam_reconstruct_missing_quality (vb, reconstruct);
             goto done;
         }

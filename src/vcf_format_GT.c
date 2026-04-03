@@ -315,7 +315,7 @@ void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockVCFP vb, char *recon, uint
         // case: if its a non-trivial PS - not empty or '.' - the phase is |, otherwise it's /
         STR(ps);
         reconstruct_peek (VB, CTX(FORMAT_PS), pSTRa(ps));
-        if (ps_len && !(ps_len==1 && *ps=='.')) prediction = '|';
+        if (ps_len && !IS_PERIOD(ps)) prediction = '|';
     }
         
     // we only use prediction in in diploid GTs, and genozip allows only single or double-digit alleles

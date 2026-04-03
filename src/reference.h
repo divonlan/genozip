@@ -65,24 +65,26 @@ extern bool ref_load_stored_reference (void);
 extern bool ref_is_loaded (void);
 extern bool ref_is_external_loaded (void);
 extern void ref_set_reference (rom filename, ReferenceType ref_type, bool is_explicit);
-extern void ref_set_ref_file_info (Digest genome_digest, bool is_adler, rom fasta_name, uint8_t genozip_version);
+extern void ref_set_ref_file_info (Digest genome_digest, DigestAlg alg, rom fasta_name, Version genozip_version);
 extern void ref_unload_reference (void);
 extern void ref_destroy_reference (void);
+extern void ref_destroy_genome (void);
 extern ConstRangeP ref_piz_get_range (VBlockP vb, FailType soft_fail);
 extern RangeP ref_get_range_by_ref_index (VBlockP vb, WordIndex ref_contig_index);
 extern void ref_generate_reverse_complement_genome (void);
 extern rom ref_get_filename (void);
 extern rom ref_get_fasta_name (void);
-extern uint8_t ref_get_genozip_version (void);
+extern Version ref_get_genozip_ver (void);
 extern BufferP ref_get_stored_ra (void);
 extern Digest ref_get_genome_digest (void);
-extern rom ref_get_digest_name (void);
-extern void ref_get_genome (const Bits **genome, const Bits **emoneg, PosType64 *genome_nbases);
+extern void ref_get_genome (const Bits **genome, PosType64 *genome_nbases);
 extern BitsP ref_get_genome_is_set (void);
+extern uint64_t ref_get_max_gpos (void);
 extern void ref_get_is_set_bytemap (VBlockP vb, PosType64 gpos, uint32_t num_bases, bool rev_comp, BufferP is_set, rom buf_name);
 extern void ref_set_genome_is_used (PosType64 gpos, uint32_t len);
-extern bool ref_is_digest_adler (void);
+extern DigestAlg ref_get_genome_digest_alg (void);
 extern rom ref_get_textual_seq (PosType64 gpos, STRc(ref), bool revcomp);
+extern Digest reference_re_digest_genome (DigestAlg alg);
 
 // ZIPping a reference
 extern void ref_compress_ref (void);
@@ -98,6 +100,8 @@ extern ConstBufferP ref_make_get_contig_metadata (void);
 extern void ref_make_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void ref_make_finalize (bool unused);
 extern rom ref_fasta_to_ref (FileP file);
+extern void ref_download_eval_ref (rom dt_name);
+extern void ref_make_prepare_one_range_for_dispatch (VBlockP vb);
 
 // contigs stuff
 extern void ref_contigs_populate_aligned_chroms (void);
@@ -119,6 +123,7 @@ extern WordIndex ref_contig_get_by_gpos (PosType64 gpos, int32_t seq_len, PosTyp
 // cache stuff
 extern bool ref_cache_is_cached  (void);
 extern bool ref_cache_is_populating (void);
+extern void ref_cache_remove_do (bool cache_exists, bool verbose);
 extern void ref_cache_remove (void);
 extern void ref_cache_remove_all (void);
 extern void ref_cache_detach (void);
@@ -128,7 +133,6 @@ extern void ref_cache_ls (void);
 // encoding of A,C,G,T to 0-3 - everything else in is 4
 static inline uint32_t nuke_encode      (char c) { return c=='A'?0 : c=='T'?3 : c=='C'?1 : c=='G'?2 : 4; } // test AT first (A,T ~30% of human genome each; G,C ~20%)
 static inline uint32_t nuke_encode_comp (char c) { return c=='T'?0 : c=='A'?3 : c=='G'?1 : c=='C'?2 : 4; }
-static inline uint32_t nuke_encode_dir (char c, bool is_forward) { return is_forward ? nuke_encode(c) : nuke_encode_comp(c); }
 
 // encoding of A,C,G,T to 0-3, encodes IUPACs to one of their bases 0-3, and everything else to 0
 extern const uint8_t acgt_encode[256];

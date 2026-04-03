@@ -602,6 +602,9 @@ batch_special_algs()
         exit 1
     fi
 
+    # empty FASTQ read (seq_len=0)
+    $genozip -tf ${TESTDIR}/special.empty_read.fq || exit 1
+
     # VCF with with allele values in FORMAT/GT > NUM_SMALL_ALLELES
     test_header "VCF with with allele values in FORMAT/GT > NUM_SMALL_ALLELES"
     $genozip -tf ${TESTDIR}/special.large-alleles.vcf || exit 1
@@ -1818,6 +1821,11 @@ batch_multiseq()
 
 batch_sam_bam_cram_output()
 {
+    # reconstructing CRAM doesn't work well on Windows: bug 1250
+    if [ -n "$is_windows" ]; then # these don't work with samtools on Windows
+        return
+    fi
+
     batch_print_header
     if ! `command -v samtools >& /dev/null`; then return; fi
 
@@ -1911,7 +1919,7 @@ batch_sam_bam_cram_output()
         txt_type=$(get_sam_type $txt)
         if [[ $txt_type != "BAM_Z0" ]]; then echo "genocat (--bam -z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
 
-        if [ ! -n "$is_windows" ]; then # these don't work with samtools on Windows
+        if [ ! -n "$is_windows" ]; then # these don't work with samtools on Windows (bug 1250)
             test_header "#15: genocat of `basename $z`: explicitly CRAM by flag"
             $genocat $z -fo $txt --cram || exit 1
             txt_type=$(get_sam_type $txt)
@@ -2270,7 +2278,7 @@ batch_make_reference()
 
     # Making a reference from a local file
     test_header "Making a reference for a local file: $genozip --make-reference $fa_file"
-    $genozip --make-reference $fa_file --force -o $ref_file || exit 1
+    $genozip --make-reference $fa_file --stats --force -o $ref_file || exit 1 # also tests --stats for make-ref
 
     local ref="--reference $ref_file"
     local REF="--REFERENCE $ref_file"
@@ -2388,6 +2396,23 @@ batch_reference_backcomp()
         echo "new file, old reference, new genounzip"
         $genozip $TESTDIR/$f -mft -e $prod_ref_file -o $output || exit 1
     done
+
+    cleanup
+}
+
+# test that new (starting 15.0.81) and old (up to 15.0.80) v15 reference are forward and backwards compatible
+batch_v15_ref_interoperability()
+{
+    batch_print_header
+    local file=$TESTDIR/test.human2-R2.fq.gz
+
+    test_header "zip with old, piz with new"
+    $genozip $file -e $hs37d5_v15 -fXo $output || exit 1
+    $genounzip $output -e $hs37d5 -t || exit 1
+
+    test_header "zip with new, piz with old"
+    $genozip $file -e $hs37d5 -fXo $output || exit 1
+    $genounzip $output -e $hs37d5_v15 -t || exit 1    
 
     cleanup
 }
@@ -2970,14 +2995,15 @@ output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
 
 # reference files
-hg19=$REFDIR/hg19.v15.ref.genozip
+hg19=$REFDIR/hg19.v15.ref.genozip # keep some v15 licenses to test back comp
 hg19_plusMT=$REFDIR/hg19_plusMT.v15.ref.genozip
-hs37d5=$REFDIR/hs37d5.v15.ref.genozip
-GRCh38=$REFDIR/GRCh38.v15.ref.genozip
+GRCh38=$REFDIR/GRCh38.large.ref.genozip
+hs37d5=$REFDIR/hs37d5.medium.ref.genozip
+hs37d5_v15=$REFDIR/hs37d5.v15.ref.genozip
 T2T1_1=$REFDIR/chm13_1.1.v15.ref.genozip
 mm10=$REFDIR/mm10.v15.ref.genozip
-chinese_spring=$REFDIR/Chinese_Spring.v15.ref.genozip
-koala=$REFDIR/koala.v15.ref.genozip
+chinese_spring=$REFDIR/Chinese_Spring.tiny.ref.genozip
+koala=$REFDIR/koala.v12.ref.genozip # also tests backcomp with v12 license
 
 zmd5=$SCRIPTSDIR/zmd5
 
@@ -3171,21 +3197,22 @@ case $GENOZIP_TEST in
 66)  batch_password_permissions        ;;
 67)  batch_genocat_backcomp_recon_plan ;;
 68)  batch_reference_backcomp          ;;
-69)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-70)  batch_real_world_backcomp 12.0.42 ;; 
-71)  batch_real_world_backcomp 13.0.21 ;; 
-72)  batch_real_world_backcomp 14.0.33 ;; 
-73)  batch_real_world_backcomp latest  ;;
-74)  batch_basic basic.vcf     latest  ;;
-75)  batch_basic basic.bam     latest  ;;
-76)  batch_basic basic.sam     latest  ;;
-77)  batch_basic basic.fq      latest  ;;
-78)  batch_basic basic.fa      latest  ;;
-79)  batch_basic basic.bed     latest  ;;
-80)  batch_basic basic.gvf     latest  ;;
-81)  batch_basic basic.gtf     latest  ;;
-82)  batch_basic basic.me23    latest  ;;
-83)  batch_basic basic.generic latest  ;;
+69)  batch_v15_ref_interoperability    ;;
+70)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+71)  batch_real_world_backcomp 12.0.42 ;; 
+72)  batch_real_world_backcomp 13.0.21 ;; 
+73)  batch_real_world_backcomp 14.0.33 ;; 
+74)  batch_real_world_backcomp latest  ;;
+75)  batch_basic basic.vcf     latest  ;;
+76)  batch_basic basic.bam     latest  ;;
+77)  batch_basic basic.sam     latest  ;;
+78)  batch_basic basic.fq      latest  ;;
+79)  batch_basic basic.fa      latest  ;;
+80)  batch_basic basic.bed     latest  ;;
+81)  batch_basic basic.gvf     latest  ;;
+82)  batch_basic basic.gtf     latest  ;;
+83)  batch_basic basic.me23    latest  ;;
+84)  batch_basic basic.generic latest  ;;
 * ) break; # break out of loop
 
 esac

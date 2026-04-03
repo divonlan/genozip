@@ -71,6 +71,7 @@ typedef struct VBlockFASTQ {
     uint32_t seq_comp_len;          // total comrpessed len of sections contributing to SEQ compression. Use for calculating bamass_trims.
     uint32_t num_consumed;          // number of consumed deep/bamass ents by this VB
     uint32_t num_monochar;          // number of lines segged monochar
+    uint32_t num_empty_read;        // number of lines with seq_len=0
     Multiplexer2 mux_ultima_c;
 } VBlockFASTQ, *VBlockFASTQP;
 

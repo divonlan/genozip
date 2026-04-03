@@ -88,7 +88,7 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
         (!ctx->b250.len && !ctx->local.len && ctx->dict.len)) {  // all_the_same case - no b250 or local, but have dict      
         WordIndex wi = LOAD_SNIP(ctx->did_i); // note: if we have no b250, local but have dict, this will be word_index=0 (see ctx_get_next_snip)
 
-        if (snip_len==1 && *snip == SNIP_LOOKUP) 
+        if (str_is_1char (snip, SNIP_LOOKUP)) 
             goto snip_is_in_local;
         
         else if (!snip_len || IS_PRINTABLE(snip[0]))

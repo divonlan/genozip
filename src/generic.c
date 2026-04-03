@@ -46,8 +46,8 @@ int32_t generic_is_header_done (bool is_eof)
     SAFE_RESTORE;
 
     // if new data type requires an external compressor, ask user to re-start (unelegant solution to a rare scenario)
-    ASSINP0 (new_dt != DT_CRAM, "This is CRAM file, but Genozip got confused because the file's name doesn't end with .cram. Solution: re-run and add the command line option \"--input cram\"");
-    ASSINP0 (new_dt != DT_BCF,  "This is BCF file, but Genozip got confused because the file's name doesn't end with .bcf. Solution: re-run and add the command line option \"--input bcf\"");
+    ASSINP0 (new_dt != DT_CRAM, "This is CRAM file, but Genozip got confused because the file's name doesn't end with .cram. "_TIP"Use '--input cram'");
+    ASSINP0 (new_dt != DT_BCF,  "This is BCF file, but Genozip got confused because the file's name doesn't end with .bcf. "_TIP"Use '--input bcf'");
     
     if (new_dt != DT_NONE) {
         txt_file->data_type = z_file->data_type = new_dt;

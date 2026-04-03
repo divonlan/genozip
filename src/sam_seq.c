@@ -339,29 +339,29 @@ void sam_zip_report_monochar_inserts (void)
 
     double total_nonref = count_monochar_ins + count_non_monochar_ins + count_S;
     iprint0 ("\nBreakdown of NONREF data:\n");
-    iprintf ("Monochar insertions: %f%% (%"PRIu64")\n", 100.0 * (double)count_monochar_ins / total_nonref, count_monochar_ins);
-    iprintf ("Non-monochar insertions: %f%% (%"PRIu64")\n", 100.0 * count_non_monochar_ins / total_nonref, count_non_monochar_ins);
-    iprintf ("Soft clips: %f%% (%"PRIu64")\n", 100.0 * count_S / total_nonref, count_S);
+    iprintf ("Monochar insertions: %f%% (%"PRIu64")\n", percent (count_monochar_ins, total_nonref), count_monochar_ins);
+    iprintf ("Non-monochar insertions: %f%% (%"PRIu64")\n", percent (count_non_monochar_ins, total_nonref), count_non_monochar_ins);
+    iprintf ("Soft clips: %f%% (%"PRIu64")\n", percent (count_S, total_nonref), count_S);
 
              
     iprint0 ("\nBreakdown of monochar insertions by base: (monochar = single base or homopolymer)\n");
     for (int b=0; b < 4; b++)
         iprintf ("%c: %f%% (%"PRIu64"); of them: same_as_base_before=%f%% same_as_base_after=%f%%\n", 
-                 acgt_decode(b), 100.0 * (double)count_ins[b] / (double)count_monochar_ins, count_ins[b],
-                 count_ins[b] ? 100.0 *(double)count_ins_after[b][b] / (double)count_ins[b] : 0.0,
-                 count_ins[b] ? 100.0 *(double)count_ins_before[b][b] / (double)count_ins[b] : 0.0);
+                 acgt_decode(b), percent (count_ins[b], count_monochar_ins), count_ins[b],
+                 percent (count_ins_after[b][b],  count_ins[b]),
+                 percent (count_ins_before[b][b], count_ins[b]));
 
     iprint0 ("\nBreakdown of monochar insertions by base and PREVIOUS base in sequence:\n");
     for (int prev_b=0; prev_b < 4; prev_b++)
         for (int b=0; b < 4; b++)
             iprintf ("prev=%c insertion=%c: %f%% (%"PRIu64")\n", 
-                     acgt_decode(prev_b), acgt_decode(b), 100.0 * (double)count_ins_after[prev_b][b] / (double)count_monochar_ins, count_ins_after[prev_b][b]);
+                     acgt_decode(prev_b), acgt_decode(b), percent (count_ins_after[prev_b][b], count_monochar_ins), count_ins_after[prev_b][b]);
 
     iprint0 ("\nBreakdown of monochar insertions by base and NEXT base in sequence:\n");
     for (int next_b=0; next_b < 4; next_b++)
         for (int b=0; b < 4; b++)
             iprintf ("next=%c insertion=%c: %f%% (%"PRIu64")\n", 
-                     acgt_decode(next_b), acgt_decode(b), 100.0 * (double)count_ins_before[next_b][b] / (double)count_monochar_ins, count_ins_before[next_b][b]);
+                     acgt_decode(next_b), acgt_decode(b), percent (count_ins_before[next_b][b], count_monochar_ins), count_ins_before[next_b][b]);
 
     // reset for next file
     memset (count_ins, 0, sizeof (count_ins));
@@ -1086,7 +1086,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
         nonref_ctx->next_local += ROUNDUP4 (recon_len);
 
         if (deep_seq_by_ref) 
-            sam_piz_set_deep_seq (vb, true, NO_GPOS64); 
+            sam_piz_set_deep_seq (vb, true, NO_GPOS); 
 
         goto done;
     }

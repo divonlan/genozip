@@ -85,12 +85,12 @@ static COMPRESS (codec_compress_error)
 
 static UNCOMPRESS (codec_uncompress_error)
 {
-    ABORT ("Error in comp_uncompress: \"%s\": unsupported codec: %s. %s", name, codec_name (codec), genozip_update_msg());
+    ABORT ("in comp_uncompress: \"%s\": unsupported codec: %s. %s", name, codec_name (codec), genozip_update_msg());
 }
 
 static CODEC_RECONSTRUCT (codec_reconstruct_error)
 {
-    ABORT ("Error in reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction. %s", 
+    ABORT ("in reconstruct_from_ctx_do: in ctx=%s - codec %s has no LT_CODEC reconstruction. %s", 
            dis_dict_id (ctx->dict_id).s, codec_name (codec), genozip_update_msg());
 }
 
@@ -447,13 +447,13 @@ void codec_qual_show_stats (void)
     uint32_t other = z_file->num_lines - domq - divr - homp - pacb - longr - normq; 
 
     iprintf ("\nQUAL codec stats (# lines): DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) LONGR=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%u (%.1f%%)\n",
-             domq,  (double)domq  / z_file->num_lines * 100, 
-             divr,  (double)divr  / z_file->num_lines * 100, 
-             homp,  (double)homp  / z_file->num_lines * 100, 
-             pacb,  (double)pacb  / z_file->num_lines * 100, 
-             longr, (double)longr / z_file->num_lines * 100, 
-             normq, (double)normq / z_file->num_lines * 100, 
-             other, (double)other / z_file->num_lines * 100);
+             domq,  percent (domq,  z_file->num_lines), 
+             divr,  percent (divr,  z_file->num_lines), 
+             homp,  percent (homp,  z_file->num_lines), 
+             pacb,  percent (pacb,  z_file->num_lines), 
+             longr, percent (longr, z_file->num_lines), 
+             normq, percent (normq, z_file->num_lines), 
+             other, percent (other, z_file->num_lines));
 }
 
 UNCOMPRESS (codec_hapmat_uncompress)

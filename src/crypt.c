@@ -108,8 +108,8 @@ static void crypt_generate_aes_key (VBlockP vb,
     Digest peppered_hash = md5_do (STRb(vb->spiced_pw));
 
     // get hash
-    memcpy (aes_key, salty_hash.bytes, sizeof(Digest)); // first half of key
-    memcpy (aes_key + sizeof(Digest), peppered_hash.bytes, sizeof(Digest)); // 2nd half of key
+    memcpy (aes_key, salty_hash.md5, sizeof(Digest)); // first half of key
+    memcpy (aes_key + sizeof(Digest), peppered_hash.md5, sizeof(Digest)); // 2nd half of key
 
     buf_free (vb->spiced_pw);
 }
@@ -142,7 +142,7 @@ void crypt_pad (uint8_t *data, uint32_t data_len, uint32_t padding_len)
     uint32_t src_len = MIN_(data_len, 100);
     Digest hash = md5_do (&data[data_len - src_len], src_len);
     
-    memcpy (&data[data_len-padding_len], hash.bytes, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
+    memcpy (&data[data_len-padding_len], hash.md5, padding_len); // luckily the length of MD5 hash and AES block are both 16 bytes - so one hash is sufficient for the padding
 }
 
 rom encryption_name (EncryptionType encryption_type)

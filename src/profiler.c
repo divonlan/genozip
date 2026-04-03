@@ -6,42 +6,18 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
 
+
 #include "profiler.h"
 #include "file.h"
 
 static ProfilerRec profile = {};    // data for this z_file 
-static Mutex profile_mutex = {};
 static TimeSpecType profiler_timer; // wallclock
+static Mutex profile_mutex = {};
 
 void profiler_initialize (void)
 {
     mutex_bottleneck_analysis_init();
     mutex_initialize (profile_mutex);
-}
-
-void profiler_new_z_file (void)
-{
-    memset (&profile, 0, sizeof (profile));
-    clock_gettime (CLOCK_REALTIME, &profiler_timer); // initialze wallclock
-}
-
-void profiler_set_avg_compute_vbs (float avg_compute_vbs)
-{
-    ASSERT0 (profile.num_txt_files >= 0 && profile.num_txt_files < MAX_NUM_TXT_FILES_IN_ZFILE, "too many txt files");
-
-    profile.avg_compute_vbs[profile.num_txt_files++] = avg_compute_vbs;
-}
-
-StrTextSuperLong profiler_get_avg_compute_vbs (char sep)
-{
-    StrTextSuperLong s = {};
-    int s_len = 0;
-    for (int i=0; i < profile.num_txt_files; i++)
-        SNPRINTF (s, "%.1f%c", profile.avg_compute_vbs[i], sep);
-
-    if (s_len) s.s[s_len-1] = 0; // remove final separator
-
-    return s;
 }
 
 void profiler_add (ConstVBlockP vb)
@@ -79,13 +55,6 @@ void profiler_add (ConstVBlockP vb)
 
 static inline uint32_t ms(uint64_t ns) { return (uint32_t)(ns / 1000000);}
 
-rom profiler_print_short (const ProfilerRec *p)
-{
-    static char str[300]; // not thread safe
-    snprintf (str, sizeof (str), "read: %s compute:%s write: %s", str_int_commas (ms(p->nanosecs.read)).s, str_int_commas (ms(p->nanosecs.compute)).s, str_int_commas (ms(p->nanosecs.write)).s);
-    return str;
-}
-
 void profiler_add_evb_and_print_report (void)
 {
     profiler_add (evb);
@@ -118,13 +87,10 @@ void profiler_add_evb_and_print_report (void)
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
         PRINT (ref_load_stored_reference, 1);
         PRINT (ref_read_one_range, 2);
-        PRINT (ref_uncompress_one_range, 2);
         PRINT (ref_load_digest, 2); 
-        PRINT (refhash_load, 1);
         PRINT (refhash_load_digest, 2);
         PRINT (refhash_read_one_vb, 2);
-        PRINT (refhash_compress_digest, 2); // make-ref
-        PRINT (refhash_uncompress_one_vb, 2);
+        PRINT (refhash_p5_digest, 2); // make-ref
         PRINT (cram_inspect_file, 1);
         PRINT (txtfile_discover_specific_gz, 1);
         PRINT (fastq_bamass_populate, 1);
@@ -183,14 +149,10 @@ void profiler_add_evb_and_print_report (void)
         PRINT (dict_io_assign_codecs, 3); 
         PRINT (dict_io_compress_one_fragment, 3);
         PRINT (ref_compress_ref, 2);
-        PRINT (ref_compress_one_range, 3);
-        PRINT (refhash_calc_one_range, 4);
-        PRINT (refhash_compress_refhash, 2);
-        PRINT (refhash_compress_one_vb, 3);
-        PRINT (refhash_compress_digest, 3);
         PRINT (ref_make_calculate_digest, 3);
         PRINT (ref_contigs_compress, 3);
         PRINT (ref_copy_compressed_sections_from_reference_file, 3);
+        PRINT (refhash_make_refhash, 2);
         PRINT (random_access_finalize_entries, 2);
         PRINT (random_access_compress, 2);
         PRINT (ctx_compress_counts, 2);
@@ -225,6 +187,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (seg_initialize, 2);
         PRINT (piz_uncompress_all_ctxs__fastq_read_r1, 3);
         PRINT (qname_seg, 2);
+        PRINT (qname_seg_qf, 3);
         PRINT (sam_cigar_seg, 2);
         if (!flag.bam_assist) PRINT (squank_seg, 3); // sub of either sam_cigar_seg or fastq_bamass_seg_CIGAR
         PRINT (fastq_seg_get_lines, 2);
@@ -247,10 +210,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_analyze_copied_SEQ, 3);
         PRINT (aligner_seg_seq, 3);
         PRINT (aligner_best_match, 4);
-        PRINT (aligner_first_layer, 5);
-        PRINT (aligner_additional_layers, 5);
+        PRINT (aligner_tight_loop, 5);
         PRINT (aligner_update_best, 5);
-        PRINT (aligner_get_word_from_seq, 5);
         PRINT (aligner_seq_to_bitmap, 5);
         PRINT (fastq_seg_DESC, 2);
         PRINT (fastq_seg_saux, 2);
@@ -343,9 +304,9 @@ void profiler_add_evb_and_print_report (void)
 
         iprint0 ("GENOUNZIP main thread (piz_one_txt_file):\n");
         PRINT (ref_load_stored_reference, 1);
+        PRINT (reference_re_digest_genome, 1);
         PRINT (ref_initialize_ranges, 2);
         PRINT (ref_read_one_range, 2);
-        PRINT (ref_uncompress_one_range, 2);
         PRINT (piz_read_global_area, 1); // sometimes also includes ref_load_stored_reference, but usually not
         PRINT (dict_io_read_all_dictionaries, 2);
         PRINT (dict_io_build_word_lists, 3);
@@ -412,7 +373,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (aligner_reconstruct_seq, 2);
         PRINT (sam_piz_sam2bam_SEQ, 2);
         PRINT (sam_piz_special_QUAL, 2);
-        if (z_file && (Z_DT(SAM) || Z_DT(BAM))) {
+        if (z_file && (Z_DT(BAM) || Z_DT(SAM))) {
             PRINT (codec_longr_reconstruct,3);
             PRINT (codec_homp_reconstruct, 3);
             PRINT (codec_t0_reconstruct,   3);
@@ -462,6 +423,17 @@ void profiler_add_evb_and_print_report (void)
         }
     }
 
+    if (flag.make_reference || flag.reference) iprint0 ("Other compute threads\n");
+    PRINT (ref_uncompress_one_range, 1);
+    PRINT (refhash_uncompress_one_vb, 1);
+    PRINT (ref_compress_one_range, 1);
+    PRINT (refhash_p1_count, 1);
+    PRINT (refhash_p2_decide_occupier, 1);
+    PRINT (refhash_p3_occupy, 1);
+    PRINT (refhash_p4_compress, 1);
+    PRINT (refhash_p5_digest, 1);
+    PRINT (refhash_revcomp_genome_do, 1);
+
     // PIZ and also ZIP if paired FASTQ
     if (profile.nanosecs.zfile_uncompress_section) {
         iprint0 ("BREAKDOWN OF zfile_uncompress_section by codec (all threads)\n");
@@ -502,9 +474,10 @@ void profiler_add_evb_and_print_report (void)
     PRINT (buflist_find_buf, 0);
     PRINT (buf_low_level_free, 0);
     PRINT (vb_release_vb_do, 0);
+    PRINT (buflist_free_vb, 1);
+    PRINT (buflist_compact, 0);
     PRINT (vb_destroy_vb, 0);
     PRINT (dispatcher_recycle_vbs, 0);
-    PRINT (refhash_generate_emoneg, 0);
     PRINT (tmp1, 0); 
     PRINT (tmp2, 0); 
     PRINT (tmp3, 0); 
@@ -524,4 +497,39 @@ void profiler_add_evb_and_print_report (void)
     iprint0 ("\n\n");
 
     mutex_show_bottleneck_analsyis();
+}
+
+void show_time_one (VBlockP vb, rom res, uint64_t delta)
+{
+    iprintf ("%s %s%s%s: %"PRIu64" μsec\n", res, \
+                (vb->profile.next_name    ? vb->profile.next_name : ""),\
+                (vb->profile.next_subname ? "." : ""),\
+                (vb->profile.next_subname ? vb->profile.next_subname : ""),\
+                delta/1000);\
+    vb->profile.next_name = vb->profile.next_subname = NULL;\
+}
+
+void profiler_new_z_file (void)
+{
+    memset (&profile, 0, sizeof (profile));
+    clock_gettime (CLOCK_REALTIME, &profiler_timer); // initialze wallclock
+}
+
+void profiler_set_avg_compute_vbs (float avg_compute_vbs)
+{
+    ASSERT0 (profile.num_txt_files >= 0 && profile.num_txt_files < MAX_NUM_TXT_FILES_IN_ZFILE, "too many txt files");
+
+    profile.avg_compute_vbs[profile.num_txt_files++] = avg_compute_vbs;
+}
+
+StrTextSuperLong profiler_get_avg_compute_vbs (char sep)
+{
+    StrTextSuperLong s = {};
+    int s_len = 0;
+    for (int i=0; i < profile.num_txt_files; i++)
+        SNPRINTF (s, "%.1f%c", profile.avg_compute_vbs[i], sep);
+
+    if (s_len) s.s[s_len-1] = 0; // remove final separator
+
+    return s;
 }

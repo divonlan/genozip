@@ -21,6 +21,7 @@
 #include "mgzip.h"
 #include "threads.h"
 #include "license.h"
+#include "refhash.h"
 
 typedef struct SectionEnt SectionEntModifiable;
 
@@ -1015,12 +1016,12 @@ FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt/*data ty
 
     switch (st) {
         case SEC_GENOZIP_HEADER:
-            snprintf (str.s, sizeof (str.s), "%s=%u %s=%u aligner=%u txt_is_bin=%u %s=%u adler=%u has_gencomp=%u has_taxid=%u",
+            snprintf (str.s, sizeof (str.s), "%s=%u %s=%u aligner=%u txt_is_bin=%u %s=%u not_md5=%u has_gencomp=%u has_taxid=%u",
                      (dt != DT_NONE && dts[dt])  ? dts[dt]  : "dt_specific",  f.genozip_header.dt_specific, 
                      (dt != DT_NONE && dts2[dt]) ? dts2[dt] : "dt_specific2", f.genozip_header.dt_specific2, 
                      f.genozip_header.aligner, f.genozip_header.txt_is_bin, 
                      VER(15) ? "has_digest" : "v14_bgzf", f.genozip_header.has_digest, 
-                     f.genozip_header.adler, f.genozip_header.has_gencomp,f.genozip_header.has_taxid);
+                     f.genozip_header.not_md5, f.genozip_header.has_gencomp,f.genozip_header.has_taxid);
             break;
 
         case SEC_TXT_HEADER: {
@@ -1109,7 +1110,7 @@ void sections_show_header (ConstSectionHeaderP header,
     if (flag.show_header_section_i != -1 && flag.show_header_section_i != header->section_i)
         return;
           
-    bool is_dict_offset = (HEADER_IS(DICT) && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
+    bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
     bool v12 = (IS_ZIP || VER(12));
     bool v14 = (IS_ZIP || VER(14));
     bool v15 = (IS_ZIP || VER(15));
@@ -1127,9 +1128,9 @@ void sections_show_header (ConstSectionHeaderP header,
               cond_str (header->section_type == SEC_LOCAL && header->sub_codec, "sub=", codec_name (header->sub_codec)),
               cond_int (header->section_type == SEC_DICT, "dict_helper=", header->dict_helper),
               BGEN32 (header->vblock_i), 
-              VER(15) ? "z_digest" : "comp_off",
-              VER(15) ? -10 : -4,
-              VER(15) ? BGEN32 (header->z_digest) : BGEN32 (header->v14_compressed_offset), 
+              v15 ? "z_digest" : "comp_off",
+              v15 ? -10 : -4,
+              v15 ? BGEN32 (header->z_digest) : BGEN32 (header->v14_compressed_offset), 
               BGEN32 (header->data_uncompressed_len), 
               BGEN32 (header->data_compressed_len), 
               BGEN32 (header->data_encrypted_len));
@@ -1144,8 +1145,8 @@ void sections_show_header (ConstSectionHeaderP header,
 
     case SEC_GENOZIP_HEADER: {
         SectionHeaderGenozipHeaderP h = (SectionHeaderGenozipHeaderP)header;
-        z_file->z_flags.adler = h->flags.genozip_header.adler; // needed by digest_display_ex
-        char dt_specific[REF_FILENAME_LEN + 1 KB] = "";
+        z_file->z_flags.not_md5 = h->flags.genozip_header.not_md5; // needed by digest_display_ex
+        char dt_specific[REF_FILENAME_LEN + 2 KB] = "";
         dt = BGEN16 (h->data_type); // for GENOZIP_HEADER, go by what header declares
         if (dt >= NUM_DATATYPES) dt = DT_NONE;
 
@@ -1170,7 +1171,12 @@ void sections_show_header (ConstSectionHeaderP header,
                       SAM_FACTOR_MULT, h->sam.segconf_sam_factor);
 
         else if (DT(REF)) {
-            if (v15) snprintf (dt_specific, sizeof (dt_specific), "%sgenome_digest=%s\n", SEC_TAB, digest_display (h->genome_digest).s);
+            if (v15) snprintf (dt_specific, sizeof (dt_specific), "%sgenome_digest=%s%.30s%.30s%.30s%.30s\n", 
+                               SEC_TAB, digest_display (h->genome_digest).s,
+                               cond_int (VER2(15,81), " bases_per_hash=", h->ref.bases_per_hash),
+                               cond_int (VER2(15,81), " bits_per_hash_out=", h->ref.bits_per_hash_out),
+                               cond_int (VER2(15,81), " gpos_bytes=", h->ref.gpos_bytes),
+                               cond_int (VER2(15,81), " make_ref_flag=", h->ref.make_ref_flag));
             else     snprintf (dt_specific, sizeof (dt_specific), "%sfasta_md5=%s\n", SEC_TAB, digest_display (h->v14_REF_fasta_md5).s);
         }
 
@@ -1180,11 +1186,13 @@ void sections_show_header (ConstSectionHeaderP header,
                       dis_dict_id(h->fastq.segconf_seq_len_dict_id).s, TF(h->fastq.segconf_fa_as_fq), TF(h->fastq.segconf_is_ileaved), BGEN32(h->fastq.segconf_std_seq_len),
                       h->fastq.segconf_use_ins_ctxs);
 
-        snprintf (str, sizeof (str), "\n%sver=%u.0.%u modified=%u lic=%s private=%u enc=%s dt=%s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u %.10s%.20s%.6s\n" 
-                                     "%s%s %s=\"%.*s\" %s=%34s\n"
+        snprintf (str, sizeof (str), "\n%sver=%.10s%.10s modified=%u lic=%.20s private=%u enc=%.10s dt=%.10s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u %.10s%.20s%.6s\n" 
+                                     "%s%s %s=\"%.*s\" %s:%s%s\n"
                                      "%s" // dt_specific, if there is any
                                      "%screated=\"%.*s\"\n",
-                  SEC_TAB, h->genozip_version, h->genozip_minor_ver/*15.0.28*/, h->is_modified/*15.0.60*/, lic_type_name (h->lic_type)/*15.0.59*/, 
+                  SEC_TAB, STRver_(h->genozip_version, h->genozip_minor_ver).s, 
+                  cond_str(VER2(15,81), " ref_ver=", STRver_(h->ref_genozip_ver, BGEN16(h->ref_genozip_minor_ver)).s),
+                  h->is_modified/*15.0.60*/, lic_type_name (h->lic_type)/*15.0.59*/, 
                   h->private_file, encryption_name (h->encryption_type), dt_name (dt), 
                   BGEN64 (h->recon_size), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                   cond_int(!VER2(15,65), "vb_size=", BGEN16(h->old_vb_size)),
@@ -1192,8 +1200,8 @@ void sections_show_header (ConstSectionHeaderP header,
                   cond_int ((DT(SAM) || DT(BAM)) && v15, " conc_writing_vbs=", BGEN16(h->sam.conc_writing_vbs)), 
                   SEC_TAB, sections_dis_flags (f, st, dt, is_r2).s,
                   DT(REF) ? "fasta" : "ref", REF_FILENAME_LEN, h->ref_filename, 
-                  DT(REF) ? "refhash_digest" : "ref_genome_digest", 
-                  DT(REF) ? digest_display(h->refhash_digest).s : digest_display_ex (h->ref_genome_digest, DD_MD5).s,
+                  DT(REF) ? "refhash_digest" : "ref_genome_digest", DT(REF) ? digest_display(h->refhash_digest).s : digest_display_ex_ (h->ref_genome_digest, DD_NORMAL, VER2(15,81) ? h->ref_genome_digest_alg : DIGEST_UNKNOWN, !VER2(15,81)/*guess alg for older files*/).s,
+                  cond_str (!DT(REF) && VER2(15,81), " ref_genome_digest_alg=", digest_alg_name (h->ref_genome_digest_alg)),
                   dt_specific, 
                   SEC_TAB, FILE_METADATA_LEN, h->created);
         break;
@@ -1201,7 +1209,7 @@ void sections_show_header (ConstSectionHeaderP header,
 
     case SEC_TXT_HEADER: {
         SectionHeaderTxtHeaderP h = (SectionHeaderTxtHeaderP)header;
-        if (!VER(15))
+        if (!v15)
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
                       "%ssrc_codec=%s OLD_gz_size_3LSB=%u %s txt_filename=\"%.*s\"\n",
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
@@ -1281,8 +1289,11 @@ void sections_show_header (ConstSectionHeaderP header,
     
     case SEC_REF_HASH: {
         SectionHeaderRefHashP h = (SectionHeaderRefHashP)header;
-        snprintf (str, sizeof (str), "num_layers=%u layer_i=%u layer_bits=%u start_in_layer=%u\n",
-                  h->num_layers, h->layer_i, h->layer_bits, BGEN32 (h->start_in_layer)); 
+        if (VER2(15,81))
+            snprintf (str, sizeof (str), "first_ent=%"PRIu64"\n", BGEN64 (h->first_ent)); 
+        else
+            snprintf (str, sizeof (str), "num_layers=%u layer_i=%u layer_bits=%u start_in_layer=%u\n",
+                      h->OLD.num_layers, h->OLD.layer_i, h->OLD.layer_bits, BGEN32 (h->OLD.start_in_layer)); 
         break;
     }
     
@@ -1379,7 +1390,7 @@ void noreturn genocat_show_headers (rom z_filename)
 
     TEMP_FLAG (show_headers, 0);
     TEMP_FLAG (genocat_no_reconstruct, 1);
-    zfile_read_genozip_header (&header, HARD_FAIL); // also sets z_file->genozip_version
+    zfile_read_genozip_header (&header, HARD_FAIL); // also sets z_file->genozip_ver
     RESTORE_FLAG (show_headers);
     RESTORE_FLAG (genocat_no_reconstruct);
 
@@ -1505,10 +1516,10 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
     
     if (header) {
         iprintf ("Contents of the SEC_GENOZIP_HEADER section (output of --show-gheader) of %s:\n", z_name);
-        iprintf ("  genozip_version: %u.0.%u\n",    header->genozip_version, header->genozip_minor_ver); // note: minor version always 0 before 15.0.28
+        iprintf ("  genozip_version: %s\n",         STRver_(header->genozip_version, header->genozip_minor_ver).s); // note: minor version always 0 before 15.0.28
         iprintf ("  data_type: %s\n",               dt_name (dt));
         iprintf ("  encryption_type: %s\n",         encryption_name (header->encryption_type)); 
-        iprintf ("  recon_size: %s\n",         str_int_commas (BGEN64 (header->recon_size)).s);
+        iprintf ("  recon_size: %s\n",              str_int_commas (BGEN64 (header->recon_size)).s);
         iprintf ("  num_lines_bound: %"PRIu64"\n",  BGEN64 (header->num_lines_bound));
         iprintf ("  num_sections: %u\n",            z_file->section_list.len32);
         iprintf ("  num_txt_files: %u\n",           header->num_txt_files);

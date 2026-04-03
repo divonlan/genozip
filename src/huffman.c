@@ -531,7 +531,8 @@ int huffman_uncompress (Did did_i, bytes comp, STRc(uncomp))
     // if we use master, then first 5 bits indicate the subset of master used
     uint32_t prefix_len = 0;
     if (h->max_prefix_len) {
-        prefix_len = bits_get5 (&bits, bit_i); // assumes HUFFMAN_PREFIX_LEN_BITS=5
+        _Static_assert (HUFFMAN_PREFIX_LEN_BITS==5, "bits_get5");
+        prefix_len = bits_get5 (&bits, bit_i); 
         ASSERT (prefix_len <= h->master_len, "expected prefix_len=%u <= h->master_len=%u", prefix_len, h->master_len);
 
         memcpy (uncomp, h->master, prefix_len);

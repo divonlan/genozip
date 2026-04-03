@@ -24,6 +24,7 @@
 #include "zriter.h"
 #include "qname_filter.h"
 #include "mgzip.h"
+#include "license.h"
 
 #define dict_id_is_fastq_qname_sf dict_id_is_type_1
 #define dict_id_is_fastq_aux      dict_id_is_type_2
@@ -34,7 +35,7 @@ STRl (copy_qname_snip, 30);
 unsigned fastq_vb_size (DataType dt) { return sizeof (VBlockFASTQ); }
 unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
 
-uint64_t global_num_consumed = 0; // number of consumed deep/bamass ents. note: not in z_file because bamass can be used by several z_files.
+uint64_t global_num_consumed = 0; // number of consumed deep/bamazzss ents. note: not in z_file because bamass can be used by several z_files.
 
 #define DT_NAME (FAF ? "FASTA" : "FASTQ")
 
@@ -177,7 +178,7 @@ static inline bool is_valid_read (const rom *t,      // 4 (FASTQ) or 2 (FASTA-as
     
     else
         return l[0] >= 2 && t[0][0] == '@' && // DESC line starts with a '@' and is of length at least 2
-               l[1] >= 1 && l[1] == l[3]   && // QUAL and SEQ have the same length, which is at least 1
+               l[1] == l[3] &&                // QUAL and SEQ have the same length (possibly 0 for an "empty read" since 15.0.81)
                l[2] >= 1 && t[2][0] == '+';   // THIRD line starts with '+'
 }
 
@@ -434,6 +435,7 @@ void fastq_zip_after_compute (VBlockP vb)
     z_file->fq_num_aligned         += vb->num_aligned;
     z_file->fq_num_verbatim        += vb->num_verbatim;
     z_file->fq_num_monochar        += VB_FASTQ->num_monochar;
+    z_file->fq_num_empty_read      += VB_FASTQ->num_empty_read;
     global_num_consumed            += VB_FASTQ->num_consumed;
 
     if (!flag.deep && IS_REF_LOADED_ZIP) {
@@ -701,10 +703,14 @@ void fastq_segconf_finalize (VBlockP vb)
     if (!flag.reference && !flag.fast) 
         segconf_test_multiseq (VB, FASTQ_NONREF);
 
-    if (!segconf.multiseq && !flag.reference && !txt_file->redirected && !flag.seg_only && !flag.restarted)
-        TIP ("Compressing a %s file using a reference file can reduce the compressed file's size by an additional %s.\n"
-             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n", 
-             DT_NAME, (FAF ? "60%-80%" : "20%-60%"), arch_get_argv0(), txt_file->name);
+    if (!segconf.multiseq && !flag.reference && !txt_file->redirected && !flag.seg_only && !flag.restarted) {
+        if (!flag.force && license_is_eval() && isatty(0) && isatty(1)) 
+            ref_download_eval_ref (DT_NAME);
+        else
+            TIP ("Compressing a %s file using a reference file can reduce the compressed file's size by an additional %s.\n"
+                 "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n", 
+                 DT_NAME, (FAF ? "60%-80%" : "20%-60%"), arch_get_argv0(), txt_file->name);
+    }
 
     // cases where aligner is available (note: called even if reference is not loaded, so that it errors in segconf_calculate)
     if (flag.best || flag.deep || flag.bam_assist)

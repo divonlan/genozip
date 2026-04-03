@@ -175,7 +175,7 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t num_alns/
     if (IS_MAIN(vb)) {
         FAILIF (!sam_might_have_saggies_in_other_VBs (vb, dl, num_alns), "all sag alignments are contained in this VB%s", "");
         FAILIF (dl->QNAME_len > SAM_MAX_QNAME_LEN, "dl->QNAME_len=%u > %u", dl->QNAME_len, SAM_MAX_QNAME_LEN);
-        FAILIF (seq_len==1 && *seq == '*', "SEQ=\"*\"%s", ""); // we haven't segged seq yet, so vb->seq_missing is not yet set
+        FAILIF (IS_ASTERISK(seq), "SEQ=\"*\"%s", ""); // we haven't segged seq yet, so vb->seq_missing is not yet set
         FAILIF (seq_len > MAX_SA_SEQ_LEN, "seq_len=%u > %u", seq_len, MAX_SA_SEQ_LEN);
         FAILIF (!dl->POS, "POS=0%s", ""); // unaligned
         FAILIF (num_alns > MAX_SA_NUM_ALNS, "%s=%u > %u", (IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) ? "NH:i" : "num_alns", num_alns, MAX_SA_NUM_ALNS);
@@ -358,7 +358,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), boo
     START_TIMER;
 
     SamNMType NM;
-    int32_t n_alns; 
+    int32_t n_alns; // number of alignments (including this one in SAG)
     SamComponentType comp_i = COMP_MAIN; // generated component
     
     // unmapped or otherwise lacking alignment - not gencomp
@@ -429,6 +429,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), boo
             break;
 
         case SAG_BY_FLAG: // note: we only possibly set this for BAM (not SAM) files
+            n_alns = 1; // avoid compiler warning - we don't know about many n_alns, and we don't use this in case SAG_BY_FLAG
             if (sam_line_is_depn(dl))
                 comp_i = SAM_COMP_DEPN;
 

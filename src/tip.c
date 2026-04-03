@@ -46,13 +46,15 @@ void tip_print (void)
             valid_tips[n++] = acadmic_notice.s; // 5X more likely than other tips
 
     // italics from: https://en.wikipedia.org/wiki/Mathematical_Alphanumeric_Symbols
-    valid_tips[n++] = _TIP "Want to understand how Genozip works? See the paper: " PAPER2 "\n";
-    valid_tips[n++] = _TIP "Use 'genocat --downsample=𝑟𝑎𝑡𝑒' to downsample your data. " WEBSITE_DOWNSAMPLING "\n";
-    valid_tips[n++] = _TIP "Use --password=𝑝𝑎𝑠𝑠𝑤𝑜𝑟𝑑 to also encrypt the data. " WEBSITE_ENCRYPTION "\n";
-    valid_tips[n++] = _TIP "Use 'genozip --is-exactable' to know if 'genounzip --bgzf=exact' will be able to re-compress the file with identical gz compression. " WEBSITE_GZ "\n";
-    valid_tips[n++] = _TIP "Use 'genozip --tar mydata.tar 𝑓𝑖𝑙𝑒𝑠 𝑎𝑛𝑑 𝑑𝑖𝑟𝑒𝑐𝑡𝑜𝑟𝑖𝑒𝑠' to archive entire directories. " WEBSITE_ARCHIVING "\n";
-    valid_tips[n++] = _TIP "genozip files are an excellent way to share and publish data – uncompressing genozip files is always free\n";
-    valid_tips[n++] = _TIP "To compress a file directly from a URL use, for example, 'genozip ftp://mysite/sample.fastq.gz'. " WEBSITE_COMPRESS_URL "\n";
+    if (!flag.default_make_ref) {
+        valid_tips[n++] = _TIP "Want to understand how Genozip works? See the paper: " PAPER2 "\n";
+        valid_tips[n++] = _TIP "Use 'genocat --downsample=𝑟𝑎𝑡𝑒' to downsample your data. " WEBSITE_DOWNSAMPLING "\n";
+        valid_tips[n++] = _TIP "Use 'genozip --is-exactable' to know if 'genounzip --bgzf=exact' will be able to re-compress the file with identical gz compression. " WEBSITE_GZ "\n";
+        valid_tips[n++] = _TIP "Use 'genozip --tar mydata.tar 𝑓𝑖𝑙𝑒𝑠 𝑎𝑛𝑑 𝑑𝑖𝑟𝑒𝑐𝑡𝑜𝑟𝑖𝑒𝑠' to archive entire directories. " WEBSITE_ARCHIVING "\n";
+        valid_tips[n++] = _TIP "genozip files are an excellent way to share and publish data – uncompressing genozip files is always free\n";
+        valid_tips[n++] = _TIP "genozip can compress a file directly from a URL: 'genozip ftp://mysite/sample.fastq.gz'. " WEBSITE_COMPRESS_URL "\n";
+        valid_tips[n++] = _TIP "Use --password=𝑝𝑎𝑠𝑠𝑤𝑜𝑟𝑑 to also encrypt the data. " WEBSITE_ENCRYPTION "\n";
+    }
 
     if (!(E(SAM) || E(BAM) || E(VCF) || E(BCF)) && (license_is_academic() || license_is_eval()))
         valid_tips[n++] = "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER2_CITATION "\n";
@@ -69,7 +71,7 @@ void tip_print (void)
     if ((E(SAM) || E(BAM)) && (license_is_academic() || license_is_eval()))
         valid_tips[n++] = _TIP "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER3_CITATION "\n";
 
-    bool is_deep = flag.deep || ((IS_PIZ && z_file && (Z_DT(SAM) || Z_DT(BAM))) && z_file->z_flags.dts2_deep);
+    bool is_deep = flag.deep || ((IS_PIZ && z_file && (Z_DT(BAM) || Z_DT(SAM))) && z_file->z_flags.dts2_deep);
     
     if (is_deep && (license_is_academic() || license_is_eval()))
         valid_tips[n++] = _TIP "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER4_CITATION "\n";
@@ -85,7 +87,7 @@ void tip_print (void)
     if ((E(VCF) || E(BCF)) && (license_is_academic() || license_is_eval()))
         valid_tips[n++] = _TIP "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER1_CITATION "\n";
 
-    if (!flag.optimize) {
+    if (!flag.optimize && !flag.make_reference) {
         if (E(SAM) || E(BAM) || E(CRAM)) valid_tips[n++] = _TIP "--optimize allows genozip to make minor modifications to the data that usually have no impact on downstream analysis, for better compression. " WEBSITE_OPT_BAM "\n";
         else if (E(VCF) || E(BCF))       valid_tips[n++] = _TIP "--optimize allows genozip to make minor modifications to the data that usually have no impact on downstream analysis, for better compression. " WEBSITE_OPT_VCF "\n";
         else if (E(FASTQ))               valid_tips[n++] = _TIP "--optimize allows genozip to make minor modifications to the data that usually have no impact on downstream analysis, for better compression. " WEBSITE_OPT_FASTQ "\n";
@@ -94,13 +96,17 @@ void tip_print (void)
     if (!flag.best && !flag.fast && !flag.low_memory && !flag.make_reference) 
         valid_tips[n++] = _TIP "Use --best for the best compression (slower)\n";
 
-    if (license_is_eval() && !flag.show_stats)
+    if (flag.default_make_ref)
+        valid_tips[n++] = _TIP "Use --make-reference=[tiny|small|medium|large] (default: medium) to control the size of the reference file. Larger reference files result is faster and better compression, but using them consumes more RAM. " WEBSITE_REFERENCE "\n";
+
+    if (license_is_eval() && !flag.show_stats && !flag.make_reference)
         valid_tips[n++] = _TIP "Use --stats to see detailed compression statistics\n";
 
     if (license_is_eval() || license_is_standard() || license_is_enterprise())
         valid_tips[n++] = _TIP "\"genozip --sendto\" lets your clients compress files using 𝑦𝑜𝑢𝑟 Genozip license ahead of sending them to you. " WEBSITE_PREMIUM "\n";
 
-    if (arch_get_max_resident_set() > 100 GB || flag.is_windows || flag.is_wsl || flag.is_mac)
+    if ((arch_get_max_resident_set() > 100 GB || flag.is_windows || flag.is_wsl || flag.is_mac) &&
+        !flag.make_reference)
         valid_tips[n++] = _TIP "Use --low-memory to reduce RAM consumption at the expense of compression size and time\n";
 
     iprintf ("\n%s\n", valid_tips[clock() % n]); // "randomly" select one of the valid tips

@@ -992,7 +992,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY)
     ContextP base_ctx = ctx;
 
     // up to v13: set buddy if needed and not already set
-    if (!VER(14) && snip_len==1 && *snip == v13_SNIP_COPY_BUDDY) {
+    if (!VER(14) && str_is_1char (snip, v13_SNIP_COPY_BUDDY)) {
         sam_piz_set_buddy_v13 (VB); 
         snip++;
         snip_len--;

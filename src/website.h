@@ -36,7 +36,6 @@
 #define WEBSITE_STUDENT         GENOZIP_URL "/student"
 #define WEBSITE_EVAL            GENOZIP_URL "/eval"
 #define WEBSITE_COMPARE         GENOZIP_URL "/compare"
-#define WEBSITE_OFFLINE         GENOZIP_URL "/offline"
 #define WEBSITE_DEEP            GENOZIP_URL "/fastq#deep"
 #define WEBSITE_BAMASS          GENOZIP_URL "/fastq#bamass"
 #define WEBSITE_OPT_FASTQ       GENOZIP_URL "/fastq#optimize"
@@ -44,6 +43,7 @@
 #define WEBSITE_OPT_VCF         GENOZIP_URL "/vcf#optimize"
 #define WEBSITE_INDEXING        GENOZIP_URL "/indexing"
 #define WEBSITE_GZ              GENOZIP_URL "/losslessness#gz"
+#define WEBSITE_REFERENCE       GENOZIP_URL "/reference"
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"
 #define EMAIL_REGISTER "register@genozip.com"
@@ -76,3 +76,5 @@
 
 #define PAPER4 "https://www.researchgate.net/publication/372195570_Deep_FASTQ_and_BAM_co-compression_in_Genozip_15"
 #define PAPER4_CITATION "Lan, D., et al. (2023) Deep FASTQ and BAM co-compression in Genozip 15 (pre-print), doi: https://doi.org/10.1101/2023.07.07.548069"
+
+#define HS37D5_DOWNLOAD "ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence/hs37d5.fa.gz"

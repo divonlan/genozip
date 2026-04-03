@@ -14,6 +14,8 @@
 #ifndef _WIN32
 #include <sys/socket.h>
 #include <fcntl.h>
+#else
+#include <windows.h>
 #endif
 
 #define Z_LARGE64
@@ -27,7 +29,7 @@
 #include "strings.h"
 #include "arch.h"
 
-#define CURL_RESPONSE_LEN 4096
+#define CURL_RESPONSE_LEN (4 KB)
 
 static StreamP remote_file_stream = NULL;
 
@@ -43,38 +45,94 @@ bool url_is_url (rom filename)
 
 static inline bool is_wget (StreamP stream) { return stream_exec_is (stream, "wget"); }
 
-static StreamP url_open (StreamP parent_stream, rom url, bool head_only)
+static rom url_write_post_data_to_file (rom post) 
+{
+#ifdef _WIN32
+    char path[MAX_PATH];
+    char *post_data_filename = MALLOC (MAX_PATH + 1);
+
+    // constant filename - overwrite previous post
+    ASSERT (GetTempPath (MAX_PATH-20, path), "GetTempPath: %s", str_win_error());
+    snprintf (post_data_filename, MAX_PATH-1, "@%sgenozip_data.tmp", path); // @ as expected by curl --binary-data
+
+    file_put_data (post_data_filename+1, post, strlen (post), 0);
+    post_data_filename[0] = '@'; // format expected by curl
+    
+    str_replace_letter (post_data_filename, strlen (post_data_filename), '\\', '/'); // avoid escape issues with backslashs
+    return post_data_filename;
+#else
+    return NULL;
+#endif
+}
+
+static StreamP url_open (StreamP parent_stream, rom url, rom user, rom password, bool head_only, rom post, bool async_post)
 {
     char str5[6] = "";
     strncpy (str5, url, 5);
     bool is_file = str_case_compare (str5, "file:", NULL); 
+    StreamP stream = NULL;
+    
+    // On Windows, command line length is limited to 8191 characters, so we write post data to a temp file
+    rom post_data_filename = (post && flag.is_windows) ? url_write_post_data_to_file (post) : NULL;
 
     // wget is better than curl in flakey connections
-    if (!is_file &&                       // wget doesn't support file://
-        !(head_only && curl_available())  // wget --spider doesn't follow redirects, so for header_only, we prefer curl if its available
-        && wget_available())              // note: wget is not supported for Windows (see wget_available)
+    bool use_wget = !is_file                         // wget doesn't support file://
+                 && !(head_only && curl_available()) // wget --spider doesn't follow redirects, so for header_only, we prefer curl if its available
+                 && !(post && flag.is_windows)       // for Windows, we prepare post_data_filename in curl-specific filename format
+                 && wget_available();                // note: wget is not supported for Windows (see wget_available)
         
-        return stream_create (parent_stream, 
-                              head_only ? 0 : DEFAULT_PIPE_SIZE, // in wget, header arrives in error channel and data channel is empty
-                              DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
-                              "To compress files from a URL", "wget", "--tries=16", 
-                              "--quiet", 
-                              "--waitretry=3", 
-                              head_only ? "--server-response"           : SKIP_ARG,                         
-                              head_only ? "--spider"                    : SKIP_ARG,                         
-                              head_only ? "--output-document=/dev/null" : "--output-document=/dev/stdout", 
-                              url, NULL);
+    if (flag.telemetry && flag.debug)
+        iprintf ("Launching URL stream with %s\n", use_wget ? "wget" : "curl");
+
+    if (use_wget)
+        stream = stream_create (
+            parent_stream, 
+            head_only ? 0 : DEFAULT_PIPE_SIZE, // in wget, header arrives in error channel and data channel is empty
+            DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
+            "URL", "wget", 
+            "--quiet", 
+            post       ? SKIP_ARG      : "--tries=50",    // max nubmer of re-connects (except if server returns Connection Refused or File Not Found)
+            post       ? SKIP_ARG      : "--waitretry=1", // wait this number of seconds before retrying 
+            post       ? SKIP_ARG      : "--continue",    // upon restarting after connection drop, continue from where we left off, if the server supports it (re-fetching from scratch if not)
+            post       ? "--post-data" : SKIP_ARG,
+            post       ? post          : SKIP_ARG,
+            user       ? "--user"      : SKIP_ARG,
+            user       ? user          : SKIP_ARG,
+            password   ? "--password"  : SKIP_ARG,
+            password   ? password      : SKIP_ARG,
+            head_only  ? "--spider"    : SKIP_ARG,
+            head_only  ? "--server-response"                       : SKIP_ARG,
+            head_only  ? "--output-document=/dev/null"             : "--output-document=/dev/stdout", 
+            post       ? "--header=Content-Type: application/json" : SKIP_ARG,
+            async_post ? "--header=x-fc-invocation-type: Async"    : SKIP_ARG,
+            url, NULL);
     
-    else if (curl_available()) 
-        return stream_create (parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
-                              "To compress files from a URL", "curl", "--silent", "--location",
-                              flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,
-                              head_only       ? "--head"          : SKIP_ARG,                         
-                              url, NULL);
+    // Note on testing for Windows: can't run Windows .exe from WSL, bc when it finishes it kills all child processes. Run from VSC terminal.
+    else if (curl_available()) {
+        int auth_len = (user && password) ? (strlen(user) + strlen(password) + 4) : 0;
+        char auth[auth_len];
+        if (auth_len)
+            snprintf (auth, auth_len, "-u%s:%s", user, password);
+
+        stream = stream_create (
+            parent_stream, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0,
+            "URL", "curl", "--silent", "--location",
+            auth_len        ? auth              : SKIP_ARG,
+            flag.is_windows ? "--ssl-no-revoke" : SKIP_ARG,
+            head_only       ? "--head"          : SKIP_ARG, 
+            post            ? "-XPOST"          : SKIP_ARG,
+            async_post      ? "-Hx-fc-invocation-type:Async" : SKIP_ARG,
+            post            ? "--data-binary"   : SKIP_ARG,
+            post            ? (post_data_filename ? post_data_filename : post) : SKIP_ARG,
+            url, NULL);
+    }
 
     else 
         ABORT ("Failed to open URL %s because %s not found in the execution path", 
                 url, (flag.is_windows || is_file) ? "curl was" : "wget or curl were");
+
+    FREE (post_data_filename);
+    return stream;
 }
 
 static bool url_get_head (rom url, qSTRp(data), qSTRp(error),
@@ -82,7 +140,7 @@ static bool url_get_head (rom url, qSTRp(data), qSTRp(error),
 {
     store_release (*url_stream, (StreamP)NULL);
 
-    store_release (*url_stream, url_open (NULL, url, true));
+    store_release (*url_stream, url_open (NULL, url, 0, 0, true, NULL, false));
     
     bool wget = is_wget (*url_stream);
 
@@ -254,9 +312,11 @@ rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size)
 }
 
 // returns error string if curl/wget itself (not server) failed, or NULL if successful
-static void url_read_string_do (rom url, qSTRp(data), qSTRp(error), bool blocking, bool follow_redirects) 
+static void url_read_string_do (rom url, rom user, rom password, 
+                                rom post, // NUL-termianted for POST, NULL for GET
+                                qSTRp(data), qSTRp(error), bool blocking, bool follow_redirects) 
 {
-    StreamP url_stream = url_open (NULL, url, false);
+    StreamP url_stream = url_open (NULL, url, user, password, false, post, false);
     FILE *data_stream  = stream_from_stream_stdout (url_stream);
     FILE *error_stream = stream_from_stream_stdout (url_stream);
 
@@ -324,14 +384,26 @@ static void url_read_string_do (rom url, qSTRp(data), qSTRp(error), bool blockin
     *error_len = strlen (error);
 }
 
+static void url_verify_url_legality (rom url)
+{
+    int url_len = strlen (url);
+    for (int i=0, in_arg=false; i < url_len ; i++) {
+        ASSERT (!in_arg || IS_VALID_URL_CHAR(url[i]) || url[i]=='&' || url[i]=='=' || url[i]=='%', 
+                "Invalid url character [%u]=%c(%u). url=\"%s\"", i, url[i], (unsigned char)url[i], url); 
+        if (url[i] == '?') in_arg = true;
+    }
+}
+
 // reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
-int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirects, rom show_errors)
+int32_t url_read_string (rom url, rom user, rom password,
+                         rom post, // NUL-termianted for POST, NULL for GET
+                         STRc(data), bool blocking, bool follow_redirects, rom show_errors)
 {
     rom action = show_errors ? show_errors : "url_read_string";
 
     if (!wget_available() && !curl_available()) {
-        if (flag.debug_submit || show_errors) 
-            fprintf (stderr, "\nError in %s: neither curl nor wget are available\n", action);
+        if (show_errors) 
+            fprintf (stderr, "\n❌ %s: neither curl nor wget are available\n", action);
         
         return -3; // failure
     }
@@ -339,32 +411,56 @@ int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirec
     char *response, local_response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
     unsigned response_len=0, error_len=0;
 
-    int url_len = strlen (url);
-    for (int i=0, in_arg=false; i < url_len ; i++) {
-        ASSERT (!in_arg || IS_VALID_URL_CHAR(url[i]) || url[i]=='&' || url[i]=='=' || url[i]=='%', 
-                "Invalid url character [%u]=%c(%u). url=\"%s\"", i, url[i], (unsigned char)url[i], url); 
-        if (url[i] == '?') in_arg = true;
-    }
+    url_verify_url_legality (url);
 
     response     = data ? data     : local_response;
     response_len = data ? data_len : CURL_RESPONSE_LEN;
-    url_read_string_do (url, qSTRa(response), qSTRa(error), blocking, follow_redirects);
+    url_read_string_do (url, user, password, post, qSTRa(response), qSTRa(error), blocking, follow_redirects);
+
+    // an Alibaba script failed - see alibaba logs
+
+    if (post && response_len >= 5 && strstr (response, "\"Error")) {
+        if (show_errors) 
+            fprintf (stderr, "\n❌ Internal server error\n");
+
+        return -3;
+    }
 
     if (error_len && !response_len) {
-        if (flag.debug_submit || show_errors) 
-            fprintf (stderr, "\nError in %s: %.*s\n", action, STRf(error));
+        if (show_errors) 
+            fprintf (stderr, "\n❌ %s: %.*s\n", action, STRf(error));
 
         return -1; // failure
     }
 
     if (response_len && strstr (response, "Bad Request")) {
-        if (flag.debug_submit || show_errors) 
-            fprintf (stderr, "\nError in %s: Bad Request\n", action);
+        if (show_errors) 
+            fprintf (stderr, "\n❌ %s: Bad Request\n", action);
 
         return -2;
     }
 
     return data ? response_len : 0;
+}
+
+// best-effort asynchronous posting - ignore all errors and don't check server response
+bool url_post_async (rom url, rom user, rom password, rom post)
+{
+    if (!wget_available() && !curl_available()) {
+        if (flag.telemetry && flag.debug) 
+            fprintf (stderr, "\n❌ neither curl nor wget are available\n");
+        return false;
+    }
+
+    url_verify_url_legality (url);
+
+    StreamP url_stream = url_open (NULL, url, user, password, false, post, true);
+    int exit_code = stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS);
+
+    if (exit_code && flag.telemetry && flag.debug) 
+        fprintf (stderr, "\n❌ curl or wget exit_code=%u\n", exit_code);
+
+    return exit_code == 0; // true if curl/wget completed successfully (i.e. no connectivity issues)
 }
 
 // returns a FILE* which streams the content of a URL 
@@ -375,7 +471,7 @@ int32_t url_read_string (rom url, STRc(data), bool blocking, bool follow_redirec
 FILE *url_open_remote_file (StreamP parent_stream, rom url)
 {
     ASSERTISNULL (remote_file_stream);
-    remote_file_stream = url_open (parent_stream, url, false);
+    remote_file_stream = url_open (parent_stream, url, 0, 0, false, NULL, false);
 
     return stream_from_stream_stdout (remote_file_stream);
 }
@@ -433,18 +529,5 @@ char *url_esc_non_valid_chars_(rom in, char *out/*malloced if NULL*/, bool esc_a
     if (esc_all_or_none && !any_invalid)
         strcpy (out, save_in);
 
-    return out;
-}
-
-StrTextLong url_esc_non_valid_charsS (rom in) // for short strings - on stack
-{
-    rom esc = url_esc_non_valid_chars_(in, NULL, false); // note: might be longer than StrTextLong
-    
-    StrTextLong out;
-    int out_len = MIN_(sizeof (out.s)-1, strlen(esc)); // trim if needed - possibly resulting in an invalid URL!
-    memcpy (out.s, esc, out_len);
-    out.s[out_len] = 0;
-    
-    FREE (esc);
     return out;
 }

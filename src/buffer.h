@@ -28,6 +28,7 @@
 #define B8(buf, index)      B(uint8_t,  (buf), (index))
 #define B16(buf, index)     B(uint16_t, (buf), (index))
 #define B32(buf, index)     B(uint32_t, (buf), (index))
+#define B40(buf, index)     B(uint40_t, (buf), (index))
 #define B64(buf, index)     B(uint64_t, (buf), (index))
 #define Btxt(index)         Bc (vb->txt_data, index)
 #define Ltxt                (vb->txt_data.len32)

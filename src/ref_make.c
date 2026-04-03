@@ -7,7 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "codec.h" // must be included before reference.h
-#include "fasta_private.h"
+#include "fasta_friend.h"
 #include "ref_private.h"
 #include "refhash.h"
 #include "random_access.h"
@@ -17,6 +17,7 @@
 #include "stream.h"
 #include "arch.h"
 #include "digest.h"
+#include "tip.h"
 
 SPINLOCK (make_ref_spin);
 #define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
@@ -67,7 +68,7 @@ void ref_make_create_range (VBlockP vb)
     uint64_t seq_len = CTX(FASTA_NONREF)->local.len;
 
     // at this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
-    // the missing details will be added during ref_make_prepare_one_range_for_compress
+    // the missing details will be added during ref_make_prepare_one_range_for_dispatch
     r->ref = bits_alloc (seq_len * 2, false); // 2 bits per base
     r->range_id = vb->vblock_i-1;
 
@@ -101,8 +102,6 @@ void ref_make_ref_init (void)
     
     buf_zero (&gref.ranges);
 
-    refhash_initialize_for_make();
-
     spin_initialize (make_ref_spin);
 
     serializer_initialize (make_ref_merge_serializer);
@@ -121,27 +120,18 @@ void ref_make_prepare_ranges_for_compress (void)
                 : (r->chrom != (r-1)->chrom) ? ROUNDUP64 ((r-1)->gpos + ref_size (r-1))  // first range of a contig
                 :                              (r-1)->gpos + ref_size (r-1);             // 2nd+ range of contig
     }
-
-    PosType64 max_gpos = BLST(Range, gref.ranges)->gpos;
-
-    // since our refhash entries are 32 bit, we cannot use the reference data beyond the first 4Gbp for creating the refhash
-    // TO DO: make the hash entries 40bit (or 64 bit?) if genome size > 4Gbp (bug 150)
-    ASSERTW (max_gpos <= MAX_ALIGNER_GPOS,
-             "FYI: %s contains %s bases. When compressing a FASTQ or unaligned (i.e. missing RNAME, POS) "
-             "SAM/BAM file using the reference being generated, only the first %s bases of the reference will be used, "
-             "possibly affecting the compression ratio. This limitation doesn't apply to aligned SAM/BAM files and VCF files. "
-             "If you need to use reference files larger than %s, let us know at " EMAIL_SUPPORT ".", 
-             txt_name, str_bases (max_gpos).s, str_bases (MAX_ALIGNER_GPOS).s, str_bases (MAX_ALIGNER_GPOS).s);
 }
 
 // the "read" part of reference-compressing dispatcher, called from ref_compress_ref
-void ref_make_prepare_one_range_for_compress (VBlockP vb)
+void ref_make_prepare_one_range_for_dispatch (VBlockP vb_)
 {
+    VBlockFASTAP vb = (VBlockFASTAP)vb_;
+
     if (vb->vblock_i-1 == gref.ranges.len32) return; // we're done
 
     RangeP r = B(Range, gref.ranges, vb->vblock_i-1); // vb_i=1 goes to ranges[0] etc
 
-    vb->range          = r; // range to compress
+    vb->range          = r; 
     vb->range->num_set = r->ref.nbits / 2;
     vb->dispatch       = READY_TO_COMPUTE;
 }
@@ -161,7 +151,10 @@ void ref_make_calculate_digest (void)
     for_buf (Range, r, gref.ranges) 
         bits_copy (gref.genome, r->gpos * 2, &r->ref, 0, ref_size(r) * 2);
 
-    z_file->digest = digest_do (STRb(gref.genome_buf), !flag.md5, "genome");
+    // bug 1238
+    ASSINP (gref.genome_buf.len < 4 GB || !flag.md5, "Genozip limitation: reference data too long for --md5 (length=%"PRIu64")", gref.genome_buf.len);
+
+    z_file->digest = digest_do (STRb(gref.genome_buf), flag.md5 ? DIGEST_MD5 : DIGEST_XXH3, "genome"); // was adler32 rather than xxh3 until 15.0.80
     
     buf_free (gref.genome_buf);
 
@@ -190,12 +183,6 @@ ConstBufferP ref_make_get_contig_metadata (void)
     return &contig_metadata; 
 }
 
-// callback from zfile_compress_genozip_header
-void ref_make_genozip_header (SectionHeaderGenozipHeaderP header)
-{
-    header->genome_digest = z_file->digest;
-}
-
 // zip_finalize callback
 void ref_make_finalize (bool is_last_user_txt_file) 
 { 
@@ -215,7 +202,7 @@ rom ref_fasta_to_ref (FileP file)
 
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
                                           arch_get_genozip_executable().s, "--make-reference", file->name, 
-                                          flag.stats_submit ? "--submit" : SKIP_ARG,
+                                          flag.telemetry ? "--telemetry" : SKIP_ARG,
                                           "--no-tip", NULL);
         
         // wait for child process to finish
@@ -232,4 +219,49 @@ rom ref_fasta_to_ref (FileP file)
     file->disk_size = file_get_size (ref_filename);
 
     return gref.filename;
+}
+
+// when compressing a FASTQ in Eval with --reference, we offer to download one
+void ref_download_eval_ref (rom dt_name)
+{
+    printf ("\n\n"_TIP"When compressing a %s, it is essential to use a reference file to achieve good compression.\n"
+            "- If you have a reference file (a FASTA or a .ref.genozip file), hit Ctrl-C and re-run with --reference\n"
+            "- If not, genozip can download and prepare a reference file for you now.\n\n", dt_name);
+
+    if (!str_query_user_yn ("Download hs37d5.fa.gz (suitable for compressing human DNA data) now?\n"
+                            "(if not, genozip will continue compressing without a reference)", QDEF_YES))
+        return; // user is not interested
+
+    rom ref_url = HS37D5_DOWNLOAD;
+    rom ref_filename = filename_z_normal (ref_url, DT_REF, FA_GZ/*matching HS37D5_DOWNLOAD extension*/); 
+
+    printf ("\n"_TIP"For the next filesb, you will be able to use, for example:\n"
+            "genozip --reference %s %s\n\n", ref_filename, txt_name);
+
+    StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
+                                      arch_get_genozip_executable().s, "--make-reference", ref_url, 
+                                      flag.telemetry ? "--telemetry" : SKIP_ARG,
+                                     "--no-tip", "--force", NULL);
+    
+    // wait for child process to finish
+    if (stream_wait_for_exit (make_ref, false) == 0) { // genozip --make-ref completed successfully            
+        ref_set_reference (ref_filename, REF_EXTERNAL, true);
+        flag.reference         = REF_EXTERNAL;
+        flag.aligner_available = true; // need to load refhash
+        
+        // save
+        FileP save_z_file = z_file, save_txt_file = txt_file;
+        z_file = txt_file = NULL;
+        
+        ref_load_external_reference (NULL);
+        
+        // restore
+        z_file   = save_z_file;
+        txt_file = save_txt_file;
+
+        FREE (ref_filename);
+    }
+
+    else 
+        WARN0 ("\nFailed to download and make reference file: continuing without a reference");
 }

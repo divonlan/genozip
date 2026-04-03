@@ -285,7 +285,7 @@ extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP ctx,
 extern void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values);
 eSTRl(datasets_snip); eSTRl(callsets_snip); eSTRl(platforms_snip);
 
-#define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || (recon_len==1 && *recon=='.')) && dict_id_is_vcf_format_sf (ctx->dict_id))
+#define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || IS_PERIOD(recon)) && dict_id_is_vcf_format_sf (ctx->dict_id))
 extern void vcf_FORMAT_PL_decide (VBlockVCFP vb);
 extern void vcf_FORMAT_PL_after_vbs (Did did_i);
 

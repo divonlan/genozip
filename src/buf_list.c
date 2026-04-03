@@ -291,10 +291,13 @@ void buflist_update_vb_addr_change (VBlockP new_vb, ConstVBlockP old_vb)
 void buflist_compact (VBlockP vb)
 {
     if (!vb) return;
+    START_TIMER;
 
     buf_lock_(&vb->buffer_list);
     buf_remove_items_except_(BufListEnt, vb->buffer_list, !BL_IS_REMOVED (ent->buf));
     buf_unlock;
+
+    COPY_TIMER_EVB (buflist_compact);
 }
 
 bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
@@ -361,6 +364,7 @@ static rom buflist_locate_s (ConstBufferP buf)
 void buflist_free_vb (VBlockP vb) 
 {
     if (flag.let_OS_cleanup_on_exit) return;
+    START_TIMER;
 
     buf_lock_(&vb->buffer_list);
     buflist_sort (vb, true); // need buffers to be sorted to erase the space between them
@@ -389,7 +393,7 @@ void buflist_free_vb (VBlockP vb)
                 
             char *save_buf = (char *)ent->buf; // before buf_destroy changes the ent->buf pointer
 
-            if (vb != evb)
+            if ((ent->buf->shared || flag.low_memory) && vb != evb)
                 buf_destroy_do_do (ent, __FUNCLINE); 
             else
                 buf_free (*ent->buf);
@@ -410,6 +414,8 @@ void buflist_free_vb (VBlockP vb)
     memset (start_erase, 0, (rom)vb + sizeof_vb - start_erase);
 
     buf_unlock;
+
+    COPY_TIMER_EVB (buflist_free_vb);
 }
 
 // frees all buffers in a Context, and also erases the spaces between Buffers in the Context.
@@ -824,7 +830,7 @@ void buflist_show_memory (bool memory_full, unsigned max_threads, unsigned used_
 {
     // if memory is full - only one thread needs to show this - other threads stall
     static bool once=0;
-    if (memory_full && __atomic_test_and_set (&once, __ATOMIC_RELAXED)) 
+    if (memory_full && test_and_set_relaxed (once)) 
         stall();
     
     memset (stats, 0, sizeof(stats));
@@ -856,7 +862,7 @@ void buflist_show_memory (bool memory_full, unsigned max_threads, unsigned used_
         fprintf (print, "Compute threads: max_permitted=%u actually_used=%u\n", max_threads, used_threads);
 
     for (unsigned i=0; i < num_stats; i++)
-        fprintf (print, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str_size (stats[i].bytes).s, 100.0 * (float)stats[i].bytes / (float)total_bytes, stats[i].buffers);
+        fprintf (print, "%-30s: %-8s (%4.1f%%) in %u buffers\n", stats[i].name, str_size (stats[i].bytes).s, percent (stats[i].bytes, total_bytes), stats[i].buffers);
 
     fprintf (print, "\n");
 

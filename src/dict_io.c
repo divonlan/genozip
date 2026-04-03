@@ -60,7 +60,7 @@ void dict_io_assign_codecs (void)
             zctx->dcodec = CODEC_ARTB;
     }
 
-    dispatcher_fan_out_task ("assign_dict_codecs", NULL, 0, "Writing dictionaries...", true, false, false, 0, 20000, true,
+    dispatcher_fan_out_task (TASK_ASSIGN_DICT_CODECS, NULL, 0, JOIN_OUT_OF_ORDER, false, 0, 20000,
                              dict_io_prepare_for_assign_codec, 
                              dict_io_assign_codec_one_dict, 
                              NO_CALLBACK);
@@ -158,13 +158,13 @@ static void dict_io_compress_one_fragment (VBlockP vb)
         dict_io_print (info_stream, vb->fragment_ctx->dict_id, vb->fragment_start, vb->fragment_len, true, true, true, false);
 
     if (flag.show_contigs && vb->fragment_ctx->did_i == CHROM)
-        dict_io_print (info_stream, vb->fragment_ctx->dict_id, vb->fragment_start, vb->fragment_len, true, true, true, VB_DT(SAM) || VB_DT(BAM));
+        dict_io_print (info_stream, vb->fragment_ctx->dict_id, vb->fragment_start, vb->fragment_len, true, true, true, VB_DT(BAM) || VB_DT(SAM));
 
     if (flag.show_time) codec_show_time (vb, st_name (SEC_DICT), vb->fragment_ctx->tag_name, vb->fragment_ctx->dcodec);
 
     comp_compress (vb, vb->fragment_ctx, &vb->z_data, &header, vb->fragment_start, NO_CALLBACK, "SEC_DICT");
 
-    COPY_TIMER (dict_io_compress_one_fragment)    
+    COPY_TIMER (dict_io_compress_one_fragment);
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
@@ -180,10 +180,9 @@ void dict_io_compress_dictionaries (void)
 
     dict_io_assign_codecs(); // assign codecs to all contexts' dicts
 
-    dispatcher_fan_out_task ("compress_dicts", NULL, 0, "Writing dictionaries...", 
-                             false, false, 
+    dispatcher_fan_out_task (TASK_COMP_DICTS, NULL, 0, JOIN_IN_ORDER, 
                              flag.show_dict || flag.show_one_dict, // force single thread if displaying 
-                             0, 20000, true,
+                             0, 20000, 
                              dict_io_prepare_for_compress, 
                              dict_io_compress_one_fragment, 
                              zfile_output_processed_vb);
@@ -352,13 +351,9 @@ void dict_io_read_all_dictionaries (void)
     dict_sec = NULL;
     dict_ctx = NULL;
 
-    dispatcher_fan_out_task (flag.reading_reference ? "read_dicts_ref" : "read_dicts",
-                             NULL, 0, 0, 
-                             true, flag.test,
-                             false,
-                             0, 
+    dispatcher_fan_out_task (flag.reading_reference ? TASK_READ_DICTS_REF : TASK_READ_DICTS,
+                             NULL, 0, JOIN_OUT_OF_ORDER, false, 0, 
                              10, // must be short - many dictionaries are just a few bytes
-                             true,
                              dict_io_read_one_vb, 
                              dict_io_uncompress_one_vb,
                              NO_CALLBACK);
@@ -556,9 +551,7 @@ StrTextMegaLong str_snip_ex (DataType dt, STRp(snip), bool add_quote)
 // decide for a SPECIAL snip in a Deep file, whether it is a FASTQ or SAM special (ugly code)
 static DataType dict_io_print_deep_dt_by_special (char special, DictId dict_id)
 {
-    #if NUM_FASTQ_SPECIAL != 16
-    #error need to update dict_io_print_deep_dt_by_special()
-    #endif
+    _Static_assert (NUM_FASTQ_SPECIAL == 16, "NUM_FASTQ_SPECIAL chaged, update dict_io_print_deep_dt_by_special logic");
 
     #define SP(sam_name, fq_name) ({ \
         ASSERT ((int)SAM_SPECIAL_##sam_name == (int)FASTQ_SPECIAL_##fq_name, "expecting SAM_SPECIAL_%s == FASTQ_SPECIAL_%s", #sam_name, #fq_name); /* optimized away if ok */ \

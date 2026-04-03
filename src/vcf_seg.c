@@ -51,7 +51,7 @@ void vcf_zip_finalize (bool is_last_user_txt_file)
 {
     // if REFALT takes more than 10% of z_file, advise on using --reference (note: if some cases, we already advised in vcf_segconf_finalize)
     decl_zctx(VCF_REFALT);
-    int refalt_z_pc = flag.zip_no_z_file ? 0 : (100 * (zctx->dict.count + zctx->b250.count + zctx->local.count) / z_file->disk_size);
+    int refalt_z_pc = flag.zip_no_z_file ? 0 : percent (zctx->dict.count + zctx->b250.count + zctx->local.count, z_file->disk_size);
 
     if (!flag.reference && refalt_z_pc > 10 && !flag.seg_only)
         TIP ("Compressing a this %s file using a reference file can reduce the compressed file's size by %d%%-%d%%.\n"
@@ -406,7 +406,7 @@ void vcf_seg_finalize (VBlockP vb_)
 
     if (segconf.vcf_sample_copy) vcf_copy_sample_seg_finalize (vb);
     
-    __atomic_add_fetch (&z_file->mate_line_count, (uint64_t)vb->mate_line_count,  __ATOMIC_RELAXED);
+    add_relaxed (z_file->mate_line_count, vb->mate_line_count);
 }
 
 // Compute thread: after each VB is compressed and merge (VB order is arbitrary)

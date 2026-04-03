@@ -82,7 +82,11 @@ ifdef linux_x86
 	ASFLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
 	# DEBUGFLAGS += -fsanitize=undefined
 	# DEBUGFLAGS += -fsanitize=thread -Dsanitize_thread=1
-	DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 # not compatable with valgrind - comment out if using valgrind
+	
+	# Notes on Address Sanitizer:
+	# 1. not compatable with valgrind - comment out if using valgrind 
+	# 2. Run with: setarch x86_64 -R genozip-debug ... (see internal-docs/address-sanitizer)
+	# DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 
 endif
 
 ifdef osx_arm64
@@ -137,7 +141,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
 		  error.c 																								\
           zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c specials.c    	\
-		  reference.c contigs.c ref_lock.c refhash.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c digest.c \
+		  reference.c contigs.c ref_lock.c refhash_make.c refhash_load.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c digest.c \
 		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c vcf_modify.c     	\
 		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c vcf_qual.c vcf_1000G.c vcf_me.c	\
 		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c vcf_svaba.c vcf_pbsv.c			\
@@ -187,13 +191,13 @@ CONDA_DEVS = Makefile ../.gitignore
 CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
 
 INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h 					\
-            endianness.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h 								\
+            endianness.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h sorter.h						\
             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 		\
             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
-		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h tip.h deep.h filename.h stats.h multiplexer.h 						\
-		 	reference.h ref_private.h refhash.h ref_iupacs.h aligner.h mutex.h mgzip.h coverage.h threads.h error.h local_type.h sorter.h	\
+		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h tip.h deep.h filename.h stats.h multiplexer.h local_type.h 		\
+		 	reference.h ref_private.h refhash.h refhash_friend.h ref_iupacs.h aligner.h mutex.h mgzip.h coverage.h threads.h error.h 		\
 			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h writer_private.h zriter.h bases_filter.h genols.h 		\
-			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h sam_friend.h me23.h fasta.h fasta_private.h gff.h bed.h locs.h		\
+			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h sam_friend.h me23.h fasta.h fasta_friend.h gff.h bed.h locs.h			\
 			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h								\
 			\
 			zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h													\
@@ -535,8 +539,6 @@ clean:  # careful not to delete license.o
 
 initialize-build-distribution: # clean Linux, Windows
 	@$(SH_VERIFY_ALL_STAGED)
-	@bash --norc --noprofile secure/prepare.sh # before clean removes executables
-	@(cd secure ; git stage secure.data ; git commit -m $(version) ; git push) 
 	@echo Cleaning up Linux, Windows for distribution
 	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d \
 	       $(OBJDIR_LINUX)/*/*.o $(OBJDIR_LINUX)/*/*.d $(OBJDIR_WINDOWS)/*/*.o $(OBJDIR_WINDOWS)/*/*.d \
@@ -690,9 +692,11 @@ finalize-distribution:
 	@echo "  Next:"
 	@echo "  (1) Wait for all 4 tests to pass (~8 minutes)"
 	@echo "  (2) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
-	@echo "  (3) Open: https://github.com/divonlan/genozip/releases/new"
-	@echo "  (4) Set 'Tag version' and 'Release title' are both: genozip-$(version)"
-	@echo "  (5) Copy the notes for the version from RELEASE NOTES -> Publish release"
+	@echo "  (3) A. Open: https://github.com/divonlan/genozip/releases/new"
+	@echo "      B. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
+	@echo "      C. Copy the notes for the version from RELEASE NOTES -> Publish release"
+	@echo "  (4) For each: create version and move ALIAS"
+	@echo "  (5) Commit private"
 
 distribution: initialize-build-distribution increment-version ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
               $(INSTALLERS)/genozip-osx-arm.tar 			\
@@ -770,70 +774,5 @@ genozip-latest:
 	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) 2> /dev/null || exit 0); cd $(OBJDIR) ; (mkdir $(SRC_DIRS) 2> /dev/null || exit 0))
 	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard; git pull ; $(MAKE) -j clean ; $(MAKE) -j 20; fi)
 	@ln -sf $(LATEST_SRC)/genozip $@
-
-# MACDWNDIR = mac/darwinpkg
-# MACLIBDIR = $(MACDWNDIR)/Library/genozip
-# MACSCTDIR = mac/scripts
-# MACRSSDIR = mac/Resources
-
-# $(MACRSSDIR)/welcome.html: mac/welcome.template.html
-# 	@sed -e "s/__VERSION__/$(version)/g" $< > $@ 
-
-# $(MACSCTDIR)/postinstall: mac/postinstall.template.sh
-# 	@sed -e "s/__FILES__/$(EXECUTABLES)/g" $< > $@
-
-# $(MACLIBDIR)/uninstall.sh: mac/uninstall.template.sh
-# 	@sed -e "s/__VERSION__/$(version)/g" $< | sed -e "s/__FILES__/$(EXECUTABLES)/g" > $@ 
-
-# $(MACRSSDIR)/README.html: ../README.md
-# 	@cp -f $< $@
-
-# $(MACRSSDIR)/LICENSE.txt: ../LICENSE.txt
-# 	@cp -f $< $@
-
-# $(MACLIBDIR)/%: %
-# 	@cp -f $< $@
-
-# pkg_identifier  := genozip-$(version)
-
-# #app_specific_pw := $(shell cat .altool_app_specifc_password)
-
-# apple_id        := $(shell /usr/libexec/PlistBuddy -c "print :Accounts:0:AccountID" ~/Library/Preferences/MobileMeAccounts.plist)
-
-# signer_name     := ${shell security find-identity -v|grep "3rd Party Mac Developer Installer" | cut -d ":" -f2 | cut -d"(" -f1 }
-
-# mac/genozip.pkg: $(MACLIBDIR)/genozip $(MACLIBDIR)/genounzip $(MACLIBDIR)/genocat $(MACLIBDIR)/genols $(MACLIBDIR)/uninstall.sh \
-#                  $(MACSCTDIR)/postinstall
-# 	@echo "Building Mac package $@"
-# 	@$(SH_VERIFY_ALL_COMMITTED)
-# 	@chmod -R 755 $(MACLIBDIR) $(MACSCTDIR)				 
-# 	@pkgbuild --identifier $(pkg_identifier) --version $(version) --scripts $(MACSCTDIR) --root $(MACDWNDIR) mac/genozip.pkg > /dev/null
-
-# mac/genozip_installer.unsigned.pkg: mac/genozip.pkg mac/Distribution \
-#                                     $(MACRSSDIR)/welcome.html $(MACRSSDIR)/README.html $(MACRSSDIR)/LICENSE.txt
-# 	@echo "Building Mac product $@"
-# 	@productbuild --distribution mac/Distribution --resources $(MACRSSDIR) --package-path mac $@ > /dev/null
-
-# mac/genozip_installer.pkg: mac/genozip_installer.unsigned.pkg
-# 	@bash -c "echo -n Unlocking the keychain. Password:"
-# 	@# note: keychain requires unlocking if logged in remotely (through SSH)
-# 	@read pw ; security -v unlock-keychain -p $$pw `security list-keychains|grep login|cut -d\" -f2`
-# 	@echo "Signing Mac product $@"
-# 	@# note: productsign needs a "3rd party mac developer" certificate, and the Apple developer CA certificate, installed in the keychain. see: https://developer.apple.com/developer-id/. I keep them on Drive for backup.
-# 	@productsign --sign "$(signer_name)" $< $@ > /dev/null
-# 	@echo "Verifying the signature"
-# 	@(( `pkgutil --check-signature $@ | grep "signed by a developer certificate issued by Apple (Development)" | wc -l ` > 0 )) || (echo Error: signature verification failed ; exit 1)
-# 	@#@echo 'Committing Mac installer and pushing to repo'
-# 	@#@(git stage $@ ; exit 0)
-# 	@#(git commit -m mac_installer_for_version_$(version) $@ ; exit 0)
-# 	@#git push
-
-# mac/.from_remote_timestamp: mac/genozip_installer.pkg
-# 	@echo "Notarizing Mac app"
-# 	@xcrun altool --notarize-app --primary-bundle-id $(pkg_identifier) --username $(apple_id) --password $(app_specific_pw) --file $< >& .notarize.out ; exit 0
-# 	@grep ERROR\: .notarize.out ; exit 0
-# 	@(( `grep ERROR\: .notarize.out | wc -l` == 0 )) || (echo "See .notarize.out" ; exit 1)
-# 	@(( `grep "No errors uploading" .notarize.out | wc -l` == 0 )) || (grep "RequestUUID" .notarize.out ; exit 0)
-# 	@touch $@
 
 endif # Darwin

@@ -142,7 +142,7 @@ void bai_set_show_bai (rom optarg)
 static void bai_abort (rom reason, STRp(qname), bool debug_bai_only)
 {
     // only one thread gets to display abortion reason
-    if (!__atomic_test_and_set (&bai_is_aborted, __ATOMIC_RELAXED)) {
+    if (!test_and_set_relaxed (bai_is_aborted)) {
         if (!debug_bai_only || flag.debug_bai) {
             if (qname) 
                 WARN ("FYI: Not creating a %s file. Reason: %s. Offending %s: %.*s ", 

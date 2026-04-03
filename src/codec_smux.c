@@ -133,7 +133,7 @@ void codec_smux_calc_stats (VBlockP vb)
                 
         iprint0 ("\nMux by SEQ:\n");
         for (int b=0; b < 4; b++) {
-            iprintf ("%c: size=%2.1f%%: ", acgt_decode(b), 100.0 * count_base[b] / num_bp);
+            iprintf ("%c: size=%2.1f%%: ", acgt_decode(b), percent (count_base[b], num_bp));
             for (int q=0; q < 94; q++) {
                 if (histo_by_seq[b][q] > SHOW_THREASHOLD) 
                     iprintf ("'%c'=%2.1f%% ", q + '!', 100.0 * histo_by_seq[b][q]);

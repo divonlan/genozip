@@ -12,14 +12,33 @@
 // without attribution or restrictions. There are no warranties and there may be bugs."
 
 #include <stdarg.h>
+#include <stdalign.h>
 #include "genozip.h"
 #include "endianness.h"
 #include "bits.h"
 #include "buffer.h"
 
-//
-// Tables of constants
-//
+#ifndef __clang__
+// align to 64B so it loads into four CPU L1 cache lines
+alignas(64) const uint8_t rev_comp_table[256] = { // 00=A 01=C 10=G 11=T
+    0b11111111, 0b10111111, 0b01111111, 0b00111111, 0b11101111, 0b10101111, 0b01101111, 0b00101111, 0b11011111, 0b10011111, 0b01011111, 0b00011111, 0b11001111, 0b10001111, 0b01001111, 0b00001111,
+    0b11111011, 0b10111011, 0b01111011, 0b00111011, 0b11101011, 0b10101011, 0b01101011, 0b00101011, 0b11011011, 0b10011011, 0b01011011, 0b00011011, 0b11001011, 0b10001011, 0b01001011, 0b00001011,
+    0b11110111, 0b10110111, 0b01110111, 0b00110111, 0b11100111, 0b10100111, 0b01100111, 0b00100111, 0b11010111, 0b10010111, 0b01010111, 0b00010111, 0b11000111, 0b10000111, 0b01000111, 0b00000111,
+    0b11110011, 0b10110011, 0b01110011, 0b00110011, 0b11100011, 0b10100011, 0b01100011, 0b00100011, 0b11010011, 0b10010011, 0b01010011, 0b00010011, 0b11000011, 0b10000011, 0b01000011, 0b00000011,
+    0b11111110, 0b10111110, 0b01111110, 0b00111110, 0b11101110, 0b10101110, 0b01101110, 0b00101110, 0b11011110, 0b10011110, 0b01011110, 0b00011110, 0b11001110, 0b10001110, 0b01001110, 0b00001110,
+    0b11111010, 0b10111010, 0b01111010, 0b00111010, 0b11101010, 0b10101010, 0b01101010, 0b00101010, 0b11011010, 0b10011010, 0b01011010, 0b00011010, 0b11001010, 0b10001010, 0b01001010, 0b00001010,
+    0b11110110, 0b10110110, 0b01110110, 0b00110110, 0b11100110, 0b10100110, 0b01100110, 0b00100110, 0b11010110, 0b10010110, 0b01010110, 0b00010110, 0b11000110, 0b10000110, 0b01000110, 0b00000110,
+    0b11110010, 0b10110010, 0b01110010, 0b00110010, 0b11100010, 0b10100010, 0b01100010, 0b00100010, 0b11010010, 0b10010010, 0b01010010, 0b00010010, 0b11000010, 0b10000010, 0b01000010, 0b00000010,
+    0b11111101, 0b10111101, 0b01111101, 0b00111101, 0b11101101, 0b10101101, 0b01101101, 0b00101101, 0b11011101, 0b10011101, 0b01011101, 0b00011101, 0b11001101, 0b10001101, 0b01001101, 0b00001101,
+    0b11111001, 0b10111001, 0b01111001, 0b00111001, 0b11101001, 0b10101001, 0b01101001, 0b00101001, 0b11011001, 0b10011001, 0b01011001, 0b00011001, 0b11001001, 0b10001001, 0b01001001, 0b00001001,
+    0b11110101, 0b10110101, 0b01110101, 0b00110101, 0b11100101, 0b10100101, 0b01100101, 0b00100101, 0b11010101, 0b10010101, 0b01010101, 0b00010101, 0b11000101, 0b10000101, 0b01000101, 0b00000101,
+    0b11110001, 0b10110001, 0b01110001, 0b00110001, 0b11100001, 0b10100001, 0b01100001, 0b00100001, 0b11010001, 0b10010001, 0b01010001, 0b00010001, 0b11000001, 0b10000001, 0b01000001, 0b00000001,
+    0b11111100, 0b10111100, 0b01111100, 0b00111100, 0b11101100, 0b10101100, 0b01101100, 0b00101100, 0b11011100, 0b10011100, 0b01011100, 0b00011100, 0b11001100, 0b10001100, 0b01001100, 0b00001100, 
+    0b11111000, 0b10111000, 0b01111000, 0b00111000, 0b11101000, 0b10101000, 0b01101000, 0b00101000, 0b11011000, 0b10011000, 0b01011000, 0b00011000, 0b11001000, 0b10001000, 0b01001000, 0b00001000,
+    0b11110100, 0b10110100, 0b01110100, 0b00110100, 0b11100100, 0b10100100, 0b01100100, 0b00100100, 0b11010100, 0b10010100, 0b01010100, 0b00010100, 0b11000100, 0b10000100, 0b01000100, 0b00000100,
+    0b11110000, 0b10110000, 0b01110000, 0b00110000, 0b11100000, 0b10100000, 0b01100000, 0b00100000, 0b11010000, 0b10010000, 0b01010000, 0b00010000, 0b11000000, 0b10000000, 0b01000000, 0b00000000
+};
+#endif
 
 #define assert(x) ASSERT ((x), "%s", #x)
 
@@ -122,12 +141,6 @@ static inline uint64_t _reverse_word (uint64_t word)
     return reverse;
 }
 
-static inline void _set_byte (BitsP bits, uint64_t start, uint8_t byte)
-{
-    uint64_t w = _get_word (bits, start);
-    _set_word (bits, start, (w & ~(uint64_t)0xff) | byte);
-}
-
 // Wrap around
 static inline uint64_t _get_word_cyclic (ConstBitsP bits, uint64_t start)
 {
@@ -226,32 +239,6 @@ static inline void _set_region (BitsP bits, uint64_t start, uint64_t length, Fil
     }
 }
 
-//
-// Constructor
-//
-
-// initializes bits for an existing allocation
-Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len/*in bytes*/, bool clear, FUNCLINE)
-{
-    ASSERT (data_len >= roundup_bits2bytes64 (nbits), "called from %s:%u: data_len=%"PRIu64" too short for nbits=%"PRIu64, 
-            func, code_line, data_len, nbits);
-
-    ASSERT (!((uint64_t)data % sizeof (uint64_t)), "called from %s:%u: data=%p is not word-aligned", func, code_line, data);
-
-    Bits bits = { .type   = BITS_STANDALONE, // standalone Bits that is not part of a Buffer
-                  .nbits  = nbits,
-                  .nwords = roundup_bits2words64(nbits),
-                  .words  = (uint64_t *)data };
-
-    // zero the bits in the top word that are beyond nbits (if not already cleared)
-    if (clear) 
-        memset (data, roundup_bits2bytes64 (nbits), data_len);
-    else
-        bits_clear_excess_bits_in_top_word (&bits, false);
-
-    return bits;
-}
-
 // allocates a STANDALONE bit array
 Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE)
 {
@@ -265,122 +252,6 @@ Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE)
     
     return bits;
 }
-
-void bits_free (BitsP bits)
-{
-    FREE (bits->words);
-    memset (bits, 0, sizeof(Bits));
-}
-
-// If bits length < num_bits, resizes to num_bits
-char bits_ensure_size (BitsP bits, uint64_t ensure_num_of_bits)
-{
-    ASSERT (bits->nbits >= ensure_num_of_bits, "bits of out range: bits->nbits=%"PRIu64" ensure_num_of_bits=%"PRIu64,
-            bits->nbits, ensure_num_of_bits);
-
-    return 1;
-}
-
-static inline void bits_ensure_size_critical (BitsP bits, uint64_t nbits)
-{
-    ASSERT (bits->nbits >= nbits, "bits of out range: bits->nbits=%"PRIu64" nbits=%"PRIu64,
-            bits->nbits, nbits);
-}
-
-//
-// Get, set, clear, assign and toggle individual bits
-//
-
-// Get the value of a bit (returns 0 or 1)
-bool bits_get_bit (ConstBitsP bits, uint64_t b)
-{
-    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
-    return bits_get (bits, b);
-}
-
-// set a bit (to 1) at position b
-void bits_set_bit (BitsP bits, uint64_t b)
-{
-    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
-    bits_set (bits,b);
-    DEBUG_VALIDATE(bits);
-}
-
-// clear a bit (to 0) at position b
-void bits_clear_bit (BitsP bits, uint64_t b)
-{
-    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
-    bits_clear (bits, b);
-    DEBUG_VALIDATE(bits);
-}
-
-// If bit is 0 -> 1, if bit is 1 -> 0.  AKA 'flip'
-void bits_toggle_bit (BitsP bits, uint64_t b)
-{
-    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
-    bits_toggle (bits, b);
-    DEBUG_VALIDATE(bits);
-}
-
-void bits_assign_bit (BitsP bits, uint64_t b, bool set)
-{
-    ASSERT (b < bits->nbits, "Expecting b=%"PRId64" < nbits=%"PRId64, b, bits->nbits);
-    bits_assign (bits, b, set);
-    DEBUG_VALIDATE(bits);
-}
-
-//
-// Get, set, clear and toggle several bits at once
-//
-
-// Get the offsets of the set bits (for offsets start<=offset<end)
-// Returns the number of bits set
-// It is assumed that dst is at least of length (end-start)
-uint64_t bits_get_bits (ConstBitsP bits, uint64_t start, uint64_t end, uint64_t *dst)
-{
-    uint64_t i, n = 0;
-    assert(end <= bits->nbits);
-    for (i = start; i < end; i++) 
-        if (bits_get(bits, i)) dst[n++] = i;
-
-    return n;
-}
-
-// Set multiple bits at once.
-// e.g. set bits 1, 20 & 31: bits_set_bits(bits, 3, 1,20,31);
-void bits_set_bits (BitsP bits, size_t n, ...)
-{
-    va_list argptr;
-    va_start(argptr, n);
-
-    for (size_t i = 0; i < n; i++) {
-        unsigned int bit_index = va_arg(argptr, unsigned int);
-        bits_set_bit(bits, bit_index);
-    }
-
-    va_end(argptr);
-    DEBUG_VALIDATE(bits);
-}
-
-// Clear multiple bits at once.
-// e.g. clear bits 1, 20 & 31: bits_clear_bits(bits, 3, 1,20,31);
-void bits_clear_bits (BitsP bits, size_t n, ...)
-{
-    va_list argptr;
-    va_start(argptr, n);
-
-    for (size_t i = 0; i < n; i++) {
-        unsigned int bit_index = va_arg(argptr, unsigned int);
-        bits_clear_bit(bits, bit_index);
-    }
-
-    va_end(argptr);
-    DEBUG_VALIDATE(bits);
-}
-
-//
-// Set, clear all bits in a region
-//
 
 // Set all the bits in a region
 void bits_set_region (BitsP bits, uint64_t start, uint64_t len)
@@ -438,39 +309,6 @@ uint64_t bits_get_wordn (ConstBitsP bits, uint64_t start, int n /* up to 64 */)
           start, n, bits->nbits);
            
   return (uint64_t)(_get_word(bits, start) & bitmask64(n));
-}
-
-//
-// Set a word at a time
-//
-// Doesn't extend bit array. However it is safe to TRY to set bits beyond the
-// end of the array, as long as: `start` is < `nbits`
-//
-
-void bits_set_word64 (BitsP bits, uint64_t start, uint64_t word)
-{
-    ASSERT (start < bits->nbits, "expecting start(%"PRIu64") < bits->nbits(%"PRIu64")", start, bits->nbits);
-    _set_word(bits, start, (uint64_t)word);
-}
-
-void bits_set_word32 (BitsP bits, uint64_t start, uint32_t word)
-{
-    ASSERT (start < bits->nbits, "expecting start(%"PRIu64") < bits->nbits(%"PRIu64")", start, bits->nbits);
-    uint64_t w = _get_word(bits, start);
-    _set_word(bits, start, bitmask_merge(w, word, 0xffffffff00000000UL));
-}
-
-void bits_set_word16 (BitsP bits, uint64_t start, uint16_t word)
-{
-    ASSERT (start < bits->nbits, "expecting start(%"PRIu64") < bits->nbits(%"PRIu64")", start, bits->nbits);
-    uint64_t w = _get_word(bits, start);
-    _set_word(bits, start, bitmask_merge(w, word, 0xffffffffffff0000UL));
-}
-
-void bits_set_word8 (BitsP bits, uint64_t start, uint8_t byte)
-{
-    ASSERT (start < bits->nbits, "expecting start(%"PRIu64") < bits->nbits(%"PRIu64")", start, bits->nbits);
-    _set_byte(bits, start, byte);
 }
 
 //
@@ -668,55 +506,6 @@ bool bits_find_last_clear_bit (ConstBitsP bits, uint64_t *result)
 // Strings and printing
 //
 
-// Construct a Bits from a substring with given on and off characters.
-void bits_from_substr (BitsP bits, uint64_t offset, rom str, size_t len, rom on, rom off,char left_to_right)
-{
-    bits_ensure_size (bits, offset + len);
-    bits_clear_region (bits, offset, len);
-
-    // Bits region is now all 0s -- just set the 1s
-    size_t i;
-    uint64_t j;
-
-    for (i = 0; i < len; i++)
-        if (strchr(on, str[i]) != NULL) {
-            j = offset + (left_to_right ? i : len - i - 1);
-            bits_set(bits, j);
-        }
-        else { assert(strchr(off, str[i]) != NULL); }
-
-    DEBUG_VALIDATE(bits);
-}
-
-// From string method
-void bits_from_str (BitsP bits, rom str)
-{
-    bits_from_substr(bits, 0, str, strlen(str), "1", "0", 1);
-}
-
-// Takes a char array to write to.  `str` must be bits->nbits+1 in length
-// Terminates string with '\0'
-char *bits_to_str (ConstBitsP bits, char *str)
-{
-    for (uint64_t i = 0; i < bits->nbits; i++)
-        str[i] = bits_get(bits, i) ? '1' : '0';
-
-    str[bits->nbits] = '\0';
-
-    return str;
-}
-
-char *bits_to_str_rev (ConstBitsP bits, char *str)
-{
-    for (uint64_t i = 0; i < bits->nbits; i++)
-        str[i] = bits_get(bits, bits->nbits-i-1) ? '1' : '0';
-
-    str[bits->nbits] = '\0';
-
-    return str;
-}
-
-
 // Get a string representations for a given region, using given on/off characters.
 char *bits_to_substr (ConstBitsP bits, uint64_t start, uint64_t length, char *str)
 {
@@ -884,255 +673,6 @@ void bits_bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit, uint
 }
 
 //
-// Logic operators
-//
-
-// Destination can be the same as one or both of the sources
-void bits_and (BitsP dst, ConstBitsP src1, ConstBitsP src2)
-{
-    // Ensure dst array is big enough
-    uint64_t max_bits = MAX_(src1->nbits, src2->nbits);
-    bits_ensure_size_critical(dst, max_bits);
-
-    uint64_t min_words = MIN_(src1->nwords, src2->nwords);
-
-    for (uint64_t i = 0; i < min_words; i++)
-        dst->words[i] = src1->words[i] & src2->words[i];
-
-    // Set remaining bits to zero
-    for (uint64_t i = min_words; i < dst->nwords; i++)
-        dst->words[i] = (uint64_t)0;
-
-  DEBUG_VALIDATE(dst);
-}
-
-// Destination can be the same as one or both of the sources
-static void _logical_or_xor(BitsP dst, ConstBitsP src1, ConstBitsP src2,char use_xor)
-{
-    // Ensure dst array is big enough
-    bits_ensure_size_critical(dst, MAX_(src1->nbits, src2->nbits));
-    DEBUG_VALIDATE(src1);
-    DEBUG_VALIDATE(src2);
-    if (dst != src1 && dst != src2) DEBUG_VALIDATE(dst);
-
-    uint64_t min_words = MIN_(src1->nwords, src2->nwords);
-    uint64_t max_words = MAX_(src1->nwords, src2->nwords);
-
-    if (use_xor) {
-        for (uint64_t i = 0; i < min_words; i++)
-        dst->words[i] = src1->words[i] ^ src2->words[i];
-    }
-    else {
-        for (uint64_t i = 0; i < min_words; i++)
-        dst->words[i] = src1->words[i] | src2->words[i];
-    }
-
-    // Copy remaining bits from longer src array
-    if (min_words != max_words) {
-        ConstBitsP longer = src1->nwords > src2->nwords ? src1 : src2;
-
-        for (uint64_t i = min_words; i < max_words; i++)
-            dst->words[i] = longer->words[i];
-    }
-
-    // Set remaining bits to zero
-    size_t size = (dst->nwords - max_words) * sizeof(uint64_t);
-    memset(dst->words + max_words, 0, size);
-
-    DEBUG_VALIDATE(dst);
-}
-
-void bits_or (BitsP dst, ConstBitsP src1, ConstBitsP src2)
-{
-    _logical_or_xor(dst, src1, src2, 0);
-}
-
-// Destination can be the same as one or both of the sources
-void bits_xor (BitsP dst, ConstBitsP src1, ConstBitsP src2)
-{
-    _logical_or_xor(dst, src1, src2, 1);
-}
-
-// xor the entire dst bit array, with a subset of xor_with
-void bits_xor_with (BitsP dst, uint64_t dst_bit, ConstBitsP xor_with, uint64_t xor_with_bit, uint64_t num_bits)
-{
-    ASSERT (xor_with_bit + num_bits <= xor_with->nbits, 
-            "Expecting xor_with_bit=%"PRId64" + num_bits=%"PRId64" <= xor_with->nbits=%"PRId64, xor_with_bit, num_bits, xor_with->nbits);
-
-    ASSERT (dst_bit + num_bits <= dst->nbits, 
-            "Expecting dst_bit=%"PRId64" + num_bits=%"PRId64" <= dst->nbits=%"PRId64, dst_bit, num_bits, dst->nbits);
-
-    uint64_t num_of_full_words = num_bits / WORD_SIZE;
-
-    // full words
-    for (uint64_t i=0; i < num_of_full_words; i++, xor_with_bit += 64, dst_bit += 64) {
-        uint64_t xored = _get_word (dst, dst_bit) ^ _get_word (xor_with, xor_with_bit);
-        _set_word (dst, dst_bit, xored);
-    }
-
-    // last partial word - combine xored part of the word, part of the dst word beyond the requested range
-    uint8_t remaining_bits = num_bits - num_of_full_words * 64;
-    if (remaining_bits) {
-        uint64_t dst_word = _get_word (dst, dst_bit);
-        uint64_t mask     = bitmask64 (remaining_bits);
-        uint64_t xored    = (dst_word ^ _get_word (xor_with, xor_with_bit)) & mask;
-        uint64_t result   = xored | (dst_word & ~mask);
-        _set_word (dst, dst_bit, result);
-    }
-
-    DEBUG_VALIDATE(dst);
-}
-
-// If dst is longer than src, top bits are set to 1
-void bits_not (BitsP dst, ConstBitsP src)
-{
-    bits_ensure_size_critical(dst, src->nbits);
-
-    for (uint64_t i = 0; i < src->nwords; i++)
-        dst->words[i] = ~(src->words[i]);
-
-    // Set remaining words to 1s
-    for (uint64_t i = src->nwords; i < dst->nwords; i++)
-        dst->words[i] = WORD_MAX;
-
-    bits_clear_excess_bits_in_top_word(dst, true);
-
-    DEBUG_VALIDATE(dst);
-}
-
-//
-// Comparisons
-//
-
-// Compare two bit arrays by value stored, with index 0 being the Least
-// Significant Bit (LSB). Arrays do not have to be the same length.
-// Example: ..0101 (5) > ...0011 (3) [index 0 is LSB at right hand side]
-// Sorts on length if all zeros: (0,0) < (0,0,0)
-// returns:
-//  >0 iff bits1 > bits2
-//   0 iff bits1 == bits2
-//  <0 iff bits1 < bits2
-int bits_cmp (ConstBitsP bits1, ConstBitsP bits2)
-{
-    uint64_t word1, word2;
-    uint64_t min_words = bits1->nwords;
-
-    // i is unsigned so break when i == 0
-    if (bits1->nwords > bits2->nwords) {
-        min_words = bits2->nwords;
-        for (uint64_t i = bits1->nwords-1; ; i--) {
-            if (bits1->words[i]) return 1;
-            if (i == bits2->nwords) break;
-        }
-    }
-    else if (bits1->nwords < bits2->nwords) {
-        for (uint64_t i = bits2->nwords-1; ; i--) {
-            if (bits2->words[i]) return 1;
-            if (i == bits1->nwords) break;
-        }
-    }
-
-    if (min_words == 0) return 0;
-
-    for (uint64_t i = min_words-1; ; i--)
-    {
-        word1 = bits1->words[i];
-        word2 = bits2->words[i];
-        if (word1 != word2) return (word1 > word2 ? 1 : -1);
-        if (i == 0) break;
-    }
-
-    if (bits1->nbits == bits2->nbits) return 0;
-    return bits1->nbits > bits2->nbits ? 1 : -1;
-}
-
-// Compare two bit arrays by value stored, with index 0 being the Most
-// Significant Bit (MSB). Arrays do not have to be the same length.
-// Example: 10.. > 01.. [index 0 is MSB at left hand side]
-// Sorts on length if all zeros: (0,0) < (0,0,0)
-// returns:
-//  >0 iff bits1 > bits2
-//   0 iff bits1 == bits2
-//  <0 iff bits1 < bits2
-int bits_cmp_big_endian (ConstBitsP bits1, ConstBitsP bits2)
-{
-    uint64_t min_words = MAX_(bits1->nwords, bits2->nwords);
-
-    uint64_t i;
-    uint64_t word1, word2;
-
-    for (i = 0; i < min_words; i++) {
-        word1 = _reverse_word(bits1->words[i]);
-        word2 = _reverse_word(bits2->words[i]);
-        if (word1 != word2) return (word1 > word2 ? 1 : -1);
-    }
-
-    // Check remaining words. Only one of these loops will execute
-    for (; i < bits1->nwords; i++)
-        if (bits1->words[i]) return 1;
-    for (; i < bits2->nwords; i++)
-        if (bits2->words[i]) return -1;
-
-    if (bits1->nbits == bits2->nbits) return 0;
-    return bits1->nbits > bits2->nbits ? 1 : -1;
-}
-
-// compare bits with (bits2 << pos)
-// bits_cmp(bits1, bits2<<pos)
-// returns:
-//  >0 iff bits1 > bits2
-//   0 iff bits1 == bits2
-//  <0 iff bits1 < bits2
-int bits_cmp_words (ConstBitsP arr1,uint64_t pos, ConstBitsP arr2)
-{
-    if (arr1->nbits == 0 && arr2->nbits == 0) return 0;
-
-    uint64_t top_bit1 = 0, top_bit2 = 0;
-
-    bool arr1_zero = !bits_find_last_set_bit(arr1, &top_bit1);
-    bool arr2_zero = !bits_find_last_set_bit(arr2, &top_bit2);
-
-    if (arr1_zero && arr2_zero) return 0;
-    if (arr1_zero) return -1;
-    if (arr2_zero) return 1;
-
-    uint64_t top_bit2_offset = top_bit2 + pos;
-
-    if (top_bit1 != top_bit2_offset) 
-        return top_bit1 > top_bit2_offset ? 1 : -1;
-
-    uint64_t i, word1, word2;
-    for (i = top_bit2 / WORD_SIZE; i > 0; i--) {
-        word1 = _get_word(arr1, pos + i * WORD_SIZE);
-        word2 = arr2->words[i];
-
-        if (word1 > word2) return 1;
-        if (word1 < word2) return -1;
-    }
-
-    word1 = _get_word(arr1, pos);
-    word2 = arr2->words[0];
-
-    if (word1 > word2) return 1;
-    if (word1 < word2) return -1;
-
-    // return 1 if arr1[0..pos] != 0, 0 otherwise
-
-    // Whole words
-    uint64_t num_words = pos / WORD_SIZE;
-
-    for (i = 0; i < num_words; i++)
-        if (arr1->words[i] > 0) return 1;
-
-    word_offset_t bits_remaining = pos - num_words * WORD_SIZE;
-
-    if (arr1->words[num_words] & bitmask64(bits_remaining)) return 1;
-
-    return 0;
-}
-
-
-//
 // Reverse -- coords may wrap around
 //
 
@@ -1198,99 +738,11 @@ static void _reverse_region (BitsP bits, uint64_t start, uint64_t length)
     _set_word_cyclic (bits, left, word);
 }
 
-void bits_reverse_region (BitsP bits, uint64_t start, uint64_t len)
-{
-    assert (start + len <= bits->nbits);
-    
-    if (len) _reverse_region (bits, start, len);
-  
-    DEBUG_VALIDATE(bits);
-}
-
 void bits_reverse (BitsP bits)
 {
     if (bits->nbits) _reverse_region (bits, 0, bits->nbits);
     
     DEBUG_VALIDATE(bits);
-}
-
-// for each 2 bits in the src array, the dst array will contain those 2 bits in the reverse
-// position, as well as transform them 00->11 11->00 01->10 10->01
-// src_start_base and max_num_bases must be multiplies of 32 and src != dst: one can call this function piecemiel - eg divide it to threads
-// (2) src_start_base and max_num_bases are both 0, but src and dst MAY be the same
-void bits_reverse_complement_aligned (BitsP dst, ConstBitsP src, uint64_t src_start_base, uint64_t max_num_bases) 
-{
-    ASSERT (src != dst && src_start_base % 32 == 0 && max_num_bases % 32 == 0, "Expecting src_start_base=%"PRIu64" and max_num_bases=%"PRIu64" to be multiples of 32 and src=%p != dst=%p",
-            src_start_base, max_num_bases, src, dst);
-
-    if (!max_num_bases) max_num_bases = src->nbits / 2; // entire Bits
-
-    static const uint8_t rev_comp_table[256] = { // 00=A 01=C 10=G 11=T
-        0b11111111, 0b10111111, 0b01111111, 0b00111111, 0b11101111, 0b10101111, 0b01101111, 0b00101111, 0b11011111, 0b10011111, 0b01011111, 0b00011111, 0b11001111, 0b10001111, 0b01001111, 0b00001111,
-        0b11111011, 0b10111011, 0b01111011, 0b00111011, 0b11101011, 0b10101011, 0b01101011, 0b00101011, 0b11011011, 0b10011011, 0b01011011, 0b00011011, 0b11001011, 0b10001011, 0b01001011, 0b00001011,
-        0b11110111, 0b10110111, 0b01110111, 0b00110111, 0b11100111, 0b10100111, 0b01100111, 0b00100111, 0b11010111, 0b10010111, 0b01010111, 0b00010111, 0b11000111, 0b10000111, 0b01000111, 0b00000111,
-        0b11110011, 0b10110011, 0b01110011, 0b00110011, 0b11100011, 0b10100011, 0b01100011, 0b00100011, 0b11010011, 0b10010011, 0b01010011, 0b00010011, 0b11000011, 0b10000011, 0b01000011, 0b00000011,
-        0b11111110, 0b10111110, 0b01111110, 0b00111110, 0b11101110, 0b10101110, 0b01101110, 0b00101110, 0b11011110, 0b10011110, 0b01011110, 0b00011110, 0b11001110, 0b10001110, 0b01001110, 0b00001110,
-        0b11111010, 0b10111010, 0b01111010, 0b00111010, 0b11101010, 0b10101010, 0b01101010, 0b00101010, 0b11011010, 0b10011010, 0b01011010, 0b00011010, 0b11001010, 0b10001010, 0b01001010, 0b00001010,
-        0b11110110, 0b10110110, 0b01110110, 0b00110110, 0b11100110, 0b10100110, 0b01100110, 0b00100110, 0b11010110, 0b10010110, 0b01010110, 0b00010110, 0b11000110, 0b10000110, 0b01000110, 0b00000110,
-        0b11110010, 0b10110010, 0b01110010, 0b00110010, 0b11100010, 0b10100010, 0b01100010, 0b00100010, 0b11010010, 0b10010010, 0b01010010, 0b00010010, 0b11000010, 0b10000010, 0b01000010, 0b00000010,
-        0b11111101, 0b10111101, 0b01111101, 0b00111101, 0b11101101, 0b10101101, 0b01101101, 0b00101101, 0b11011101, 0b10011101, 0b01011101, 0b00011101, 0b11001101, 0b10001101, 0b01001101, 0b00001101,
-        0b11111001, 0b10111001, 0b01111001, 0b00111001, 0b11101001, 0b10101001, 0b01101001, 0b00101001, 0b11011001, 0b10011001, 0b01011001, 0b00011001, 0b11001001, 0b10001001, 0b01001001, 0b00001001,
-        0b11110101, 0b10110101, 0b01110101, 0b00110101, 0b11100101, 0b10100101, 0b01100101, 0b00100101, 0b11010101, 0b10010101, 0b01010101, 0b00010101, 0b11000101, 0b10000101, 0b01000101, 0b00000101,
-        0b11110001, 0b10110001, 0b01110001, 0b00110001, 0b11100001, 0b10100001, 0b01100001, 0b00100001, 0b11010001, 0b10010001, 0b01010001, 0b00010001, 0b11000001, 0b10000001, 0b01000001, 0b00000001,
-        0b11111100, 0b10111100, 0b01111100, 0b00111100, 0b11101100, 0b10101100, 0b01101100, 0b00101100, 0b11011100, 0b10011100, 0b01011100, 0b00011100, 0b11001100, 0b10001100, 0b01001100, 0b00001100, 
-        0b11111000, 0b10111000, 0b01111000, 0b00111000, 0b11101000, 0b10101000, 0b01101000, 0b00101000, 0b11011000, 0b10011000, 0b01011000, 0b00011000, 0b11001000, 0b10001000, 0b01001000, 0b00001000,
-        0b11110100, 0b10110100, 0b01110100, 0b00110100, 0b11100100, 0b10100100, 0b01100100, 0b00100100, 0b11010100, 0b10010100, 0b01010100, 0b00010100, 0b11000100, 0b10000100, 0b01000100, 0b00000100,
-        0b11110000, 0b10110000, 0b01110000, 0b00110000, 0b11100000, 0b10100000, 0b01100000, 0b00100000, 0b11010000, 0b10010000, 0b01010000, 0b00010000, 0b11000000, 0b10000000, 0b01000000, 0b00000000
-    };
-
-    ASSERT (src->nbits == src->nwords * 64, "expecting full words, bits->nwords=%"PRIu64" and bits->num_of_bit=%"PRIu64,
-            src->nwords, src->nbits);
-
-    ASSERT0 (src->nbits == dst->nbits && src->nwords == dst->nwords, "expecting src and dst to have the same number of bits and words");
-
-    ASSERT0 (src_start_base % 32 == 0 && max_num_bases % 32 == 0, "invalid start_base or num_bases");
-
-    #define REV_COMP(w) (((uint64_t)rev_comp_table[(w)       & 0xff] << 56) | \
-                         ((uint64_t)rev_comp_table[(w >>  8) & 0xff] << 48) | \
-                         ((uint64_t)rev_comp_table[(w >> 16) & 0xff] << 40) | \
-                         ((uint64_t)rev_comp_table[(w >> 24) & 0xff] << 32) | \
-                         ((uint64_t)rev_comp_table[(w >> 32) & 0xff] << 24) | \
-                         ((uint64_t)rev_comp_table[(w >> 40) & 0xff] << 16) | \
-                         ((uint64_t)rev_comp_table[(w >> 48) & 0xff] << 8)  | \
-                         ((uint64_t)rev_comp_table[(w >> 56) & 0xff]        ))
-
-    uint64_t after_word = MIN_(src->nwords, (src_start_base + max_num_bases) / 32); // 32 nucleotides in a word
-
-    for (uint64_t i=src_start_base / 32; i < after_word; i++)
-        dst->words[dst->nwords-1 - i] = REV_COMP (src->words[i]);
-}
-
-// reverse-complements an ACGT bit array in-place
-void bits_reverse_complement_in_place (BitsP bits) 
-{
-    DEBUG_VALIDATE(bits);
-
-    if (!bits->nbits) return;
-    _reverse_region (bits, 0, bits->nbits);
-
-    uint8_t *bytes = (uint8_t *)bits->words;
-    uint64_t nbytes = bits->nwords * sizeof(uint64_t);
-
-    for (uint64_t i=0; i < nbytes; i++) {
-        uint8_t b = bytes[i];
-        uint8_t b0 = b & 0b11;
-        uint8_t b1 = (b>>2) & 0b11;
-        uint8_t b2 = (b>>4) & 0b11;
-        uint8_t b3 = (b>>6) & 0b11;
-
-        #define CONVERT(x) ((x)==0b00 ? 0b11 : (x)==0b11 ? 0b00 : (x))
-
-        // TO DO - we can do this faster with a lookup table
-        bytes[i] = CONVERT(b0) | (CONVERT(b1) << 2) | (CONVERT(b2) << 4) | (CONVERT(b3) << 6);
-    }
-
-    bits_clear_excess_bits_in_top_word (bits, true);
 }
 
 // removes flanking bits on boths sides, shrinking bits
@@ -1315,20 +767,6 @@ void bits_truncate (BitsP bits, uint64_t new_num_of_bits)
     bits->nwords = roundup_bits2words64 (new_num_of_bits);   
 
     bits_clear_excess_bits_in_top_word (bits, true);
-}
-
-// get number of bits in an array, excluding trailing zeros (divon)
-uint64_t bits_effective_length (BitsP bits)
-{
-    int64_t i;
-    for (i=bits->nwords-1; i>=0; i--) 
-        if (bits->words[i]) break; // break on last non-zero word
-
-    if (i == -1) return 0;
-
-    uint64_t last_non_zero_word = bits->words[i];
-
-    return 64 * (1+i) - leading_zeros(last_non_zero_word);
 }
 
 void LTEN_bits (BitsP bits)

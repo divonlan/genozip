@@ -263,7 +263,7 @@ void vcf_seg_INFO_X_IL (VBlockVCFP vb, ContextP ctx, STRp(il_str))
     else for (int alt_i=0; alt_i < n_ils; alt_i++) {
         int64_t il;
 
-        if (str_is_1chari (il, alt_i, '.'))
+        if (IS_PERIODi(il, alt_i))
             predicted &= (X_IL_prediction (vb, alt_i) == 0);
 
         else if (str_get_int (STRi(il, alt_i), &il))

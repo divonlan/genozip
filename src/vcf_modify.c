@@ -220,7 +220,7 @@ fallback:
 
 static char *vcf_optimize_float_or_not (VBlockVCFP vb, ContextP ctx, STRp(value), char *next)
 {
-    if (str_is_1char (value, '.')) goto fallback;
+    if (IS_PERIOD(value)) goto fallback;
     
     if (value && ctx && ctx->header_info.vcf.Type == VCF_Float && ctx->dict_id.num && segconf.optimize[ctx->did_i]) {
         if (ctx->header_info.vcf.Number == 1)
@@ -343,7 +343,7 @@ static char *vcf_phred_optimize (VBlockVCFP vb, ContextP ctx, STRp(snip), char *
     START_TIMER;
 
     char *save_next = next;
-    if (str_is_1char (snip, '.')) fallback: {
+    if (IS_PERIOD(snip)) fallback: {
         COPY_TIMER (vcf_phred_optimize);
         return mempcpy (save_next, snip, snip_len); // format error - don't optimize
     }

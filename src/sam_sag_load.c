@@ -898,7 +898,7 @@ void sam_piz_after_preproc_vb (VBlockP vb)
         sam_gencomp_trim_memory();
     }
 
-    if (flag_is_show_vblocks (PREPROCESSING_TASK_NAME) || flag_is_show_vblocks (PIZ_TASK_NAME))
+    if (flag_is_show_vblocks (TASK_PIZ))
         iprintf ("LOADED_SA(id=%d) vb=%s\n", vb->id, VB_NAME);
 }
 
@@ -907,7 +907,12 @@ void sam_piz_preproc_finalize (Dispatcher dispatcher)
 {
     // restore globals
     flag = save_flag;  // also resets flag.preprocessing
-    dispatcher_set_task_name (dispatcher, PIZ_TASK_NAME);
+    dispatcher_set_task (dispatcher, TASK_PIZ);
+
+    // zero up to 7 bytes at the end of the buffers, so that the last Bits word (if huffman-compressed) doesn't contain uninitialized bytes, angrying valgrind
+    memset (BAFT8(z_file->sag_qual),      0, MIN_(7, z_file->sag_qual.size      - z_file->sag_qual.len));
+    memset (BAFT8(z_file->sag_cigars),    0, MIN_(7, z_file->sag_cigars.size    - z_file->sag_cigars.len)); // union with solo_data
+    memset (BAFT8(z_file->sag_qnames),    0, MIN_(7, z_file->sag_qnames.size    - z_file->sag_qnames.len));
 }
 
 static void sam_sag_load_alloc_z (BufferP buf, bool is_precise, uint64_t precise_len, uint64_t estimated_len, MutexP mutex, rom buf_name)

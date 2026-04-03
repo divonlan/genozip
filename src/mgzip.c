@@ -413,7 +413,7 @@ uint32_t mgzip_get_max_block_size (void)
 
 void inc_disk_gz_uncomp_or_trunc_(FileP file, uint64_t inc, FUNCLINE)
 {
-    __atomic_add_fetch (&file->disk_gz_uncomp_or_trunc, inc, __ATOMIC_RELAXED);
+    add_relaxed (file->disk_gz_uncomp_or_trunc, inc);
 
     if (flag.show_gz_uncomp)
         iprintf ("%s:%u: disk_gz_uncomp_or_trunc + %"PRIu64"\t= %"PRIu64"\n", func, code_line, inc, file->disk_gz_uncomp_or_trunc); 
@@ -463,7 +463,7 @@ static GzStatus mgzip_block_verify_header (FileP file, // option 1
             return GZ_NOT_GZIP;
         else
             ABORT ("expecting %s file %s to be compressed with gzip format, but it is not. offset=%"PRIu64, 
-                   codec_name (file->effective_codec), file->basename, (uint64_t)ftello64 (fp) - h_len);
+                   codec_name (file->effective_codec), file->basename, (int64_t)ftello64 (fp) - h_len);
     }
 
     // case: this is GZIP block (by the magic) but it is NOT a valid (BGZF | IL1M | ...) block
@@ -472,7 +472,7 @@ static GzStatus mgzip_block_verify_header (FileP file, // option 1
             return GZ_IS_OTHER_FORMAT;
         else 
             RESTART ("--no-bgzf", "Encountered a GZIP block that unexpectedly is not %s in %s offset=%"PRIu64" file_size=%"PRIu64" found=%s expected=%s", 
-                     codec_name (file->effective_codec), file->basename, (uint64_t)ftello64 (fp) - h_len, file->disk_size, display_gz_header (h, h_len, false).s, display_gz_header (STRa(prefix), false).s);
+                     codec_name (file->effective_codec), file->basename, (int64_t)ftello64 (fp) - h_len, file->disk_size, display_gz_header (h, h_len, false).s, display_gz_header (STRa(prefix), false).s);
     }
 
     return GZ_SUCCESS;
@@ -949,7 +949,7 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
         bgzf_discover_library_and_level (vb, (rom)h, bb->gz_size, Btxt (bb->txt_index), bb->txt_size);   
         
         if ((!txt_file->num_plausible_levels || num_bgzf_blocks_tested_for_level() >= BGZF_DISCOVERY_MAX_TESTS)
-        &&  !__atomic_test_and_set (&txt_file->once_set_is_exactable, __ATOMIC_RELAXED)) // first threads wins
+        &&  !test_and_set_relaxed (txt_file->once_set_is_exactable)) // first threads wins
             mgzip_set_is_exactable (txt_file, txt_file->num_plausible_levels > 0, "BGZF library unrecognized");
     }
 }
@@ -979,7 +979,7 @@ void mgzip_uncompress_vb (VBlockP vb, Codec codec)
     buf_destroy (vb->comp_txt_data); // now that we are finished decompressing we can release the memory (we won't need this buffer for a while so better destroy)
 
     if (flag.show_time) {
-        if (threads_am_i_main_thread ()) COPY_TIMER (bgzf_io_thread)
+        if (threads_am_i_main_thread ()) COPY_TIMER (bgzf_io_thread);
         else                             COPY_TIMER (bgzf_compute_thread);
     }
 
@@ -1217,7 +1217,7 @@ static void bgzf_failed_exact_verification (void)
 
 static void bgzf_failed_exact_verification_one_block (VBlockP vb, const BgzfBlockPiz *restrict block, uint32_t this_block_digest, STRp(gz_data))
 {
-    if (!__atomic_test_and_set (&txt_file->exact_failed_verification, __ATOMIC_RELAXED)) { // once per file
+    if (!test_and_set_relaxed (txt_file->exact_failed_verification)) { // once per file
         uint64_t gz_blk_i = vb->vb_mgzip_i + BNUM64(vb->gz_blocks, block);
         if (flag_show_bgzf) 
             iprintf ("VERIFY exact gz-recompression FAILED for gz_blk_i=%"PRIu64" isize=%u bsize=%u zip_digest=%08x piz_digest=%08x library=%s\n", 

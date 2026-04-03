@@ -1,4 +1,7 @@
+genozip.code-workspace
+.vscode
 private
+alibaba
 docs
 test
 scripts
@@ -124,3 +127,4 @@ out
 *.backup
 vgcore.*
 P226339*
+invocations*

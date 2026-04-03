@@ -124,7 +124,7 @@ IS_SKIP (vcf_piz_is_skip_section)
 void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
 #ifdef DEBUG
-    DO_ONCE WARN_IF (segconf.wid[ctx->did_i].width==0, "segconf.wid[%s].width=0. This can legimately happen if this field is not encountered in segconf, or all segconf occurances are longer than %u, or this field didn't exist in version %s, or possibly a bug", ctx->tag_name, SEGCONF_MAX_WIDTH, file_version().s);
+    DO_ONCE WARN_IF (segconf.wid[ctx->did_i].width==0, "segconf.wid[%s].width=0. This can legimately happen if this field is not encountered in segconf, or all segconf occurances are longer than %u, or this field didn't exist in version %s, or possibly a bug", ctx->tag_name, SEGCONF_MAX_WIDTH, STRver(file_version()).s);
 #endif
 
     if (!IS_RECON_INSERTION(ctx)) return;

@@ -50,8 +50,10 @@ typedef uint64_t __attribute__((aligned(1))) unaligned_uint64_t;
 #define MAX_UINT40 0xffffffffffULL
 typedef struct __attribute__((packed)) { uint32_t lo; uint8_t hi; } uint40_t;
 // macros are good if lo is 32 bit and hi is 1 to 32 bits
-#define U40to64(x40) (((uint64_t)(x40).hi << 32) | (uint64_t)(x40).lo)         
-#define U64to40(x64) ((uint40_t){ .lo = (uint32_t)(x64), .hi = (x64) >> 32 })
+#define U40to64(x40)      (((uint64_t)(x40).hi << 32) | (uint64_t)(x40).lo)         
+#define U40to64_LTEN(x40) (((uint64_t)(x40).hi << 32) | (uint64_t)LTEN32((x40).lo))         
+#define U64to40(x64)      ((uint40_t){ .lo = (uint32_t)(x64), .hi = (x64) >> 32 })
+#define LTEN40(x64)       ((uint40_t){ .lo = LTEN32((uint32_t)(x64)), .hi = (x64) >> 32 })
 
 typedef unsigned __int128 uint128_t;
 typedef          __int128 int128_t;
@@ -96,7 +98,9 @@ typedef packed_enum {
     NO_POOL=-1, 
     POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
     POOL_BGZF,  // PIZ only: used for BGZF-compression dispatcher
+    POOL_MISC,  // Used for tasks that are embedded in the main PIZ or ZIP: for now: TASK_READ_TXT_HEADER
     NUM_POOL_TYPES } VBlockPoolType;
+#define POOL_NAMES { "MAIN", "BGZF", "MISC" }
 
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
@@ -211,8 +215,9 @@ typedef uint64_t CharIndex;     // index within dictionary
 typedef int32_t WordIndex;      // used for word and node indices
 typedef int64_t PosType64;      // used for position coordinate within a genome
 typedef int32_t PosType32;    
-#define MAX_POS32 ((PosType64)0x7fffffff)  // max value of a POS field in VCF and SAM per their specifications
-#define MAX_POS40 ((PosType64)0xffffffffff)// max gpos for deep and bamass
+#define MAX_POS32 ((PosType64)0x7fffffff)   // max value of a POS field in VCF and SAM per their specifications
+#define MAX_POS40 ((PosType64)0xffffffffff) // max gpos for deep and bamass
+#define NO_GPOS -1LL
 
 typedef int32_t LineIType;
 #define NO_LINE (-1)
@@ -377,41 +382,49 @@ extern CommandType command, primary_command;
 typedef enum { VB_ID_EVB=-1, VB_ID_WRITER=-2, VB_ID_SEGCONF=-3, VB_ID_SCAN_VB=-4, VB_ID_COMPRESS_DEPN=-5, VB_ID_NONE=-999 } VBID;
 #define NUM_NONPOOL_VBs 5
 
+// tasks
+typedef enum { TASK_NONE, /*dispatcher tasks →*/ TASK_ZIP, TASK_PIZ, TASK_PIZ_REF, TASK_LOAD_EXT_REF, TASK_LOAD_STORED_REF, TASK_MAKE_REF_COMP, TASK_COMPRESS_REF, TASK_LOAD_REFHASH, TASK_MRH_DECIDE_OCCUPIER, TASK_MRH_OCCUPY, TASK_MRH_COMPRESS, TASK_UNCOMP_RECON_PLAN, TASK_COMP_TXT_HEADER, TASK_READ_TXT_HEADER, TASK_BAMASS_READ, TASK_BAMASS_LINK, TASK_ASSIGN_DICT_CODECS, TASK_COMP_DICTS, TASK_READ_DICTS_REF, TASK_READ_DICTS, TASK_BGZF,  /*non-dispatcher tasks →*/ TASK_EVB, TASK_WVB, TASK_SEGCONF, TASK_COMP_DEPN_BUF, TASK_FASTA_FILTER_GREP, TASK_SCAN_FOR_DEPN, NUM_TASKS } Task;
+#define TASK_NAMES { "none",                         "zip",    "piz",    "piz_ref",    "load_ext_ref",    "load_stored_ref",    "make_ref_compress",    "compress_ref",    "load_refhash",    "mrh_decide_occupier",    "mrh_occupy",    "mrh_compress",    "uncomp_recon_plan",    "comp_txt_header",    "read_txt_header",    "bamass_read",    "bamass_link",    "assign_dict_codecs",    "comp_dicts",    "read_dicts_ref",    "read_dicts",    "bgzf", /*non-dispatcher tasks →*/     "evb",    "wvb",    "segconf",    "comp_depn_buf",    "fasta_filter_grep",    "scan_for_depn" }
+
 extern VBlockP evb; // External VB
 
 // threads
 typedef int ThreadId;
 #define THREAD_ID_NONE ((ThreadId)-1)
 
-#define VER(n) (z_file->genozip_version >= (n))
-#define VER2(major,minor) (({ ASSERT0 ((major) >= 15 && ((major)>15 || (minor)>=28), "VER2 can test versions starting 15.0.28"); /* optimized out */ \
-                              (z_file->genozip_version == (major) && (z_file->genozip_minor_ver >= (minor))) || \
-                              (z_file->genozip_version > (major)); }))
+#define VER(maj) (z_file->genozip_ver.major >= (maj))
+#define VER2(maj,min) (({ ASSERT0 ((maj) >= 15 && ((maj)>15 || (min)>=28), "VER2 can test versions starting 15.0.28"); /* optimized out */ \
+                          VER_GE (z_file->genozip_ver, ((Version){(maj),(min)})); }))                      
 
-#define EXACT_VER(n) (z_file->genozip_version == (n))
+#define EXACT_VER(maj) (z_file->genozip_ver.major == (maj))
 
+// atomics
 #define load_relaxed(var)        __atomic_load_n    (&var, __ATOMIC_RELAXED)
 #define load_acquire(var)        __atomic_load_n    (&var, __ATOMIC_ACQUIRE)
 #define store_relaxed(var,value) __atomic_store_n   (&var, (value), __ATOMIC_RELAXED); 
 #define store_release(var,value) __atomic_store_n   (&var, (value), __ATOMIC_RELEASE); 
-#define increment_relaxed(var)   __atomic_fetch_add (&var, 1, __ATOMIC_RELAXED) // returns value before incrementing
-#define decrement_relaxed(var)   __atomic_sub_fetch (&var, 1, __ATOMIC_RELAXED) // returns value after decrementing
+#define add_relaxed(var, delta)  __atomic_add_fetch (&var, (typeof(var))(delta), __ATOMIC_RELAXED) // returns value after 
+#define sub_relaxed(var, delta)  __atomic_sub_fetch (&var, (typeof(var))(delta), __ATOMIC_RELAXED) // returns value after 
+#define increment_relaxed(var)   add_relaxed (var, 1) // returns value after incrementing
+#define decrement_relaxed(var)   sub_relaxed (var, 1) // returns value after decrementing
+#define test_and_set_relaxed(var) __atomic_test_and_set (&var, __ATOMIC_RELAXED)
 
 // macros with arguments that evaluate only once 
-#define MIN_(a, b) ({ __typeof__(a) _a_=(a); __typeof__(b) _b_=(b); (_a_ < _b_) ? _a_ : _b_; }) // GCC / clang "statement expressions" extesion: https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html#Statement-Exprs
-#define MAX_(a, b) ({ __typeof__(a) _a_=(a); __typeof__(b) _b_=(b); (_a_ > _b_) ? _a_ : _b_; })
+#define MIN_(a, b) ({ typeof(a) _a_=(a); typeof(b) _b_=(b); (_a_ < _b_) ? _a_ : _b_; }) // GCC / clang "statement expressions" extension: https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html#Statement-Exprs
+#define MAX_(a, b) ({ typeof(a) _a_=(a); typeof(b) _b_=(b); (_a_ > _b_) ? _a_ : _b_; })
 #ifndef ABS
-#define ABS(a) ({ __typeof__(a) _a_=(a); (_a_ >= 0) ? _a_ : -_a_; })
+#define ABS(a) ({ typeof(a) _a_=(a); (_a_ >= 0) ? _a_ : -_a_; })
 #endif
 #ifndef SQR 
 #define SQR(x) ((x)*(x)) 
 #endif
+static inline double percent (double numerator, double denominator) { return denominator ? 100.0 * numerator / denominator : 0.0; }
 
 #define MINIMIZE(var,new_val) ({ if ((new_val) < (var)) var = (new_val); })
 #define MAXIMIZE(var,new_val) ({ if ((new_val) > (var)) var = (new_val); })
 
-#define IN_RANGE(x,min,after) ((x) >= (min) && (x) < (after)) // half_open [min,after)
-#define IN_RANGX(x,min,max)   ((x) >= (min) && (x) <= (max))  // close [min,max]
+#define IN_RANGE(x,min,after) ((x) >= (min) && (x) < (after)) // half-open [min,after)
+#define IN_RANGX(x,min,max)   ((x) >= (min) && (x) <= (max))  // closed [min,max]
 
 #define MAXB64(x) ((uint64_t)((1ULL<<(x))-1))
 #define MAXB(x) ((uint32_t)MAXB64(x))  // eg: MAXB(3) == 0b111 == 7
@@ -447,7 +460,7 @@ typedef int ThreadId;
     ({ out##_len += snprintf (&out.s[out##_len], sizeof(out.s)-out##_len, (str)); out##_len = MIN_(out##_len, sizeof(out.s)); })
 
 // note: second caller will skip block, even if first caller is still executing it
-#define DO_ONCE static bool do_once=0; if (!__atomic_test_and_set (&do_once, __ATOMIC_RELAXED))  
+#define DO_ONCE static bool do_once=0; if (!test_and_set_relaxed (do_once))
 
 // Strings - declarations
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]
@@ -689,7 +702,7 @@ extern StrText license_get_number (void);
 extern rom report_support (void);
 extern rom report_support_if_unexpected (void);
 
-#define ASSERT(condition, format, ...)       ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, "%s Error in %s:%u %s%s: ", str_time().s, __FUNCLINE, version_str().s, license_get_number().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true); }} )
+#define ASSERT(condition, format, ...)       ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, "%s ❌ %s:%u %s%s: ", str_time().s, __FUNCLINE, version_str().s, license_get_number().s); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true); }} )
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT (!p, "expecting %s to be NULL", #p)
 #define ASSERTNOTNULL(p)                     ASSERT (p, "%s is NULL", #p)
@@ -708,10 +721,10 @@ extern rom report_support_if_unexpected (void);
 #define ASSRET(condition, ret, format, ...)  ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); return ret; }} )
 #define ASSRET0(condition, ret, string)      ASSRET (condition, ret, string "%s", "")
 #define ASSERTRUNONCE(string)                ( { static bool once = false; /* this code path should run only once */ \
-                                                 ASSINP0 (!__atomic_test_and_set (&once, __ATOMIC_RELAXED), string); } )
+                                                 ASSINP0 (!test_and_set_relaxed (once), string); } )
 #define RETURNW(condition, ret, format, ...) ( { if (__builtin_expect (!(condition), 0)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } return ret; }} )
 #define RETURNW0(condition, ret, string)     ( { if (__builtin_expect (!(condition), 0)) { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: %s\n", global_cmd, string); fflush (stderr); } return ret; } } )
-#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s Error in %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true);} )
+#define ABORT(format, ...)                   ( { progress_newline(); fprintf (stderr, "%s ❌ %s:%u: ", str_time().s, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true);} )
 #define ABORT0(string)                       ABORT (string "%s", "")
 #define RESTART(add_cmd_option, format, ...) ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); error_restart(add_cmd_option);} )
 #define RESTART0(add_cmd_option, string)     RESTART (add_cmd_option, string "%s", "")
@@ -721,7 +734,7 @@ extern rom report_support_if_unexpected (void);
 #define NOISYWARN0(string)                   NOISYWARN (string "%s", "")
 
 #define WARN_ONCE(format, ...)               ( { static bool warning_shown = false; \
-                                                 if (!flag.quiet && !__atomic_test_and_set (&warning_shown, __ATOMIC_RELAXED)) \
+                                                 if (!flag.quiet && !test_and_set_relaxed (warning_shown)) \
                                                     { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } \
                                                } ) 
 

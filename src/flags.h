@@ -33,7 +33,7 @@ extern rom ref_type_name(void);
 #define IS_REF_CHROM2REF  (flag.reference & REF_ZIP_CHROM2REF)
 
 #define IS_REF_STORED_PIZ (flag.reference == REF_STORED) // 2 bits set
-#define IS_REF_INTERNAL_PIZ ((Z_DT(SAM) || Z_DT(BAM)) && z_file->z_flags.dts_ref_internal)
+#define IS_REF_INTERNAL_PIZ ((Z_DT(BAM) || Z_DT(SAM)) && z_file->z_flags.dts_ref_internal)
 
 typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, STATS_LONG_GREP=-2 } StatsType;
 
@@ -52,10 +52,15 @@ typedef packed_enum { NOT_PAIRED,       // ZIP and PIZ
 #define PADDED_FLAG(type,f) struct { char pad_##f[3]; type f; } __attribute__ ((aligned (4)))
 #endif
 
+typedef enum { NO_MAKE_REF, MAKE_REF_TINY, MAKE_REF_SMALL, MAKE_REF_MEDIUM, MAKE_REF_LARGE, NUM_MAKE_REF } MakeRefSize;
+#define MAKE_REF_SIZES { "N/A",     "tiny",        "small",        "medium",        "large" }
+extern rom ref_hash_sizes[NUM_MAKE_REF];
+
 typedef struct {
-    
     // genozip options that affect the compressed file
-    int fast, best, low_memory, make_reference, multiseq, md5, secure_DP, not_paired,
+    #define MAKE_REF_DEFAULT MAKE_REF_MEDIUM
+    MakeRefSize make_reference; // note: values are part of the file format: GenozipHeader.ref.make_ref_flag
+    int fast, best, low_memory, multiseq, md5, secure_DP, not_paired,
         deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.dts2_deep in PIZ
     rom vblock, bam_assist;
     int64_t sendto;
@@ -95,7 +100,7 @@ typedef struct {
     enum { INTERLEAVE_NONE, INTERLEAVE_EITHER, INTERLEAVE_BOTH } interleaved;
     uint16_t FLAG; // the value for sam_flag_filter
     uint8_t MAPQ;  // the value for sam_mapq_filter
-    bool explicit_head;
+    bool explicit_head, default_make_ref;
     enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } bases;
 
     int64_t t_offset, t_size; // PIZ: offset and size of a z_file within a tar file - for genounzip --test executed from genozip
@@ -144,9 +149,9 @@ typedef struct {
         show_codec, show_cache, show_memory, show_snips, show_regions,
         show_alleles, show_bgzf, show_gz, show_isizes, show_is_exactable, show_txt_contigs, show_lines, show_gz_uncomp,
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type, debug_dyn_int,
-        debug_progress, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
+        show_tasks, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, stats_submit, debug_submit, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
+        debug_peek, telemetry, debug_telemetry, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, debug_bai, // ad-hoc debug printing in prod
         show_compress, show_sec_gencomp, show_scan,
@@ -159,11 +164,12 @@ typedef struct {
         recover,      // PIZ: attempted recovery from data corruption
         #define SHOW_ALL_HEADERS (-1)
         show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
-    rom help, dump_section, show_is_set, show_time, show_mutex, show_vblocks, show_header_dict_name, show_flavor;
+    rom help, dump_section, show_is_set, show_time, show_mutex, show_header_dict_name, show_flavor;
     int32_t dump_section_i, show_header_section_i, dump_gz_block;
+    Task show_vblocks; // -1=all tasks
     enum { SHOW_DEEP_SUMMARY=1, SHOW_DEEP_ONE_HASH=2, SHOW_DEEP_ALL=3 } show_deep;
     enum { SHOW_BAI_NONE, SHOW_BAI_UNSORTED, SHOW_BAI_SORT, SHOW_BAI_CHUNKS, SHOW_BAI_RAW, SHOW_BAI_LINEAR } show_bai;
-
+    
     // use __builtin_expect for show/debug flags that are tested throughout execution (i.e. not just during initialization or finalization)
     #define flag_show_deep       __builtin_expect (flag.show_deep > 0,   false)
     #define flag_show_threads    __builtin_expect (flag.show_threads,    false)
@@ -267,7 +273,7 @@ extern void flags_restore (Flags *save_flag);
         if ((aux_name) && (flag.show_threads || flag.debug_memory || flag.show_vblocks))                                        \
             WARN_ONCE ("FYI: xthreads: Turning off show_vblocks, show_threads, debug_memory while loading %s\n", (aux_name) ? (aux_name) : "");   \
         flag.show_threads = flag.debug_memory = false;                                                                          \
-        flag.show_vblocks = NULL;                                                                                               \
+        flag.show_vblocks = TASK_NONE;                                                                                               \
     }                                                                                                                           \
     flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf = flag.show_gz =                               \
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =                                      \
@@ -304,9 +310,9 @@ extern bool flags_is_genocat_global_area_only (void);
 extern rom pair_type_name (PairType p);
 extern bool flags_writer_counts (void);
 
-static inline bool flag_is_show_vblocks (rom task)
+static inline bool flag_is_show_vblocks (Task task)
 {
-    return flag.show_vblocks && (!task || !flag.show_vblocks[0] || !strcmp (flag.show_vblocks, task));
+    return flag.show_vblocks && (!task || flag.show_vblocks == -1/*all tasks*/ || flag.show_vblocks == task);
 }
 
 static inline bool flag_is_set_(int flag_without_dict, DictId flag_with_dict, DictId dict/*may be DICT_ID_NONE*/)

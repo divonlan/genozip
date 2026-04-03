@@ -188,7 +188,7 @@ bool vcf_seg_sample_has_null_value (Did did_i, ContextP *ctxs, STRps(sf))
 {
     for (int i=0; i < n_sfs; i++) 
         if (ctxs[i]->did_i == did_i)
-            return str_is_1chari (sf, i, '.'); // null value found on this line - return true if its a '.'
+            return IS_PERIODi(sf, i); // null value found on this line - return true if its a '.'
 
     return false; // no context dnum at all in this sample
 }
@@ -793,15 +793,15 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
     ConstMultiplexerP mux = (ConstMultiplexerP)&vb->mux_RGQ;
         
     // prediction: we have GT, and if GT[0]=. then RGQ=0. Fallback seg in case prediction fails
-    if (gt_ctx->did_i != FORMAT_GT ||               // prediction failed: first subfield isn't GT
-        (gt[0] == '.' && !str_is_1char (rgq, '0'))) // prediction failed: GT[0]=. and yet RGQ!="0"
+    if (gt_ctx->did_i != FORMAT_GT ||           // prediction failed: first subfield isn't GT
+        (gt[0] == '.' && !IS_CHAR0(rgq)))       // prediction failed: GT[0]=. and yet RGQ!="0"
         goto fallback;
 
     // case: GT[0] is not '.' - seg the value of RGQ multiplexed by DP
     if (gt[0] != '.') {
-        if (!segconf.has[FORMAT_DP]          ||    // segconf didn't detect FORMAT/DP so we didn't initialize the mux
-            !ctx_encountered (VB, FORMAT_DP) ||    // no DP in the FORMAT of this line
-            segconf_running) goto fallback;        // multiplexer not initalized yet 
+        if (!segconf.has[FORMAT_DP]          || // segconf didn't detect FORMAT/DP so we didn't initialize the mux
+            !ctx_encountered (VB, FORMAT_DP) || // no DP in the FORMAT of this line
+            segconf_running) goto fallback;     // multiplexer not initalized yet 
 
         int64_t DP;
         if (!str_get_int (STRlst(FORMAT_DP), &DP)) // in some files, DP may be '.'
@@ -947,7 +947,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_single)
 static inline void vcf_seg_FORMAT_PGT (VBlockVCFP vb, ContextP ctx, STRp(pgt), ContextP *ctxs, STRps(sf))
 {
     // case: PGT=. and PID=.
-    if ((pgt_len==1 && *pgt=='.' && vcf_seg_sample_has_null_value (FORMAT_PID, ctxs, STRas(sf)))
+    if ((IS_PERIOD(pgt) && vcf_seg_sample_has_null_value (FORMAT_PID, ctxs, STRas(sf)))
 
     // case: haplotypes of PGT are the same and in the same order as GT
     || (ctxs[0]->did_i == FORMAT_GT && sf_lens[0] == 3 && pgt_len==3 && 

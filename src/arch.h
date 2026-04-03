@@ -28,6 +28,7 @@ extern rom arch_get_argv0 (void);
 extern bool arch_is_valgrind (void);
 extern bool arch_is_docker (void);
 extern bool arch_is_first_compression (void);
+extern uint64_t arch_time (void);
 extern Timestamp arch_timestamp (void);
 extern bool arch_is_process_alive (uint32_t pid);
 extern uint64_t arch_get_max_resident_set (void);

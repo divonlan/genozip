@@ -79,23 +79,24 @@ typedef struct File {
 
     // Digest stuff - stored in z_file (ZIP & PIZ)
     Serializer digest_serializer;      // ZIP/PIZ: used for serializing VBs so they are MD5ed in order (not used for Adler32)
-    DigestContext digest_ctx;          // ZIP/PIZ: Z_FILE: digest context of txt file being compressed / reconstructed (used for MD5 and, in v9-13, for Adler32, starting v15 also for make-reference)
-    DigestContext v13_commulative_digest_ctx; // PIZ: z_file: used for multi-component up-to-v13 files - VB digests (adler and md5) are commulative since the beginning of the data, while txt file digest are commulative only with in the component.
+    DigestState digest_state;          // ZIP/PIZ: Z_FILE: digest context of txt file being compressed / reconstructed (used for MD5 and, in v9-13, for Adler32, starting v15 also for make-reference)
+    DigestState v13_commulative_digest_state; // PIZ: z_file: used for multi-component up-to-v13 files - VB digests (adler and md5) are commulative since the beginning of the data, while txt file digest are commulative only with in the component.
     Digest digest;                     // ZIP: Z_FILE: digest of txt data read from input file (make-ref since v15: digest of in-memory genome)  PIZ: z_file: as read from TxtHeader section (used for MD5 and, in v9-13, for Adler32)
     bool vb_digest_failed;             // PIZ: TXT_FILE: At least one VB has an unexpected digest when decompressing
     
-    // PIZ: reference file name and digest as appears in the z_file header 
+    // PIZ: reference file info as appears in the file's z_file header 
     char ref_filename_used_in_zip[REF_FILENAME_LEN]; // PIZ: Z_FILE: ref filename as appears in the z_file header - this is not necessarily the file used - it could be overridden with --reference or $GENOZIP_REFERENCE
     Digest ref_genome_digest;          // PIZ: Z_FILE: digest of REF_EXTERNAL file with which this file was compressed
-    
+    DigestAlg ref_genome_digest_alg;   // PIZ: Z_FILE: digest algorithm used to produce ref_genome_digest
+    Version ref_genozip_ver;           // PIZ: Z_FILE: genozip version of the reference file used compress this file 
+
     // Used for READING & WRITING txt files - but stored in the z_file structure for zip to support bindenation (and in the txt_file structure for piz)
     uint32_t max_lines_per_vb;         // ZIP & PIZ - in ZIP, discovered while segmenting, in PIZ - given by SectionHeaderTxtHeader
     bool piz_header_init_has_run;      // PIZ: true if we called piz_header_init to initialize (only once per outputted txt_file, even if concatenated)
 
     // Used for READING GENOZIP files
-    uint8_t genozip_version;           // major version of the genozip file being created / read
-    uint16_t genozip_minor_ver;        // since 15.0.28
-            
+    Version genozip_ver;               // ZIP/PIZ major version of the genozip file being created / read
+
     CompIType num_txt_files;           // PIZ Z_FILE: set from genozip header (ZIP: see num_txts_so_far)
     CompIType num_txts_so_far;         // ZIP Z_FILE: number of txt files compressed into this z_file - each becomes one or more components
                                        // PIZ Z_FILE: number of txt files written from this z_file - each generated from one or more components 
@@ -235,6 +236,7 @@ typedef struct File {
     uint64_t fq_num_perfect_matches;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
     uint64_t fq_num_verbatim;          // Z_FILE: ZIP: FASTQ: number of lines segged verbatim
     uint64_t fq_num_monochar;          // Z_FILE: ZIP: FASTQ: number of lines segged monochar
+    uint64_t fq_num_empty_read;        // Z_FILE: ZIP: FASTQ: number of lines with seq_len=0
     uint64_t vcf_num_samples_copied;   // Z_FILE: ZIP: VCF: number of samples copied
     uint64_t domq_lines, divr_lines, homp_lines, pacb_lines, longr_lines, normq_lines;// Z_FILE: ZIP: number of lines QUAL codecs (show in codec_qual_show_stats)
 
@@ -261,7 +263,7 @@ typedef struct File {
 } File;
 
 #define z_has_gencomp (z_file && z_file->z_flags.has_gencomp) // ZIP/PIZ
-#define z_sam_gencomp (z_file && (Z_DT(SAM) || Z_DT(BAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(SAM) and in zip are Z_DT(BAM)
+#define z_sam_gencomp (z_file && (Z_DT(BAM) || Z_DT(SAM)) && z_has_gencomp) // note: is BAM file in piz are Z_DT(SAM) and in zip are Z_DT(BAM)
 
 // methods
 extern FileP file_open_z_read (rom filename);

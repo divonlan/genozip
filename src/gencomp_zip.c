@@ -215,9 +215,7 @@ void gencomp_initialize (CompIType comp_i, GencompType gct)
     buf_set_promiscuous (&componentsP[comp_i].txt_data, "componentsP[]");
 
     // initialize queue. note: same-type components share a queue
-    #if MAX_QUEUE_SIZE < MAX_GLOBAL_MAX_THREADS 
-    #error MAX_GLOBAL_MAX_THREADS must be at most MAX_QUEUE_SIZE or else the queue_size might overflow
-    #endif
+    _Static_assert (MAX_QUEUE_SIZE >= MAX_GLOBAL_MAX_THREADS, "MAX_GLOBAL_MAX_THREADS must be at most MAX_QUEUE_SIZE or else the queue_size might overflow");
 
     if (gct == GCT_DEPN) {
 
@@ -327,7 +325,7 @@ static uint32_t compress_depn_buf (BufferP comp_buf)
 {
     START_TIMER;
 
-    compress_depn_vb = vb_initialize_nonpool_vb (VB_ID_COMPRESS_DEPN, DT_NONE, "compress_depn_buf");
+    compress_depn_vb = vb_initialize_nonpool_vb (VB_ID_COMPRESS_DEPN, DT_NONE, TASK_COMP_DEPN_BUF);
     
     uint32_t uncomp_len = depn.thread_data.len32;
     uint32_t comp_len = codec_RANB_est_size (CODEC_RANB, uncomp_len);
@@ -339,7 +337,7 @@ static uint32_t compress_depn_buf (BufferP comp_buf)
     codec_RANB_compress (compress_depn_vb, NULL, NULL, depn.thread_data.data, &uncomp_len, NULL, comp_buf->data + sizeof(uint32_t), 
                          &comp_len, false, NULL);
     
-    vb_release_vb (&compress_depn_vb, "compress_depn_buf");
+    vb_release_vb (&compress_depn_vb);
     
     COPY_TIMER_EVB (compress_depn_buf);
     return (comp_buf->len = comp_len + sizeof (uint32_t));
@@ -736,7 +734,7 @@ static void gencomp_get_txt_data_from_queue (VBlockP vb, GencompType gct)
     if (flag_debug_gencomp) 
         debug_gencomp (vb->comp_i==1 ? "GetTxt PRIM" : "GetTxt DEPN", false, vb);
 
-    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
+    if (flag_is_show_vblocks (TASK_ZIP)) 
         iprintf ("TXT_DATA_FROM_GENCOMP_QUEUE(id=%d) vb=%s buf_i=%u Ltxt=%u n_lines=%u\n", 
                  vb->id, VB_NAME, buf_i, Ltxt, vb->lines.len32);
 
@@ -894,7 +892,7 @@ bool gencomp_am_i_expecting_more_txt_data (void)
     bool expecting = !finished_absorbingP || queueP[GCT_OOB].queue_len || queueP[GCT_DEPN].queue_len ||
                      reread_depn_vb_prescriptions.next < reread_depn_vb_prescriptions.len;
 
-    if ((TXT_DT(SAM) || TXT_DT(BAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
+    if ((TXT_DT(BAM) || TXT_DT(SAM)) && finished_absorbingP && !queueP[GCT_OOB].queue_len && !num_vbs_dispatched[GCT_OOB]) {
         sam_finished_ingesting_prim = true;
         if (flag_debug_gencomp) iprint0 ("No PRIM VBs in this file\n");
     }
@@ -928,7 +926,7 @@ void gencomp_sam_prim_vb_has_been_ingested (VBlockP vb)
     // which guarantees that if we have data, at least one of these two conditions will be true. 
     // 2. gencomp_get_txt_data ensures that if there is a VB being dispatched, it is accounted for in
     // at least one of: num_vbs_dispatched[GCT_OOB], queueP[GCT_OOB].queue_len
-    if ((VB_DT(SAM) || VB_DT(BAM)) && my_finished_absorbing && !prim_queue_len && num_vbs_dispatched[GCT_OOB] == num_SAM_PRIM_vbs_ingested) {
+    if ((VB_DT(BAM) || VB_DT(SAM)) && my_finished_absorbing && !prim_queue_len && num_vbs_dispatched[GCT_OOB] == num_SAM_PRIM_vbs_ingested) {
         sam_sa_prim_finalize_ingest ();
         sam_finished_ingesting_prim = true;
         if (flag_debug_gencomp) iprintf ("Finished ingesting SAGs: num_SAM_PRIM_vbs_ingested=%u\n", num_SAM_PRIM_vbs_ingested);
@@ -949,7 +947,7 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
 
     stream_set_inheritability (fileno (fp), false); // Windows: allow file_remove in case of --replace
 
-    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
+    if (flag_is_show_vblocks (TASK_ZIP)) 
         iprintf ("REREAD_DEPN(id=%d) vb=%s n_lines=%u effective_codec=%s\n", 
                  vb->id, VB_NAME, vb->reread_prescription.len32, codec_name (txt_file->effective_codec));
 

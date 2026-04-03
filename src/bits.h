@@ -6,7 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 //   Copyright claimed on additions and modifications vs public domain.
-//
+
 // a module for handling arrays of 2-bit elements, partially based on Bits, a public domain code located in https://github.com/noporpoise/BitArray/. 
 // The unmodified license of Bits is as follows:
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 
@@ -64,9 +64,6 @@
     #define leading_zeros(x)  ((x) ? (__typeof(x))__builtin_clzll(x) : (__typeof(x))sizeof(x)*8)
 #endif
 
-// Get index of top set bit. If x is 0 return nbits
-#define top_set_bit(x) ((x) ? sizeof(x)*8-leading_zeros(x)-1 : sizeof(x)*8)
-
 #define roundup_bits2bytes(bits)   (((bits)+7)/8)
 #define roundup_bits2words32(bits) (((bits)+31)/32)
 #define roundup_bits2words64(bits) (((bits)+63)/64)
@@ -80,12 +77,15 @@
 #define rot32(x,r) (((x)<<(r)) | ((x)>>(32-(r)))) // note: use __builtin_stdc_rotate_right instead
 #define rot64(x,r) (((x)<<(r)) | ((x)>>(64-(r))))
 
-// A bitmask is a value with the (nbits) lower bits set to 1, and the remaining bits set to 0
-#define bitmask(nbits, type) ((nbits) ? (type)~(type)0 >> (sizeof(type)*8-(nbits)) : (type)0)
-#define bitmask8(nbits)  bitmask(nbits, uint8_t)
-#define bitmask16(nbits) bitmask(nbits, uint16_t)
-#define bitmask32(nbits) bitmask(nbits, uint32_t)
-#define bitmask64(nbits) bitmask(nbits, uint64_t)
+// A bitmask is a value with the (nbits) lower bits set to 1, and the remaining bits set to 0: caller is certain nbits > 0 (saves a branch)
+#define bitmask_(nbits, type) ((type)~(type)0 >> (sizeof(type)*8-(nbits)))
+#define bitmask8_(nbits)  bitmask_(nbits, uint8_t)
+#define bitmask64_(nbits) bitmask_(nbits, uint64_t)
+
+// same, but nbits is allowed to be 0
+#define bitmask(nbits, type) (__builtin_expect ((nbits) > 0, true) ? bitmask_(nbits, type) : (type)0)
+#define bitmask8(nbits)   bitmask(nbits, uint8_t)
+#define bitmask64(nbits)  bitmask(nbits, uint64_t)
 
 // combine two words: for "1" bits in the abits, take the bit from a, and for "0" take the bit from b
 #define bitmask_merge(a,b,abits) (b ^ ((a ^ b) & abits))  // equivalent to ((a & abits) | (b & ~abits))
@@ -138,7 +138,7 @@
 #define bitset_get(arr,pos)       bitset_op (bitset2_get,  (arr), (pos))
 #define bitset_get2(arr,pos)      bitset_op (bitset2_get2, (arr), (pos)) // divon - gets a value [0,3] of 2 bits 
 #define bitset_get4(arr,pos)      bitset_op (bitset2_get4, (arr), (pos)) // divon - gets a value [0,15] of 4 bits 
-#define bitset_get5(arr,pos)      bitset_op (bitset2_get5, (arr), (pos)) // divon - gets a value [0,15] of 4 bits 
+#define bitset_get5(arr,pos)      bitset_op (bitset2_get5, (arr), (pos)) // divon - gets a value [0,31] of 5 bits 
 #define bitset_set(arr,pos)       bitset_op (bitset2_set,  (arr), (pos))
 #define bitset_del(arr,pos)       bitset_op (bitset2_del,  (arr), (pos))
 #define bitset_tgl(arr,pos)       bitset_op (bitset2_tgl,  (arr), (pos))
@@ -155,16 +155,10 @@
 
 typedef uint8_t word_offset_t; // Offset within a 64 bit word
 
-#define BIT_INDEX_MIN 0
 #define BIT_INDEX_MAX (~(uint64_t)0)
 
-//
-// Structs
-//
-
-typedef struct Bits
-{
-    // These fields should not be changed or added to, as they map to Buffer
+typedef struct Bits {
+    // Note: These fields map to Buffer
     uint64_t *words;     // maps to Buffer->data
     uint64_t nbits;      // maps to Buffer->nbits
     uint64_t nwords;     // maps to Buffer->len  ; round_up (nbits / 64)
@@ -172,7 +166,7 @@ typedef struct Bits
     uint64_t other : 64-BUF_TYPE_BITS; // used only if this is a Buffer
 } Bits;
 
-#define bits_in_top_word(nbits) ((nbits) ? bitset64_idx((nbits) - 1) + 1 : 0)
+#define bits_in_top_word(nbits) (__builtin_expect ((nbits) > 0, true) ? bitset64_idx((nbits) - 1) + 1 : 0)
 
 // clear excess bits in top used word of bitmap 
 static inline void bits_clear_excess_bits_in_top_word (BitsP bits, bool atomic)
@@ -193,19 +187,10 @@ static inline void ASSERT_excess_bits_are_0 (ConstBitsP bits) // divon
            "Expecting excess bits in top word of bit array to be 0");
 }
 
-extern Bits bits_init_do (uint64_t nbits, uint8_t *data, uint64_t data_len, bool clear, FUNCLINE);
-#define bits_init(nbits, data, data_len, clear) bits_init_do ((nbits), (data), (data_len), (clear), __FUNCLINE)
-
 extern Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE);
 #define bits_alloc(nbits, clear) bits_alloc_do ((nbits), (clear), __FUNCLINE)
 
-extern void bits_free (BitsP bits);
-
 extern void LTEN_bits (BitsP bits); // divon
-
-//
-// Macros
-//
 
 //
 // Get, set, clear, assign and toggle individual bits
@@ -221,49 +206,8 @@ static inline void bits_toggle (BitsP arr, uint64_t i) { bitset_tgl(arr->words, 
 static inline void bits_assign (BitsP arr, uint64_t i, bool value) { bitset_cpy(arr->words, i, value); }
 static inline void bits_assign2(BitsP arr, uint64_t i/*even number*/, uint8_t value/*0,1,2 or 3*/) { bitset_cpy2(arr->words, i, value); }
 
-//
-// Get, set, clear, assign and toggle individual bits
-// "Safe": use assert() to check bounds
-//
-
-// Get the value of a bit (returns 0 or 1)
-extern bool bits_get_bit (ConstBitsP bits, uint64_t b);
-extern void bits_set_bit (BitsP bits, uint64_t b);
-extern void bits_clear_bit (BitsP bits, uint64_t b);
-extern void bits_toggle_bit (BitsP bits, uint64_t b);
-extern void bits_assign_bit (BitsP bits, uint64_t b, bool set);
-
-//
-// Get, set, clear and toggle several bits at once
-//
-
-// Get the offsets of the set bits (for offsets start<=offset<end)
-// Returns the number of bits set
-// It is assumed that dst is at least of length (end-start)
-extern uint64_t bits_get_bits(ConstBitsP bits, uint64_t start, uint64_t end, uint64_t *dst);
-
-// Set multiple bits at once.
-// e.g. set bits 1, 20 & 31: bits_set_bits(bits, 3, 1,20,31);
-// Note: variable args are of type unsigned int
-extern void bits_set_bits(BitsP bits, size_t n, ...);
-
-// Clear multiple bits at once.
-// e.g. clear bits 1, 20 & 31: bits_clear_bits(bits, 3, 1,20,31);
-// Note: variable args are of type unsigned int
-extern void bits_clear_bits(BitsP bits, size_t n, ...);
-
-// Toggle multiple bits at once
-// e.g. toggle bits 1, 20 & 31: bits_toggle_bits(bits, 3, 1,20,31);
-// Note: variable args are of type unsigned int
-extern void bits_toggle_bits(BitsP bits, size_t n, ...);
-
 // Reverse the whole array or part of it
 extern void bits_reverse (BitsP bits);
-extern void bits_reverse_region (BitsP bits, uint64_t start, uint64_t len);
-
-//
-// Set, clear and toggle all bits in a region
-//
 
 // Set all the bits in a region
 extern void bits_set_region (BitsP bits, uint64_t start, uint64_t len);
@@ -350,14 +294,6 @@ BIT_ARRAY_GET_WORD(8)
 
 extern uint64_t bits_get_wordn(ConstBitsP bits, uint64_t start, int n);
 
-// Set 64 bits at once from a particular start position
-// Doesn't extend bit array. However it is safe to TRY to set bits beyond the
-// end of the array, as long as: `start` is < `nbits`
-extern void bits_set_word64 (BitsP bits, uint64_t start, uint64_t word);
-extern void bits_set_word32 (BitsP bits, uint64_t start, uint32_t word);
-extern void bits_set_word16 (BitsP bits, uint64_t start, uint16_t word);
-extern void bits_set_word8 (BitsP bits, uint64_t start, uint8_t byte);
-
 static inline void bits_set_wordn (BitsP bits, uint64_t start, uint64_t word, int n) 
 {
     uint64_t w = _get_word (bits, start), m = bitmask64(n);
@@ -399,17 +335,6 @@ extern bool bits_find_last_clear_bit (ConstBitsP bits, uint64_t *result);
 // String and printing methods
 //
 
-// Construct a Bits from a string.
-extern void bits_from_str (BitsP bits, rom bitstr);
-
-// Construct a Bits from a substring with given on and off characters.
-extern void bits_from_substr (BitsP bits, uint64_t offset, rom str, size_t len, rom on, rom off, char left_to_right);
-
-// Takes a char array to write to.  `str` must be bits->nbits+1 in
-// length. Terminates string with '\0'
-extern char* bits_to_str (ConstBitsP bits, char* str);
-extern char* bits_to_str_rev (ConstBitsP bits, char* str);
-
 // Get a string representations for a given region, using given on/off characters.
 extern char *bits_to_substr (ConstBitsP bits, uint64_t start, uint64_t length, char *str);
 
@@ -432,55 +357,37 @@ extern void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t 
 #define bits_copy(dst, dstindex, src, srcindx, length) \
     bits_copy_do ((dst), (dstindex), (src), (srcindx), (length), __FUNCLINE)
 
-// for each 2 bits in the src array, the dst array will contain those 2 bits in the reverse
-// position, as well as transform them 00->11 11->00 01->10 10->01
-// works on arrays with full words
-extern void bits_reverse_complement_aligned (BitsP dst, ConstBitsP src, uint64_t src_start_base, uint64_t max_num_bases);
-extern void bits_reverse_complement_in_place (BitsP bits) ;
+// revcomp one byte: the order of the 4 bases in a byte is swapped, and each base is complemented A⇔T C⇔G
+static inline uint64_t bits_revcomp_word (uint64_t w) 
+{
+#ifdef __clang__ 
+    w = ~w; // reverses bit values - effectively A(00)⇔T(11) C(01)⇔G(10)
+
+    w = __builtin_bitreverse64(w); // reverse bit order, however this also swaps the bits within every 2bits 
+
+    // swap back the bits within every 2bits
+    w = ((w & 0xAAAAAAAAAAAAAAAAULL) >> 1) | // picks bits 1, 3, 5...
+        ((w & 0x5555555555555555ULL) << 1);  // picks bits 0, 2, 4...
+
+#else
+    extern const uint8_t rev_comp_table[256];
+    
+    w = __builtin_bswap64(w); // reverse order of the 8 bytes
+
+    // reverse-complement each byte
+    w = ((uint64_t)rev_comp_table[w         & 0xff]       ) |
+        ((uint64_t)rev_comp_table[(w >>  8) & 0xff] <<  8 ) |
+        ((uint64_t)rev_comp_table[(w >> 16) & 0xff] << 16 ) |
+        ((uint64_t)rev_comp_table[(w >> 24) & 0xff] << 24 ) |
+        ((uint64_t)rev_comp_table[(w >> 32) & 0xff] << 32 ) |
+        ((uint64_t)rev_comp_table[(w >> 40) & 0xff] << 40 ) |
+        ((uint64_t)rev_comp_table[(w >> 48) & 0xff] << 48 ) |
+        ((uint64_t)rev_comp_table[(w >> 56) & 0xff] << 56 );
+#endif
+    return w;
+}
 
 extern void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint64_t nbits);
-
-//
-// Logic operators
-//
-
-// BIT_ARRAYs can all be different or the same object
-// dest array will be resized if it is too short
-//
-extern void bits_and (BitsP dest, ConstBitsP src1, ConstBitsP src2);
-extern void bits_or  (BitsP dest, ConstBitsP src1, ConstBitsP src2);
-extern void bits_xor (BitsP dest, ConstBitsP src1, ConstBitsP src2);
-extern void bits_not (BitsP dest, ConstBitsP src);
-
-extern void bits_xor_with (BitsP dst, uint64_t dst_start_bit, ConstBitsP xor_with, uint64_t xor_with_bit, uint64_t num_bits);
-
-//
-// Comparisons
-//
-
-// Note: (bits_cmp(a,b) == 0) <=> (bits_cmp_big_endian(a,b) == 0)
-
-// comparison functions return:
-//   1 iff bits1 > bits2
-//   0 iff bits1 == bits2
-//  -1 iff bits1 < bits2
-
-// Compare two bit arrays by value stored, with index 0 being the Least
-// Significant Bit (LSB). Arrays do not have to be the same length.
-// Example: ..0101 (5) > ...0011 (3) [index 0 is LSB at right hand side]
-extern int bits_cmp(ConstBitsP bits1, ConstBitsP bits2);
-
-// Compare two bit arrays by value stored, with index 0 being the Most
-// Significant Bit (MSB). Arrays do not have to be the same length.
-// Example: 10.. > 01.. [index 0 is MSB at left hand side]
-extern int bits_cmp_big_endian(ConstBitsP bits1, ConstBitsP bits2);
-
-// compare bits with (bits2 << pos)
-extern int bits_cmp_words(ConstBitsP bits, uint64_t pos, ConstBitsP bits2);
-
-//
-// Shift, interleave, reverse
-//
 
 // removes flanking bits on boths sides, shrinking bits (divon)
 void bits_remove_flanking (BitsP bits, uint64_t lsb_flanking, uint64_t msb_flanking);
@@ -488,49 +395,63 @@ void bits_remove_flanking (BitsP bits, uint64_t lsb_flanking, uint64_t msb_flank
 // shortens an array to a certain number of bits (divon)
 void bits_truncate (BitsP bits, uint64_t new_num_of_bits);
 
-// get number of bits in an array, excluding trailing zeros (divon)
-uint64_t bits_effective_length (BitsP bits);
-
 // create words - if the word is not aligned to the bitmap word boundaries, and hence spans 2 bitmap words, 
 // we take the MSb's from the left word and the LSb's from the right word, to create shift_1 (divon)
-static inline uint64_t _bits_combined_word (uint64_t word_a, uint64_t word_b, uint8_t shift)
+static inline uint64_t _bits_combined_word (uint64_t word_a, uint64_t word_b, int shift)
 {
-    return shift ? ( (word_a >> shift)       // first  word's MSb are the LSb of our combined word
-                   | (word_b << (64-shift))) // second word's LSb are the MSb of our combined word
-                 : word_a;
+    return __builtin_expect (shift > 0, true) 
+        ? ( (word_a >> shift)       // first  word's MSb are the LSb of our combined word
+          | (word_b << (64-shift))) // second word's LSb are the MSb of our combined word
+        : word_a;
 }         
 
-// calculate the number of bits that are different between two Bits' at arbitrary positions (divon)
+// calculate the number of bits that are different between a bit array (in its entirety)
+// and a forward or reverse-complemented region of another bit array
 // note: static inline because in the tight loop of aligner
 static inline uint32_t bits_hamming_distance (ConstBitsP bits_1, // the entire bit array  
-                                              ConstBitsP bits_2, uint64_t index_2) // a subset of this one
+                                              ConstBitsP bits_2, 
+                                              uint64_t index_2,  // index first bit in bits_2 
+                                              bool is_forward)
 {
+    if (!is_forward) index_2 += bits_1->nbits; // after
     const uint64_t *words_1 = bits_1->words;
     const uint64_t *words_2 = &bits_2->words[index_2 >> 6];
     const uint64_t *after_1 = words_1 + bits_1->nwords;
-    uint64_t word=0;
+    uint64_t diff=0;
+    int shift_2 = index_2 & 0b111111;
     uint32_t distance=0; // number of non-matching bits
 
     // if bits_1 goes beyond the end of bits_2 we can't calculate distance
-    if (index_2 + bits_1->nbits > bits_2->nbits)
+    if ((is_forward && index_2 + bits_1->nbits > bits_2->nbits) ||
+        (!is_forward && index_2 < bits_1->nbits))
         return bits_1->nbits; // maximum distance = complete misfit
 
-    // calculate distance: number of '1' bits in the xor between the two bitmaps
     uint64_t next_w2 = *words_2; 
-    for (const uint64_t *w1=words_1, *w2=words_2; w1 < after_1; w1++, w2++) {
-        uint64_t this_w2 = next_w2;
-        next_w2 = *(w2+1);
-        // note: if last bits_1 word is partial, we still calculate it in its entirety and correct later. However, in case we reach 
-        // the end of bits_2 and have shift_2, we will access the word beyond the end of the bits_2->words. counting on words being a Buffer to not cause a segfault.
-        word = *w1 ^ _bits_combined_word (this_w2, next_w2, index_2 & 0b111111); 
-        distance += __builtin_popcountll (word); // note: expected to be _mm_popcnt_u64 with SSE4.2
-    }
+    if (is_forward)
+        for (const uint64_t *w1=words_1, *w2=words_2; w1 < after_1; w1++, w2++) {
+            uint64_t this_w2 = next_w2;
+            next_w2 = *(w2+1);
+            // note: if last bits_1 word is partial, we still calculate it in its entirety and correct later. However, in case we reach 
+            // the end of bits_2 and have shift_2, we will access the word beyond the end of the bits_2->words. counting on words being a Buffer to not cause a segfault.
+            uint64_t w2_value = _bits_combined_word (this_w2, next_w2, shift_2);
+            diff = *w1 ^ w2_value; 
+            distance += __builtin_popcountll (diff); // note: expected to be _mm_popcnt_u64 with SSE4.2
+        }
+
+    else 
+        for (const uint64_t *w1=words_1, *w2=words_2; w1 < after_1; w1++, w2--) {
+            uint64_t this_w2 = next_w2;
+            next_w2 = *(w2-1);
+            uint64_t w2_revcomp = bits_revcomp_word (_bits_combined_word (next_w2, this_w2, shift_2)); 
+            diff = *w1 ^ w2_revcomp; 
+            distance += __builtin_popcountll (diff); 
+        }
 
     // remove distance due to the unused part of the last bits_1 word
     if (bits_1->nbits & 0b111111)
-        distance -= __builtin_popcountll (word & ~bitmask64 (bits_1->nbits & 0b111111));
+        distance -= __builtin_popcountll (diff & ~bitmask64 (bits_1->nbits & 0b111111));
 
-    return distance; // this is the "hamming distance" between the two Bits' - number of non-matches
+    return distance; 
 }
 
 // get the number of consecutive 1s at the start of a region (divon)

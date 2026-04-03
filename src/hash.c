@@ -29,12 +29,10 @@ uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 
     // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
     // minimum ~64K to prevent horrible miscalculations in edge cases that result in dramatic slow down
-    //xxxx static uint32_t hash_sizes[] = { 65521, 92681, 131071, 
-    //                                  185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
-    //                                  11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
-    //                                  94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
-    // #define NUM_HASH_REGULAR 25
-    static uint32_t hash_sizes[] = { 64 KB, 128 KB, 256 KB  };
+    static uint32_t hash_sizes[] = { 65521, 92681, 131071, 
+                                     185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
+                                     11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
+                                     94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
     #define NUM_HASH_REGULAR 25
     #define NUM_HASH_HUGE ARRAY_LEN(hash_sizes)
     #define NUM_HASH_SIZES (allow_huge ? NUM_HASH_HUGE : NUM_HASH_REGULAR)
@@ -461,7 +459,7 @@ WordIndex hash_find_snip_in_ol_nodes (VBlockP vb, ContextP vctx, STRp(snip),
     #ifndef sanitize_thread
     CtxNode dummy = { .next = *B32(vctx->global_hash, hash) }, *node = &dummy;
     #else // just so sanitize-threads doesn't shout
-    CtxNode dummy = { .next = __atomic_load_n (B32(vctx->global_hash, hash), __ATOMIC_RELAXED) }, *node = &dummy;
+    CtxNode dummy = { .next = load_relaxed (*B32(vctx->global_hash, hash)) }, *node = &dummy;
     #endif
 
     while (1) {

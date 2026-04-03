@@ -6,6 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#include <stdalign.h>
 #include "sam_private.h"
 #include "txtfile.h"
 #include "mgzip.h"
@@ -171,7 +172,7 @@ bool bam_txt_file_is_last_alignment_unmapped (void)
 
 static rom bam_dump_alignment (VBlockSAMP vb, rom alignment, rom after)
 {
-    buf_free (vb->scratch); // feel free to use scratch bc this is called in an ASSERT before aborting
+    buf_destroy (vb->scratch); // feel free to use scratch bc this is called in an ASSERT before aborting
 
     buf_set_shared (&vb->txt_data);
     buf_overlay_partial (vb, &vb->scratch, &vb->txt_data, BNUMtxt(alignment), "alignment_buf");
@@ -179,7 +180,7 @@ static rom bam_dump_alignment (VBlockSAMP vb, rom alignment, rom after)
 
     rom fn = "bad_alignment.bam";
     buf_dump_to_file (fn, &vb->scratch, 1, false, false, false, false);
-    buf_free (vb->scratch);
+    buf_destroy (vb->scratch); // overlaid needs to be destroyed
 
     return fn;
 }
@@ -189,8 +190,8 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
     uint32_t n_auxs = 0;
     while (aux < after_aux) {
         auxs[n_auxs] = aux;
-
-        static unsigned const size[256] = { ['A']=1, ['c']=1, ['C']=1, ['s']=2, ['S']=2, ['i']=4, ['I']=4, ['f']=4 };
+        // all non-zero values are within offsets 64-127: a single L1 cache line
+        static alignas(64) const uint8_t size[256] = { ['A']=1, ['c']=1, ['C']=1, ['s']=2, ['S']=2, ['i']=4, ['I']=4, ['f']=4 };
         
         ASSERT (after_aux - aux >= 4, "%s: Failed to parse BAM AUX fields after n_aux=%u. Only %u bytes remaining in the field, but expecting at least 4 bytes to contain any auxilliary field. Possibly this BAM file has an incorrect value in the block_size field of this alignment. Dumped alignment to %s", 
                 LN_NAME, n_auxs, (int)(after_aux-aux), bam_dump_alignment (vb, alignment, after_aux));
@@ -201,6 +202,9 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
             SAFE_RESTORE;
         }
         else if (aux[2] == 'B') {
+            ASSERT (size[(int)aux[3]], "%s: Unrecognized B (AUX array) type '%c' (ASCII %u = 0x%0x) in aux_i=%u. Dumped alignment to %s", 
+                    LN_NAME, aux[3], (uint8_t)aux[3], (uint8_t)aux[3], n_auxs, bam_dump_alignment (vb, alignment, after_aux));
+
             uint32_t array_len = GET_UINT32 (aux+4);
             aux_lens[n_auxs] = 8 + array_len * size[(int)aux[3]]; 
         }
@@ -209,7 +213,8 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
             aux_lens[n_auxs] = 3 + size[(int)aux[2]];
             
         else
-            ABORT ("%s: Unrecognized aux type '%c' (ASCII %u). Dumped alignment to %s", LN_NAME, aux[2], (uint8_t)aux[2], bam_dump_alignment (vb, alignment, after_aux));
+            ABORT ("%s: Unrecognized AUX field type '%c' (ASCII %u = 0x%0x) in aux_i=%u. Dumped alignment to %s", 
+                   LN_NAME, aux[2], (uint8_t)aux[2], (uint8_t)aux[2], n_auxs, bam_dump_alignment (vb, alignment, after_aux));
         
         aux += aux_lens[n_auxs++];
     }

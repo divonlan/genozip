@@ -5,7 +5,7 @@
 
 #include "version.h"
 
-static rom license[] = {
+static rom license_text[] = {
     "This program, \"Genozip\", which includes four tools (genozip, genounzip, genocat and genols), source code, object code, executables, documentation and other files, was developed by Divon Lan (\"Developer\") and is copyright (C) 2019-2026 Genozip Limited (\"Licensor\"). All rights reserved. Patent pending.",
     "TERMS AND CONDITIONS FOR USE",
     

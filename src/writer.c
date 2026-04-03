@@ -50,7 +50,7 @@ static ThreadId writer_thread = THREAD_ID_NONE;
 
 static void writer_release_vb (VbInfo *v)
 {
-    if (v->vb) vb_release_vb (&v->vb, PIZ_TASK_NAME);
+    if (v->vb) vb_release_vb (&v->vb);
     buf_destroy (v->is_dropped_buf); // destroy and not free as this memory is not going to be recycled - its a buffer inside a buffer
 }
 
@@ -256,7 +256,7 @@ void writer_z_initialize (void)
 {
     if (txt_header_info.len) return; // already initialized
 
-    wvb = vb_initialize_nonpool_vb (VB_ID_WRITER, DT_NONE, WRITER_TASK_NAME);
+    wvb = vb_initialize_nonpool_vb (VB_ID_WRITER, DT_NONE, TASK_WVB);
 
     writer_init_txt_header_info(); 
 
@@ -1139,7 +1139,7 @@ static void writer_load_vb (Dispatcher dispatcher, VbInfo *v, bool is_txtheader)
     if (flag_show_threads && !is_txtheader) 
         iprintf ("writer: vb=%s/%u WAITING FOR VB\n", comp_name(v->comp_i), VBINFO_NUM(v));
 
-    if (flag_is_show_vblocks (PIZ_TASK_NAME) && !is_txtheader) 
+    if (flag_is_show_vblocks (TASK_PIZ) && !is_txtheader) 
         iprintf ("WRITER_WAITING_FOR vb=%s/%u\n", comp_name(v->comp_i), VBINFO_NUM(v));
 
     else if (flag_show_threads && is_txtheader) 
@@ -1166,7 +1166,7 @@ static void writer_load_vb (Dispatcher dispatcher, VbInfo *v, bool is_txtheader)
 
     threads_log_by_vb (v->vb, "writer", v->vb->vblock_i ? "WRITER LOADED VB" : "WRITER LOADED TXT_HEADER", 0);
 
-    if (flag_is_show_vblocks (PIZ_TASK_NAME) && !is_txtheader) 
+    if (flag_is_show_vblocks (TASK_PIZ) && !is_txtheader) 
         iprintf ("WRITER_LOADED vb=%s/%u\n", comp_name(v->comp_i), VBINFO_NUM(v));
 
     v->is_loaded = true;
@@ -1185,7 +1185,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
 
     // if we need to BGZF-compress, we will dispatch the compression workload to compute threads
     Dispatcher dispatcher = (!flag.no_writer && TXT_IS(BGZF) && txt_file->mgzip_flags.library != BGZF_EXTERNAL_LIB) ? 
-        dispatcher_init ("bgzf", NULL, POOL_BGZF, writer_get_max_bgzf_threads(), 0, false, false, NULL, 0, NULL) : NULL;
+        dispatcher_init (TASK_BGZF, writer_get_max_bgzf_threads(), 0, JOIN_IN_ORDER, NULL, 0) : NULL;
 
     // normally, we digest in the compute thread but in case gencomp lines can be inserted into the vb we digest here.
     bool do_digest = piz_need_digest && z_has_gencomp;
@@ -1230,7 +1230,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
 
                 if (!flag.downsample) {
 
-                    if (flag_is_show_vblocks (PIZ_TASK_NAME)) // only displayed for entire VBs, not line ranges etc 
+                    if (flag_is_show_vblocks (TASK_PIZ)) // only displayed for entire VBs, not line ranges etc 
                         iprintf ("VB_FLUSH_FULL_VB(id=%d) vb=%s/%d txt_data.len=%u\n", v->vb->id, comp_name (v->vb->comp_i), v->vb->vblock_i, v->vb->txt_data.len32);
 
                     writer_flush_vb (dispatcher, wvb, false, false);   // flush any remaining unflushed wvb lines from previous VBs
@@ -1307,7 +1307,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
         bgzf_write_finalize(); // write final data to wvb->comp_txt_data
         writer_write (&wvb->comp_txt_data, 0);
 
-        dispatcher_finish (&dispatcher, NULL, false, false);
+        dispatcher_end_task (dispatcher);
     }
   
     // The recon plan is supposed to end with all VBs flushed due to END_OF_VB, FULL_VB etc
@@ -1337,7 +1337,7 @@ void writer_finish_writing (bool is_last_txt_file)
 {
     if (writer_thread != THREAD_ID_NONE) 
         // wait for thread to complete (possibly it completed already)
-        threads_join (&writer_thread, WRITER_TASK_NAME); // also sets writer_thread=THREAD_ID_NONE
+        threads_join (&writer_thread, TASK_WVB); // also sets writer_thread=THREAD_ID_NONE
     
     // all mutexes destroyed by main thread, that created them (because we will proceed to freeing z_file in which they live)    
     if (is_last_txt_file) {
@@ -1362,12 +1362,12 @@ static bool writer_handover (VbInfo *v, VBlockP vb)
     // writer thread now owns this VB, and is the only thread that will modify it, until finally destroying it
     v->vb = vb;
 
-    threads_log_by_vb (vb, vb->compute_task, vb->vblock_i ? "HANDING OVER VB" : "HANDING OVER TXT_HEADER", 0);
+    threads_log_by_vb (vb, task_name (vb->compute_task), vb->vblock_i ? "HANDING OVER VB" : "HANDING OVER TXT_HEADER", 0);
 
     mutex_unlock (v->wait_for_data); 
 
-    if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
-        iprintf ("HANDED_OVER(task=%s id=%d) vb_i=%s/%u txt_data.len=%u\n", PIZ_TASK_NAME, vb->id, comp_name(v->comp_i), vb->vblock_i, Ltxt);
+    if (flag_is_show_vblocks (TASK_PIZ)) 
+        iprintf ("HANDED_OVER(task=%s id=%d) vb_i=%s/%u txt_data.len=%u\n", task_name (TASK_PIZ), vb->id, comp_name(v->comp_i), vb->vblock_i, Ltxt);
 
     return true;
 }

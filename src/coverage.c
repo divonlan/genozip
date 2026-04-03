@@ -37,7 +37,7 @@ void coverage_add_one_vb (VBlockP vb)
 
 static ConstContigPkgP coverage_get_contigs (rom option_name)
 {
-    ConstContigPkgP contigs = ((Z_DT(SAM) || Z_DT(BAM)) && sam_hdr_contigs) ? sam_hdr_contigs : ref_get_ctgs();
+    ConstContigPkgP contigs = ((Z_DT(BAM) || Z_DT(SAM)) && sam_hdr_contigs) ? sam_hdr_contigs : ref_get_ctgs();
 
     ASSINP (!Z_DT(FASTQ) || contigs->contigs.len, "%s: %s for FASTQ only works on files compressed with a reference", z_name, option_name);
 
@@ -113,7 +113,7 @@ void coverage_show_coverage (void)
         if (flag.show_coverage == COV_ALL || (flag.show_coverage == COV_CHROM && ctg->chrom_name_len <= 5))
             iprintf (is_info_stream_terminal ? "%-*s  %-8s  %-11s  %-10s  %-4.1f%%  %6.2f\n" : "%*s\t%s\t%s\t%s\t%4.1f\t%6.2f\n", 
                      chr_width, ctg->chrom_name, str_bases(ctg->LN).s, str_int_commas (ctg->read_count).s, str_bases(ctg->coverage).s, 
-                     100.0 * (float)ctg->coverage / (float)coverage_special[CVR_TOTAL], 
+                     percent (ctg->coverage, coverage_special[CVR_TOTAL]), 
                      ctg->LN ? (float)ctg->coverage / (float)ctg->LN : 0);
 
         else {
@@ -141,7 +141,7 @@ void coverage_show_coverage (void)
                         chr_width, cvr_names[i], "",
                         (i == CVR_SOFT_CLIP ? "" : str_int_commas (read_count_special[i]).s),
                         str_bases(coverage_special[i]).s,
-                        100.0 * (float)coverage_special[i] / (float)coverage_special[CVR_TOTAL],
+                        percent (coverage_special[i], coverage_special[CVR_TOTAL]),
                         i == CVR_ALL_CONTIGS ? all_coverage : "");
             
             if (i == CVR_OTHER_CONTIGS && is_info_stream_terminal)

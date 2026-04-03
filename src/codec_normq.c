@@ -39,7 +39,7 @@ COMPRESS(codec_normq_compress)
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (!soft_fail) goto do_compress;
 
-    __atomic_add_fetch (&z_file->normq_lines, vb->lines.len, __ATOMIC_RELAXED);
+    add_relaxed (z_file->normq_lines, vb->lines.len);
 
     buf_alloc_exact (vb, *qual_buf, qual_buf->len, char, C_LOCAL); 
     

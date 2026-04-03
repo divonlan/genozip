@@ -76,7 +76,7 @@ void fastq_deep_zip_finalize (void)
         
         for (int i=0; i < NUM_DEEP_STATS_ZIP; i++) 
             if (z_file->deep_stats[i])
-                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)total);
+                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], percent (z_file->deep_stats[i], total));
     }
 
     ASSERTISALLOCED (z_file->deep_ents);

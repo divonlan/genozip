@@ -11,9 +11,8 @@
 #include "genozip.h"
 #include "digest.h"
 
-extern void md5_initialize (Md5StateP ctx);
+extern void md5_initialize (Md5StateP ctx, bool log);
 extern Digest md5_finalize (Md5StateP ctx);
-extern Digest md5_do (const void *data, uint32_t len);
-extern void md5_update (Md5StateP ctx, const void *data, uint32_t len);
-extern void md5_display_state (const Md5State *ctx); // for debugging
+extern Digest md5_do (const void *data, uint64_t len);
+extern void md5_update (Md5StateP ctx, const void *data, uint64_t len);
 extern Digest md5_read (const char str[32]);

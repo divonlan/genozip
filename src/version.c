@@ -33,39 +33,39 @@ bool version_is_devel (void)
             !strstr (exe, "releases") && !strstr (exe, "latest");
 }
 
-// version of the genozip executable running
-int code_version_major (void)
+Version code_version (void)
 {
-    return (GENOZIP_CODE_VERSION[0]-'0') * 10 + (GENOZIP_CODE_VERSION[1]-'0');
+    return (Version){
+        .major = (GENOZIP_CODE_VERSION[0]-'0') * 10 + (GENOZIP_CODE_VERSION[1]-'0'),
+        .minor = atoi (strrchr (GENOZIP_CODE_VERSION, '.') + 1) + 
+                 version_is_devel() //  In development - we are running one minor version higher than GENOZIP_CODE_VERSION: needed so VER2() works in PIZ
+    };
 }
 
-int code_version_minor (void)
-{   
-    return atoi (strrchr (GENOZIP_CODE_VERSION, '.') + 1) + 
-           version_is_devel(); //  In development - we are running one minor version higher than GENOZIP_CODE_VERSION: needed so VER2() works in PIZ
-}
-
-StrText code_version (void)
+Version file_version (void)
 {
-    StrText s;
-    snprintf (s.s, sizeof(s), "%u.0.%u", code_version_major(), code_version_minor());
-    
-    return s;
+    return z_file ? z_file->genozip_ver : (Version){};
 }
 
-StrText file_version (void)
+// takes a string "15.0.81" and returns (Version){15,81}. Or {0,0} is string is malformatted
+Version str_to_version (rom version_str)
+{
+    str_split_ints (version_str, strlen (version_str), 3, '.', v, true);
+
+    return (n_vs == 3 && vs[0] > 0 && vs[1] == 0 && vs[2] >= 0) 
+        ? (Version){ vs[0], vs[2] } : (Version){};
+}
+
+StrText STRver (Version v)
 {
     StrText s={};
-
-    if (!z_file) 
-        strcpy (s.s, "(no z_file)");
-
-    else if (!VER2(15,28))
-        snprintf (s.s, sizeof (s.s), "%u", z_file->genozip_version);
-    
-    else        
-        snprintf (s.s, sizeof (s.s), "%u.0.%u", z_file->genozip_version, z_file->genozip_minor_ver);
-
+    if (v.major && v.minor)
+        snprintf (s.s, sizeof (s.s), "%u.0.%u", v.major, v.minor);
+    else if (v.major)
+        snprintf (s.s, sizeof (s.s), "%u", v.major);
+    else
+        strcpy (s.s, "N/A");
+        
     return s;
 }
 
@@ -74,10 +74,10 @@ StrText version_str (void)
     StrText s={};
 
     if (IS_ZIP || !z_file)  
-        snprintf (s.s, sizeof (s.s), "version=%.16s", code_version().s);
+        snprintf (s.s, sizeof (s.s), "version=%.16s", STRver(code_version()).s);
     
     else 
-        snprintf (s.s, sizeof (s.s), "code_version=%.16s file_version=%.16s", code_version().s, file_version().s);
+        snprintf (s.s, sizeof (s.s), "code_version=%.16s file_version=%.16s", STRver(code_version()).s, STRver(file_version()).s);
 
     return s;
 }
@@ -103,12 +103,10 @@ static void *version_background_test_for_newer_do (void *unused)
             if (flag.debug_upgrade)
                 iprintf ("\ndebug-upgrade: latest_version=%s\n", latest_version);
 
-            StrText code_ver = code_version();
+            Version code_ver = code_version();
+            Version lastest_ver = str_to_version (latest_version);
 
-            str_split_ints (latest_version, strlen (latest_version), 3, '.', latest, true);
-            str_split_ints (code_ver.s, strlen (code_ver.s), 3, '.', this, true);
-
-            if (!flag.debug_latest && n_latests == 3 && n_thiss == 3 && latests[0] == thiss[0] && latests[2] <= thiss[2])
+            if (!flag.debug_latest && lastest_ver.major == code_ver.major && lastest_ver.minor <= code_ver.minor)
                 latest_version = NULL; // same or newer than current version
         } 
         else {
@@ -289,7 +287,7 @@ void version_print_notice_if_has_newer (void)
             iprint0 ("debug-upgrade: upgrade thread completed\n");
 
         iprintf ("\nA newer & better version of Genozip is available - version %s. You are currently running version %s\n", 
-                 latest_version, code_version().s);
+                 latest_version, STRver(code_version()).s);
 
         if (is_info_stream_terminal) {
 #ifdef _WIN32

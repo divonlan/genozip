@@ -249,10 +249,10 @@ void vb_parse_ALT (VBlockVCFP vb)
         a_len = alts[alt_i].alt_len = alt_str_lens[alt_i];
 
         // missing due upstream deletion
-        if (str_is_1char (a, '*'))
+        if (IS_ASTERISK(a))
             alts[alt_i].var_type = VT_UPSTRM_DEL;
 
-        else if (str_is_1char (a, '.'))
+        else if (IS_PERIOD(a))
             alts[alt_i].var_type = VT_NO_ALT;
 
         // symbolic alts e.g. "<DEL>"

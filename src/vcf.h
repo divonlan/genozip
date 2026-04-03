@@ -743,9 +743,7 @@
 // (dup) #pragma GENDICT INFO_MAF=DTYPE_1=MAF       // <ID=MAF,Number=1,Type=Float,Description="Minor Allele Frequency">
 
 #define VCF_MAX_PLOIDY 100  // set to a reasonable 100 to avoid memory allocation explosion in case of an error in the VCF file
-#if VCF_MAX_PLOIDY > 255
-#error "VCF_MAX_PLOIDY cannot go beyond 255 because Ploidy is uint8_t"
-#endif
+_Static_assert (VCF_MAX_PLOIDY <= 255, "VCF_MAX_PLOIDY cannot go beyond 255 because Ploidy is uint8_t");
 
 #define NUM_SMALL_ALLELES 245 // REF (allele #0) + 244 ALTs (alleles # 1-244) (note: these map to ASCII 48->255,0->36 where ASCII 37-47 are reserved for special values). Important: this value is part of the file format (see codec_pbwt.c)
 typedef uint8_t Allele; // elements of ht_matrix: values 48->255,0->36 for allele 0 to 244, '*' for unused, '%', '-'

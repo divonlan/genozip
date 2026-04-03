@@ -1557,8 +1557,7 @@ static void ctx_show_counts (ContextP zctx)
     if (sum_count)
         for (uint32_t i=0; i < counts_len; i++) {            
             dict_io_print (info_stream, zctx->dict_id, counts[i].snip, strlen(counts[i].snip), false, true, false, false);
-            iprintf ("(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].word_index, counts[i].count, 
-                     100 * (float)counts[i].count / (float)sum_count);
+            iprintf ("(%d)\t%"PRIu64"\t%-4.2f%%\n", counts[i].word_index, counts[i].count, percent (counts[i].count, sum_count));
         }
         
     if (is_genocat) exit_ok;

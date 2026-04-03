@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   fasta_private.h
+//   fasta_friend.h
 //   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
@@ -25,6 +25,12 @@ typedef struct VBlockFASTA {
     // --make-reference
     bool has_contig_metadata;       // used by make-reference
     ContigMetadata contig_metadata; 
+    uint64_t first_ent;             // first entry (in uints of gpos_bytes) of this vb in refhash_buf 
+    uint32_t num_ents;              // number of refhash_buf entries this vb should compress
+
+    // --make-reference stats for refhash
+    uint32_t hooks_in_genome;       // number of hooks in genome (not counting hooks on the boundary between make-ref 1 Mbps sranges - 0.0017% of hooks)
+    uint32_t hooks_in_hash_table;   // number of hooks whose GPOS is in the hash table (the rest were dropped due to hash collisions - more than one hook wishes to occupy the same hash entry)
 } VBlockFASTA, *VBlockFASTAP;
 
 #define VB_FASTA ((VBlockFASTAP)vb)

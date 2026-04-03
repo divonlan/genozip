@@ -61,7 +61,7 @@ void vcf_seg_FORMAT_QR_QA (VBlockVCFP vb, ContextP ctx, STRp(value_str))
     int64_t value;
 
     // value is '.' as predicted
-    if (str_is_1char (value_str, '.') && 
+    if (IS_PERIOD(value_str) && 
         other_ctx->last_txt.len==1 && *last_txtx (vb, other_ctx) == '.') {
         
         seg_special0 (VB, VCF_SPECIAL_QR_QA, ctx, value_str_len); 

@@ -201,6 +201,6 @@ void thread_join_lock_point (rom thread_name, TimeSpecType profiler_timer, FUNCL
         if (lp[code_line].func != func) 
             WARN_ONCE ("FYI: Two calls to mutex_lock/pthreads_join exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
                         lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, thread_name, func, code_line);
-        
-    __atomic_add_fetch (&lp[code_line].accumulator, CHECK_TIMER, __ATOMIC_RELAXED); 
+
+    add_relaxed (lp[code_line].accumulator, CHECK_TIMER); 
 }

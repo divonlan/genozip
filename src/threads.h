@@ -9,14 +9,14 @@
 #pragma once
 
 #include <pthread.h>
+#include "flags.h"
 
 extern void threads_initialize (void);
 extern void threads_finalize (void);
 
 extern ThreadId threads_create (void (*func)(VBlockP), VBlockP vb);
-extern void threads_join_do (ThreadId *thread_id, rom expected_task, rom expected_task2, rom func);
-#define threads_join(threads_id, expected_task) threads_join_do((threads_id), (expected_task), (expected_task), __FUNCTION__)
-#define threads_join2(threads_id, expected_task, expected_task2) threads_join_do((threads_id), (expected_task), (expected_task2), __FUNCTION__)
+extern void threads_join_do (ThreadId *thread_id, Task expected_task, rom func);
+#define threads_join(threads_id, expected_task) threads_join_do((threads_id), (expected_task), __FUNCTION__)
 extern void threads_cancel_other_threads (void);
 extern rom threads_get_task_name (void);
 

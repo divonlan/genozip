@@ -198,10 +198,7 @@ extern void seg_prepare_array_dict_id_special_snip (int num_dict_ids, DictId *di
 
 static void inline seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value))
 {
-    bool is_value_in_txt_data = value >= B1STtxt &&
-                                value <= BLST  (char, vb->txt_data);
-
-    ctx->last_txt = (TxtWord){ .index = is_value_in_txt_data ? BNUMtxt (value) : INVALID_LAST_TXT_INDEX,
+    ctx->last_txt = (TxtWord){ .index = IN_RANGE(value, B1STtxt, BAFTtxt) ? BNUMtxt (value) : INVALID_LAST_TXT_INDEX,
                                .len   = value_len };
 
     ctx_set_encountered (vb, ctx);

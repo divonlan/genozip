@@ -25,6 +25,9 @@
 #include "refhash.h"
 #include "arch.h"
 #include "filename.h"
+#include "tip.h"
+
+#define REF_CACHE_FORMAT_VERSION 0
 
 bool ref_cache_is_cached     (void) { return gref.cache_state == CACHE_READY;      }
 bool ref_cache_is_populating (void) { return gref.cache_state == CACHE_POPULATING; }
@@ -37,6 +40,7 @@ bool ref_cache_is_populating (void) { return gref.cache_state == CACHE_POPULATIN
 void ref_cache_remove_do (bool cache_exists, bool verbose)
 {
     ASSINP (cache_exists, "There is currently no cache for reference file %s", gref.filename);
+    if (!gref.cache) return; // fail silently (could happen with --no-cache)
 
 #ifndef _WIN32    
     ASSERT (shmctl (gref.cache_shm, IPC_RMID, NULL) != -1,
@@ -146,7 +150,10 @@ void noreturn ref_cache_hold (rom handle_str)
 // returns true if ref_cache can be used
 bool ref_cache_initialize_genome (void)
 {
-    uint64_t refhash_size = refhash_get_refhash_size();    
+    static rom tip = _TIP "run: 'genozip --no-cache' to clear cache";
+
+    uint64_t refhash_size = refhash_get_refhash_size();  
+
     uint64_t genome_size  = roundup_bits2bytes64 (gref.genome_nbases * 2);
 
     if (gref.cache_state == CACHE_READY) goto cache_ok; // cache already loaded
@@ -182,13 +189,14 @@ bool ref_cache_initialize_genome (void)
     bool cache_did_not_exist = (errno == ENOENT);
 
     ASSGOTO (gref.cache_shm >= 0 || (flag.removing_cache && cache_did_not_exist), 
-                FAIL_MSG "shmget (%s) failed: %s", gref.filename, strerror(errno));
+             FAIL_MSG "shmget (%s key=0x%08x size=%"PRIu64") failed: %s.%s", 
+             gref.filename, key, shm_size, strerror(errno), tip);
 
     if (flag.show_cache) iprintf ("show-cache: shmget of shm id %u\n", gref.cache_shm);
 
     if (gref.cache_shm != CACHE_SHM_NONE) {
         gref.cache = shmat (gref.cache_shm, NULL, 0);
-        ASSGOTO (gref.cache != (void*)-1, FAIL_MSG "shmat (%s) failed: %s", gref.filename, strerror(errno));
+        ASSGOTO (gref.cache != (void*)-1, FAIL_MSG "shmat (%s) failed: %s.%s", gref.filename, strerror(errno), tip);
     }
 
 #else // Windows
@@ -197,14 +205,16 @@ bool ref_cache_initialize_genome (void)
         gref.cache_shm = CreateFileMappingA (INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, shm_size >> 32, shm_size & 0xffffffff, gref.filename);
         cache_did_not_exist = (GetLastError() == ERROR_SUCCESS);
     
-        ASSGOTO (gref.cache_shm, FAIL_MSG "CreateFileMapping (%s) failed: %s", gref.filename, str_win_error());
+        ASSGOTO (gref.cache_shm, FAIL_MSG "CreateFileMapping (%s, size=%"PRIu64") failed: %s.%s", 
+                 gref.filename, shm_size, str_win_error(), tip);
         if (flag.show_cache) iprintf ("show-cache: CreateFileMapping %s\n", gref.filename);
     }
     else { 
         gref.cache_shm = OpenFileMappingA (FILE_MAP_WRITE, false, gref.filename);
         cache_did_not_exist = !gref.cache_shm && GetLastError() == ERROR_FILE_NOT_FOUND;
 
-        ASSERT (gref.cache_shm || cache_did_not_exist, FAIL_MSG "OpenFileMapping (%s) failed: %s", gref.filename, str_win_error());
+        ASSERT (gref.cache_shm || cache_did_not_exist, FAIL_MSG "OpenFileMapping (%s) failed: %s.%s", 
+                gref.filename, str_win_error(), tip);
         if (flag.show_cache) iprintf ("show-cache: OpenFileMapping %s: %s\n", gref.filename, str_win_error());
     }
 
@@ -231,7 +241,7 @@ bool ref_cache_initialize_genome (void)
 
     if (gref.cache_shm != CACHE_SHM_NONE) {
         gref.cache = MapViewOfFile (gref.cache_shm, FILE_MAP_WRITE, 0, 0, 0);
-        ASSGOTO (gref.cache, FAIL_MSG "MapViewOfFile (read-write) (%s) failed: %s", gref.filename, str_win_error());
+        ASSGOTO (gref.cache, FAIL_MSG "MapViewOfFile (read-write) (%s) failed: %s.%s", gref.filename, str_win_error(), tip);
     }
 
 #endif
@@ -264,7 +274,8 @@ bool ref_cache_initialize_genome (void)
         // set our other data *after* the creation_ts
         gref.cache->creator_pid = getpid();
         gref.cache->magic = GENOZIP_MAGIC;
-        gref.cache->genozip_version = code_version_major();
+        gref.cache->genozip_version = code_version().major;
+        gref.cache->cache_format_version = REF_CACHE_FORMAT_VERSION;
         gref.cache->shm_size = shm_size;
         filename_base (gref.filename, false, "<unknown>", gref.cache->ref_basename, sizeof (gref.cache->ref_basename));
 
@@ -398,7 +409,11 @@ void ref_cache_remove_all (void)
 
 static bool do_ls (int shmid, RefCache *cache)
 {
-    iprintf ("%s (shmid=%u size=%"PRIu64")%s\n", cache->ref_basename, shmid,cache->shm_size, (cache->is_populated ? "" : " NOT READY"));
+    StrText time_str = {};
+    struct tm *time_info = localtime ((time_t *)&cache->creation_ts); // assumes time_t is 64 bit
+    strftime (time_str.s, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", time_info);
+    iprintf ("%s (shmid=%u size=%"PRIu64" loaded=%s)%s\n", 
+             cache->ref_basename, shmid,cache->shm_size, time_str.s, (cache->is_populated ? "" : " NOT READY"));
     
     return true;
 }

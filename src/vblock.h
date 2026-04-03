@@ -58,7 +58,7 @@ typedef struct {
     \
     /* compute thread stuff */ \
     ThreadId compute_thread_id;   /* id of compute thread currently processing this VB */ \
-    rom compute_task;             /* task which the compute thread for this VB is performing */ \
+    Task compute_task;            /* task which the compute thread for this VB is performing */ \
     void (*compute_func)(VBlockP);/* compute thread entry point */\
     Mutex ready_for_compute;      /* threads_create finished initializeing this VB */\
     \
@@ -99,9 +99,6 @@ typedef struct {
     \
     rom drop_curr_line;           /* PIZ: line currently in reconstruction is to be dropped due a filter (value is filter name) */\
     uint32_t num_nondrop_lines;   /* PIZ: number of lines NOT dropped as a result of drop_curr_line */\
-    uint8_t num_type1_subfields; \
-    uint8_t num_type2_subfields; \
-    RangeP range;                 /* ZIP: used for compressing the reference ranges. SAM PIZ: used */ \
     \
     union {                                     \
     struct { /* ZIP */                          \
@@ -124,10 +121,9 @@ typedef struct {
     char *fragment_start;        \
     uint32_t fragment_len;       \
     uint32_t fragment_num_words; \
-    Context *fragment_ctx;       \
+    ContextP fragment_ctx;       \
     \
-    uint32_t refhash_layer;       /* create_ref && reading external reference: compressing/decompressing refhash */ \
-    uint32_t refhash_start_in_layer; /* create_ref && reading external reference: compressing/decompressing refhash */ \
+    RangeP range;                 /* ZIP: used for compressing the reference ranges and also refhash (make-ref or internal). SAM PIZ: used for reconstructing SEQ */ \
     \
     ProfilerRec profile; \
     \
@@ -229,10 +225,10 @@ typedef struct VBlock {
 
 extern bool vb_is_valid (VBlockP vb);
 
-extern VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompIType comp_i);
+extern VBlockP vb_get_vb (VBlockPoolType type, Task task, VBIType vblock_i, CompIType comp_i);
 
-extern void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func);
-#define vb_release_vb(vb_p, task_name) vb_release_vb_do ((vb_p), (task_name), __FUNCTION__)
+extern void vb_release_vb_do (VBlockP *vb_p, rom func);
+#define vb_release_vb(vb_p) vb_release_vb_do ((vb_p), __FUNCTION__)
 extern unsigned def_vb_size (DataType dt);
 
 extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
@@ -240,7 +236,7 @@ extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 
 extern void vb_dehoard_memory (bool release_to_kernel);
 
-extern VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, rom task);
+extern VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, Task task);
 extern void vb_change_datatype_nonpool_vb (VBlockP *vb_p, DataType new_dt);
 extern VBlockP vb_get_nonpool_vb (VBID vb_id);
 
@@ -262,10 +258,10 @@ typedef struct VBlockPool {
     VBlockP vb[];               // variable length
 } VBlockPool;
 
-extern void vb_create_pool (VBlockPoolType type, rom name);
+extern void vb_create_pool (VBlockPoolType type);
 extern VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail);
 extern VBlockP vb_get_from_pool (VBlockPoolP pool, VBID vb_id);
-extern void vb_destroy_pool_vbs (VBlockPoolType type, bool destroy_pool);
+extern void vb_destroy_pool (VBlockPoolType type, bool destroy_pool);
 extern uint32_t vb_pool_get_num_in_use (VBlockPoolType type, VBID *id_in_use);
 extern bool vb_pool_is_full (VBlockPoolType type);
 extern bool vb_pool_is_empty (VBlockPoolType type);

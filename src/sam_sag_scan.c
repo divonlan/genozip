@@ -244,11 +244,9 @@ void sam_sag_by_flag_scan_for_depn (void)
 {
     START_TIMER;
 
-    const rom task_name = "scan_for_depn";
-
     buf_alloc (evb, &z_file->sag_depn_index, 0, 100, uint32_t, 0, "z_file->sag_depn_index");
 
-    scan_vb = vb_initialize_nonpool_vb (VB_ID_SCAN_VB, DT_BAM, task_name);
+    scan_vb = vb_initialize_nonpool_vb (VB_ID_SCAN_VB, DT_BAM, TASK_SCAN_FOR_DEPN);
     VBlockP real_evb = evb;
     evb = scan_vb;
 
@@ -261,10 +259,9 @@ void sam_sag_by_flag_scan_for_depn (void)
     txtfile_read_header (true); // reads into evb->txt_data and evb->lines.len
     buf_free (evb->txt_data);   // discard the header
     
-    dispatcher_fan_out_task (task_name, 
-                             save_txt_file->basename, // not txt_file-> bc it will be closed in a sec, while the progress component will continue to the main zip fan_out 
-                             0, "Preprocessing...",   // this is not the same as the preprocessing that happens in PIZ - loading sags'
-                             false, false, flag.xthreads, 0, 5000, true,
+    dispatcher_fan_out_task (TASK_SCAN_FOR_DEPN, 
+                             save_txt_file->basename,  // not txt_file-> bc it will be closed in a sec, while the progress component will continue to the main zip fan_out 
+                             0, JOIN_IN_ORDER, flag.xthreads, 0, 5000,
                              scan_read_one_vb, 
                              scan_index_qnames_preprocessing, 
                              scan_append_index);

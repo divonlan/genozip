@@ -524,7 +524,7 @@ static void sam_piz_QUAL_undiff_vs_other (VBlockSAMP vb, STRp (other_qual), Qual
 static void sam_piz_QUAL_primary (VBlockSAMP vb)
 {
     sam_get_sa_grp_qual (vb, vb->sag); // uncompress PRIM qual to vb->scratch
-
+    
     RECONSTRUCT_BUF (vb->scratch);
     buf_free (vb->scratch);
 }
@@ -551,7 +551,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     bool prim_has_qual_but_i_dont = (snip[0] == '1');
     QualDiffType diff_type        = (snip[1] - '0');
     bool pacbio_diff              = (snip_len >= 3 && snip[2] == '1'); // v15
-    bool bad_qual                 = VER2(15,76) && snip[3] == '1';     // since 15.0.76
+    bool bad_qual                 = VER2(15,76) ? (snip_len >= 4 && snip[3] == '1') : 0; // since 15.0.76
     char monochar                 = VER2(15,76) ? (snip_len >= 5 ? snip[4] : 0)   // since 15.0.76
                                                 : (snip_len >= 4 ? snip[3] : 0);  // v15
     char is_missing               = (snip[0] == '*');

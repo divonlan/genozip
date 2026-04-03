@@ -34,9 +34,14 @@ extern const bool is_fastq_seq[256];
 #define UPPER_CASE(c) (IS_SLETTER(c) ? ((c)-32) : (c))
 #define LOWER_CASE(c) (IS_CLETTER(c) ? ((c)+32) : (c))
 
+#define str_is_1char(str,c)    (str##_len    ==1 && (char)*str      ==(char)(c))
+#define str_is_1chari(arr,i,c) (arr##_lens[i]==1 && (char)*arr##s[i]==(char)(c))
 #define IS_ASTERISK(str)    str_is_1char(str, '*')
 #define IS_ASTERISKi(arr,i) str_is_1chari(arr, (i), '*')
 #define IS_PERIOD(str)      str_is_1char(str, '.')
+#define IS_PERIODi(arr,i)   str_is_1chari(arr, (i), '.')
+#define IS_CHAR0(str)       str_is_1char(str, '0')
+#define IS_CHAR0i(arr,i)    str_is_1chari(arr, (i), '0')
 #define IS_SPACE(str)       str_is_1char(str, ' ')
 #define IS_EQUAL_SIGN(str)  str_is_1char(str, '=')
 
@@ -111,9 +116,6 @@ static bool inline str_issame_revcomp_(STRp(str1), STRp(str2)) // true if the sa
 }
 #define str_issame_revcomp(str1,str2) str_issame_revcomp_ (str1, str1##_len, str2, str2##_len)
 
-#define str_is_1char(str,char) (str##_len==1 && *str==(char))
-#define str_is_1chari(arr,i,char) (arr##_lens[i]==1 && *arr##s[i]==(char))
-
 extern bool str_case_compare (rom str1, rom str2, bool *identical); // similar to stricmp that doesn't exist on all platforms
 
 static inline char *str_tolower_(rom in, char *out, uint32_t len)
@@ -183,8 +185,6 @@ static inline bool str_is_monochar_(STRp(str), char mono)
     
     return true;
 }
-
-#define is_zero_struct(_struct) str_is_monochar_((rom)&(_struct), sizeof (_struct), 0)
 
 static inline unsigned homopolymer_len (STRp(seq), unsigned start)
 {

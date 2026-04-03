@@ -28,6 +28,7 @@
 #include "file.h"
 #include "threads.h"
 #include "arch.h"
+#include "tip.h"
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 
@@ -508,7 +509,6 @@ void buf_free_do (BufferP buf, FUNCLINE)
 
             if (buf->vb == evb) COPY_TIMER_EVB (buf_free_main); // works even for promiscuous bc uses atomic 
             else { VBlockP vb = buf->vb; COPY_TIMER (buf_free_compute); };
-
             break;
         }
         case BUF_UNALLOCATED: // reset len and param that may be used even without allocating the buffer
@@ -747,6 +747,16 @@ void buf_low_level_free (void *p, FUNCLINE)
         COPY_TIMER_EVB (buf_low_level_free);
 }
 
+static StrTextLong oom_tip (void)
+{
+    StrTextLong s;
+    snprintf (s.s, sizeof(s), "\n" _TIP "use --low-memory or alternatively limit the number of concurrent threads with --threads "
+             "(currently %d - affects speed) and/or reduce the amount of data processed by each thread with --vblock "
+             "(currently %d - affects compression ratio)", global_max_threads, (int)(segconf.vb_size / (1 MB)));
+
+    return s;
+} 
+
 void *buf_low_level_realloc (void *p, size_t size, rom name, FUNCLINE)
 {
 #ifndef _WIN32
@@ -755,8 +765,8 @@ void *buf_low_level_realloc (void *p, size_t size, rom name, FUNCLINE)
     void *new = HeapReAlloc (heap, 0, p, size);
 #endif
 
-    ASSERTW (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", func, code_line, name, (uint64_t)size, 
-             IS_ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
+    ASSERTW (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", 
+             func, code_line, name, (uint64_t)size, IS_ZIP ? oom_tip().s : "");
 
     if (flag.debug_memory && size >= flag.debug_memory) {
 #pragma GCC diagnostic push 
@@ -777,8 +787,8 @@ void *buf_low_level_malloc (size_t size, bool zero, FUNCLINE)
 #else
     void *new = HeapAlloc (heap, zero ? HEAP_ZERO_MEMORY : 0, size);
 #endif
-    ASSERT (new, "Out of memory in %s:%u: malloc failed (size=%"PRIu64" bytes). %s", func, code_line, (uint64_t)size,
-            IS_ZIP ? "Try limiting the number of concurrent threads with --threads (affects speed) or reducing the amount of data processed by each thread with --vblock (affects compression ratio)" : "");
+    ASSERT (new, "Out of memory in %s:%u: malloc failed (size=%"PRIu64" bytes). %s", 
+            func, code_line, (uint64_t)size, IS_ZIP ? oom_tip().s : "");
 
     if (flag.debug_memory && size >= flag.debug_memory) 
         iprintf ("malloc(): %p size=%"PRIu64" %s:%u\n", new, (uint64_t)size, func, code_line);

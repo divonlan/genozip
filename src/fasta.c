@@ -6,7 +6,7 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "fasta_private.h"
+#include "fasta_friend.h"
 #include "seg.h"
 #include "piz.h"
 #include "dict_id.h"
@@ -764,9 +764,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
 
     TEMP_FLAG (show_containers, false); // don't show during preprocessing
 
-    rom task_name = "fasta_filter_grep";
-
-    VBlockP vb = vb_get_vb (POOL_MAIN, task_name, vb_i, COMP_MAIN);
+    VBlockP vb = vb_get_vb (POOL_MAIN, TASK_FASTA_FILTER_GREP, vb_i, COMP_MAIN);
     vb->preprocessing = true;
 
     piz_read_one_vb (vb, false); // preprocessing - reads only DESC data
@@ -808,7 +806,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
             (!num_descs && !needed))                  // this contig has no DESC, it just continues SEQ of prev VB, which is grepped out
             writer_set_fasta_contig_grepped_out (vb_i + 1); // if next VB starts with SEQ, that SEQ is part of the grepped-out contig
 
-    vb_release_vb (&vb, task_name);
+    vb_release_vb (&vb);
 
     RESTORE_FLAG (show_containers);
     return needed;

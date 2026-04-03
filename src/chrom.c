@@ -197,8 +197,8 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
     static bool once[2]={};
     if (ref_index != WORD_INDEX_NONE && is_alt && // a new chrom that matched to the reference with an alternative name
         is_primary &&
-        !segconf_running  &&              // segconf runs with flag.quiet so the user won't see the warning
-        !__atomic_test_and_set (&once[is_primary], __ATOMIC_RELAXED))   // skip if we've shown the warning already
+        !segconf_running  &&                      // segconf runs with flag.quiet so the user won't see the warning
+        !test_and_set_relaxed (once[is_primary])) // skip if we've shown the warning already
             
         WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: file: \"%.*s\" Reference file: \"%.*s\". This makes no difference for the compression.",
               txt_name, ref_get_filename(), STRf(chrom), STRf(ref_contig));

@@ -15,15 +15,17 @@
 #include "mgzip.h"
 #include "threads.h"
 #include "writer.h"
+#include "dispatcher.h"
 
 // pool of VBs allocated based on number of threads
 static VBlockPoolP pools[NUM_POOL_TYPES] = {};
+static rom pool_type_names[NUM_POOL_TYPES] = POOL_NAMES;
 
 VBlockP evb = NULL; // outside a pool
 
 VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail)
 {
-    ASSERT (pools[type] || soft_fail, "VB Pool type=%u is not allocated", type);
+    ASSERT (pools[type] || soft_fail, "VB Pool %s is not allocated", pool_type_names[type]);
     return pools[type];
 }
 
@@ -49,7 +51,7 @@ static void set_in_use (VBlockP vb, bool in_use)
     store_release (vb->in_use, in_use);   
 }
 
-void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
+void vb_release_vb_do (VBlockP *vb_p, rom func)
 {
     START_TIMER;
 
@@ -59,7 +61,8 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
     ASSERT (is_in_use (vb) || vb==evb, "Cannot release VB because it is not in_use (called from %s): vb->id=%d vb->vblock_id=%u", 
             func, vb->id, vb->vblock_i);
 
-    threads_log_by_vb (vb, vb->compute_task ? vb->compute_task : func, "RELEASING VB", 0);
+    Task task = vb->compute_task;
+    threads_log_by_vb (vb, task ? task_name (task) : func, "RELEASING VB", 0);
 
     if (flag.show_time_comp_i == vb->comp_i || flag.show_time_comp_i == COMP_ALL)
         profiler_add (vb);
@@ -97,10 +100,10 @@ void vb_release_vb_do (VBlockP *vb_p, rom task_name, rom func)
         *vb_p = NULL;
     }
 
-    if (flag_is_show_vblocks (task_name)) 
+    if (flag_is_show_vblocks (task)) 
         iprintf (vb_id >= 0 ? "VB_RELEASE(task=%s id=%d) vb=%s caller=%s in_use=%d/%d\n"
                             : "VB_RELEASE(task=%s id=%d) vb=%s caller=%s\n", 
-                 task_name, vb_id, VB_NAME, func, num_in_use, (vb_id >= 0 ? pools[pool]->num_vbs : -1));
+                 task_name (task), vb_id, VB_NAME, func, num_in_use, (vb_id >= 0 ? pools[pool]->num_vbs : -1));
 
     if (vb_id >= 0) COPY_TIMER_EVB (vb_release_vb_do);
 }
@@ -134,24 +137,26 @@ void vb_destroy_vb_do (VBlockP *vb_p, rom func)
 // return all VBlocks memory and unused evb memory to libc and optionally to the kernel
 void vb_dehoard_memory (bool release_to_kernel)
 {
-    vb_destroy_pool_vbs (POOL_MAIN, false); 
+    vb_destroy_pool (POOL_MAIN, false); 
     buflist_destroy_vb_bufs (evb, true); // destroys all unused buffers
 
     if (release_to_kernel)
         return_freed_memory_to_kernel();
 }
 
-void vb_create_pool (VBlockPoolType type, rom name)
+void vb_create_pool (VBlockPoolType type)
 {
     // only main-thread dispatcher can create a pool. other dispatcher (eg writer's bgzf compression) can must existing pool
-    uint32_t num_vbs = (type == POOL_MAIN) ? MAX_(1, global_max_threads)                 + // compute thread VBs
-                                             (IS_PIZ ? (1 + !flag.no_writer_thread) : 0) + // txt header VB and wvb (for PIZ)
-                                             (IS_PIZ && !flag.no_writer_thread ? z_file->max_conc_writing_vbs : 0) // SAM: max number of thread-less VBs handed over to the writer thread which the writer must load concurrently 
-                       /*   POOL_BGZF   */ : writer_get_max_bgzf_threads();
+    uint32_t num_vbs = 
+        (type == POOL_BGZF) ? writer_get_max_bgzf_threads()
+      : (type == POOL_MISC) ? MAX_(1, global_max_threads)
+      : /*POOL_MAIN*/         MAX_(1, global_max_threads) + // compute thread VBs
+                              (IS_PIZ ? 2 : 0) + 
+                              (IS_PIZ && !flag.no_writer_thread ? z_file->max_conc_writing_vbs : 0); // SAM: max number of thread-less VBs handed over to the writer thread which the writer must load concurrently 
     
-    if (flag_is_show_vblocks (NULL)) 
+    if (flag_is_show_vblocks (TASK_NONE)) 
         iprintf ("CREATING_VB_POOL: type=%s global_max_threads=%u max_conc_writing_vbs=%u num_vbs=%u\n", 
-                 name, global_max_threads, z_file->max_conc_writing_vbs, num_vbs); 
+                 pool_type_names[type], global_max_threads, z_file->max_conc_writing_vbs, num_vbs); 
 
     uint32_t size = sizeof (VBlockPool) + num_vbs * sizeof (VBlockP);
 
@@ -165,12 +170,12 @@ void vb_create_pool (VBlockPoolType type, rom name)
         memset (&pools[type]->vb[pools[type]->num_vbs], 0, (num_vbs - pools[type]->num_vbs) * sizeof (VBlockP)); // initialize new entries
     }
 
-    pools[type]->name    = name;
+    pools[type]->name    = pool_type_names[type];
     pools[type]->size    = size; 
     pools[type]->num_vbs = MAX_(num_vbs, pools[type]->num_vbs); 
 }
 
-VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, rom task)
+VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, Task task)
 {
     VBlockP vb            = CALLOC (get_vb_size (dt));
     vb->data_type         = DT_NONE;
@@ -245,7 +250,7 @@ static VBlockP vb_update_data_type (VBlockP vb, DataType dt, DataType alloc_dt, 
 }
 
 // allocate an unused vb from the pool. separate pools for zip and unzip
-VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompIType comp_i)
+VBlockP vb_get_vb (VBlockPoolType type, Task task, VBIType vblock_i, CompIType comp_i)
 {
     START_TIMER;
 
@@ -314,19 +319,19 @@ VBlockP vb_get_vb (VBlockPoolType type, rom task_name, VBIType vblock_i, CompITy
     vb->vblock_i          = vblock_i;
     vb->comp_i            = comp_i;
     vb->compute_thread_id = THREAD_ID_NONE;
-    vb->compute_task      = task_name;
+    vb->compute_task      = task;
     ca_init_d2d_map (&vb->ca);
     
-    if (flag_is_show_vblocks (task_name)) 
+    if (flag_is_show_vblocks (task)) 
         iprintf ("VB_GET_VB(task=%s id=%u) vb_i=%s/%d num_in_use=%u/%u%s\n", 
-                  task_name, vb->id, comp_name (vb->comp_i), vb->vblock_i, num_in_use, pool->num_vbs,
+                  task_name (task), vb->id, comp_name (vb->comp_i), vb->vblock_i, num_in_use, pool->num_vbs,
                   flag.preprocessing ? " preprocessing" : "");
 
-    threads_log_by_vb (vb, task_name, "GET VB", 0);
+    threads_log_by_vb (vb, task_name (task), "GET VB", 0);
 
     if (flag.debug_memory)
         iprintf ("vb_get_vb: got vb_i=%d id=%d task=%s dt=%s address=[%p - %p]\n", 
-                 vblock_i, vb_id, task_name, dt_name(alloc_dt), vb, (char*)vb + sizeof_vb);
+                 vblock_i, vb_id, task_name (task), dt_name(alloc_dt), vb, (char*)vb + sizeof_vb);
 
     COPY_TIMER_EVB (vb_get_vb);
     return vb;
@@ -377,8 +382,8 @@ bool vb_is_valid (VBlockP vb)
     return false;
 }
 
-// frees memory of all VBs, except for non-pool VBs (evb, segconf, writer,...)
-void vb_destroy_pool_vbs (VBlockPoolType type, bool destroy_pool)
+// frees memory of all VBs in a pool and the pool itself
+void vb_destroy_pool (VBlockPoolType type, bool destroy_pool)
 {
     if (!pools[type]) return;
 

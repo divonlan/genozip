@@ -129,8 +129,12 @@ void arch_initialize (rom my_argv0)
     base_argv0 = slash ? slash + 1 : argv0;
 
     // verify CPU architecture and compiler is supported
-    ASSERT0 (sizeof(char)==1 && sizeof(short)==2 && sizeof (unsigned)==4 && sizeof(long long)==8, 
-             "Unsupported C type lengths, check compiler options");
+    _Static_assert (sizeof(char)==1,      "unsupported sizeof(char)");
+    _Static_assert (sizeof(short)==2,     "unsupported sizeof(short)");
+    _Static_assert (sizeof(unsigned)==4,  "unsupported sizeof(unsigned)");
+    _Static_assert (sizeof(long long)==8, "unsupported sizeof(long long)");
+    _Static_assert (sizeof(size_t)==8,    "unsupported sizeof(size_t)");
+    _Static_assert (sizeof(time_t)==8,    "unsupported sizeof(time_t)");
     
     // verify endianity is as expected
     ASSERT0 (!strcmp (arch_get_endianity(), "little"), "Genozip is currently not supported on big endian architectures");
@@ -148,7 +152,7 @@ void arch_initialize (rom my_argv0)
     ASSERT0 (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
     ASSERT0 (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
     ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
-    ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_uncompress, str_pack_bases, bits_init_do
+    ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_uncompress, str_pack_bases
     ASSERT0 (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
 
     // Note: __builtin_clzl is inconsistent between Windows and Linux, even on the same host, so we don't use it
@@ -498,6 +502,27 @@ Timestamp inline arch_timestamp (void)
     struct timespec tb;
     clock_gettime (CLOCK_REALTIME, &tb);
     return (uint128_t)tb.tv_sec * 1000000000 + (uint128_t)tb.tv_nsec;
+}
+
+// seconds since Unix epoch, same as time()
+uint64_t arch_time (void)
+{
+    // in WSL2 there is a issue of a stale clock after sleep / hybernation
+    if (!arch_is_wsl()) return time (NULL);
+
+    // bypass WSL clock and get the Windows clock instead
+    uint64_t win_time = 0;
+    FILE *pipe = popen ("powershell.exe -Command \"[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()\"", "r");
+    
+    if (pipe) {
+        char str[32];
+        if (fgets (str, sizeof (str), pipe)) 
+            win_time = (uint64_t)atoll (str);
+        
+        pclose (pipe);
+    }
+    
+    return win_time ? win_time : time (NULL); // fallback to time() if failed to get from Windows
 }
 
 bool arch_is_process_alive (uint32_t pid)

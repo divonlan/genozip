@@ -122,7 +122,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STR
 {
     int64_t ps_value;
     uint32_t lookback, lb_lines;    
-    bool is_missing = (value_len==1 && *value=='.');
+    bool is_missing = IS_PERIOD(value);
 
     // set ps_type if not already set
     if (!ctx->ps_type && !is_missing) 

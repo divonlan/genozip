@@ -165,7 +165,7 @@ static LONG WINAPI windows_exception_handler (EXCEPTION_POINTERS *ep)
 {
     if (catch_msg) {
         progress_newline(); 
-        fprintf (stderr, "Error in %s:%u: %s\n", catch_func, catch_line, catch_msg);
+        fprintf (stderr, "❌ %s:%u: %s\n", catch_func, catch_line, catch_msg);
     }
 
     else
@@ -236,7 +236,7 @@ static void noreturn signal_handler_bug (int signum)
 {
     if (catch_msg) {
         progress_newline(); 
-        fprintf (stderr, "Error in %s:%u: %s\n", catch_func, catch_line, catch_msg);
+        fprintf (stderr, "❌ %s:%u: %s\n", catch_func, catch_line, catch_msg);
     }
 
     else {
@@ -331,8 +331,8 @@ static void error_free_all (void)
     flags_finalize();
     chrom_finalize();
     ref_finalize (true);
-    vb_destroy_pool_vbs (POOL_MAIN, true);
-    vb_destroy_pool_vbs (POOL_BGZF, true);
+    vb_destroy_pool (POOL_MAIN, true);
+    vb_destroy_pool (POOL_BGZF, true);
     vb_destroy_vb (&evb);
 }
 

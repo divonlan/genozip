@@ -45,7 +45,7 @@ static void zip_display_compression_ratio (Digest md5)
     float ratio_vs_plain = plain_bytes / z_bytes;
     float ratio_vs_comp  = -1;
 
-    if (flag.debug_progress) 
+    if (flag.show_tasks) 
         iprintf ("Ratio calculation: ratio_vs_plain=%f = plain_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
                     ratio_vs_plain, (uint64_t)plain_bytes, (uint64_t)z_bytes);
 
@@ -68,7 +68,7 @@ static void zip_display_compression_ratio (Digest md5)
 
         if (z_file->z_closes_after_me) { 
             ratio_vs_comp = comp_bytes_bind / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
-            if (flag.debug_progress) 
+            if (flag.show_tasks) 
                 iprintf ("Ratio calculation: ratio_vs_comp=%f = comp_bytes_bind=%"PRIu64" / z_bytes=%"PRIu64"\n",
                          ratio_vs_comp, (uint64_t)comp_bytes_bind, (uint64_t)z_bytes);
         }
@@ -77,7 +77,7 @@ static void zip_display_compression_ratio (Digest md5)
     }
     else {
         ratio_vs_comp = comp_bytes / z_bytes; // compression vs .gz/.bz2/.bcf/.xz... size
-        if (flag.debug_progress) 
+        if (flag.show_tasks) 
             iprintf ("Ratio calculation: ratio_vs_comp=%f = comp_bytes=%"PRIu64" / z_bytes=%"PRIu64"\n",
                      ratio_vs_comp, (uint64_t)comp_bytes, (uint64_t)z_bytes);
     }
@@ -468,8 +468,8 @@ static void zip_write_global_area (void)
         THREAD_DEBUG (compress_iupacs);
         ref_iupacs_compress();
 
-        THREAD_DEBUG (compress_refhash);
-        refhash_compress_refhash();
+        THREAD_DEBUG (make_refhash);
+        refhash_make_refhash();
     }
 
     // compress alias list, if this data_type has any aliases defined
@@ -668,9 +668,11 @@ static void zip_complete_processing_one_vb (VBlockP vb)
         
     txt_file->max_lines_per_vb = MAX_(txt_file->max_lines_per_vb, vb->lines.len);
 
-    if (!flag.make_reference && !flag.seg_only)
+    if (!flag.make_reference && !flag.seg_only) {
         zfile_output_processed_vb_ext (vb, true);
-    
+        dispatcher_increment_progress ("z_write", PROGRESS_UNIT); // writing done.
+    }    
+
     zip_update_txt_counters (vb);
 
     // destroy some buffers of "first generation" contexts (those that didn't clone any nodes)  
@@ -681,8 +683,6 @@ static void zip_complete_processing_one_vb (VBlockP vb)
             buf_destroy (vctx->nodes);      // 1st generation likely to have a lot more new nodes (+dict) that subsequent generations
             buf_destroy (vctx->dict);       
         }
-
-    dispatcher_increment_progress ("z_write", PROGRESS_UNIT); // writing done.
 
     z_file->num_vbs = MAX_(z_file->num_vbs, vb->vblock_i); // note: VBs are written out of order, so this can increase by 0, 1, or more than 1
     txt_file->num_vbs++;
@@ -698,10 +698,10 @@ uint64_t zip_get_target_progress (void)
         int64_t progress_unit = txt_file->est_num_lines ? txt_file->est_num_lines : txt_file->est_seggable_size; 
 
         target_progress = progress_unit * (3 + segconf.zip_txt_modified) // read, (modify), seg, compress
-                        + (!flag.make_reference && !flag.seg_only && !flag.biopsy) * progress_unit; // write
+                        + (!flag.make_reference && !flag.seg_only && !flag.biopsy) * progress_unit; // write (for --make-reference: writing of the SEC_REFERENCE sections is in a different dispatcher)
     }
 
-    DO_ONCE if (flag.debug_progress)
+    DO_ONCE if (flag.show_tasks)
         iprintf ("zip_comp_i=%u : target_progress=%s\n", flag.zip_comp_i, str_int_commas(target_progress).s);
 
     return target_progress;
@@ -711,8 +711,7 @@ uint64_t zip_get_target_progress (void)
 // a VB from the input file and send it off to a thread for computation. When the thread
 // completes, this function proceeds to write the output to the output file. It can dispatch
 // several threads in parallel.
-void zip_one_file (rom txt_basename, 
-                   bool is_last_user_txt_file)  // the last user-specified txt file in this execution
+void zip_one_file (bool is_last_user_txt_file)  // the last user-specified txt file in this execution
 {
     Dispatcher dispatcher = 0;
     if (flag.show_time_comp_i == flag.zip_comp_i) profiler_initialize(); // re-start wallclock
@@ -724,7 +723,7 @@ void zip_one_file (rom txt_basename,
         
     // we calculate digest for each component seperately, stored in SectionHeaderTxtHeader (always 0 for generated components, or if modified)
     if (gencomp_comp_eligible_for_digest(NULL)) // if generated component - keep digest to display in progress after the last component
-        z_file->digest_ctx = DIGEST_CONTEXT_NONE;
+        z_file->digest_state = DIGEST_CONTEXT_NONE;
 
     if (!flag.bind || flag.zip_comp_i == COMP_MAIN) 
         prev_file_first_vb_i = prev_file_last_vb_i = 0; // reset if we're not binding
@@ -751,20 +750,13 @@ void zip_one_file (rom txt_basename,
 
     txtfile_zip_finalize_codecs();
 
-    uint64_t target_progress = zip_get_target_progress(); // estimate based on segconf data
-
     dispatcher_start_wallclock(); // after any preprocessing (used for calculating remaining time)
 
     dispatcher = dispatcher_fan_out_task (
-        ZIP_TASK_NAME, txt_basename, 
-        target_progress,      // target progress: 1 for each read, compute, write
-        target_progress     ? NULL 
-      : txt_file->is_remote ? "Downloading & compressing..." 
-      : flag.skip_segconf   ? "Compressing (skipped segconf)..." // no progress data if segconf was skipped 
-      :                       "Compressing...",
-        !flag.make_reference, // allow callbacks to zip_complete_processing_one_vb not in order of VBs (not allowed for make-reference as contigs need to be in consistent order)
-        false,                // not test mode
-        flag.xthreads, prev_file_last_vb_i, 5000, false,
+        TASK_ZIP, txt_file->basename, 
+        zip_get_target_progress(), // estimate based on segconf data
+        flag.make_reference ? JOIN_IN_ORDER : JOIN_OUT_OF_ORDER, // make-reference must be in order as contigs need to be in consistent order between runs to receive consistent GPOS values (so creation of reference files is reproduceable - see defect 2022-08-14)
+        flag.xthreads, prev_file_last_vb_i, 5000,
         zip_prepare_one_vb_for_dispatching, 
         zip_compress_one_vb, 
         zip_complete_processing_one_vb);
@@ -830,12 +822,12 @@ finish:
         zip_write_global_area();
     }
 
-    zip_display_compression_ratio (digest_snapshot (&z_file->digest_ctx, NULL)); // Done for reference + final compression ratio calculation
+    zip_display_compression_ratio (flag.md5 ? digest_snapshot (&z_file->digest_state, NULL) : DIGEST_NONE); // Done for reference + final compression ratio calculation
     
     if (flag.md5 && flag.bind && z_file->z_closes_after_me &&
         ((flag.bind == BIND_FQ_PAIR && z_file->num_txts_so_far == 2) ||
          (flag.bind == BIND_SAM && z_file->num_txts_so_far == 3)))
-        progress_concatenated_md5 (z_dt_name(), digest_snapshot (&z_file->digest_ctx, "file"));
+        progress_concatenated_md5 (z_dt_name(), digest_snapshot (&z_file->digest_state, "file"));
 
     z_file->disk_size = z_file->disk_so_far;
 

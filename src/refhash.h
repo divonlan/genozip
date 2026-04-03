@@ -8,34 +8,22 @@
 
 #pragma once
 
-#include "genozip.h"
-#include "reference.h"
+#include "digest.h"
+#include "buf_struct.h"
 
-#define HOOK 'G'
-#define HOOK_REV 'C' // complement of HOOK
-
-#define MAX_ALIGNER_GPOS ((PosType64)0xfffffffe)
-#define NO_GPOS   ((PosType64)0xffffffff)
-#define NO_GPOS64 ((PosType64)-1)
-
-extern unsigned num_layers;
-extern bool bits_per_hash_is_odd;  // true bits_per_hash is odd
-extern uint32_t nukes_per_hash;    // = layer_bits[0] / 2
-extern uint32_t layer_bitmask[64]; // 1s in the layer_bits[] LSbs
-extern uint32_t **refhashs;
 extern Buffer refhash_buf;
 
 // make-reference stuff
-extern void refhash_initialize_for_make (void);
-extern void refhash_compress_refhash (void);
-extern void refhash_calc_one_range (VBlockP vb, ConstRangeP r, ConstRangeP next_r);
+extern void refhash_make_initialize (void);
+extern void refhash_make_refhash (void);
 extern Digest refhash_get_digest (void);
 
 // stuff for loading and using refhash when ZIPping a fastq or sam/bam file
+extern void refhash_set_ref_file_info (Digest digest, uint8_t ref_bases_per_hash, uint8_t ref_bits_per_hash_out, uint8_t ref_gpos_bytes);
 extern uint64_t refhash_get_refhash_size (void);
 extern void refhash_load (void);
 extern void refhash_load_standalone (void);
 extern void refhash_destroy (void);
-extern void refhash_set_digest (Digest digest);
-extern void refhash_update_layers (int64_t delta_bytes);
-extern ConstBitsP refhash_get_emoneg (void);
+
+typedef enum { REFHASH_COUNT_INSTANCES, REFHASH_OCCUPY } RefhashCalcType;
+extern void refhash_calc_one_range (VBlockP vb, RefhashCalcType calc_type);

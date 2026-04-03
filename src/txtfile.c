@@ -454,27 +454,39 @@ void txtfile_discover_specific_gz (FileP file)
         #define XZ_MAGIC  (char[]){ 0xFD, '7', 'z', 'X', 'Z', 0 }
         #define ZIP_MAGIC (char[]){ 0x50, 0x4b, 0x03, 0x04 }
         #define ORA_MAGIC (char[]){ 0x49, 0x7c } // https://support-docs.illumina.com/SW/ORA_Format_Specification/Content/SW/ORA/ORAFormatSpecification.htm
+        #define CRAM_MAGIC "CRAM"  // first 4 bytes of a CRAM file
 
         // we already open the file, so not easy to re-open with BZ2_bzopen as it would require injecting the read data into the BZ2 buffers
         if (str_isprefix_(STRb(file->gz_data), BZ2_MAGIC, 3)) 
-            ABORTINP0 ("The data seems to be in bz2 format. Please use --input to specify the type (eg: \"genozip --input sam.bz2\")");
+            ABORTINP0 ("The data seems to be in bz2 format. "_TIP"Use --input to specify the type (eg: \"genozip --input sam.bz2\")");
 
         else if (str_isprefix_(STRb(file->gz_data), XZ_MAGIC, 6)) {
             if (file->redirected) ABORTINP0 ("Compressing piped-in data in xz format is not currently supported");
-            if (file->is_remote) ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\")");
+            if (file->is_remote) ABORTINP0 ("The data seems to be in xz format. "_TIP"Use --input to specify the type (eg: \"genozip --input sam.xz\")");
             ABORTINP0 ("The data seems to be in xz format. Please use --input to specify the type (eg: \"genozip --input sam.xz\")");
         }
 
         else if (str_isprefix_(STRb(file->gz_data), ZIP_MAGIC, 4)) {
             if (file->redirected) ABORTINP0 ("Compressing piped-in data in zip format is not currently supported");
-            if (file->is_remote) ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
+            if (file->is_remote) ABORTINP0 ("The data seems to be in zip format. "_TIP"Use --input to specify the type (eg: \"genozip --input generic.zip\")");
             ABORTINP0 ("The data seems to be in zip format. Please use --input to specify the type (eg: \"genozip --input generic.zip\")");
         }
 
         else if (str_isprefix_(STRb(file->gz_data), ORA_MAGIC, 2)) {
             if (file->redirected) ABORTINP0 ("Compressing piped-in data in ora format is not currently supported");
-            if (file->is_remote) ABORTINP0 ("The data seems to be in ora format. Please use --input to specify the type (eg: \"genozip --input fastq.ora\")");
-            ABORTINP0 ("The data seems to be in ora format. Please use --input to specify the type (eg: \"genozip --input fastq.ora\")");
+            if (file->is_remote) ABORTINP0 ("The data seems to be in ora format. "_TIP"Use '--input fastq.ora'");
+            ABORTINP0 ("The data seems to be in ora format. "_TIP" use '--input fastq.ora'");
+        }
+
+        // case: a CRAM file without a .cram file name extension
+        else if (str_isprefix_(STRb(file->gz_data), CRAM_MAGIC, 4)) {
+            if (file->is_remote || file->redirected) ABORTINP0 ("The data seems to be in CRAM format. "_TIP"Use '--input cram'");
+            file->src_codec   = file->effective_codec = CODEC_CRAM;
+            file->type        = CRAM;
+            file->data_type   = DT_BAM;
+            file->disk_so_far = 0;
+            buf_free (file->gz_data); // we will re-read through external decompressor
+            return;
         }
 
         if (!keep_src_codec) file->src_codec = CODEC_NONE;
@@ -985,7 +997,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
     {
     START_TIMER;
     final_unconsumed_len = (DT_FUNC(vb, unconsumed)(vb, 0));
-    COPY_TIMER (txtfile_get_unconsumed_callback)
+    COPY_TIMER (txtfile_get_unconsumed_callback);
     }
 
     // case: truncate entire VB (requested by fastq_unconsumed in case this R2 VB doesn't have an R1 counterpart and we are allowed to truncate)
@@ -1334,7 +1346,7 @@ void txtfile_read_vblock (VBlockP vb)
     }
 
 done:
-    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
+    if (flag_is_show_vblocks (TASK_ZIP)) 
         iprintf ("VB_READ(id=%d) vb=%s Ltxt=%u vb_position_txt_file=%"PRIu64" unconsumed_txt.len=%u is_last_vb_in_txt_file=%s\n", 
                  vb->id, VB_NAME, Ltxt, vb->vb_position_txt_file, txt_file->unconsumed_txt.len32, TF(vb->is_last_vb_in_txt_file));
 

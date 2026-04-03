@@ -11,7 +11,7 @@
 #include "digest.h"
 #include "local_type.h"
 
-#define HEADER_IS(_st) (header->section_type == SEC_##_st)
+#define HEADER_IS(_st) (h->section_type == SEC_##_st)
 #define ST(_st) (st == SEC_##_st)
 
 // Section headers - integers are all big endian, unless mentioned otherwise
@@ -50,7 +50,7 @@ typedef union SectionFlags {
         uint8_t txt_is_bin       : 1;  // BAM: Source file is binary 
         uint8_t has_digest       : 1;  // true if compressed with digest (i.e. not --optimize etc) (v15) 
         #define v14_bgzf has_digest    // Up to v14: Reconstruct as BGZF (user may override) (determined by the last component) (since v15, determined by SectionHeaderTxtHeader.src_codec)
-        uint8_t adler            : 1;  // true if Adler32 is used, false if MD5 is used 
+        uint8_t not_md5          : 1;  // 0=MD5, 1=(XXH3 since 15.0.81, Adler32 before) 
         uint8_t has_gencomp      : 1;  // SAM/BAM: PRIM and/or DEPN components exist (v14)
                                        // v12 to 15.0.41: VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12-15.0.41)
         uint8_t has_taxid        : 1;  // obsolete: each line in the file has Taxonomic ID information
@@ -168,7 +168,7 @@ typedef struct {
     EncryptionType encryption_type;    // one of EncryptionType
     uint16_t data_type;                // one of DataType
     uint64_t recon_size;               // data size of reconstructed file (note: for MAIN VBs in SAM gencomp, this excludes any PRIM/DEPN lines)
-    uint64_t genozip_minor_ver : 14;   // populated since 15.0.28. 10 bits until 15.0.59
+    uint64_t genozip_minor_ver : 14;   // populated since 15.0.28. 10 bits until 15.0.59 (Little Endian!)
     uint64_t is_modified       : 1;    // ZIP modified the txt_data (e.g. --optimize). Since 15.0.60      
     uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.30)
     uint64_t num_lines_bound   : 48;   // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
@@ -182,7 +182,7 @@ typedef struct {
         uint32_t v13_num_components;   // up to v13: number of txt bound components in this file (1 if no binding)
     };
     union { // 16 bytes
-        Digest genome_digest;          // DT_REF: Digest of genome as loaded to memory (algorithm determined by genozip_header.adler) (since v15)
+        Digest genome_digest;          // DT_REF: Digest of genome as loaded to memory (algorithm determined by genozip_header.not_md5) (since v15)
         Digest v14_REF_fasta_md5;      // DT_REF: MD5 of original FASTA file (v14, buggy)
         Digest FASTQ_v13_digest_bound; // DT_FASTQ: up to v13 "digest_bound": digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
     };
@@ -197,10 +197,10 @@ typedef struct {
     char fasta_filename[REF_FILENAME_LEN]; // DT_REF: fasta file used to generated this reference
     }; 
     union {
-        Digest ref_genome_digest;      // Used if REF_EXTERNAL: SectionHeaderGenozipHeader.genome_digest of the reference file
+        Digest ref_genome_digest;      // Used if REF_EXTERNAL: SectionHeaderGenozipHeader.genome_digest of the reference file (in-memory digest of reference files since v15, MD5 of FASTA earlier)
         Digest refhash_digest;         // DT_REF: digest of refhash (v15)
     };
-    union { // 271 bytes - data-type specific
+    union { // (272 bytes minus the fields at the very bottom) - data-type specific - since v12
         struct {
             // copied from their respective values in segconf, and copied back to segconf in PIZ
             DictId segconf_seq_len_dict_id;   // SAM: dict_id of one of the Q?NAME contexts (the "length=" item), which is expected to hold the seq_len for this read. 0 if there is no such item. v14.
@@ -236,7 +236,7 @@ typedef struct {
             uint16_t segconf_s1_to_cm_32;     // 15.0.76: minimap2: 32X of average s1:i / cm:i   
             uint8_t segconf_deep_FAF     : 1; // 15.0.77: Deep: FASTA-as-FASTQ 
             uint8_t unused_bits          : 7; // 
-            char unused[242];
+            char unused[238];
         } sam;
 
         struct { 
@@ -247,7 +247,7 @@ typedef struct {
             uint8_t unused_bits          : 5;
             uint8_t unused8[3];
             uint32_t segconf_std_seq_len;     // FASTQ: 15.0.69
-            char unused[251];
+            char unused[247];
         } fastq;
 
         struct {
@@ -274,13 +274,24 @@ typedef struct {
 
             float segconf_Q_to_O;              // VCF: 15.0.61
 
-            uint8_t unused[251];
+            uint8_t unused[247];
         } vcf;
+
+        struct {
+            uint8_t bases_per_hash;    // REF: number of bases input to hash. 15.0.81
+            uint8_t bits_per_hash_out; // REF: output length in bits of hash: 2^ this is the hash table length. 15.0.81
+            uint8_t gpos_bytes;        // REF: 4 or 5. 15.0.81
+            uint8_t make_ref_flag;     // REF: value of flag.make_reference with which this reference file was created. 15.0.81
+            uint8_t unused[259];
+        } ref;
     };
 
     // ⇧ New non-data-type-specific fields grow upwards at the expense of unused[] ⇧ 
+    uint8_t  ref_genome_digest_alg;    // digest algorithm (DigestAlg) used to generate ref_genome_digest. 15.0.81
+    uint8_t  ref_genozip_ver;          // version of genozip used to create the external reference file with each this file is compressed. added 15.0.81.
+    uint16_t ref_genozip_minor_ver;    // ( " )
     uint32_t segconf_vb_size;          // in bytes (replaced old_vb_size). 15.0.65
-    uint8_t lic_type;                  // LicenseType: license type used to create this file. 15.0.59.
+    uint8_t  lic_type;                 // LicenseType: license type used to create this file. 15.0.59.
 } SectionHeaderGenozipHeader, *SectionHeaderGenozipHeaderP;
 typedef const SectionHeaderGenozipHeader *ConstSectionHeaderGenozipHeaderP;
 
@@ -434,11 +445,17 @@ typedef struct {
 
 typedef struct {
     SectionHeader;
-    uint8_t num_layers;        // total number of layers
-    uint8_t layer_i;           // layer number of this section (0=base layer, with the most bits)
-    uint8_t layer_bits;        // number of bits in layer
-    uint8_t ffu;
-    uint32_t start_in_layer;   // start index within layer
+    union {
+    uint64_t first_ent : 40;   // first_ent of this block with refhsah_buf (little endian!) (in units of gpos_bytes) (15.0.81)
+    uint64_t unused    : 24;
+    struct { // up to 15.0.80
+    uint8_t num_layers;        // total number of layers (always 4)
+    uint8_t layer_i;           // layer number of this section (0,1,2 or 3)
+    uint8_t layer_bits;        // number of bits in layer (28,27,26 or 25)
+    uint8_t unused; 
+    uint32_t start_in_layer;   // start index within layer (in bytes)
+    } OLD; 
+    };
 } SectionHeaderRefHash, *SectionHeaderRefHashP;
 
 // SEC_RECON_PLAN, contains ar array of ReconPlanItem (used v14-15.0.63 for SAM ; v12-15.0.52 for DVCF)

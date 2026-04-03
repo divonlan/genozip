@@ -59,7 +59,7 @@ static void txtheader_compress_one_fragment (VBlockP vb)
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 
-    COPY_TIMER (txtheader_compress_one_fragment)    
+    COPY_TIMER (txtheader_compress_one_fragment);
 }
 
 void txtheader_compress (BufferP txt_header, 
@@ -94,7 +94,7 @@ void txtheader_compress (BufferP txt_header,
     txt_header_buf->next = 0;
     txt_header_comp_i = comp_i;
 
-    dispatcher_fan_out_task ("compress_txt_header", NULL, 0, "Writing txt header...", false, false, false, 0, 20000, true,
+    dispatcher_fan_out_task (TASK_COMP_TXT_HEADER, txt_file->basename, 0, JOIN_IN_ORDER, false, 0, 20000,
                              txtheader_prepare_for_compress, 
                              txtheader_compress_one_fragment, 
                              zfile_output_processed_vb);
@@ -313,7 +313,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
     txtheader_sec = sec;
 
-    txt_header_vb = vb_get_vb (POOL_MAIN, PIZ_TASK_NAME, 0, sec->comp_i);
+    txt_header_vb = vb_get_vb (POOL_MAIN, TASK_PIZ, 0, sec->comp_i);
 
     // allocate memory for uncompressed txt header - the size is the sum of the fragment sizes
     Section my_sec = sec;
@@ -343,7 +343,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     sum_fragment_len = 0;
 
     if (needs_recon) {
-        dispatcher_fan_out_task ("read_txt_header", NULL, 0, 0, true, flag.test, false, 0, 1000, true,
+        dispatcher_fan_out_task (TASK_READ_TXT_HEADER, NULL, 0, JOIN_OUT_OF_ORDER, false, 0, 1000,
                                  txtheader_read_one_vb, 
                                  txtheader_uncompress_one_vb,
                                  NO_CALLBACK);
@@ -368,8 +368,8 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     // note: this is reset for each component:
     // since v14 it is used for the commulative component-scope MD5 used for both VBs and txt file verification
     // up to v13 it is for commulative digest of both MD5 and Adler, but used only for txt file verification,
-    // while VB verification relies on v13_commulative_digest_ctx which is commulative across components.
-    z_file->digest_ctx = DIGEST_CONTEXT_NONE; // reset digest
+    // while VB verification relies on v13_commulative_digest_state which is commulative across components.
+    z_file->digest_state = DIGEST_CONTEXT_NONE; // reset digest
 
     if (!VER(14) && header.flags.txt_header.v13_dvcf_comp_i)
         ABORT0 ("DVCF files can be accessed with Genozip up to version 15.0.41");
@@ -433,7 +433,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
     if (!writer_handover_txtheader (&txt_header_vb)) {  // handover data to writer thread (even if the header is empty, as the writer thread is waiting for it)
         txt_file->txt_data_so_far_single += txt_header_vb->txt_data.len; // if writing, this is done in writer_write, caputring the processing in writer too
 
-        vb_release_vb (&txt_header_vb, PIZ_TASK_NAME); // not handing over, so release here      
+        vb_release_vb (&txt_header_vb); // not handing over, so release here      
     }
 
     if (!flag.reading_reference)

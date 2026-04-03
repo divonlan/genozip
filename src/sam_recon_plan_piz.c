@@ -174,8 +174,8 @@ void recon_plan_add_prescribed_by_recon_plan_section (void)
 
     next_sec = recon_plan_sec;
 
-    dispatcher_fan_out_task ("uncompress_recon_plan", NULL, 0, 0, true, flag.test, false, 0, 1000, true,
-                            recon_plan_read_one_vb, recon_plan_uncompress_one_vb, NO_CALLBACK);
+    dispatcher_fan_out_task (TASK_UNCOMP_RECON_PLAN, NULL, 0, JOIN_OUT_OF_ORDER, false, 0, 1000,
+                             recon_plan_read_one_vb, recon_plan_uncompress_one_vb, NO_CALLBACK);
 
     recon_plan_dedeltify();
 

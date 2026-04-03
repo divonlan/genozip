@@ -89,7 +89,7 @@ static StrTextLong piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) /
     if (comp_i == COMP_NONE)
         comp_i = sections_vb_header (vb_i)->comp_i;
 
-    int file_i = ((Z_DT(SAM) || Z_DT(BAM)) && comp_i <= SAM_COMP_DEPN) ? 0
+    int file_i = ((Z_DT(BAM) || Z_DT(SAM)) && comp_i <= SAM_COMP_DEPN) ? 0
                 : (flag.deep && comp_i >= SAM_COMP_FQ00)               ? (1 + comp_i - SAM_COMP_FQ00)
                 :                                                        comp_i;
 
@@ -152,7 +152,7 @@ void asspiz_text (VBlockP vb, FUNCLINE)
     SNPRINTF (s, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
 
     progress_newline(); 
-    fprintf (stderr, "%s %s: Error in %s:%u vb_position_in_file: %"PRIu64" vb_recon_size(expected)=%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
+    fprintf (stderr, "%s %s: ❌ %s:%u vb_position_in_file: %"PRIu64" vb_recon_size(expected)=%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
              str_time().s, LN_NAME, func, code_line,
              vb->vb_position_txt_file, vb->recon_size, 
              writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
@@ -257,25 +257,25 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
     bool i_am_r2 = is_fastq_pair_2(vb); // is this VB a pair-2 FASTQ VB (either in a FASTQ or SAM z_file)
 
     for_buf (uint32_t, header_offset, vb->z_section_headers) {
-        SectionHeaderCtxP header = (SectionHeaderCtxP)Bc(vb->z_data, *header_offset);
+        SectionHeaderCtxP h = (SectionHeaderCtxP)Bc(vb->z_data, *header_offset);
 
         bool is_local = HEADER_IS(LOCAL);
         bool is_b250  = HEADER_IS(B250);
         if (!is_b250 && !is_local) continue;
 
-        ContextP ctx = ctx_get_ctx (vb, header->dict_id); // gets the context (creating it if it doesn't already exist)
+        ContextP ctx = ctx_get_ctx (vb, h->dict_id); // gets the context (creating it if it doesn't already exist)
         
         // back comp: bug observed with E2:Z in v11.0.10: OPTION_E2_Z has LOCAL section despite being an alias to SAM_E2_Z
         if (IS_PIZ && ctx->is_ctx_alias/*PIZ-only field*/ && !VER(12)) { 
             ctx = CTX(ctx->did_i); 
-            header->dict_id = ctx->dict_id; 
+            h->dict_id = ctx->dict_id; 
         }
 
-        bool is_pair_section = i_am_r2 && (BGEN32 (header->vblock_i) != vb->vblock_i); // is this a section of R1 read into an R2 vb 
-        bool uncompress_to_pair = is_pair_section && (!header->flags.ctx.r1_pair_identical || IS_ZIP); // ZIP: always; PIZ: if pair-assisted
+        bool is_pair_section = i_am_r2 && (BGEN32 (h->vblock_i) != vb->vblock_i); // is this a section of R1 read into an R2 vb 
+        bool uncompress_to_pair = is_pair_section && (!h->flags.ctx.r1_pair_identical || IS_ZIP); // ZIP: always; PIZ: if pair-assisted
 
-        ASSERT (is_b250 || header->ltype < NUM_LTYPES, "in vb=%u ctx=%s.%s: ltype=%u >= NUM_LTYPES=%u. This can possibly be solved by upgrading Genozip to the latest version", 
-                vb->vblock_i, ctx->tag_name, is_local ? "local" : "b250", header->ltype, NUM_LTYPES);
+        ASSERT (is_b250 || h->ltype < NUM_LTYPES, "in vb=%u ctx=%s.%s: ltype=%u >= NUM_LTYPES=%u. This can possibly be solved by upgrading Genozip to the latest version", 
+                vb->vblock_i, ctx->tag_name, is_local ? "local" : "b250", h->ltype, NUM_LTYPES);
 
         // PIZ only: load normal section, or a pair-identical section of from the R1 VB
         if (!uncompress_to_pair) {
@@ -286,21 +286,21 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
                 continue;
                         
             if (is_local) {
-                ctx->lcodec = header->codec;
-                ctx->ltype  = header->ltype; 
-                ctx->nothing_char = !lt_max(ctx->ltype)          ? 0 // nothing char is only relevant for integer ltypes   
-                                  : header->nothing_char == 0xff ? 0 // no nothing char
-                                  : header->nothing_char == 0    ? 1 // use hard-coded logic up to (0 always, and only, appears in files up to 15.0.37)
-                                  :                                header->nothing_char;
+                ctx->lcodec = h->codec;
+                ctx->ltype  = h->ltype; 
+                ctx->nothing_char = !lt_max(ctx->ltype)     ? 0 // nothing char is only relevant for integer ltypes   
+                                  : h->nothing_char == 0xff ? 0 // no nothing char
+                                  : h->nothing_char == 0    ? 1 // use hard-coded logic up to (0 always, and only, appears in files up to 15.0.37)
+                                  :                           h->nothing_char;
             }
 
             else { // b250
                 // old logic - not clear if/why it is needed but not removed to avoid break back comp:
                 if (!VER(15) && !ctx->ltype) 
-                    ctx->ltype = header->ltype; 
+                    ctx->ltype = h->ltype; 
 
                 ctx->iterator    = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250), .prev_word_index = WORD_INDEX_NONE };
-                ctx->b250_size   = header->b250_size; // note: for files<=v13, this was always 0, ie B250_BYTES_4
+                ctx->b250_size   = h->b250_size; // note: for files<=v13, this was always 0, ie B250_BYTES_4
             }
         }
 
@@ -308,10 +308,10 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
         else {
             if (is_b250) {
                 ctx->pair_b250_iter = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250R1), .prev_word_index = WORD_INDEX_NONE };
-                ctx->pair_b250_size = header->b250_size;
+                ctx->pair_b250_size = h->b250_size;
             }
             else 
-                ctx->pair_ltype = header->ltype;
+                ctx->pair_ltype = h->ltype;
         }
 
         BufferP target_buf = uncompress_to_pair ? (is_local ? &ctx->localR1 : &ctx->b250R1)
@@ -322,7 +322,7 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
 
         START_TIMER;
 
-        zfile_uncompress_section (vb, header, target_buf, target_buf_name, BGEN32 (header->vblock_i), header->section_type); 
+        zfile_uncompress_section (vb, h, target_buf, target_buf_name, BGEN32 (h->vblock_i), h->section_type); 
 
         if (is_local && flag_is_δ (show_singletons, ctx->dict_id) && !is_pair_section) 
             dict_io_show_singletons (vb, ctx);
@@ -335,10 +335,10 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
 
         // BGEN32, transpose, fix len
         if (is_local && uncompress_to_pair) 
-            piz_adjust_one_local (ctx, &ctx->localR1, &ctx->pair_ltype, header->param, true);
+            piz_adjust_one_local (ctx, &ctx->localR1, &ctx->pair_ltype, h->param, true);
         
         else if (is_local && !uncompress_to_pair)  
-            piz_adjust_one_local (ctx, &ctx->local, &ctx->ltype, header->param, false);
+            piz_adjust_one_local (ctx, &ctx->local, &ctx->ltype, h->param, false);
 
         if (is_local && !is_pair_section) 
             ctx->local_uncompressed = true;
@@ -348,8 +348,8 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
 
         if (!uncompress_to_pair/*added this condition in v15*/ && 
             ((VER(14) && ctx->ltype != LT_BITMAP) ||                // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
-             (!VER(14) && header->flags.ctx.v13_copy_local_param))) // up to v13: copy if v13_copy_local_param is set
-            target_buf->prm8[0] = header->param;
+             (!VER(14) && h->flags.ctx.v13_copy_local_param))) // up to v13: copy if v13_copy_local_param is set
+            target_buf->prm8[0] = h->param;
 
         if (flag.debug_read_ctxs) 
             iprintf ("%c Uncompressed %s: %s[%u].len=%u into %s\n", sections_read_prefix (is_pair_section || vb->preprocessing), 
@@ -629,7 +629,7 @@ DataType piz_read_global_area (void)
             // load the IUPACs list of the reference (rare non-ACGT "bases")
             ref_iupacs_load();
 
-            // load the refhash, if we are compressing FASTA or FASTQ, or if user requested to see it
+            // load the refhash, if we are compressing FASTA/FASTQ/SAM/BAM, or if user requested to see it
             if (  (primary_command == ZIP && flag.aligner_available) ||
                   (flag.show_ref_hash && is_genocat) ||
                   ref_cache_is_populating())
@@ -669,16 +669,16 @@ SectionHeaderVbHeader piz_read_vb_header (VBlockP vb)
     ASSERT0 (0 == zfile_read_section (z_file, vb, vb->vblock_i, &vb->z_data, "z_data", SEC_VB_HEADER, sec),
              "Unexpectedly VB_HEADER section was skipped");
 
-    SectionHeaderVbHeader header = *B1ST (SectionHeaderVbHeader, vb->z_data);
+    SectionHeaderVbHeader h = *B1ST (SectionHeaderVbHeader, vb->z_data);
 
     // any of these might be overridden by callback
-    vb->flags            = header.flags.vb_header;
-    vb->recon_size       = BGEN32 (header.recon_size);   
-    vb->longest_line_len = BGEN32 (header.longest_line_len);
-    vb->longest_seq_len  = VER(15) ? BGEN32 (header.longest_seq_len) : (1 MB)/*long enough arbitrary*/;
-    vb->expected_digest  = header.digest;
+    vb->flags            = h.flags.vb_header;
+    vb->recon_size       = BGEN32 (h.recon_size);   
+    vb->longest_line_len = BGEN32 (h.longest_line_len);
+    vb->longest_seq_len  = VER(15) ? BGEN32 (h.longest_seq_len) : (1 MB)/*long enough arbitrary*/;
+    vb->expected_digest  = h.digest;
     vb->chrom_node_index = WORD_INDEX_NONE;
-    vb->lines.len        = VER(14) ? sec->num_lines : BGEN32 (header.v13_top_level_repeats);
+    vb->lines.len        = VER(14) ? sec->num_lines : BGEN32 (h.v13_top_level_repeats);
     vb->show_containers  = (flag_show_containers == SHOW_CONTAINERS_ALL_VBs || flag_show_containers == vb->vblock_i); // a per-VB value bc in SAM Load-Prim VBs =false vs normal VBs have the flag value (set in sam_piz_dispatch_one_load_sag_vb)
 
     if (txt_file) { // sometimes we don't have a txtfile, eg when genocat is used with some flags that emit other data, no the file
@@ -687,15 +687,15 @@ SectionHeaderVbHeader piz_read_vb_header (VBlockP vb)
     }
 
     // uncompress data_type-specific VB header payload. note: adjust length, BGEN etc in piz_after_vb_header
-    if (header.data_compressed_len)
+    if (h.data_compressed_len)
         zfile_uncompress_section (vb, B1ST(SectionHeaderVbHeader, vb->z_data), &vb->dt_specific_vb_header_payload, "dt_specific_vb_header_payload", 
                                   vb->vblock_i, SEC_VB_HEADER); 
 
     // in case of unbind, the vblock_i in the 2nd+ component will be different than that assigned by the dispatcher
     // because the dispatcher is re-initialized for every txt component
-    if (flag.unbind) vb->vblock_i = BGEN32 (header.vblock_i);
+    if (flag.unbind) vb->vblock_i = BGEN32 (h.vblock_i);
 
-    return header;
+    return h;
 }
 
 // main thread
@@ -703,11 +703,11 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 {
     START_TIMER; 
     
-    SectionHeaderVbHeader header = piz_read_vb_header (vb);
+    SectionHeaderVbHeader h = piz_read_vb_header (vb);
 
-    if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
+    if (flag_is_show_vblocks (TASK_PIZ)) 
         iprintf ("READING(id=%d) vb=%s num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u %s\n",
-                 vb->id, VB_NAME, vb->lines.len32, vb->recon_size, BGEN32 (header.z_data_bytes), vb->longest_line_len, 
+                 vb->id, VB_NAME, vb->lines.len32, vb->recon_size, BGEN32 (h.z_data_bytes), vb->longest_line_len, 
                  flag.preprocessing ? "preprocessing=true" : "");
 
     ctx_overlay_dictionaries_to_vb (VB); // overlay all dictionaries to the vb 
@@ -724,12 +724,12 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     Section sec = sections_vb_header (vb->vblock_i); 
     piz_read_all_ctxs (vb, &sec, false);
 
-    bool ok_to_compute = DT_FUNC_OPTIONAL (vb, piz_init_vb, true)(vb, &header);
+    bool ok_to_compute = DT_FUNC_OPTIONAL (vb, piz_init_vb, true)(vb, &h);
 
     vb->translation = dt_get_translation (vb); // must be after piz_init_vb, as in VCF we set vb->vb_chords there, needed for dt_get_translation
 
     if (txt_file) 
-        txt_file->txt_data_so_far_single_0 += BGEN32 (header.recon_size); // cumulative expected recon size without piz-side modifications
+        txt_file->txt_data_so_far_single_0 += BGEN32 (h.recon_size); // cumulative expected recon size without piz-side modifications
 
     if (ok_to_compute && for_reconstruction && flag.collect_coverage) 
         coverage_initialize (vb);
@@ -778,7 +778,7 @@ static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
                             !flag.genocat_no_reconstruct; 
 
     if (reconstruct) {
-        if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
+        if (flag_is_show_vblocks (TASK_PIZ)) 
             iprintf ("BEFORE_COMPUTE(id=%d) vb=%s/%u num_running_compute_threads(before)=%u\n", 
                      vb->id, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
 
@@ -866,15 +866,11 @@ Dispatcher piz_z_file_initialize (void)
         ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
 
     // note: if --unbind, we will recalculate the target progress in dispatcher_resume()
-    Dispatcher dispatcher = dispatcher_init (flag.reading_reference ? "piz-ref" : PIZ_TASK_NAME, // also referred to in dispatcher_recycle_vbs()
-                                             PREPROCESSING_TASK_NAME, 
-                                             POOL_MAIN,
+    Dispatcher dispatcher = dispatcher_init (flag.reading_reference ? TASK_PIZ_REF : TASK_PIZ, // also referred to in dispatcher_recycle_vbs()
                                              flag.xthreads ? 1 : global_max_threads, 0, 
-                                             flag.test && flag.no_writer_thread, // out-of-order if --test with no writer thread (note: SAM gencomp always have writer thread to do digest). 
-                                             flag.test,
+                                             (flag.test && flag.no_writer_thread) ? JOIN_OUT_OF_ORDER : JOIN_IN_ORDER, // out-of-order if --test with no writer thread (note: SAM gencomp always have writer thread to do digest). 
                                              flag.out_filename ? flag.out_filename : txtheader_get_txt_filename_from_section(COMP_MAIN).s, 
-                                             piz_target_progress (COMP_MAIN), 
-                                             0);
+                                             piz_target_progress (COMP_MAIN));
 
     return dispatcher;
 }
@@ -920,7 +916,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
             // case: we're done with this txt_file (either no header bc EOF, or TXT_HEADER belongs to the next txt_file when unbinding)
             if (z_file->piz_reading_list.next > z_file->piz_reading_list.len) {
-                if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
+                if (flag_is_show_vblocks (TASK_PIZ)) 
                     iprintf ("INPUT EXHAUSTED - no more SEC_VB_HEADER or SEC_TXT_HEADER for txt_file_i=%u\n", z_file->num_txts_so_far);                
 
                 dispatcher_set_no_data_available (dispatcher, false, DATA_EXHAUSTED);
@@ -946,7 +942,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
                 if (!writer_does_vb_need_recon (sec->vblock_i)) {
                     dispatcher_increment_progress ("vb_no_recon", 3); // skipped reading, reconstructing, writing
 
-                    if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
+                    if (flag_is_show_vblocks (TASK_PIZ)) 
                         iprintf ("SKIPPED vb=%s/%u\n", comp_name (sec->comp_i), sec->vblock_i); 
                     continue;
                 }
@@ -959,7 +955,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         // if the next thread (usually in order or VBs in recon_plan, but out-of-order if --test with no writer) is ready, handle the reconstructed VB
         VBlockP vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
         if (vb) {    
-            if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
+            if (flag_is_show_vblocks (TASK_PIZ)) 
                 iprintf ("AFTER_COMPUTE(task=piz id=%d) vb=%s/%u num_running_compute_threads(after)=%u\n", 
                          vb->id, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
             
@@ -980,7 +976,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     // make sure memory writes by compute threads are visible to the main thread
     __atomic_thread_fence (__ATOMIC_ACQUIRE); 
 
-    if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
+    if (flag_is_show_vblocks (TASK_PIZ)) 
         iprintf ("DISPATCHER is done for txt_file_i=%u: %s\n", z_file->num_txts_so_far, txt_file ? txt_file->name : "(no filename)");                
 
     dispatcher_calc_avg_compute_vbs (dispatcher);
@@ -1000,6 +996,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     if (piz_need_digest)
         digest_piz_verify_one_txt_file (z_file->num_txts_so_far - 1);
 
+    dispatcher_end_task (dispatcher); 
     progress_finalize_component_time ("Done", DIGEST_NONE);
         
     // --coverage and --idxstats: output results
@@ -1018,7 +1015,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     if (txt_file)
         DT_FUNC (txt_file, piz_finalize) (is_last_z_file);
 
-    if (flag_is_show_vblocks (PIZ_TASK_NAME)) 
+    if (flag_is_show_vblocks (TASK_PIZ)) 
         iprintf ("Finished PIZ of %s\n", txt_file ? txt_file->name : "(no filename)");                
 
     if (flag.make_bai)
@@ -1026,7 +1023,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
     // if we're loading an aux file for ZIP - destroy VBs as contexts are unions of ZIP and PIZ
     if (primary_command == ZIP && flag_loading_auxiliary)
-        vb_destroy_pool_vbs (POOL_MAIN, true);
+        vb_destroy_pool (POOL_MAIN, true);
         
     file_close (&txt_file); 
 

@@ -214,6 +214,8 @@ void qname_zip_initialize (void)
                 container_prepare_snip ((Container*)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qSTRi(qfs->con_snip,q));
             }
 
+            static rom err_both_fmt = "Bad definition of QNAME flavor=%s: item=%u is invalidly defined as both %s";
+             
             // in qname_flavors.h, we keep lists in the form of index lists, for maintenanbility. now
             // we convert them to a bitmap for ease of segging.
             for (unsigned i=0; qfs->integer_items[i] != -1; i++) {
@@ -222,11 +224,9 @@ void qname_zip_initialize (void)
                         "since qfs=%s item=%u has seperator[0] ∈ { CI0_FIXED_0_PAD, CI0_VAR_0_PAD }, expecting it to be numeric, not int", qfs->name, qfs->integer_items[i]);
                 qfs->is_integer[qfs->integer_items[i]] = true;
 
-                ASSERT (qfs->barcode_item != qfs->integer_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an integer_item and barcode_item",
-                        qfs->name, qfs->barcode_item);
+                ASSERT (qfs->barcode_item != qfs->integer_items[i], err_both_fmt, qfs->name, qfs->barcode_item, "an integer_item and barcode_item");
 
-                ASSERT (qfs->barcode_item2 != qfs->integer_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an integer_item and barcode_item2",
-                        qfs->name, qfs->barcode_item2);
+                ASSERT (qfs->barcode_item2 != qfs->integer_items[i], err_both_fmt, qfs->name, qfs->barcode_item2, "an integer_item and barcode_item2");
             }
 
             for (unsigned i=0; qfs->numeric_items[i] != -1; i++) {
@@ -235,101 +235,79 @@ void qname_zip_initialize (void)
                         "since qfs=%s item=%u has seperator[0] ∉ { CI0_FIXED_0_PAD, CI0_VAR_0_PAD }, expecting it to be int, not numeric", qfs->name, qfs->numeric_items[i]);
                 qfs->is_numeric[qfs->numeric_items[i]] = true;
 
-                ASSERT (!qfs->is_integer[qfs->numeric_items[i]], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an integer_item and numeric_item",
-                        qfs->name, qfs->numeric_items[i]);
+                ASSERT (!qfs->is_integer[qfs->numeric_items[i]], err_both_fmt, qfs->name, qfs->numeric_items[i], "an integer_item and numeric_item");
 
-                ASSERT (qfs->barcode_item != qfs->numeric_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an numeric_item and barcode_item",
-                        qfs->name, qfs->barcode_item);
+                ASSERT (qfs->barcode_item != qfs->numeric_items[i], err_both_fmt, qfs->name, qfs->barcode_item, "an numeric_item and barcode_item");
 
-                ASSERT (qfs->barcode_item2 != qfs->numeric_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an numeric_item and barcode_item2",
-                        qfs->name, qfs->barcode_item2);
+                ASSERT (qfs->barcode_item2 != qfs->numeric_items[i], err_both_fmt, qfs->name, qfs->barcode_item2, "an numeric_item and barcode_item2");
             }
 
             for (unsigned i=0; qfs->hex_items[i] != -1; i++) {
                 qfs->is_hex[qfs->hex_items[i]] = true;
 
                 ASSERT (qfs->is_integer[qfs->hex_items[i]] || qfs->is_numeric[qfs->hex_items[i]], 
-                        "Error in definition of QNAME flavor=%s: item=%u a hex_item must also be either an integer_item or a numeric_item",
+                        "Bad definition of QNAME flavor=%s: item=%u a hex_item must also be either an integer_item or a numeric_item",
                         qfs->name, qfs->hex_items[i]);
 
-                ASSERT (qfs->barcode_item != qfs->hex_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an hex_item and barcode_item",
-                        qfs->name, qfs->barcode_item);
+                ASSERT (qfs->barcode_item != qfs->hex_items[i], err_both_fmt, qfs->name, qfs->barcode_item, "an hex_item and barcode_item");
 
-                ASSERT (qfs->barcode_item2 != qfs->hex_items[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an hex_item and barcode_item2",
-                        qfs->name, qfs->barcode_item2);                        
+                ASSERT (qfs->barcode_item2 != qfs->hex_items[i], err_both_fmt, qfs->name, qfs->barcode_item2, "an hex_item and barcode_item2");                        
             }
 
             for (unsigned i=0; qfs->in_local[i] != -1; i++) {
                 qfs->is_in_local[qfs->in_local[i]] = true;
 
-                ASSERT (qfs->barcode_item != qfs->in_local[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both in_local and barcode_item",
-                        qfs->name, qfs->barcode_item);
+                ASSERT (qfs->barcode_item != qfs->in_local[i], err_both_fmt, qfs->name, qfs->barcode_item, "in_local and barcode_item");
 
-                ASSERT (qfs->barcode_item2 != qfs->in_local[i], "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both in_local and barcode_item2",
-                        qfs->name, qfs->barcode_item2);                        
+                ASSERT (qfs->barcode_item2 != qfs->in_local[i], err_both_fmt, qfs->name, qfs->barcode_item2, "in_local and barcode_item2");                        
             }
             
             if (qfs->barcode_item != -1) {
                 ASSERT (qfs->barcode_item != qfs->range_end_item1 && qfs->barcode_item != qfs->range_end_item2, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a range_item and barcode_item",
-                        qfs->name, qfs->barcode_item);
+                        err_both_fmt, qfs->name, qfs->barcode_item, "a range_item and barcode_item");
 
                 ASSERT (qfs->barcode_item != qfs->ordered_item1 && qfs->barcode_item != qfs->ordered_item2, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an ordered_item and barcode_item",
-                        qfs->name, qfs->barcode_item);
+                        err_both_fmt, qfs->name, qfs->barcode_item, "an ordered_item and barcode_item");
 
-                ASSERT (qfs->barcode_item != qfs->seq_len_item, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a seq_len_item and barcode_item",
-                        qfs->name, qfs->barcode_item);
+                ASSERT (qfs->barcode_item != qfs->seq_len_item, err_both_fmt, qfs->name, qfs->barcode_item, "a seq_len_item and barcode_item");
             }
 
             if (qfs->barcode_item2 != -1) {
                 ASSERT (qfs->barcode_item2 != qfs->range_end_item1 && qfs->barcode_item2 != qfs->range_end_item2, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a range_item and barcode_item2",
-                        qfs->name, qfs->barcode_item2);
+                        err_both_fmt, qfs->name, qfs->barcode_item2, "a range_item and barcode_item2");
 
                 ASSERT (qfs->barcode_item2 != qfs->ordered_item1 && qfs->barcode_item2 != qfs->ordered_item2, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an ordered_item and barcode_item2",
-                        qfs->name, qfs->barcode_item2);
+                        err_both_fmt, qfs->name, qfs->barcode_item2, "an ordered_item and barcode_item2");
 
-                ASSERT (qfs->barcode_item2 != qfs->seq_len_item, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a seq_len_item and barcode_item2",
-                        qfs->name, qfs->barcode_item2);
+                ASSERT (qfs->barcode_item2 != qfs->seq_len_item, err_both_fmt, qfs->name, qfs->barcode_item2, "a seq_len_item and barcode_item2");
             }
 
             ASSERT (qfs->ordered_item1 == -1 || qfs->is_integer[qfs->ordered_item1] || qfs->is_numeric[qfs->ordered_item1] || qfs->is_hex[qfs->ordered_item1], 
-                    "Error in definition of QNAME flavor=%s: item=%u is one of \"ordered_item\" - expecting it to be is_integer or is_numeric or is_hex", qfs->name, qfs->ordered_item1);
+                    "Bad definition of QNAME flavor=%s: item=%u is one of \"ordered_item\" - expecting it to be is_integer or is_numeric or is_hex", qfs->name, qfs->ordered_item1);
 
             if (qfs->callback_item != -1) {
                 ASSERT (qf_callbacks[qfs->id], "QNAME flavor=%s defines a callback, but the callback is not listed in qf_callbacks", qfs->name);
 
                 ASSERT (qfs->callback_item != qfs->range_end_item1 && qfs->callback_item != qfs->range_end_item2, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a range_item and callback_item",
-                        qfs->name, qfs->callback_item);
+                        err_both_fmt, qfs->name, qfs->callback_item, "a range_item and callback_item");
 
                 ASSERT (qfs->callback_item != qfs->ordered_item1 && qfs->callback_item != qfs->ordered_item2, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an ordered_item and callback_item",
-                        qfs->name, qfs->callback_item);
+                        err_both_fmt, qfs->name, qfs->callback_item, "an ordered_item and callback_item");
 
                 ASSERT (!qfs->is_in_local[qfs->callback_item], 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an is_in_local and callback_item",
-                        qfs->name, qfs->callback_item);
+                        err_both_fmt, qfs->name, qfs->callback_item, "an is_in_local and callback_item");
             }
 
             if (qfs->callback_item2 != -1) {
                 ASSERT (qf_callbacks[qfs->id], "QNAME flavor=%s defines a callback, but the callback is not listed in qf_callbacks", qfs->name);
 
                 ASSERT (qfs->callback_item2 != qfs->range_end_item1 && qfs->callback_item2 != qfs->range_end_item2, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both a range_item and callback_item2",
-                        qfs->name, qfs->callback_item2);
+                        err_both_fmt, qfs->name, qfs->callback_item2, "a range_item and callback_item2");
 
                 ASSERT (qfs->callback_item2 != qfs->ordered_item1 && qfs->callback_item2 != qfs->ordered_item2, 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an ordered_item and callback_item2",
-                        qfs->name, qfs->callback_item2);
+                        err_both_fmt, qfs->name, qfs->callback_item2, "an ordered_item and callback_item2");
 
-                ASSERT (!qfs->is_in_local[qfs->callback_item2], 
-                        "Error in definition of QNAME flavor=%s: item=%u is invalidly defined as both an is_in_local and callback_item2",
-                        qfs->name, qfs->callback_item2);
+                ASSERT (!qfs->is_in_local[qfs->callback_item2], err_both_fmt, qfs->name, qfs->callback_item2, "an is_in_local and callback_item2");
             }
         }
 
@@ -388,7 +366,7 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
     if (qfs->barcode_item2 != -1)
         ctx_by_item (qfs->barcode_item2)->no_stons = true;
 
-    if (qfs->seq_len_item != -1 && (VB_DT(SAM) || VB_DT(BAM))) 
+    if (qfs->seq_len_item != -1 && (VB_DT(BAM) || VB_DT(SAM))) 
         ctx_by_item (qfs->seq_len_item)->flags.store_per_line = true; // consumed by sam_cigar_special_CIGAR
 
     // when pairing, we cannot have singletons, bc a singleton in R1, when appearing in R2 will not
@@ -401,7 +379,7 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
 void qname_segconf_finalize (VBlockP vb)
 {
     // SAM: if we have a consensus flavor, it must QNAME2, expected by sam_piz_con_item_cb
-    if (VB_DT(SAM) || VB_DT(BAM)) {
+    if (VB_DT(BAM) || VB_DT(SAM)) {
         if (segconf.flav_prop[QNAME1].is_consensus && segconf.qname_flavor[QNAME2]) {
             SWAP (segconf.qname_flavor[QNAME1], segconf.qname_flavor[QNAME2]);
             SWAP (segconf.flav_prop[QNAME1],    segconf.flav_prop[QNAME2]);
@@ -630,6 +608,7 @@ QType qname_sam_get_qtype (STRp(qname))
 // attempt to seg according to the qf - return true if successful
 static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes)
 {
+    START_TIMER;
     QnameFlavor qfs = segconf.qname_flavor[q];
     ASSERTNOTNULL (qfs);
     
@@ -712,6 +691,7 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
         set_last_txtC (item_ctx, str, str_len); 
     }
 
+    COPY_TIMER(qname_seg_qf);
     return true;
 }
 
@@ -725,7 +705,7 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
 
     // copy if identical to previous (> 50% of lines in collated SAM/BAM) - small improvement in compression and compression time
     // no need in is_sorted, as already handled in sam_seg_QNAME with buddy 
-    if ((VB_DT(SAM) || VB_DT(BAM)) && !segconf.is_sorted && vb->line_i && is_same_last_txt (vb, qname_ctx, STRa(qname))) {
+    if ((VB_DT(BAM) || VB_DT(SAM)) && !segconf.is_sorted && vb->line_i && is_same_last_txt (vb, qname_ctx, STRa(qname))) {
         seg_by_ctx (vb, STRa(copy_qname), qname_ctx, qname_len + add_additional_bytes);
         goto done;
     }
@@ -741,7 +721,7 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
         success = qname_seg_qf (vb, q, STRa(qname), add_additional_bytes); // now with new flavor
 
     // in SAM/BAM, we allow two flavours - try the second one (eg the second could be a consensus read name)
-    if (!success && flavor && (VB_DT(SAM) || VB_DT(BAM)) && q == QNAME1) {
+    if (!success && flavor && (VB_DT(BAM) || VB_DT(SAM)) && q == QNAME1) {
         qname_seg (vb, QNAME2, STRa(qname), 0);
 
         seg_by_ctx (vb, STRa(snip_redirect_to_QNAME2), qname_ctx, add_additional_bytes);
@@ -755,7 +735,7 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
 
         if (segconf_running) {
             // case SAM/BAM: reset to QNAME1 to avoid a confusing stats display - as we failed to seg by QNAME1 and QNAME2 flavors - but this is the one and only QNAME field
-            if (VB_DT(SAM) || VB_DT(BAM)) q = QNAME1; 
+            if (VB_DT(BAM) || VB_DT(SAM)) q = QNAME1; 
 
             // collect the first 6 qnames / q2names, if flavor is unknown OR not successful in segging by flavor 
             if (segconf.n_1st_flav_qnames[q] < NUM_COLLECTED_WORDS) { // unrecognized flavor

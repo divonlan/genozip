@@ -64,7 +64,7 @@ static void bamass_zip_display_reasons (void)
 
     for (int i=0; i < BA_AFTER; i++) 
         if (z_file->deep_stats[i])
-            iprintf ("%-14.14s: %"PRIu64" (%.1f%%)\n", (rom[])BAMASS_STATS_NAMES[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)z_file->deep_stats[0]);
+            iprintf ("%-14.14s: %"PRIu64" (%.1f%%)\n", (rom[])BAMASS_STATS_NAMES[i], z_file->deep_stats[i], percent (z_file->deep_stats[i], z_file->deep_stats[0]));
 
     iprintf ("\nRAM consumption:\nbamass_index: %s\nbamass_ents: %s\nbamass_alns: %s\n",
              str_size (bamass_heads.len * sizeof (uint32_t)).s, 
@@ -178,7 +178,7 @@ static rom bamass_get_one_sam_aln (VBlockFASTQP vb, rom alignment, uint32_t rema
 
     str_split_by_tab (alignment, remaining_txt_len, 11, NULL, true, true, true); // also advances alignment to next line
 
-    if (IS_ASTERISKi(fld,RNAME) || str_is_1chari(fld,POS,'0') || IS_ASTERISKi(fld,CIGAR))
+    if (IS_ASTERISKi(fld,RNAME) || IS_CHAR0i(fld,POS) || IS_ASTERISKi(fld,CIGAR))
         UNUSABLE(BA_UNMAPPED);
     
     if (IS_ASTERISKi(fld,SEQ)) UNUSABLE(BA_NO_SEQ);
@@ -194,7 +194,7 @@ static rom bamass_get_one_sam_aln (VBlockFASTQP vb, rom alignment, uint32_t rema
 
     // handle segconf
     if (segconf_running) {
-        if (!str_is_1chari(fld,PNEXT,'0') || (sam_flags->is_last && !sam_flags->is_first)) 
+        if (!IS_CHAR0i(fld,PNEXT) || (sam_flags->is_last && !sam_flags->is_first)) 
             segconf.is_paired = true;
     }
 
@@ -352,11 +352,11 @@ static void bamass_segconf (void)
 
     SAVE_FLAGS;
     flag.show_reference = false;
-    flag.show_vblocks = NULL;
+    flag.show_vblocks = TASK_NONE;
 
     segconf.vb_size = 4 MB; // this is quite large, because we are generating cigar stats
 
-    VBlockP vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, "segconf");
+    VBlockP vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, TASK_SEGCONF);
 
     txtfile_read_vblock (vb);
 
@@ -578,8 +578,6 @@ void fastq_bamass_populate (void)
 
     ASSINP0 (*p_genome_nbases <= MAX_POS40, "Reference file too big: --bamass can handle reference files up to 1 trillion basepairs");
 
-    const rom task_name = "bam_assist";
-
     FileP save_txt_file = txt_file;
     txt_file = file_open_txt_read (flag.bam_assist);
     ASSERTNOTNULL (txt_file);
@@ -605,10 +603,9 @@ void fastq_bamass_populate (void)
 
     // step one: create ents
     { START_TIMER;
-    dispatcher_fan_out_task (task_name, 
+    dispatcher_fan_out_task (TASK_BAMASS_READ, 
                              save_txt_file->basename, // not txt_file-> bc it will be closed in a sec, while the progress component will continue to the main zip fan_out 
-                             0, "Inspecting BAM...",   
-                             false, false, flag.xthreads, 0, 5000, true,
+                             0, JOIN_IN_ORDER, flag.xthreads, 0, 5000,
                              bamass_read_one_vb, 
                              bamass_generate_bamass_ents, 
                              bamass_append_z_ents);
@@ -628,10 +625,9 @@ void fastq_bamass_populate (void)
 
     // step two: create linked lists
     { START_TIMER;
-    dispatcher_fan_out_task (task_name, 
+    dispatcher_fan_out_task (TASK_BAMASS_LINK, 
                              save_txt_file->basename, // not txt_file-> bc it will be closed in a sec, while the progress component will continue to the main zip fan_out 
-                             0, "Inspecting BAM...",   
-                             false, false, flag.xthreads, 0, 5000, true,
+                             0, JOIN_IN_ORDER, flag.xthreads, 0, 5000,
                              bamass_prepare_to_link_entries, 
                              bamass_link_entries_several_vbs, 
                              bamass_after_link_entries);
@@ -895,7 +891,7 @@ void fastq_bamass_zip_finalize (bool is_last_fastq)
         
         for (int i=BA_AFTER+1; i < NUM_DEEP_STATS_ZIP; i++) 
             if (z_file->deep_stats[i])
-                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], 100.0 * (double)z_file->deep_stats[i] / (double)z_file->deep_stats[NDP_FQ_READS]);
+                iprintf ("%-11.11s: %"PRIu64" (%.1f%%)\n", (rom[])DEEP_STATS_NAMES_ZIP[i], z_file->deep_stats[i], percent (z_file->deep_stats[i], z_file->deep_stats[NDP_FQ_READS]));
     }
 
     // if we have more fastq files with the same bamass - save cigar huffman as it is a different z_file

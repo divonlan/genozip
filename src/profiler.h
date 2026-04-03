@@ -36,7 +36,7 @@
         vcf_convert_likelihoods_to_phred, vcf_phred_optimize, optimize_float_3_sig_dig, \
         vcf_seg_samples, vcf_seg_copy_one_sample, vcf_seg_one_sample, vcf_seg_info_subfields, vcf_seg_finalize_INFO_fields, vcf_seg_analyze_copied_GT, \
         seg_all_data_lines, seg_get_next_line, seg_get_next_item, seg_initialize,\
-        ctx_clone, qname_seg, sam_cigar_seg, sam_seg_BWA_XA_Z, sam_seg_BWA_XA_pos, sam_sa_prim_finalize_ingest, \
+        ctx_clone, qname_seg, qname_seg_qf, sam_cigar_seg, sam_seg_BWA_XA_Z, sam_seg_BWA_XA_pos, sam_sa_prim_finalize_ingest, \
         sam_zip_prim_ingest_vb, sam_zip_prim_ingest_idle, sam_zip_prim_ingest_wait_for_seq_mutex, sam_zip_prim_ingest_wait_for_qual_mutex, sam_zip_prim_ingest_wait_for_qname_mutex, sam_zip_prim_ingest_wait_for_aln_mutex, \
         sam_zip_prim_ingest_vb_pack_seq, sam_zip_prim_ingest_vb_compress_qual, sam_zip_prim_ingest_vb_compress_qnames, sam_zip_prim_ingest_solo_data, sam_zip_prim_ingest_vb_create_index, \
         sam_seg_SEQ, sam_seg_verify_saggy_line_SEQ, sam_seg_SEQ_vs_ref, sam_seg_bisulfite_M, reconstruct_SEQ_copy_sag_prim, \
@@ -61,15 +61,16 @@
         ref_initialize_ranges,\
         fastq_special_set_deep, fastq_special_deep_copy_QNAME, fastq_special_deep_copy_SEQ, fastq_special_deep_copy_SEQ_by_ref, \
         fastq_special_deep_copy_QUAL, fastq_special_monochar_QUAL, \
-        refhash_calc_one_range, refhash_compress_one_vb, refhash_compress_refhash, refhash_load, refhash_uncompress_one_vb, refhash_read_one_vb,\
+        xrefhash_load, refhash_uncompress_one_vb, refhash_read_one_vb,\
+        refhash_p1_count, refhash_p2_decide_occupier, refhash_p3_occupy, refhash_p4_compress, refhash_p5_digest, \
         txtheader_zip_read_and_compress, txtheader_compress, txtheader_compress_one_fragment, txtheader_piz_read_and_reconstruct,\
-        digest, digest_txt_header, ref_make_calculate_digest, refhash_load_digest, ref_load_digest, refhash_compress_digest, \
+        digest, digest_txt_header, ref_make_calculate_digest, refhash_load_digest, ref_load_digest, refhash_make_refhash, \
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, \
-        aligner_best_match, aligner_get_word_from_seq, aligner_update_best, aligner_seq_to_bitmap, aligner_first_layer, aligner_additional_layers, \
-        refhash_generate_emoneg, ref_contigs_compress,\
+        aligner_best_match, aligner_update_best, aligner_seq_to_bitmap, aligner_tight_loop, \
+        refhash_revcomp_genome_do, ref_contigs_compress,\
         zip_write_global_area, zip_finalize, \
-        piz_read_global_area, ref_load_stored_reference, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
-        ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb,\
+        piz_read_global_area, ref_load_stored_reference, reference_re_digest_genome, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
+        ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb, buflist_free_vb, buflist_compact,\
         sam_load_groups_add_one_prim_vb, sam_load_groups_move_comp_to_zfile, sam_load_groups_move_comp_to_zfile_idle, \
         sam_load_groups_add_qnames, sam_load_groups_add_flags, sam_load_groups_add_seq, sam_load_groups_add_seq_pack, sam_load_groups_add_qual, sam_load_groups_add_cigars, \
         sam_load_groups_add_SA_alns, sam_load_groups_add_solo_data, sam_load_groups_add_grps, \
@@ -100,31 +101,29 @@ typedef struct {
 
 typedef struct timespec TimeSpecType;
 
+#define START_TIMER_ALWAYS TimeSpecType profiler_timer; clock_gettime(CLOCK_REALTIME, &profiler_timer); 
+#define CHECK_TIMER_ALWAYS ({ \
+    TimeSpecType tb; \
+    clock_gettime(CLOCK_REALTIME, &tb); \
+    ((uint64_t)((tb).tv_sec-(profiler_timer).tv_sec))*1000000000ULL + ((int64_t)(tb).tv_nsec-(int64_t)(profiler_timer).tv_nsec); \
+})
+
 #define HAS_SHOW_TIME(vb) (__builtin_expect(flag.show_time_comp_i != COMP_NONE/*fail fast*/, false) && /* __builtin_expect to reduce overhead in normal execution without --show-time */ \
                            (flag.show_time_comp_i == COMP_ALL || flag.show_time_comp_i == (vb)->comp_i))
 
 #define START_TIMER TimeSpecType profiler_timer; \
                     if (__builtin_expect(flag.show_time_comp_i != COMP_NONE, false)) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
 
-#define START_TIMER_ALWAYS TimeSpecType profiler_timer; clock_gettime(CLOCK_REALTIME, &profiler_timer); 
+#define CHECK_TIMER CHECK_TIMER_ALWAYS
 
-#define CHECK_TIMER ({ TimeSpecType tb; \
-                       clock_gettime(CLOCK_REALTIME, &tb); \
-                       ((uint64_t)((tb).tv_sec-(profiler_timer).tv_sec))*1000000000ULL + ((int64_t)(tb).tv_nsec-(int64_t)(profiler_timer).tv_nsec); })
-
-#define COPY_TIMER_FULL(vb,res,atomic) { /* str - print in case of specific show-time=<res> */ \
+extern void show_time_one (VBlockP vb, rom res, uint64_t delta);
+#define COPY_TIMER_FULL(vb,res,atomic) ({ /* str - print in case of specific show-time=<res> */ \
     if (HAS_SHOW_TIME(vb)) { \
         uint64_t delta = CHECK_TIMER; \
-        if (flag.show_time[0] && strstr (#res, flag.show_time)) { \
-            iprintf ("%s %s%s%s: %"PRIu64" μsec\n", #res, \
-                     ((vb)->profile.next_name    ? (vb)->profile.next_name : ""),\
-                     ((vb)->profile.next_subname ? "." : ""),\
-                     ((vb)->profile.next_subname ? (vb)->profile.next_subname : ""),\
-                     delta/1000);\
-            (vb)->profile.next_name = (vb)->profile.next_subname = NULL;\
-        }\
+        if (flag.show_time[0] && !strcmp (#res, flag.show_time)) \
+            show_time_one ((VBlockP)(vb), #res, delta);\
         if (atomic) { \
-            __atomic_fetch_add (&(vb)->profile.nanosecs.res, delta, __ATOMIC_RELAXED); \
+            add_relaxed ((vb)->profile.nanosecs.res, delta); \
             increment_relaxed ((vb)->profile.count.res); \
         } \
         else { \
@@ -132,7 +131,7 @@ typedef struct timespec TimeSpecType;
             (vb)->profile.count.res++; \
         } \
     } \
-}
+})
 
 #define COPY_TIMER(res) COPY_TIMER_FULL(vb, res, false)
 #define COPY_TIMER_EVB(res) ({ if (evb) COPY_TIMER_FULL(evb, res, true); })
@@ -160,12 +159,9 @@ typedef struct timespec TimeSpecType;
                            clock_gettime(CLOCK_REALTIME, &tb); \
                            iprintf ("%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
 
-extern void profiler_new_z_file (void);
-extern void profiler_initialize (void);
 extern void profiler_add (ConstVBlockP vb);
-extern rom profiler_print_short (const ProfilerRec *p);
+extern void profiler_initialize (void);
 extern void profiler_add_evb_and_print_report (void);
-
+extern void profiler_new_z_file (void);
 extern void profiler_set_avg_compute_vbs (float avg_compute_vbs);
 extern StrTextSuperLong profiler_get_avg_compute_vbs (char sep);
-

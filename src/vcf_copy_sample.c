@@ -98,7 +98,7 @@ unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *c
 
                 case FORMAT_DP: { // for vcf_seg_INFO_DP_by_FORMAT_DP
                     int64_t dp;
-                    if (!str_is_1chari(sf,i,'.') && str_get_int (STRi(sf,i), &dp)) {
+                    if (!IS_PERIODi(sf,i) && str_get_int (STRi(sf,i), &dp)) {
                         if (segconf.INFO_DP_method == BY_FORMAT_DP) 
                             CTX(INFO_DP)->dp.sum_format_dp += dp;
 
@@ -196,7 +196,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_SAMPLE)
                     break;
 
                 case FORMAT_DP: 
-                    if (!str_is_1chari (sf,i,'.')) {
+                    if (!IS_PERIODi(sf,i)) {
                         int64_t dp;
                         ASSPIZ (str_get_int (STRi(sf,i), &dp), "Expecting FORMAT/DP to be an integer: %.*s", STRfi(sf,i));
                         ctx_set_last_value (VB, item_ctx, dp);

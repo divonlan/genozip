@@ -63,7 +63,7 @@ static void sam_header_add_contig (STRp(contig_name), PosType64 LN, void *out_re
 
     // In case of REF_INTERNAL compression, and we have a header contigs - we calculate their GPOS
     Contig *prev = sam_hdr_contigs->contigs.len ? B(Contig, sam_hdr_contigs->contigs, sam_hdr_contigs->contigs.len-1) : NULL;
-    PosType64 gpos = (IS_REF_INTERNAL && prev) ? ROUNDUP64 (prev->gpos + prev->max_pos) : 0; // similar to ref_make_prepare_one_range_for_compress
+    PosType64 gpos = (IS_REF_INTERNAL && prev) ? ROUNDUP64 (prev->gpos + prev->max_pos) : 0; // similar to ref_make_prepare_ranges_for_compress
 
     // add to contigs. note: index is sam_hdr_contigs is by order of appearance in header, not the same as the reference
     BNXT (Contig, sam_hdr_contigs->contigs) = (Contig){ 
@@ -684,7 +684,7 @@ static inline void sam_header_add_PG (BufferP txtheader_buf)
 
     // the command line length is unbound, careful not to put it in a bufprintf
     bufprintf (txtheader_buf->vb, txtheader_buf, "@PG\tID:genozip-%u\tPN:genozip\tDS:%s\tVN:%s\tCL:", 
-               getpid(), GENOZIP_URL, code_version().s);
+               getpid(), GENOZIP_URL, STRver(code_version()).s);
     buf_append_string (txtheader_buf->vb, txtheader_buf, flags_command_line());
     buf_append_string (txtheader_buf->vb, txtheader_buf, "\n");
 }

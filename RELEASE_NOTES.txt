@@ -3,6 +3,18 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.81 3/4/2025
+- Improved references files for better FASTQ compression. With reference files created 
+(genozip --make-reference) with this release:
+  > FASTQs will compress ~20-30% faster, and about 3-5% better
+  > the reference file now supports references up to 1 Tbps (1 trillion bases). 
+  > Existing (older) reference files remain supported as well.
+  > RAM consumption during FASTQ compression is reduced by 800 MB
+- Switched default integrity verification from Adler32 to better XXH3. no change in MD5 availablability with --md5.
+- Added support for FASTQs with empty reads (seq_len=0)
+- Resolved activation issues in China
+- diagnostics: --submits-stats renamed to --telemetry, --debug-progress renamed --show-tasks, --debug-submit cancelled
+
 15.0.80 13/3/2026
 - Significant reduction in RAM consumption (up to 33% in some cases) in genounzip (inc. in the test phase at the end of compression)
 - Significantly faster compression of many Illumina FASTQ files due to better parallelization (IL4M)

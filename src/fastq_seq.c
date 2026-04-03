@@ -77,16 +77,24 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool deepe
         goto done;
     }
 
-    if (dl->monochar) {
-        SNIPi3 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, seq[0], seq_len_by_qname (vb, seq_len) ? 0 : seq_len);
+    if (!seq_len) { // empty reads supported since 15.0.81
+        seg_special1 (VB, FASTQ_SPECIAL_unaligned_SEQ, '*', bitmap_ctx, 0);        
+
+        vb->num_empty_read++;
+        goto done;
+    }
+
+    else if (dl->monochar) { // note: seq_len=0 is considered monochar
+        SNIPi3 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, seq[0], 
+                seq_len_by_qname (vb, seq_len) ? 0 : seq_len); 
         seg_by_ctx (VB, STRa(snip), bitmap_ctx, 0); 
         nonref_ctx->txt_len += seq_len; // account for the txt data in NONREF        
+        
         vb->num_monochar++;
-
         goto done;
     }
                            
-    bool aligner_ok = flag.aligner_available && !segconf.is_long_reads && !segconf_running;
+    bool aligner_ok = flag.aligner_available && seq_len && !segconf.is_long_reads && !segconf_running;
 
     // case: aligner - lookup from SQBITMAP
     if (aligner_ok && ((aln_res = aligner_seg_seq (VB, STRa(seq), (vb->R1_vb_i > 0), pair_gpos, pair_is_forward)))) {
@@ -350,15 +358,21 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
     else {
         if (flag.show_aligner) iprintf ("%s: unaligned\n", LN_NAME);
         
+        if (VER(15) && snip[0] == '*') { // empty reads supported csince 15.0.81
+            vb->seq_len = 0;
+            goto done;
+        }
+
         char monochar = 0;
         if (VER(15)) { 
             if (snip[0] != ' ') monochar = snip[0];
             STRinc (snip, 1);
         }
         
-        if (snip_len==1 && *snip=='0') 
+        if (IS_CHAR0(snip)) // '0' means "no seq_len_dict_id", it does not mean seq_len=0 
             vb->seq_len = reconstruct_peek_by_dict_id (vb, segconf.seq_len_dict_id, 0, 0).i; // peek, since length can come from either line1 or line3
-        else
+        
+        else 
             vb->seq_len = atoi(snip);
 
         // --qual-only: only set vb->seq_len without reconstructing
@@ -374,6 +388,6 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
         }
     }
 
-    return NO_NEW_VALUE;
+    done: return NO_NEW_VALUE;
 }
 

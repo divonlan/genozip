@@ -179,7 +179,7 @@ COMPRESS (codec_longr_compress)
     STRw(seq); STRw (qual); 
     bool is_rev;
 
-    __atomic_add_fetch (&z_file->longr_lines, vb->lines.len, __ATOMIC_RELAXED);
+    add_relaxed (z_file->longr_lines, vb->lines.len);
 
     // calculate state->base_chan - the channel for each base. reads are treated in their
     // original (FASTQ) orientation.

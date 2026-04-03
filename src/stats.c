@@ -101,9 +101,8 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
             (zctx && zctx->nodes.len > 1000000 && z_file->num_lines / zctx->nodes.len < 16)) { // more than 10% of num_lines (and at least 1M nodes)
              
             // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue
-            bufprintf (evb, &exceptions, "%s%s%%2C%s%%2C%s%%2C%u%%25", 
-                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS(s->name).s, url_esc_non_valid_charsS(s->type).s, 
-                       url_esc_non_valid_charsS (s->hash.s).s, (int)s->pc_hash_occupancy);
+            bufprintf (evb, &exceptions, "%s%s,%s,%s,%u%%", 
+                       need_sep++ ? ";" : "", s->name, s->type, s->hash.s, (int)s->pc_hash_occupancy);
             
             uint32_t n_words = zctx->nodes.len32; // note: this can be a low number despite pc_hash_occupancy being large - if words ended up as singletons
             WordIndex words[NUM_COLLECTED_WORDS] = { 0, 1, 2, n_words-3, n_words-2, n_words-1 }; // first three and last threewords in the the dictionary of this field
@@ -113,7 +112,7 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
                 char *s = str_snip;
                 s[64] = 0; // limit to 64 chars per snip
 
-                bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (s, strlen(s), ',', -127)).s); 
+                bufprintf (evb, &exceptions, ",%s", str_replace_letter (s, strlen(s), ',', -127)); 
             }
         }
     }
@@ -122,49 +121,54 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
     for (QType q=QNAME1; q < NUM_QTYPES; q++) {
         if (segconf.n_1st_flav_qnames[q]) {
 
-            bufprintf (evb, &exceptions, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", qtype_name(q));
+            bufprintf (evb, &exceptions, "%s%s,,", need_sep++ ? ";" : "", qtype_name(q));
 
             for (int i=0; i < segconf.n_1st_flav_qnames[q]; i++)
                 if (segconf.unk_flav_qnames[q][i][0])
-                    bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (stats_subs_seps_in_name (segconf.unk_flav_qnames[q][i]).s).s); 
+                    bufprintf (evb, &exceptions, ",%s", stats_subs_seps_in_name (segconf.unk_flav_qnames[q][i]).s); 
         }
     }
 
     for (int id_i=0; id_i < NUM_UNK_ID_CTXS && segconf.unk_ids_tag_name[id_i][0]; id_i++) {
-        bufprintf (evb, &exceptions, "%s%s%%2C%%2C%%2C", need_sep++ ? "%3B" : "", segconf.unk_ids_tag_name[id_i]);
+        bufprintf (evb, &exceptions, "%s%s,,,", need_sep++ ? ";" : "", segconf.unk_ids_tag_name[id_i]);
 
         for (int i=0; i < NUM_COLLECTED_WORDS && segconf.unk_ids[id_i][i][0]; i++)
-            bufprintf (evb, &exceptions, "%%2C%s", url_esc_non_valid_charsS (str_replace_letter (segconf.unk_ids[id_i][i], strlen(segconf.unk_ids[id_i][i]), ',', -127)).s); 
+            bufprintf (evb, &exceptions, ",%s", str_replace_letter (segconf.unk_ids[id_i][i], strlen(segconf.unk_ids[id_i][i]), ',', -127)); 
     }
 
     if (segconf.sam_malformed_XA[0]) 
-        bufprintf (evb, &exceptions, "%sBAD_XA%%2C%s", (need_sep++ ? "%3B" : ""), url_esc_non_valid_charsS (str_replace_letter (segconf.sam_malformed_XA, strlen(segconf.sam_malformed_XA),  ',', -127)).s); 
+        bufprintf (evb, &exceptions, "%sBAD_XA,%s", (need_sep++ ? ";" : ""), str_replace_letter (segconf.sam_malformed_XA, strlen(segconf.sam_malformed_XA),  ',', -127)); 
 }
 
 // stats of contexts and sections contribution to Z
 static void stats_prepare_internals (StatsByLine *sbl, unsigned num_stats, uint64_t all_z_size)
 {
+    #define MAX_INTERNALS 128 
     if (!all_z_size) return;
     
     int need_sep = 0;
 
-    for (StatsByLine *after=sbl + num_stats; sbl < after; sbl++) 
+    // note: sbl is sorted by z_size
+    int count = 0;
+    for (StatsByLine *after=sbl + num_stats; sbl < after && count < MAX_INTERNALS; sbl++) 
         if (sbl->z_size) {
-            bufprintf (evb, &internals, "%s%s%%2C%s%%2C%.1f%%25%%2C", 
-                       need_sep++ ? "%3B" : "", url_esc_non_valid_charsS (stats_subs_seps_in_name (sbl->name).s).s, url_esc_non_valid_charsS(sbl->type).s, sbl->pc_of_z);
+            bufprintf (evb, &internals, "%s%s,%s,%.1f%%,", 
+                       need_sep++ ? ";" : "", stats_subs_seps_in_name (sbl->name).s, sbl->type, sbl->pc_of_z);
 
             if (sbl->my_did_i != DID_NONE) {
                 ContextP zctx = ZCTX(sbl->my_did_i);
 
-                bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C",
-                           url_esc_non_valid_charsS(sbl->lcodec).s, 100.0 * (double)zctx->local.count / (double)all_z_size);  // local
+                bufprintf (evb, &internals, "%s,%.1f%%,",
+                           sbl->lcodec, percent (zctx->local.count, all_z_size));  // local
 
-                bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C",
-                           url_esc_non_valid_charsS(sbl->bcodec).s, 100.0 * (double)zctx->b250.count  / (double)all_z_size);  // b250
+                bufprintf (evb, &internals, "%s,%.1f%%,",
+                           sbl->bcodec, percent (zctx->b250.count, all_z_size));  // b250
 
-                bufprintf (evb, &internals, "%s%%2C%.1f%%25%%2C%u%%2C",
-                           url_esc_non_valid_charsS(sbl->dcodec).s, 100.0 * (double)zctx->dict.count  / (double)all_z_size, zctx->nodes.len32); // dict
+                bufprintf (evb, &internals, "%s,%.1f%%,%u,",
+                           sbl->dcodec, percent (zctx->dict.count, all_z_size), zctx->nodes.len32); // dict
             }
+
+            count++; // count only those with z_size
         }
 }
 
@@ -247,11 +251,11 @@ static void stats_output_file_metadata (void)
                    (flag.deep && flag.pair)?" (deep & paired)" : flag.deep?" (deep)" : flag.pair?" (paired)" : "", 
                    (int)z_file->bound_txt_names.len, z_file->bound_txt_names.data);
     
-    else if (IS_REF_EXTERNAL || IS_REF_EXT_STORE) 
-        bufprintf (evb, &stats, "Reference: %s %s=%s ref_genozip_version=%u\n", 
-                   ref_get_filename(),  ref_get_digest_name(), 
-                   digest_display_(ref_get_genome_digest(), ref_is_digest_adler()).s, 
-                   ref_get_genozip_version());
+    if (IS_REF_EXTERNAL || IS_REF_EXT_STORE) 
+        bufprintf (evb, &stats, "Reference: %s %s=%s ref_genozip_ver=%s\n", 
+                   ref_get_filename(),  digest_alg_name (ref_get_genome_digest_alg()), 
+                   digest_display_(ref_get_genome_digest(), ref_get_genome_digest_alg()).s, 
+                   STRver(ref_get_genozip_ver()).s);
 
     uint32_t num_used_ctxs=0;
     for_zctx_that (zctx->nodes.len || zctx->txt_len) num_used_ctxs++;
@@ -276,7 +280,7 @@ static void stats_output_file_metadata (void)
             for (CompIType comp_i=SAM_COMP_FQ00; comp_i < z_file->num_components; comp_i++)
                 num_fq_reads += z_file->comp_num_lines[comp_i];
 
-            double deep_pc = z_file->deep_stats[NDP_FQ_READS] ? (double)100.0 * (double)(z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM]) / (double)z_file->deep_stats[NDP_FQ_READS] : 0;
+            double deep_pc = percent (z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM], z_file->deep_stats[NDP_FQ_READS]);
 
             if (z_has_gencomp) 
                 bufprintf (evb, &stats, "%s %ss: %s (in Prim VBs: %s in Depn VBs: %s)\n", 
@@ -345,7 +349,7 @@ static void stats_output_file_metadata (void)
 
             if (ZCTX(SAM_QUAL)->qual_codec == CODEC_DOMQ && z_file->num_lines)
                 bufprintf (evb, &features, "QUAL=DOMQ%s (DIVR:%.f%%);", segconf.sam_has_xcons ? ".xcons" : "",
-                           100.0 * (double)z_file->divr_lines / (double)z_file->num_lines);                
+                           percent (z_file->divr_lines, z_file->num_lines));                
             else
                 bufprintf (evb, &features, "QUAL=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
 
@@ -375,12 +379,12 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "RG_method=%s;", RG_method_name (segconf.RG_method));
 
             if (num_alignments) {
-                double mate_line_pc   = 100.0 * (double)z_file->mate_line_count     / (double)num_alignments;
-                double saggy_near_pc  = 100.0 * (double)z_file->saggy_near_count    / (double)num_alignments;
-                double depn_far_pc    = 100.0 * (double)z_file->depn_far_count      / (double)num_alignments;
-                double secondary_pc   = 100.0 * (double)z_file->secondary_count     / (double)num_alignments;
-                double supp_pc        = 100.0 * (double)z_file->supplementary_count / (double)num_alignments;
-                double far_of_depn_pc = z_file->comp_num_lines[SAM_COMP_DEPN] ? (100.0 * (double)z_file->depn_far_count / (double)z_file->comp_num_lines[SAM_COMP_DEPN]) : 0;
+                double mate_line_pc   = percent (z_file->mate_line_count, num_alignments);
+                double saggy_near_pc  = percent (z_file->saggy_near_count, num_alignments);
+                double depn_far_pc    = percent (z_file->depn_far_count, num_alignments);
+                double secondary_pc   = percent (z_file->secondary_count, num_alignments);
+                double supp_pc        = percent (z_file->supplementary_count, num_alignments);
+                double far_of_depn_pc = percent (z_file->depn_far_count, z_file->comp_num_lines[SAM_COMP_DEPN]);
                 #define PREC(f) (((f) && ((f)<10 || (f)>95)) ? (1 + ((f)<1 || (f)>99.5)) : 0)
                 FEATURE(true, "Buddying: sag_type=%s mate=%.*f%% saggy_near=%.*f%% depn_far=%.*f%% depn_far/num_DEPN=%.*f%% sec=%.*f%% supp=%.*f%%",
                         "sag_type=%s;mate=%.*f%%;saggy_near=%.*f%%;depn_far=%.*f%%;depn_far/num_DEPN=%.*f%%;secondary=%.*f%%;suppl=%.*f%%",
@@ -401,19 +405,19 @@ static void stats_output_file_metadata (void)
 
                 REPORT_QNAME;
                 
-                bufprintf (evb, &features, "tlen_pred=%.1f%%;", 100.0 * (double)z_file->sam_num_tlen_pred / (double)num_alignments);
+                bufprintf (evb, &features, "tlen_pred=%.1f%%;", percent (z_file->sam_num_tlen_pred, num_alignments));
 
                 if (z_file->sam_num_seq_by_aln) // seg SEQ vs internal or external reference according to SAM alignment 
-                    bufprintf (evb, &features, "seq_by_sam_aln=%.1f%%;", 100.0 * (double)z_file->sam_num_seq_by_aln / (double)num_alignments);
+                    bufprintf (evb, &features, "seq_by_sam_aln=%.1f%%;", percent (z_file->sam_num_seq_by_aln, num_alignments));
 
                 if (z_file->sam_num_by_prim)    // seg SEQ vs PRIM VB or vs saggy line
-                    bufprintf (evb, &features, "seq_by_prim=%.1f%%;", 100.0 * (double)z_file->sam_num_by_prim / (double)num_alignments); 
+                    bufprintf (evb, &features, "seq_by_prim=%.1f%%;", percent (z_file->sam_num_by_prim, num_alignments)); 
 
                 if (z_file->sam_num_aligned)    // seg SEQ vs external reference using our aligner
-                    bufprintf (evb, &features, "seq_by_aligner (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->sam_num_aligned / (double)num_alignments, 100.0 * (double)z_file->sam_num_perfect_matches / (double)num_alignments); // report even if num_aligned=0 (i.e. wrong reference)           
+                    bufprintf (evb, &features, "seq_by_aligner (perfect)=%.1f%% (%.1f%%);", percent (z_file->sam_num_aligned, num_alignments), percent (z_file->sam_num_perfect_matches, num_alignments)); // report even if num_aligned=0 (i.e. wrong reference)           
 
                 if (z_file->sam_num_verbatim)   // seg SEQ by storing verbatim
-                    bufprintf (evb, &features, "seq_by_verbatim=%.1f%%;", 100.0 * (double)z_file->sam_num_verbatim / (double)num_alignments);
+                    bufprintf (evb, &features, "seq_by_verbatim=%.1f%%;", percent (z_file->sam_num_verbatim, num_alignments));
 
                 if (flag.deep && (z_file->deep_stats[NDP_SAM_DUP] || z_file->deep_stats[NDP_SAM_DUP_TRIM]))
                     bufprintf (evb, &features, "sam_alns_deep_hash_contn=%"PRIu64";", z_file->deep_stats[NDP_SAM_DUP] + z_file->deep_stats[NDP_SAM_DUP_TRIM]);
@@ -421,13 +425,13 @@ static void stats_output_file_metadata (void)
 
             if (num_fq_reads) {
                 if (flag.deep) 
-                    bufprintf (evb, &features, "fq_deep=%.1f%%;", 100.0 * (double)(z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM]) / (double)num_fq_reads);
+                    bufprintf (evb, &features, "fq_deep=%.1f%%;", percent (z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM], num_fq_reads));
 
                 if (z_file->fq_num_aligned)
-                    bufprintf (evb, &features, "fq_aligner_ok (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->fq_num_aligned / (double)num_fq_reads, 100.0 * (double)z_file->fq_num_perfect_matches / (double)num_fq_reads); // report even if num_aligned=0 (i.e. wrong reference)           
+                    bufprintf (evb, &features, "fq_aligner_ok (perfect)=%.1f%% (%.1f%%);", percent (z_file->fq_num_aligned, num_fq_reads), percent (z_file->fq_num_perfect_matches, num_fq_reads)); // report even if num_aligned=0 (i.e. wrong reference)           
 
                 if (z_file->fq_num_verbatim)
-                    bufprintf (evb, &features, "fq_verbatim=%.1f%%;", 100.0 * (double)z_file->fq_num_verbatim / (double)num_fq_reads);
+                    bufprintf (evb, &features, "fq_verbatim=%.1f%%;", percent (z_file->fq_num_verbatim, num_fq_reads));
             }
 
             bufprintf (evb, &features, "tech=%s;", tech_name (segconf.tech));
@@ -450,7 +454,7 @@ static void stats_output_file_metadata (void)
             FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
             FEATURE0 (segconf.is_interleaved, "Interleaved", "interleaved=True");
 
-            double bamass_pc = z_file->deep_stats[NDP_FQ_READS] ? (double)100.0 * (double)(z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM]) / (double)z_file->deep_stats[NDP_FQ_READS] : 0;
+            double bamass_pc = percent (z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM], z_file->deep_stats[NDP_FQ_READS]);
 
             if (flag.bam_assist) {
                 bufprintf (evb, &stats, "Bamass: fq_reads_deeped=%.1f%% qtype=%s trim=%s\n", 
@@ -470,18 +474,21 @@ static void stats_output_file_metadata (void)
             if (bamass_pc) 
                 bufprintf (evb, &features, "bamass=%.1f%%;", bamass_pc);
 
-            if (z_file->fq_num_aligned && z_file->num_lines) 
-                bufprintf (evb, &features, "aligner_ok (perfect)=%.1f%% (%.1f%%);", 100.0 * (double)z_file->fq_num_aligned / (double)z_file->num_lines, 100.0 * (double)z_file->fq_num_perfect_matches / (double)z_file->num_lines); // report even if num_aligned=0 (i.e. wrong reference)           
+            if (z_file->fq_num_aligned) 
+                bufprintf (evb, &features, "aligner_ok (perfect)=%.1f%% (%.1f%%);", percent (z_file->fq_num_aligned, z_file->num_lines), percent (z_file->fq_num_perfect_matches, z_file->num_lines)); // report even if num_aligned=0 (i.e. wrong reference)           
 
-            if (z_file->fq_num_monochar && z_file->num_lines) 
-                bufprintf (evb, &features, "monochar=%.1f%%;", 100.0 * (double)z_file->fq_num_monochar / (double)z_file->num_lines);
+            if (z_file->fq_num_monochar) 
+                bufprintf (evb, &features, "monochar=%.1f%%;", percent (z_file->fq_num_monochar, z_file->num_lines));
 
-            if (z_file->fq_num_verbatim && z_file->num_lines)
-                bufprintf (evb, &features, "verbatim=%.1f%%;", 100.0 * (double)z_file->fq_num_verbatim / (double)z_file->num_lines);
+            if (z_file->fq_num_empty_read) 
+                bufprintf (evb, &features, "empty_read=%.1f%%;", percent (z_file->fq_num_empty_read, z_file->num_lines));
+
+            if (z_file->fq_num_verbatim)
+                bufprintf (evb, &features, "verbatim=%.1f%%;", percent (z_file->fq_num_verbatim, z_file->num_lines));
 
             if (!FAF) {
                 if (ZCTX(SAM_QUAL)->qual_codec == CODEC_DOMQ && z_file->num_lines)
-                    bufprintf (evb, &features, "QUAL=DOMQ (DIVR:%.f%%);", 100.0 * (double)z_file->divr_lines / (double)z_file->num_lines);                
+                    bufprintf (evb, &features, "QUAL=DOMQ (DIVR:%.f%%);", percent (z_file->divr_lines, z_file->num_lines));                
                 else
                     bufprintf (evb, &features, "QUAL=%s;", !segconf.nontrivial_qual ? "Trivial" : ZCTX(SAM_QUAL)->qual_codec != CODEC_UNKNOWN ? codec_name (ZCTX(SAM_QUAL)->qual_codec) : codec_name (ZCTX(SAM_QUAL)->lcodec));
                 
@@ -507,13 +514,13 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "ploidy=%u;", z_file->max_ploidy);
 
             if (z_file->mate_line_count && z_file->num_lines) {
-                double pc = 100.0 * (double)z_file->mate_line_count  / (double)z_file->num_lines;
+                double pc = percent (z_file->mate_line_count, z_file->num_lines);
                 bufprintf (evb, &stats, "Mated: %.*f%%   ", PREC(pc), pc); //  no newline
                 bufprintf (evb, &features, "mated=%.*f%%;", PREC(pc), pc);
             }
 
             if (z_file->vcf_num_samples_copied && z_file->num_lines) {
-                double pc = 100.0 * (double)z_file->vcf_num_samples_copied  / (double)(z_file->num_lines * vcf_header_get_num_samples());
+                double pc = percent (z_file->vcf_num_samples_copied, z_file->num_lines * vcf_header_get_num_samples());
                 bufprintf (evb, &features, "samples_copied=%.*f%%;", PREC(pc), pc);
             }
             else
@@ -602,7 +609,7 @@ static void stats_output_file_metadata (void)
         bufprintf (evb, &stats, "Fields optimized: %s\n", segconf_get_optimizations().s);
 
     bufprintf (evb, &stats, "Genozip version: %s %s\nDate compressed: %s\n", 
-               code_version().s, get_distribution(), str_time().s);
+               STRver(code_version()).s, get_distribution(), str_time().s);
 
     bufprint0 (evb, &stats, "Command line: ");
     buf_append_string (evb, &stats, flags_command_line()); // careful not to use bufprintf with command_line as it can exceed the maximum length in bufprintf
@@ -781,11 +788,11 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 void stats_generate (void) // specific section, or COMP_NONE if for the entire file
 {
     // initial allocation
-    buf_alloc (evb, &stats,      0, 10000,  char, 1, "stats");
-    buf_alloc (evb, &STATS,      0, 10000,  char, 1, "stats");
-    buf_alloc (evb, &features,   0, 1000,   char, 1, "stats");
-    buf_alloc (evb, &exceptions, 0, 1000,   char, 1, "stats");
-    buf_alloc (evb, &internals,  0, 1000,   char, 1, "stats");
+    buf_alloc (evb, &stats,      0, 8 KB, char, 1, "stats");
+    buf_alloc (evb, &STATS,      0, 8 KB, char, 1, "stats");
+    buf_alloc (evb, &features,   0, 1 KB, char, 1, "stats");
+    buf_alloc (evb, &exceptions, 0, 1 KB, char, 1, "stats");
+    buf_alloc (evb, &internals,  0, 8 KB, char, 1, "stats");
 
     if (flag.show_stats_comp_i == COMP_NONE) {
         stats_output_file_metadata();
@@ -817,8 +824,8 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
                       :                                                                                               "Other"; // note: some contexts appear as "Other" in --stats, but in --STATS their parent is themself, not "Other"
         s->my_did_i   = s->st_did_i = DID_NONE;
         s->did_i.s[0] = s->words.s[0] = s->hash.s[0] = s->uncomp_dict.s[0] = s->comp_dict.s[0] = '-';
-        s->pc_of_txt  = txt_size ? 100.0 * (float)s->txt_len / (float)txt_size : 0;
-        s->pc_of_z    = z_size   ? 100.0 * (float)s->z_size  / (float)z_size   : 0;
+        s->pc_of_txt  = percent (s->txt_len, txt_size);
+        s->pc_of_z    = percent (s->z_size, z_size);
         strcpy (s->name, ST_NAME (st)); 
 
         all_z_size     += s->z_size;
@@ -859,27 +866,27 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         // note: each VB contributes local.len contains its b250.count if it has it, and local_num_len if not 
         float n_words = zctx->word_list.count; // fields segged of this type in the file : set in ctx_update_stats()
 
-        s->my_did_i             = zctx->did_i;
-        s->st_did_i             = zctx->st_did_i;
-        s->did_i                = str_int_commas ((uint64_t)zctx->did_i); 
-        s->words                = str_uint_commas_limit (n_words, 99999);
-        s->dict_words           = str_uint_commas_limit (MIN_(zctx->nodes.len, n_words), 99999); // MIN_ is a workaround - not sure why nodes.len sometimes exceeds the dictionary words on the file (eg in TOPLEVEL)
-        s->local_words          = str_uint_commas_limit (zctx->local_num_words, 99999);
-        s->failed_ston_words    = str_uint_commas_limit (zctx->num_failed_singletons, 99999);
-        s->pc_hash_occupancy    = !zctx->global_hash.len32 ? 0 : 100.0 * (float)zctx->nodes.len     / (float)zctx->global_hash.len32;
-        s->pc_ston_hash_occup   = !zctx->global_hash.len32 ? 0 : 100.0 * (float)zctx->ston_ents.len / (float)zctx->global_hash.len32;
-        s->hash                 = str_size (zctx->global_hash.len32);
-        s->uncomp_dict          = str_size (zctx->dict.len);
-        s->comp_dict            = str_size (zctx->dict.count);
-        s->comp_b250            = str_size (zctx->b250.count);
-        s->uncomp_local         = str_size (zctx->local.len); // set in ctx_update_stats()
-        s->comp_local           = str_size (zctx->local.count);
-        s->pc_of_txt            = txt_size ? 100.0 * (float)s->txt_len / (float)txt_size : 0;
-        s->pc_of_z              = z_size   ? 100.0 * (float)s->z_size  / (float)z_size   : 0;
-        s->dcodec               = codec_name (zctx->dcodec);
-        s->bcodec               = codec_name (zctx->bcodec);
-        s->lcodec               = codec_name (zctx->lcodec_non_inherited ? zctx->lcodec_non_inherited : zctx->lcodec);
-        s->is_dict_alias        = (zctx->did_i != zctx->dict_did_i);
+        s->my_did_i           = zctx->did_i;
+        s->st_did_i           = zctx->st_did_i;
+        s->did_i              = str_int_commas ((uint64_t)zctx->did_i); 
+        s->words              = str_uint_commas_limit (n_words, 99999);
+        s->dict_words         = str_uint_commas_limit (MIN_(zctx->nodes.len, n_words), 99999); // MIN_ is a workaround - not sure why nodes.len sometimes exceeds the dictionary words on the file (eg in TOPLEVEL)
+        s->local_words        = str_uint_commas_limit (zctx->local_num_words, 99999);
+        s->failed_ston_words  = str_uint_commas_limit (zctx->num_failed_singletons, 99999);
+        s->pc_hash_occupancy  = percent (zctx->nodes.len, zctx->global_hash.len32);
+        s->pc_ston_hash_occup = percent (zctx->ston_ents.len, zctx->global_hash.len32);
+        s->hash               = str_size (zctx->global_hash.len32);
+        s->uncomp_dict        = str_size (zctx->dict.len);
+        s->comp_dict          = str_size (zctx->dict.count);
+        s->comp_b250          = str_size (zctx->b250.count);
+        s->uncomp_local       = str_size (zctx->local.len); // set in ctx_update_stats()
+        s->comp_local         = str_size (zctx->local.count);
+        s->pc_of_txt          = percent (s->txt_len, txt_size);
+        s->pc_of_z            = percent (s->z_size, z_size);
+        s->dcodec             = codec_name (zctx->dcodec);
+        s->bcodec             = codec_name (zctx->bcodec);
+        s->lcodec             = codec_name (zctx->lcodec_non_inherited ? zctx->lcodec_non_inherited : zctx->lcodec);
+        s->is_dict_alias      = (zctx->did_i != zctx->dict_did_i);
         
         s++; // increment only if it has some data, otherwise already continued
     }
@@ -890,9 +897,9 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // (the original txt data size) and not all_txt_size (size after ZIP modifications like --optimize). 
     // Therefore, in case of ZIP-modified txt, the sum of the (modified) fields in the TXT column will NOT equal the
     // TOTAL in the TXT column. That's ok.
-    all_comp_ratio       = (float)txt_size_0 /* without modifications */ / (float)all_z_size;
-    float all_pc_of_txt  = txt_size ? 100.0 * (float)all_txt_len / (float)txt_size : 0 /* with modifications */;
-    float all_pc_of_z    = z_size   ? 100.0 * (float)all_z_size  / (float)z_size   : 0;
+    all_comp_ratio      = (float)txt_size_0 /* without modifications */ / (float)all_z_size;
+    float all_pc_of_txt = percent (all_txt_len, txt_size/* with modifications */);
+    float all_pc_of_z   = percent (all_z_size, z_size);
 
     // long form stats from --STATS    
     qsort (sbl, sbl_buf.len32, sizeof (sbl[0]), stats_sort_by_z_size);  // sort by compressed size

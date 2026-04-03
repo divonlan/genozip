@@ -8,6 +8,7 @@
 
 #include <time.h>
 #include <math.h>
+#include <stdalign.h>
 #include "genozip.h"
 #include "strings.h"
 #include "context.h"
@@ -18,11 +19,13 @@
 #include <windows.h>
 #endif
 
-const bool is_printable[256] = { ['\t']=1, ['\n']=1, ['\r']=1, [32 ... 126]=1 };
+alignas(64) const bool is_printable[256] = { ['\t']=1, ['\n']=1, ['\r']=1, [32 ... 126]=1 };
 
 // valid characters in a FASTQ sequence
-const bool is_fastq_seq[256] = { ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, ['N']=true, 
-                                 ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true };
+alignas(64) const bool is_fastq_seq[256] = { 
+    ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, ['N']=true, 
+    ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true 
+};
 
 const uint64_t p10[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
 
@@ -847,7 +850,53 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
             }
         }
 
-        switch (sep) {
+        // common two cases with if, the special cases with switch (for speed)
+        if (!sep) long_var_0_pad: {
+            // case: no separator and next item has no prefix - goes to end of string
+            if (!(px < after_px && IS_PRINTABLE(*px))) { // make sure we don't have an implicit separator - the prefix of the next item
+                *item_lens = after_str - str;
+                *items = str; 
+                str = after_str;
+            }
+
+            // case: terminated by prefix of next item
+            else {
+                rom c; for (c = px; *c != CON_PX_SEP; c++);
+                uint32_t next_px_len = c - px;
+                
+                *items = str;
+
+                // increment str to the first character of the next item's prefix 
+                while (str < after_str-next_px_len && memcmp (str, px, next_px_len)) str++; 
+
+                ASSSPLIT (str < after_str-next_px_len || !memcmp (str, px, next_px_len), 
+                            "item_i=%u reached end of string without finding separator '%c' in string \"%.*s\"", 
+                            item_i, sep, str_len, save_str);
+
+                *item_lens = str - *items;
+            }
+        }
+
+        else if (IS_PRINTABLE(sep)) {
+            char sep1 = con->items[item_i].separator[1];
+            if (!IS_PRINTABLE (sep1)) sep1 = 0;
+            
+            *items = str;
+
+            if (!sep1) 
+                while (str < after_str && *str != sep) str++; 
+            else 
+                while (str < (after_str-1) && (str[0] != sep || str[1] != sep1)) str++; 
+
+            ASSSPLIT (str < after_str, "item_i=%u reached end of string without finding separator '%c' in string \"%.*s\"", 
+                        item_i, sep, str_len, save_str);
+
+            *item_lens = str - *items;
+            str += 1 + (sep1 != 0); // skip seperator
+        }
+
+        // common cases with if, the special cases with switch (for speed)
+        else switch (sep) {
 
             case CI0_SKIP: 
             case CI0_INVISIBLE:
@@ -888,51 +937,8 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
                 break;
             }
 
-            case 0: long_var_0_pad:
-                // case: no separator and next item has no prefix - goes to end of string
-                if (!(px < after_px && IS_PRINTABLE(*px))) { // make sure we don't have an implicit separator - the prefix of the next item
-                    *item_lens = after_str - str;
-                    *items = str; 
-                    str = after_str;
-                }
-
-                // case: terminated by prefix of next item
-                else {
-                    rom c; for (c = px; *c != CON_PX_SEP; c++);
-                    uint32_t next_px_len = c - px;
-                    
-                    *items = str;
-
-                    // increment str to the first character of the next item's prefix 
-                    while (str < after_str-next_px_len && memcmp (str, px, next_px_len)) str++; 
-
-                    ASSSPLIT (str < after_str-next_px_len || !memcmp (str, px, next_px_len), 
-                              "item_i=%u reached end of string without finding separator '%c' in string \"%.*s\"", 
-                              item_i, sep, str_len, save_str);
-
-                    *item_lens = str - *items;
-                }
-
-                break;
-
             default: 
-                ASSERT (IS_PRINTABLE(sep), "item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
-                
-                char sep1 = con->items[item_i].separator[1];
-                if (!IS_PRINTABLE (sep1)) sep1 = 0;
-                
-                *items = str;
-
-                if (!sep1) 
-                    while (str < after_str && *str != sep) str++; 
-                else 
-                    while (str < (after_str-1) && (str[0] != sep || str[1] != sep1)) str++; 
-
-                ASSSPLIT (str < after_str, "item_i=%u reached end of string without finding separator '%c' in string \"%.*s\"", 
-                          item_i, sep, str_len, save_str);
-
-                *item_lens = str - *items;
-                str += 1 + (sep1 != 0); // skip seperator
+                ABORT ("item_i=%u sep=%u is not a printable character in string \"%.*s\"", item_i, sep, str_len, save_str);
         }
 
         items++; item_lens++; // increment pointers        
@@ -1265,7 +1271,7 @@ StrText str_human_time (unsigned secs, bool compact)
              secs  = secs % 60;
 
     if (compact)
-        SNPRINTF (s, "%uh%u'%u\"", hours, mins, secs);
+        SNPRINTF (s, "%uh%u'%u\\\"", hours, mins, secs); // escape the double-quotes
     else if (hours) 
         SNPRINTF (s, "%u %s %u %s", hours, hours==1 ? "hour" : "hours", mins, mins==1 ? "minute" : "minutes");
     else if (mins)

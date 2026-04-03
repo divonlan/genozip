@@ -119,7 +119,7 @@ static bool codec_domq_qual_data_is_a_fit_for_domq (VBlockP vb, ContextP qual_ct
         num_tested_lines++;
     }
     
-    bool is_fit = num_tested_lines && (num_lines_with_dom * 100 / num_tested_lines > MINIMUM_PERCENT_LINES_WITH_DOM);
+    bool is_fit = percent (num_lines_with_dom, num_tested_lines) > MINIMUM_PERCENT_LINES_WITH_DOM;
 
     if (flag.show_qual) {
         if (get_line_cb)
@@ -173,7 +173,7 @@ static void codec_domq_calc_histogram (VBlockP vb, ContextP qual_ctx, ContextP d
     }
 
     if (flag.show_qual) 
-        iprintf ("\nDOMQ: %s: %u/%u dom-encoded qual scores (%u%%)\n", VB_NAME, n_dom_encoded_scores, n_scores, 100*n_dom_encoded_scores / n_scores);
+        iprintf ("\nDOMQ: %s: %u/%u dom-encoded qual scores (%1.1f%%)\n", VB_NAME, n_dom_encoded_scores, n_scores, percent (n_dom_encoded_scores, n_scores));
 }
 
 static uint8_t inline codec_domq_compact_histogram (uint32_t histogram[NUM_Qs][NUM_Qs], uint32_t lines_with_dom[NUM_Qs], 
@@ -338,7 +338,7 @@ static void codec_domq_show_normalized_qual_histogram (VBlockP vb, ContextP domq
 
     for (int q=0; q < NUM_Qs; q++) 
         if (hgram[q])
-            iprintf (" %u=%1.1f%%", q, 100 * (double)hgram[q] / (double)total);
+            iprintf (" %u=%1.1f%%", q, percent (hgram[q], total));
     iprint_newline();
 } 
 
@@ -485,8 +485,8 @@ COMPRESS (codec_domq_compress)
         buf_free (vb->scratch);
     }
 
-    __atomic_add_fetch (&z_file->divr_lines, (uint64_t)n_divr_lines, __ATOMIC_RELAXED);
-    __atomic_add_fetch (&z_file->domq_lines, (uint64_t)(vb->lines.len - n_divr_lines), __ATOMIC_RELAXED);
+    add_relaxed (z_file->divr_lines, n_divr_lines);
+    add_relaxed (z_file->domq_lines, vb->lines.len - n_divr_lines);
 
     qual_ctx->lcodec = CODEC_UNKNOWN;
     

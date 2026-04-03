@@ -42,6 +42,7 @@
 #include "bai.h"
 #include "qname.h"
 #include "mgzip.h"
+#include "dispatcher.h"
 
 // globals - set in main() and immutable thereafter
 char global_cmd[256]; 
@@ -56,6 +57,7 @@ CommandType command = NO_COMMAND, primary_command = NO_COMMAND;
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 
 static Buffer input_files_buf = { .name = "input_files" };
+bool input_files_has_FASTQ; // at least one of the input files is a FASTQ
 
 #define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
 #define MAIN0(string)     ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
@@ -172,7 +174,7 @@ rom main_input_filename (int file_i/* 0-based */)
 
 static void main_print_version()
 {
-    iprintf ("version=%s distribution=%s\n", code_version().s, get_distribution());  
+    iprintf ("version=%s distribution=%s\n", STRver(code_version()).s, get_distribution());  
 }
 
 static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool is_last_z_file)
@@ -230,7 +232,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
 
     // test for matching digest between loaded external reference and reference specified in SectionHeaderGenozipHeader
     if (REF_EXTERNAL) 
-        digest_verify_ref_is_equal();
+        digest_verify_correct_external_reference_is_loaded();
 
     flags_update_piz_one_z_file (z_file_i); // must be before piz_z_file_initialize
    
@@ -492,7 +494,7 @@ static void main_genozip (rom txt_filename,
     if (flag.bind == BIND_FQ_PAIR || (flag.bind == BIND_DEEP && flag.pair && flag.zip_comp_i >= SAM_COMP_FQ00))
         flag.pair = IS_R1 ? PAIR_R2 : PAIR_R1;
 
-    zip_one_file (txt_file->basename, is_last_user_txt_file);
+    zip_one_file (is_last_user_txt_file);
 
     // increment zip_comp_i for next file 
     flag.zip_comp_i = (flag.bind == BIND_FQ_PAIR) ? (flag.zip_comp_i + 1) % 2
@@ -656,9 +658,16 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
     // sort files by data type to improve VB re-using, and refhash-using files in the end to improve reference re-using
     if (!flag.deep && !flag.pair) { // if deep/pair, we have already sorted them as desired in fastq_verify_and_sort_pairs
         SET_FLAG (quiet); // suppress warnings
-        qsort (B1ST (char *, input_files_buf), input_files_buf.len, sizeof (char *), main_sort_input_filenames);
+        qsort (B1ST (rom, input_files_buf), input_files_buf.len, sizeof (rom), main_sort_input_filenames);
         RESTORE_FLAG (quiet);
     }
+
+    // check if any of the files are a FASTQ
+    for_buf (rom, fn, input_files_buf) 
+        if (main_get_file_dt (*fn) == DT_FASTQ) {
+            input_files_has_FASTQ = true;
+            break;
+        }
 }
 
 void main_destroy_filename_list (void)
@@ -775,7 +784,7 @@ int main (int argc, char *argv[])
 
     profiler_initialize();
     arch_initialize (argv[0]);
-    evb = vb_initialize_nonpool_vb (VB_ID_EVB, DT_NONE, "main_thread");
+    evb = vb_initialize_nonpool_vb (VB_ID_EVB, DT_NONE, TASK_EVB);
     threads_initialize(); // requires evb
     random_access_initialize();
     codec_initialize();
@@ -874,6 +883,8 @@ int main (int argc, char *argv[])
         // load reference, but not if we're in the midst of zipping a bound z_file
         if (!z_file)
             main_load_reference (next_input_file, !file_i, is_last_z_file);
+
+        dispatcher_new_progress_bar(); // resets the progress bar
 
         if (next_input_file || !isatty (0)) { // either the user specified a file, or we are receiving input redirection
             switch (command) {

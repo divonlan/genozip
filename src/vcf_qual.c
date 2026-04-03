@@ -148,7 +148,7 @@ static inline void vcf_seg_QUAL_by_GP (VBlockVCFP vb, ContextP ctx, STRp(qual))
 
     // case: no GP in this line
     else {
-        if (str_is_1char (qual, '.')) {
+        if (IS_PERIOD(qual)) {
             // note: decimals set as usual. They are not used for reconstructing '.' - just set in hope of "all the same"
             seg_special3 (VB, VCF_SPECIAL_QUAL_BY_GP, 'D', '0' + segconf.vcf_QUAL_decimals, '0' + segconf.vcf_QUAL_truncate_trailing_zeros, ctx, qual_len+1);
             return;
@@ -219,7 +219,7 @@ void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
     if (segconf_running) {
         SEGCONF_RECORD_WIDTH (VCF_QUAL, qual_len);
 
-        if (!str_is_1char (qual, '.')) {
+        if (!IS_PERIOD(qual)) {
             rom period = memchr (qual, '.', qual_len); 
             uint8_t decimals = period ? qual_len - (period - qual)/*integer*/ - 1/*period*/ : 0;
             if (decimals < segconf.vcf_QUAL_decimals) segconf.vcf_QUAL_truncate_trailing_zeros = true;

@@ -153,21 +153,22 @@ rom seg_get_next_item (VBlockP vb, rom str, int *str_len,
 
     rom c, after;
     for (c = str, after = str + *str_len; c < after; c++) 
-        switch (*c) {
-            case ' '  : if      (space   == GN_SEP     ) goto sep_found; 
-                        else if (space   == GN_FORBIDEN) goto not_found;
-                        break;
-                       
-            case '\t' : if      (tab     == GN_SEP     ) goto sep_found; 
-                        else if (tab     == GN_FORBIDEN) goto not_found;
-                        break;
+        if (*c <= ' ') // this "if" saves significant time vs going directly to the "switch" 
+            switch (*c) {
+                case ' '  : if      (space   == GN_SEP     ) goto sep_found; 
+                            else if (space   == GN_FORBIDEN) goto not_found;
+                            break;
+                        
+                case '\t' : if      (tab     == GN_SEP     ) goto sep_found; 
+                            else if (tab     == GN_FORBIDEN) goto not_found;
+                            break;
 
-            case '\n' : if      (newline == GN_SEP     ) goto sep_found; 
-                        else if (newline == GN_FORBIDEN) goto not_found;
-                        break;
+                case '\n' : if      (newline == GN_SEP     ) goto sep_found; 
+                            else if (newline == GN_FORBIDEN) goto not_found;
+                            break;
 
-            default   : break;
-        }
+                default   : break;
+            }
 
 not_found: // no sep found in entire string, or forbidden separator encountered
     ABOSEG ("while segmenting %s: expecting a %s%s%s in \"%.1000s\"", 
@@ -1572,7 +1573,7 @@ uint32_t seg_all_data_lines (VBlockP vb)
     // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
     if (segconf_running) vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
 
-    if (flag_is_show_vblocks (ZIP_TASK_NAME)) 
+    if (flag_is_show_vblocks (TASK_ZIP)) 
         iprintf ("SEG(id=%d) vb=%s Ltxt=%u %.*s%s\n", vb->id, VB_NAME, vb->txt_data.len32,
                  MIN_(64, Ltxt), cond_str (!DTP(is_binary), "txt_data[64]=\"", B1STtxt ? B1STtxt : "(null)"), DTP(is_binary) ? "" : "\"");
 

@@ -319,7 +319,6 @@ static rom file_samtools_no_PG (void)
 static bool file_open_txt_read_test_valid_dt (ConstFileP file)
 { 
     if (file->data_type == DT_NONE) { 
-
         if (flag.multiple_files || tar_zip_is_tar()) {
             if (filename_has_ext (file->name, ".genozip")) {
             
@@ -330,7 +329,6 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
                 }    
                 else
                     RETURNW (false, true, "Skipping %s - it is already compressed", file_printname(file));
-
             }
 
             RETURNW (false, true, "Skipping %s - genozip doesn't know how to compress this file type (use --input to tell it)", 
@@ -525,13 +523,15 @@ FileP file_open_txt_read (rom filename)
     switch (file->src_codec) { 
         case CODEC_GZ: case CODEC_BGZF: case CODEC_BAM: case CODEC_NONE: gz: 
             file_open_txt_read_gz (file);
+
+            if (file->src_codec == CODEC_CRAM) goto cram; // actually, it is cram
             break;
         
         case CODEC_BZ2:
             file_open_txt_read_bz2 (file);
             break;
 
-        case CODEC_CRAM: {
+        case CODEC_CRAM: cram: {
             // note: in CRAM, we read the header in advance in possible, directly (without samtools), so we can handle the case 
             // that the reference file is wrong. In samtools, if we read beyond the header with a wrong ref, samtools will hang.
             if (!file->is_remote && !file->redirected) {
@@ -921,8 +921,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
         }
     }
     
-    file->genozip_version   = code_version_major(); // to allow the VER macro to operate consistently across ZIP/PIZ
-    file->genozip_minor_ver = code_version_minor();
+    file->genozip_ver = code_version(); // to allow the VER macro to operate consistently across ZIP/PIZ
 
     file_initialize_z_file_data (file);
 
@@ -954,7 +953,7 @@ static void file_index_txt (ConstFileP file)
     }
 
     if (indexing) {
-        progress_new_component (file->basename, "Indexing", false, NULL);
+        progress_new_component (file->basename, "Indexing", NULL);
 
         stream_wait_for_exit (indexing, false);
 

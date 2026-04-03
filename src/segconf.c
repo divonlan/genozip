@@ -308,7 +308,7 @@ static bool segconf_skip_segconf (void)
 {
     // no need to re-run segconf for 2nd+ FASTQ in the *same* z_file
     return (Z_DT(FASTQ) && flag.pair == PAIR_R2) || // FASTQ: no recalculating for 2nd pair 
-           ((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
+           ((Z_DT(BAM) || Z_DT(SAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
 }
 
 // ZIP only: after opening z_file, before reading txt_header and opening txt_file
@@ -319,7 +319,7 @@ void segconf_zip_initialize (void)
     SegConf old_segconf = segconf;
 
     // case: everything but first FASTQ in Deep
-    if (!((Z_DT(SAM) || Z_DT(BAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
+    if (!((Z_DT(BAM) || Z_DT(SAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
         segconf = (SegConf){
             .vb_size               = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
             .is_sorted             = true,      // initialize optimistically
@@ -435,12 +435,12 @@ void segconf_calculate (void)
 
     segconf.running = true;
     uint64_t save_vb_size = segconf.vb_size;
-    segconf_vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, "segconf");
+    segconf_vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, TASK_SEGCONF);
     #define vb segconf_vb
 
     SAVE_FLAGS;
     flag.show_alleles = flag.show_digest = flag.show_hash = flag.show_reference = false;
-    flag.show_vblocks = NULL;
+    flag.show_vblocks = TASK_NONE;
     flag.pair = NOT_PAIRED;
 
     segconf.vb_size = 256 KB; // actual VB size might end up bigger, if this is not enough for a single line
@@ -496,10 +496,12 @@ void segconf_calculate (void)
     SAVE_FLAG (aligner_available); // might have been set in sam_seg_finalize_segconf
     SAVE_FLAG (no_tip);
     SAVE_FLAG (multiseq);
+    SAVE_FLAG (reference); // possibly set by ref_download_eval_ref
     RESTORE_FLAGS;
     RESTORE_FLAG (aligner_available);
     RESTORE_FLAG (no_tip);
     RESTORE_FLAG (multiseq);
+    RESTORE_FLAG (reference);
 
     if (flag.show_segconf_has) 
         segconf_show_has();
@@ -694,7 +696,7 @@ rom RG_method_name (RGMethod method)
 QualHistType did_i_to_qht (Did did_i)
 {
     if (                                did_i == SAM_QUAL   ) return QHT_QUAL;
-    if ((TXT_DT(SAM) || TXT_DT(BAM)) && did_i == OPTION_OQ_Z) return QHT_OQ;    
+    if ((TXT_DT(BAM) || TXT_DT(SAM)) && did_i == OPTION_OQ_Z) return QHT_OQ;    
 
     return -1;
 }

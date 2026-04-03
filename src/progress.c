@@ -12,6 +12,7 @@
 #include "progress.h"
 #include "profiler.h" // for TimeSpecType
 #include "flags.h"
+#include "dispatcher.h"
 
 static bool progress_newline_since_update = false; // note: might be not 100% with threads, but that's ok
 
@@ -68,7 +69,6 @@ void progress_erase (void)
 
 void progress_new_component (rom new_component_name, 
                              rom message, // can be NULL
-                             bool new_test_mode,
                              TimeSpecType *start_time) // optional: if time already started (e.g. when reading txt_header)
 {
     StrTextSuperLong prefix = {};
@@ -80,9 +80,10 @@ void progress_new_component (rom new_component_name,
 
     // (re) initialize if new component
     if (!component_name || strcmp (new_component_name, component_name)) {
-        test_mode = new_test_mode;
+        test_mode = IS_PIZ && flag.test;
         component_name = new_component_name; 
-        
+        ASSERTNOTNULL (component_name);
+
         if (!flag.quiet) {
             
             if (test_mode) { 
@@ -103,7 +104,6 @@ void progress_new_component (rom new_component_name,
 
                 else
                     strcpy (prefix.s, "testing: ");
-
             }
             else if (flag.make_reference)
                 snprintf (prefix.s, sizeof(prefix.s), "%saking reference file: %s %s : ",
@@ -118,47 +118,42 @@ void progress_new_component (rom new_component_name,
     progress_update_status (prefix.s, message ? message : "");
 }
 
-void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
+void progress_update (Task task, double portion, double portion_of_task, bool done)
 {
     char progress_str[200];
-    if (flag.quiet && !flag.debug_progress) return; 
+    if (flag.quiet && !flag.show_tasks) return; 
 
     TimeSpecType tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
     
     int seconds_so_far = ((tb.tv_sec-component_start_time.tv_sec)*1000 + (tb.tv_nsec-component_start_time.tv_nsec) / 1000000) / 1000; 
-
-    double percent;
-    if (total > 10000000) // gentle handling of really big numbers to avoid integer overflow
-        percent = MIN_(((double)(sofar/100000ULL)*100) / (double)(total/100000ULL), 100.0); // divide by 100000 to avoid number overflows
-    else
-        percent = MIN_(((double)sofar*100) / (double)total, 100.0); // divide by 100000 to avoid number overflows
-
+    double pc = 100.0 * portion;
+    
     // need to update progress indicator, max once a second or if 100% is reached
 
     // case: we've reached 99% prematurely... we under-estimated the time
-    if (!done && percent > 99 && (last_seconds_so_far < seconds_so_far)) {
-        if (!flag.debug_progress)
+    if (!done && pc > 99 && (last_seconds_so_far < seconds_so_far)) {
+        if (!flag.show_tasks)
             progress_update_status (NULL, "Finalizing...");
         else {
-            snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s sofar=%.20s total=%.20s", 
-                      (unsigned)percent, task, str_int_commas(sofar).s, str_int_commas(total).s);            
+            snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s %%_of_task=%1.1f", 
+                      (unsigned)pc, task_name (task), 100.0 * portion_of_task);            
             progress_update_status (NULL, progress_str);
         }
     }
     
     // case: we're making progress... show % and time remaining
-    else if (!done && percent && (last_seconds_so_far < seconds_so_far)) { 
+    else if (!done && pc && (last_seconds_so_far < seconds_so_far)) { 
         // time remaining
-        uint32_t secs_remaining = (100.0 - percent) * ((double)seconds_so_far / (double)percent);
+        uint32_t secs_remaining = (100.0 - pc) * ((double)seconds_so_far / (double)pc);
 
-        if (!done && (percent != last_percent || secs_remaining <= last_secs_remaining || secs_remaining >= last_secs_remaining+15)) { // timer doesn't go up unless estimate changed by a good fews seconds
+        if (!done && (pc != last_percent || secs_remaining <= last_secs_remaining || secs_remaining >= last_secs_remaining+15)) { // timer doesn't go up unless estimate changed by a good fews seconds
 
-            if (!flag.debug_progress)
-                snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)percent, str_human_time (secs_remaining, false).s);
+            if (!flag.show_tasks)
+                snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)pc, str_human_time (secs_remaining, false).s);
             else
-                snprintf (progress_str, sizeof(progress_str), "%u%% (%s) task=%s sofar=%.20s total=%.20s seconds_so_far=%d", 
-                         (unsigned)percent, str_human_time (secs_remaining, false).s, task, str_int_commas(sofar).s, str_int_commas(total).s, seconds_so_far);            
+                snprintf (progress_str, sizeof(progress_str), "%u%% (%s) task=%s %%_of_task=%1.1f seconds_so_far=%d", 
+                         (unsigned)pc, str_human_time (secs_remaining, false).s, task_name (task), 100.0 * portion_of_task, seconds_so_far);            
 
             progress_update_status (NULL, progress_str);
 
@@ -169,7 +164,7 @@ void progress_update (rom task, uint64_t sofar, uint64_t total, bool done)
     // case: we're done - caller will print the "Done" message after finalizing the genozip header etc
     else {}
 
-    last_percent = percent;
+    last_percent = pc;
     last_seconds_so_far = seconds_so_far;
 }
 
