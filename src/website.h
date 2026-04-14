@@ -65,16 +65,16 @@
 // #define GITHUB_WINDOWS_UPDATE    GITHUB_INSTALLERS "/" WINDOWS_UPDATE_NAME // .windows and not .exe to avoid antivirus blocking updates
 #define GITHUB_LICENSE_TXT       GITHUB_RAW "/LICENSE.txt"
 
-#define PAPER1 "https://www.researchgate.net/publication/341408805_genozip_a_fast_and_efficient_compression_tool_for_VCF_files"
+#define PAPER1 "🌐 https://www.researchgate.net/publication/341408805_genozip_a_fast_and_efficient_compression_tool_for_VCF_files"
 #define PAPER1_CITATION "Lan, D., et al. (2020) genozip: a fast and efficient compression tool for VCF files, Bioinformatics, 36, 4091-4092"
 
-#define PAPER2 "https://www.researchgate.net/publication/349347156_Genozip_-_A_Universal_Extensible_Genomic_Data_Compressor"
+#define PAPER2 "🌐 https://www.researchgate.net/publication/349347156_Genozip_-_A_Universal_Extensible_Genomic_Data_Compressor"
 #define PAPER2_CITATION "Lan, D., et al. (2021) Genozip: a universal extensible genomic data compressor, Bioinformatics, 37, 2225-2230"
 
-#define PAPER3 "https://www.researchgate.net/publication/363555511_Genozip_14_-_advances_in_compression_of_BAM_and_CRAM_files"
+#define PAPER3 "🌐 https://www.researchgate.net/publication/363555511_Genozip_14_-_advances_in_compression_of_BAM_and_CRAM_files"
 #define PAPER3_CITATION "Lan, D., et al. (2022) Genozip 14 - advances in compression of BAM and CRAM files (pre-print), doi: https://doi.org/10.1101/2022.09.12.507582"
 
-#define PAPER4 "https://www.researchgate.net/publication/372195570_Deep_FASTQ_and_BAM_co-compression_in_Genozip_15"
+#define PAPER4 "🌐 https://www.researchgate.net/publication/372195570_Deep_FASTQ_and_BAM_co-compression_in_Genozip_15"
 #define PAPER4_CITATION "Lan, D., et al. (2023) Deep FASTQ and BAM co-compression in Genozip 15 (pre-print), doi: https://doi.org/10.1101/2023.07.07.548069"
 
 #define HS37D5_DOWNLOAD "ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence/hs37d5.fa.gz"

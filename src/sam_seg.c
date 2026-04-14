@@ -62,12 +62,6 @@ WordIndex xa_lookback_strand_word_index = WORD_INDEX_NONE, xa_lookback_rname_wor
 
 Did buddied_Z_dids[NUM_MATED_Z_TAGS] = MATED_Z_DIDs;
 
-// called by zfile_compress_genozip_header to set FlagsGenozipHeader.dt_specific
-bool sam_zip_dts_flag (int dts)
-{
-    return (dts==1) ? IS_REF_INTERNAL : flag.deep;
-}
-
 // ----------------------
 // Seg stuff
 // ----------------------
@@ -296,6 +290,9 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->sam.segconf_sam_factor      = est_sam_factor_mult;
 
     header->sam.conc_writing_vbs        = BGEN16 (z_has_gencomp ? sam_zip_calculate_max_conc_writing_vbs() : 1); // 15.0.64
+
+    header->flags.genozip_header.is_ref_internal = IS_REF_INTERNAL;         // v6
+    header->flags.genozip_header.is_deep = flag.deep;                       // v15
 }
 
 // initialize SA and OA
@@ -698,6 +695,11 @@ void sam_segconf_finalize (VBlockP vb_)
     if (segconf.sam_is_unmapped && !flag.fast) 
         segconf_test_multiseq (VB, SAM_NONREF);
 
+    if (segconf.sam_is_unmapped && IS_REF_LOADED_ZIP && !refhash_exists())
+        ABORTINP ("%s is a \"minimal\" reference file, unsuitable for compressing *unmapped* %s files. %s", 
+                  ref_get_filename(), dt_name (txt_file->data_type), WEBSITE_REFERENCE);
+    
+
     // 1. earlier Ultima files where bwa was used, 2. headerless files - if we have ultima fields treat as MP_ULTIMA
     if (TECH(ULTIMA) && (MP(BWA) || MP(UNKNOWN)) && segconf.has[OPTION_t0_Z] && segconf.has[OPTION_tp_B_c]) {
         segconf.sam_mapper = MP_ULTIMA;
@@ -843,6 +845,7 @@ void sam_segconf_finalize (VBlockP vb_)
     if (  flag.best 
        || flag.deep 
        || ( IS_REF_LOADED_ZIP 
+         && refhash_exists()
          && !segconf.is_long_reads 
          && (  ( !flag.low_memory && (segconf.num_mapped < vb->lines.len32 || bam_txt_file_is_last_alignment_unmapped())) 
             || ( flag.low_memory && segconf.num_mapped == 0)))) { 

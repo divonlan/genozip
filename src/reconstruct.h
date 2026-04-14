@@ -19,8 +19,8 @@ typedef struct { char s[100]; } PizDisQname;
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
 extern void asspiz_text (VBlockP vb, FUNCLINE);
-extern StrTextLong piz_advise_biopsy (VBlockP vb);
-extern StrTextLong piz_advise_biopsy_line (CompIType comp_i, VBIType vblock_i, LineIType line_i, rom filename);
+extern StrText1K piz_advise_biopsy (VBlockP vb);
+extern StrText1K piz_advise_biopsy_line (CompIType comp_i, VBIType vblock_i, LineIType line_i, rom filename);
 
 #define ASSPIZ(condition, format, ...) ({ \
     if (__builtin_expect (!(condition), 0)) { \

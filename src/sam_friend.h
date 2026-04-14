@@ -102,7 +102,7 @@ extern bool sam_cigar_textual_to_binary (VBlockP vb, STRp(cigar), BufferP binary
 extern void sam_cigar_binary_to_textual (VBlockP vb, ConstBamCigarOpP cigar, uint16_t n_cigar_op, bool reverse, BufferP textual_cigar);
 extern uint32_t sam_cigar_get_ref_consumed (STRp(cigar), bool is_bam, bool min_is_one);
 extern void sam_seg_SEQ_initialize (VBlockP vb);
-extern StrTextMegaLong dis_binary_cigar (VBlockP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, Buffer *working_buf); 
+extern StrText16K dis_binary_cigar (VBlockP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, Buffer *working_buf); 
 extern void sam_prepare_deep_cigar (VBlockP vb, ConstBamCigarOpP cigar, uint32_t cigar_len, bool reverse);
 extern void sam_piz_produce_trivial_solo_huffmans (void);
 extern uint64_t sam_deep_calc_hash_bits (void);

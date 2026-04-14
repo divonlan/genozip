@@ -279,7 +279,7 @@ static rom txtheader_piz_get_filename (const SectionHeaderTxtHeader *header, rom
 }
 
 // PIZ: get filename (without the directory name), even if txt_file has not been opened. 
-StrTextLong txtheader_get_txt_filename_from_section (CompIType comp_i)
+StrText1K txtheader_get_txt_filename_from_section (CompIType comp_i)
 {
     Section sec;
 
@@ -295,9 +295,9 @@ StrTextLong txtheader_get_txt_filename_from_section (CompIType comp_i)
 
     rom filename = txtheader_piz_get_filename (&header, NULL);
 
-    StrTextLong name = {};
+    StrText1K name = {};
     if (filename) {
-        strncpy (name.s, filename, sizeof (StrTextLong)-1);
+        strncpy (name.s, filename, sizeof (StrText1K)-1);
         FREE (filename);
     }
     else

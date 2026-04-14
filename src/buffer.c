@@ -228,15 +228,11 @@ BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t more_bits, uint64_t p
     bits_clear_excess_bits_in_top_word ((BitsP)buf, false);
 
     // clear / set only added bits
-    if (init_to == CLEAR) {
-        if (!old_nbits) bits_clear_all ((BitsP)buf);
-        else if (buf->nbits > old_nbits) bits_clear_region ((BitsP)buf, old_nbits, buf->nbits - old_nbits);           
-    } 
+    if (init_to == CLEAR && buf->nbits > old_nbits) 
+        bits_clear_region ((BitsP)buf, old_nbits, buf->nbits - old_nbits);           
     
-    else if (init_to == SET) {
-        if (!old_nbits) bits_set_all ((BitsP)buf);
-        else if (buf->nbits > old_nbits) bits_set_region ((BitsP)buf, old_nbits, buf->nbits - old_nbits);           
-    } 
+    else if (init_to == SET && buf->nbits > old_nbits) 
+        bits_set_region ((BitsP)buf, old_nbits, buf->nbits - old_nbits);           
 
     return (BitsP)buf;
 }
@@ -255,10 +251,10 @@ BitsP buf_alloc_bits_exact_do (VBlockP vb, BufferP buf, uint64_t exact_bits, Bit
 
     // clear / set all bits
     if (init_to == CLEAR) 
-        bits_clear_all ((BitsP)buf);
+        bits_clear_region ((BitsP)buf, 0, exact_bits);
 
     else if (init_to == SET) 
-        bits_set_all ((BitsP)buf);
+        bits_set_region ((BitsP)buf, 0, exact_bits);
 
     return (BitsP)buf;
 }

@@ -168,7 +168,7 @@ extern void fastq_bamass_retrieve_ent (VBlockP vb, const BamAssEnt *e, bool get_
 extern MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool is_pair_2, PosType64 pair_gpos, bool pair_is_forward);
 extern void fastq_bamass_seg_CIGAR (VBlockFASTQP vb);
 extern DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQ *dl, DeepHash *deep_hash, STRp(seq), BamAssEnt **matching_ent);
-extern StrTextLong bamass_dis_ent (VBlockP vb, const BamAssEnt *e, uint64_t qname_hash);
+extern StrText1K bamass_dis_ent (VBlockP vb, const BamAssEnt *e, uint64_t qname_hash);
 extern void fastq_bamass_consider_stopping_aligner (VBlockFASTQP vb);
 
 extern Buffer bamass_ents, bamass_heads;

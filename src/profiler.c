@@ -86,7 +86,7 @@ void profiler_add_evb_and_print_report (void)
     else if (IS_ZIP) {
         iprint0 ("GENOZIP main thread (zip_one_file):\n");
         PRINT (ref_load_stored_reference, 1);
-        PRINT (ref_read_one_range, 2);
+        PRINT (ref_read_multiple_ranges, 2);
         PRINT (ref_load_digest, 2); 
         PRINT (refhash_load_digest, 2);
         PRINT (refhash_read_one_vb, 2);
@@ -288,7 +288,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_arith, 2);
         PRINT (compressor_domq,  2);
         PRINT (compressor_normq, 2);
-        PRINT (compressor_actg,  2);
+        PRINT (compressor_acgt,  2);
+        PRINT (compressor_xcgt,  2);
         PRINT (compressor_pbwt,  2);
         PRINT (compressor_longr, 2);
         PRINT (compressor_homp,  2);
@@ -306,7 +307,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (ref_load_stored_reference, 1);
         PRINT (reference_re_digest_genome, 1);
         PRINT (ref_initialize_ranges, 2);
-        PRINT (ref_read_one_range, 2);
+        PRINT (ref_read_multiple_ranges, 2);
         PRINT (piz_read_global_area, 1); // sometimes also includes ref_load_stored_reference, but usually not
         PRINT (dict_io_read_all_dictionaries, 2);
         PRINT (dict_io_build_word_lists, 3);
@@ -356,7 +357,6 @@ void profiler_add_evb_and_print_report (void)
         iprintf ("GENOUNZIP compute threads: %s\n", str_int_commas (ms(profile.nanosecs.compute)).s);
 
         PRINT (piz_uncompress_all_ctxs__recon, 1);
-
         PRINT (reconstruct_vb, 1);
         if (z_file)
             for_ctx(&z_file->ca) // not for_zctx, so we get did_i which is different than zctx->did_i if alias
@@ -423,8 +423,10 @@ void profiler_add_evb_and_print_report (void)
         }
     }
 
-    if (flag.make_reference || flag.reference) iprint0 ("Other compute threads\n");
-    PRINT (ref_uncompress_one_range, 1);
+    iprint0 ("OTHER COMPUTE threads\n");
+    PRINT (ref_uncompress_multiple_ranges, 1);
+    PRINT (zfile_uncompress_ref_section, 2);
+    PRINT (ref_uncompact_ref, 2);
     PRINT (refhash_uncompress_one_vb, 1);
     PRINT (ref_compress_one_range, 1);
     PRINT (refhash_p1_count, 1);
@@ -438,6 +440,7 @@ void profiler_add_evb_and_print_report (void)
     if (profile.nanosecs.zfile_uncompress_section) {
         iprint0 ("BREAKDOWN OF zfile_uncompress_section by codec (all threads)\n");
         PRINT (zfile_uncompress_section, 1);
+        PRINT (zfile_uncompress_ref_section, 1);
         PRINT (compressor_bz2,   2);
         PRINT (compressor_lzma,  2);
         PRINT (compressor_bsc,   2);
@@ -445,7 +448,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_arith, 2);
         PRINT (compressor_domq,  2);
         PRINT (compressor_normq, 2);
-        PRINT (compressor_actg,  2);
+        PRINT (compressor_acgt,  2);
         PRINT (compressor_pbwt,  2);
         PRINT (compressor_longr, 2);
         PRINT (compressor_homp,  2);
@@ -522,9 +525,9 @@ void profiler_set_avg_compute_vbs (float avg_compute_vbs)
     profile.avg_compute_vbs[profile.num_txt_files++] = avg_compute_vbs;
 }
 
-StrTextSuperLong profiler_get_avg_compute_vbs (char sep)
+StrText4K profiler_get_avg_compute_vbs (char sep)
 {
-    StrTextSuperLong s = {};
+    StrText4K s = {};
     int s_len = 0;
     for (int i=0; i < profile.num_txt_files; i++)
         SNPRINTF (s, "%.1f%c", profile.avg_compute_vbs[i], sep);

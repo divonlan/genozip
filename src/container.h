@@ -140,8 +140,8 @@ extern bool container_peek_has_item (VBlockP vb, ContextP container_ctx, DictId 
 typedef struct { uint64_t dnum; int16_t idx; } ContainerPeekItem;
 extern void container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, ConstContainerP *con_p, bool consume);
 
-extern StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes));
-extern void con_verify_items (ConstContainerP con, rom con_name);
+extern StrText16K container_to_json (ConstContainerP con, STRp (prefixes));
+extern void con_verify_items (ConstContainerP con, ContextP ctx, rom con_name);
 
 CONTAINER_FILTER_FUNC (default_piz_filter);
 

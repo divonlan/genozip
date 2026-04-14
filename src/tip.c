@@ -31,7 +31,7 @@ void tip_print (void)
     if (flag.no_tip || // protect from spamming the user with more than one tip
         !license_allow_tip()) return; 
 
-    StrTextLong acadmic_notice = license_academic_tip(); // empty unless acadmic license
+    StrText1K acadmic_notice = license_academic_tip(); // empty unless acadmic license
 
     if (!is_info_stream_terminal) {
         if (acadmic_notice.s[0]) iprintf ("\n%s\n", acadmic_notice.s);
@@ -71,7 +71,7 @@ void tip_print (void)
     if ((E(SAM) || E(BAM)) && (license_is_academic() || license_is_eval()))
         valid_tips[n++] = _TIP "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER3_CITATION "\n";
 
-    bool is_deep = flag.deep || ((IS_PIZ && z_file && (Z_DT(BAM) || Z_DT(SAM))) && z_file->z_flags.dts2_deep);
+    bool is_deep = flag.deep || ((IS_PIZ && z_file && (Z_DT(BAM) || Z_DT(SAM))) && z_file->z_flags.is_deep);
     
     if (is_deep && (license_is_academic() || license_is_eval()))
         valid_tips[n++] = _TIP "Please take a moment now to make a note to not forget to cite Genozip:\n" PAPER4_CITATION "\n";
@@ -97,7 +97,7 @@ void tip_print (void)
         valid_tips[n++] = _TIP "Use --best for the best compression (slower)\n";
 
     if (flag.default_make_ref)
-        valid_tips[n++] = _TIP "Use --make-reference=[tiny|small|medium|large] (default: medium) to control the size of the reference file. Larger reference files result is faster and better compression, but using them consumes more RAM. " WEBSITE_REFERENCE "\n";
+        valid_tips[n++] = _TIP "Use --make-reference=[minimal|tiny|small|medium|large] (default: medium) to control the size of the reference file. Larger reference files result is faster and better compression, but using them consumes more RAM. " WEBSITE_REFERENCE "\n";
 
     if (license_is_eval() && !flag.show_stats && !flag.make_reference)
         valid_tips[n++] = _TIP "Use --stats to see detailed compression statistics\n";

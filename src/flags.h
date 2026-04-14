@@ -33,7 +33,7 @@ extern rom ref_type_name(void);
 #define IS_REF_CHROM2REF  (flag.reference & REF_ZIP_CHROM2REF)
 
 #define IS_REF_STORED_PIZ (flag.reference == REF_STORED) // 2 bits set
-#define IS_REF_INTERNAL_PIZ ((Z_DT(BAM) || Z_DT(SAM)) && z_file->z_flags.dts_ref_internal)
+#define IS_REF_INTERNAL_PIZ ((Z_DT(BAM) || Z_DT(SAM)) && z_file->z_flags.is_ref_internal)
 
 typedef enum { STATS_NONE=0, STATS_SHORT=1, STATS_LONG=2, STATS_SHORT_GREP=-1, STATS_LONG_GREP=-2 } StatsType;
 
@@ -52,16 +52,12 @@ typedef packed_enum { NOT_PAIRED,       // ZIP and PIZ
 #define PADDED_FLAG(type,f) struct { char pad_##f[3]; type f; } __attribute__ ((aligned (4)))
 #endif
 
-typedef enum { NO_MAKE_REF, MAKE_REF_TINY, MAKE_REF_SMALL, MAKE_REF_MEDIUM, MAKE_REF_LARGE, NUM_MAKE_REF } MakeRefSize;
-#define MAKE_REF_SIZES { "N/A",     "tiny",        "small",        "medium",        "large" }
-extern rom ref_hash_sizes[NUM_MAKE_REF];
-
 typedef struct {
     // genozip options that affect the compressed file
     #define MAKE_REF_DEFAULT MAKE_REF_MEDIUM
-    MakeRefSize make_reference; // note: values are part of the file format: GenozipHeader.ref.make_ref_flag
+    MakeRefSize make_reference; // note: values are part of the file format: GenozipHeader.ref.make_ref_size
     int fast, best, low_memory, multiseq, md5, secure_DP, not_paired,
-        deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.dts2_deep in PIZ
+        deep; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.is_deep in PIZ
     rom vblock, bam_assist;
     int64_t sendto;
     
@@ -146,12 +142,12 @@ typedef struct {
     int debug, debug_or_test, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_reading_list, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_ranges,
-        show_codec, show_cache, show_memory, show_snips, show_regions,
+        show_codec, show_cache, show_memory, show_snips, show_regions, show_seg_summary,
         show_alleles, show_bgzf, show_gz, show_isizes, show_is_exactable, show_txt_contigs, show_lines, show_gz_uncomp,
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type, debug_dyn_int,
         show_tasks, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, telemetry, debug_telemetry, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
+        debug_peek, telemetry, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, debug_bai, // ad-hoc debug printing in prod
         show_compress, show_sec_gencomp, show_scan,
@@ -162,8 +158,8 @@ typedef struct {
         show_containers, show_stack, show_aligner, show_buddy,
         echo,         // show the command line in case of an error (including echo and its optional argument)
         recover,      // PIZ: attempted recovery from data corruption
-        #define SHOW_ALL_HEADERS (-1)
-        show_headers; // (1 + SectionType to display) or 0=flag off or -1=all sections
+        show_headers; 
+    bool show_sec_headers[NUM_SEC_TYPES];
     rom help, dump_section, show_is_set, show_time, show_mutex, show_header_dict_name, show_flavor;
     int32_t dump_section_i, show_header_section_i, dump_gz_block;
     Task show_vblocks; // -1=all tasks
@@ -246,7 +242,7 @@ typedef struct {
          
     volatile bool make_bai;  // PIZ BAM: write .bai file (volatile, because any thread can change its value at any time)
 
-    int only_headers,        // genocat --show_headers (not genounzip) show only headers (value is section_type+1 or SHOW_ALL_HEADERS)
+    int only_headers,        // genocat --show_headers (not genounzip) show only headers
         check_latest;        // PIZ: run with "genozip --decompress --test": ZIP passes this to PIZ upon testing of the last file
     enum { NO_PREPROC, PREPROC_RUNNING, PREPROC_FINALIZING } preprocessing; // we're currently dispatching compute threads for preprocessing (PIZ: loading SA Groups, ZIP: loading bamass ents)
 

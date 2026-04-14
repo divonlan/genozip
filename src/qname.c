@@ -125,7 +125,7 @@ void qname_zip_initialize (void)
                 qfs->con = *qfs->con_template;
 
                 // verify container dict_id and separators are valid
-                con_verify_items ((ContainerP)&qfs->con, qfs->name);
+                con_verify_items ((ContainerP)&qfs->con, NULL, qfs->name);
 
                 char item_sep = qfs->con.items[qfs->con.nitems_lo-1].separator[0];
                 ASSERT (item_sep == CI0_SKIP, "In flavor=\"%s\", expecting separator of %s to be I_AM_MATE since it is mated, but it is '%c'(%u)", 

@@ -71,7 +71,7 @@ void progress_new_component (rom new_component_name,
                              rom message, // can be NULL
                              TimeSpecType *start_time) // optional: if time already started (e.g. when reading txt_header)
 {
-    StrTextSuperLong prefix = {};
+    StrText4K prefix = {};
 
     if (start_time)
         component_start_time = *start_time;
@@ -124,30 +124,32 @@ void progress_update (Task task, double portion, double portion_of_task, bool do
     if (flag.quiet && !flag.show_tasks) return; 
 
     TimeSpecType tb; 
-    clock_gettime(CLOCK_REALTIME, &tb); 
+    clock_gettime (CLOCK_REALTIME, &tb); 
     
     int seconds_so_far = ((tb.tv_sec-component_start_time.tv_sec)*1000 + (tb.tv_nsec-component_start_time.tv_nsec) / 1000000) / 1000; 
     double pc = 100.0 * portion;
     
     // need to update progress indicator, max once a second or if 100% is reached
 
-    // case: we've reached 99% prematurely... we under-estimated the time
-    if (!done && pc > 99 && (last_seconds_so_far < seconds_so_far)) {
-        if (!flag.show_tasks)
-            progress_update_status (NULL, "Finalizing...");
-        else {
-            snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s %%_of_task=%1.1f", 
-                      (unsigned)pc, task_name (task), 100.0 * portion_of_task);            
-            progress_update_status (NULL, progress_str);
-        }
-    }
+    // // case: we've reached 99% prematurely... we under-estimated the time
+    // if (!done && pc > 99 && last_seconds_so_far < seconds_so_far) {
+    //     if (!flag.show_tasks)
+    //         progress_update_status (NULL, "Finalizing...");
+    //     else {
+    //         snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s %%_of_task=%1.1f", 
+    //                   (unsigned)pc, task_name (task), 100.0 * portion_of_task);            
+    //         progress_update_status (NULL, progress_str);
+    //     }
+    // }
     
     // case: we're making progress... show % and time remaining
-    else if (!done && pc && (last_seconds_so_far < seconds_so_far)) { 
+    // else 
+    if (last_seconds_so_far < seconds_so_far) { 
         // time remaining
         uint32_t secs_remaining = (100.0 - pc) * ((double)seconds_so_far / (double)pc);
 
-        if (!done && (pc != last_percent || secs_remaining <= last_secs_remaining || secs_remaining >= last_secs_remaining+15)) { // timer doesn't go up unless estimate changed by a good fews seconds
+        // note: timer doesn't go up unless estimate changed by a good fews seconds
+        if (pc != last_percent || secs_remaining <= last_secs_remaining || secs_remaining >= last_secs_remaining+15) {
 
             if (!flag.show_tasks)
                 snprintf (progress_str, sizeof(progress_str), "%u%% (%s)", (unsigned)pc, str_human_time (secs_remaining, false).s);
@@ -160,9 +162,6 @@ void progress_update (Task task, double portion, double portion_of_task, bool do
             last_secs_remaining = secs_remaining;
         }
     }
-
-    // case: we're done - caller will print the "Done" message after finalizing the genozip header etc
-    else {}
 
     last_percent = pc;
     last_seconds_so_far = seconds_so_far;
@@ -186,7 +185,7 @@ bool progress_has_component (void)
 }
 
 #define FINALIZE(format, ...) {                                                               \
-    StrTextLong s; int s_len=0;                                                               \
+    StrText1K s; int s_len=0;                                                               \
     SNPRINTF (s, format, __VA_ARGS__);                                                        \
     if (IS_ZIP && flag.md5) SNPRINTF (s, "\t%s = %s", digest_name(), digest_display (md5).s); \
     progress_finalize_component (s.s);                                                        \

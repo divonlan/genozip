@@ -100,11 +100,10 @@ static rom help_attributions[] = {
 static rom help_footer[] = {
     "",
     "Technical questions, bug reports and feature requests: " EMAIL_SUPPORT,
-    "License inquiries: " EMAIL_SALES,
+    "Sales inquiries: " EMAIL_SALES,
     "",
     "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS OR DISTRIBUTORS OF THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
 };
-
 
 rom report_support (void) { return "Please report this to " EMAIL_SUPPORT ". "; }
 rom report_support_if_unexpected (void) { return "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"; }
@@ -123,6 +122,7 @@ rom command_name (void) // see CommandType
         case SHOW_GZ       : return "SHOW_GZ";
         case DUMP_GZ_BLOCK : return "DUMP_GZ_BLOCK";
         case SHOW_FLAVOR   : return "SHOW_FLAVOR";
+        case RM_CACHE      : return "RM_CACHE";
         case NO_COMMAND    : return "NO_COMMAND";
         default            : return "Invalid command";
     }
@@ -702,6 +702,9 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
         ref_load_external_reference (NULL); // also loads refhash if needed
     }
 
+    if (!refhash_exists()) // now that the reference is loaded, check if it has refhash
+        flag.aligner_available = false;
+        
     // Read the refhash and calculate the reverse compliment genome for the aligner algorithm - it was not used before and now it is
     if (!old_aligner_available && flag.aligner_available && !refhash_buf.count) {
         MAIN0 ("Loading refhash");
@@ -718,11 +721,16 @@ static void set_exe_type (int argc, char *argv[])
     if      (strstr (bn, "genols"))    exe_type = EXE_GENOLS;   // captures genols-debug, genols.exe etc
     else if (strstr (bn, "genocat"))   exe_type = EXE_GENOCAT;
     else if (strstr (bn, "genounzip")) exe_type = EXE_GENOUNZIP;
-    else                               exe_type = EXE_GENOZIP; // default
+    else                               exe_type = EXE_GENOZIP;  // default
 
     if (exe_type == EXE_GENOZIP)
         for (int i=1; i < argc; i++)
-            if (!strcmp (argv[i], "-d") || !strcmp (argv[i], "--decompress")) {
+            // note: we don't catch all combinations of short flags! we test again in 'case PIZ' in flags_init_from_command_line
+            if (!strcmp (argv[i], "--decompress") || 
+                (argv[i][0] == '-' && argv[i][1] == 'd') || 
+                (argv[i][0] == '-' && argv[i][1] == 't' && argv[i][2] == 'd') || // common combinations
+                (argv[i][0] == '-' && argv[i][1] == 'f' && argv[i][2] == 'd')) { 
+                
                 exe_type = EXE_GENOUNZIP;
                 break;
             }
@@ -740,8 +748,9 @@ static void main_no_files (int argc)
     }
 
     else if (flag.no_cache) {
+        command = RM_CACHE; // this is different than --no-cache when compressing a file
         if (IS_REF_LOADED_ZIP) ref_cache_remove(); // remove a specific cache
-        else                   ref_cache_remove_all();
+        else                   ref_cache_remove_all (REF_CACHE_REMOVE_ALL);
     }
 
     else if (flag.ls_cache) 
@@ -866,12 +875,6 @@ int main (int argc, char *argv[])
 
         if (next_input_file && next_input_file[0] == '\1') next_input_file++; // skip "MALLOC indicator"
 
-        // // (bug 339) On Windows, we redirect files from stdin - For binary files \n is converted to \r\n. For
-        // // textual files, if a \r\n appears in the first characters read directly in file_open_txt_read, then we wierdly
-        // // receive only \n, and the byte immediately following the last character, is never read - not by
-        // // the fread here, and not by the subsequent read - losing it. Likely a bug in the mingw libc.
-        // ASSINP0 (!flag.is_windows || next_input_file, "genozip on Windows does not support piping in data");
-
         ASSINP0 (next_input_file || command != PIZ || (flag.show_ref_iupacs && is_genocat), 
                  "filename(s) required (redirecting from stdin is not possible)");
 
@@ -940,6 +943,9 @@ int main (int argc, char *argv[])
         main_destroy_filename_list();
         regions_destroy();
     }
+
+    // remove cached references that were not used in a long time (note: at end of execution so the reference we used now are not removed)
+    ref_cache_remove_all (REF_CACHE_REMOVE_DORMANT);
 
     exit_ok;
 }

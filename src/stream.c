@@ -168,8 +168,8 @@ static HANDLE stream_exec_child (int *stream_stdout_to_genozip, int *stream_stde
 
     PROCESS_INFORMATION proc_info = {}; // the output of CreateProcess goes in here
 
-    bool success = CreateProcess (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
-                                  NULL, NULL, &startup_info, &proc_info);
+    bool success = CreateProcessA (NULL, cmd_line, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS, 
+                                   NULL, NULL, &startup_info, &proc_info);
     if (!success) stream_abort_cannot_exec (argv[0], reason);
     
     CloseHandle (proc_info.hThread); // child process's main thread

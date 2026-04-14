@@ -306,7 +306,7 @@ extern bool file_rename (rom old_name, rom new_name, bool fail_quietly);
 extern void file_gzip (char *filename);
 extern void file_mkfifo (rom filename);
 extern uint64_t file_get_size (rom filename);
-extern StrTextLong file_compressible_extensions (bool plain_only);
+extern StrText1K file_compressible_extensions (bool plain_only);
 extern bool file_buf_locate (FileP file, ConstBufferP buf);
 
 #define FILENAME_STDIN  "(stdin)"

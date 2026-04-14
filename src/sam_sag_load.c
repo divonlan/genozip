@@ -83,7 +83,7 @@ void sam_show_sag_one_grp (VBlockP vb, SAGroup grp_i)
 {
     const Sag *g = B(Sag, z_file->sag_grps, grp_i);
 
-    StrTextMegaLong extra = {};
+    StrText16K extra = {};
     unsigned extra_len=0;
 
     if (IS_SAG_SA)

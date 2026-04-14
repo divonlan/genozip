@@ -387,9 +387,9 @@ void dict_io_read_all_dictionaries (void)
     COPY_TIMER_EVB (dict_io_read_all_dictionaries);
 }
 
-StrTextMegaLong str_snip_ex (DataType dt, STRp(snip), bool add_quote)
+StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
 {
-    StrTextMegaLong s;
+    StrText16K s;
     int s_len=0;
 
     if (dt == DT_NONE)
@@ -614,7 +614,7 @@ void dict_io_print (FILE *fp, DictId dict_id, STRp(data), bool with_word_index, 
         DataType dt = is_deep && word_len > 2 && word[0] == SNIP_SPECIAL 
                     ? dict_io_print_deep_dt_by_special (word[1], dict_id) : DT_NONE;
 
-        StrTextMegaLong snip = str_snip_ex (dt, STRa(word), add_quotation_marks);
+        StrText16K snip = str_snip_ex (dt, STRa(word), add_quotation_marks);
 
         // in case we are showing chrom data in --list-chroms in SAM - don't show * and =
         bool remove_one = remove_non_contigs && 

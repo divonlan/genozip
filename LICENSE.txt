@@ -93,9 +93,10 @@ registering by emailing register@genozip.com.
 form as well or the potential loss of data due to Genozip not being able to uncompress the
 compressed file would not cause any harm.
 
-   c. Any changes to the Genozip's source code and/or creation of Derivative Works and/or reverse
--engineering of Genozip and/or using all or part of Genozip's source code (even if modified) in
-another software package are forbidden, unless prior written permission is obtained from Licensor.
+   c. Any changes to the Genozip's source code and/or creation of Derivative Works (including, but
+not limited to, forking on github) and/or reverse-engineering of Genozip and/or using all or part
+of Genozip's source code (even if modified) in another software package are forbidden, unless prior
+written permission is obtained from Licensor.
 
    d. Any software source code intentionally submitted for inclusion in Genozip by You to the
 Licensor or the Developer, including by using a Github Pull Request, shall imply complete and
@@ -173,5 +174,5 @@ ABOVE STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.81
+Genozip license version: 15.0.82
 

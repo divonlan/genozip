@@ -16,6 +16,7 @@
 #include "codec.h"
 #include "profiler.h"
 #include "reconstruct.h"
+#include "arch.h"
 
 // note: to see the BINs in a BAM file: show_BIN.sh file.bam
 
@@ -1081,14 +1082,14 @@ void bai_write (void)
 
     if (IS_BAI)
         ASSGOTO (fwrite (vb->txt_data.data, vb->txt_data.len, 1, fp) == 1, 
-                 "WARNING: Failed to write %s. fwrite: %s", filename, strerror (errno));
+                 "WARNING: Failed to write %s. fwrite: %s", filename, arch_str_error());
 
     // TBI needs to be BGZF-compressed
     else {
         bgzf_compress_tbi();
 
         ASSGOTO (fwrite (vb->comp_txt_data.data, vb->comp_txt_data.len, 1, fp) == 1, 
-                 "WARNING: Failed to write %s. fwrite: %s", filename, strerror (errno));
+                 "WARNING: Failed to write %s. fwrite: %s", filename, arch_str_error());
         
         buf_destroy (vb->comp_txt_data);
     }

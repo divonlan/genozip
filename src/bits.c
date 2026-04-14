@@ -58,10 +58,6 @@ static uint64_t __inline windows_popcount (uint64_t w)
 #define POPCOUNT(x) (unsigned)__builtin_popcountll(x)
 #endif
 
-#define SET_REGION(bits,start,len)    _set_region((bits),(start),(len),FILL_REGION)
-#define CLEAR_REGION(bits,start,len)  _set_region((bits),(start),(len),ZERO_REGION)
-#define TOGGLE_REGION(bits,start,len) _set_region((bits),(start),(len),SWAP_REGION)
-
 //
 // Common internal functions
 //
@@ -98,7 +94,7 @@ static void validate_bits (ConstBitsP bits, rom file, int lineno)
       uint64_t tw = bits->nwords - 1;
       uint64_t top_bits = bits_in_top_word (bits->nbits);
 
-      ASSERT (bits->words[tw] <= bitmask64(top_bits), "[%s:%i] Expected %i bits in top word[%i] (the rest should be 0) but word=%s\n", 
+      ASSERT (top_bits == 64 ||  bits->words[tw] <= bitmask64(top_bits), "[%s:%i] Expected %i bits in top word[%i] (the rest should be 0) but word=%s\n", 
               file, lineno, (int)top_bits, (int)tw, _print_word(bits->words[tw]).s);
     }
 }
@@ -178,67 +174,6 @@ static inline void _set_word_cyclic (BitsP bits, uint64_t start, uint64_t word)
     }
 }
 
-//
-// Fill a region (internal use only)
-//
-
-// FillAction is fill with 0 or 1 or toggle
-typedef enum {ZERO_REGION, FILL_REGION, SWAP_REGION} FillAction;
-
-static inline void _set_region (BitsP bits, uint64_t start, uint64_t length, FillAction action)
-{
-    if (length == 0) return;
-
-    uint64_t first_word = bitset64_wrd(start);
-    uint64_t last_word = bitset64_wrd(start+length-1);
-    word_offset_t foffset = bitset64_idx(start);
-    word_offset_t loffset = bitset64_idx(start+length-1);
-
-    if (first_word == last_word) {
-        uint64_t mask = bitmask64(length) << foffset;
-
-        switch (action) {
-            case ZERO_REGION: bits->words[first_word] &= ~mask; break;
-            case FILL_REGION: bits->words[first_word] |=  mask; break;
-            case SWAP_REGION: bits->words[first_word] ^=  mask; break;
-        }
-    }
-    
-    else {
-        // Set first word
-        switch (action) {
-            case ZERO_REGION: bits->words[first_word] &=  bitmask64(foffset); break;
-            case FILL_REGION: bits->words[first_word] |= ~bitmask64(foffset); break;
-            case SWAP_REGION: bits->words[first_word] ^= ~bitmask64(foffset); break;
-        }
-
-        uint64_t i;
-
-        // Set whole words
-        switch (action) {
-            case ZERO_REGION:
-                for (i = first_word + 1; i < last_word; i++)
-                    bits->words[i] = (uint64_t)0;
-                break;
-            case FILL_REGION:
-                for (i = first_word + 1; i < last_word; i++)
-                    bits->words[i] = WORD_MAX;
-                break;
-            case SWAP_REGION:
-                for (i = first_word + 1; i < last_word; i++)
-                    bits->words[i] ^= WORD_MAX;
-                break;
-        }
-
-        // Set last word
-        switch (action) {
-            case ZERO_REGION: bits->words[last_word] &= ~bitmask64(loffset+1); break;
-            case FILL_REGION: bits->words[last_word] |=  bitmask64(loffset+1); break;
-            case SWAP_REGION: bits->words[last_word] ^=  bitmask64(loffset+1); break;
-        }
-    }
-}
-
 // allocates a STANDALONE bit array
 Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE)
 {
@@ -253,50 +188,64 @@ Bits bits_alloc_do (uint64_t nbits, bool clear, FUNCLINE)
     return bits;
 }
 
-// Set all the bits in a region
+// set all the bits in a region
 void bits_set_region (BitsP bits, uint64_t start, uint64_t len)
 {
-    if (!len) return; // nothing to do 
+    if (!len) return;
 
-    ASSERT (start + len - 1 <= bits->nbits, "Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bits->nbits(%"PRId64")",
+    ASSERT (start + len <= bits->nbits, "Expecting: start=%"PRId64" + len=%"PRId64" <= nbits=%"PRId64"",
             start, len, bits->nbits); 
 
-    SET_REGION (bits, start, len);
+    uint64_t first_word   = bitset64_wrd(start);
+    uint64_t last_word    = bitset64_wrd(start + len - 1);
+    word_offset_t foffset = bitset64_idx(start);
+    word_offset_t loffset = bitset64_idx(start + len - 1);
+
+    if (__builtin_expect (first_word == last_word, false)) {
+        uint64_t mask = bitmask64(len) << foffset;
+        bits->words[first_word] |= mask; 
+    }
+    
+    else {
+        bits->words[first_word] |= ~bitmask64(foffset);     // set first word
+        
+        for (uint64_t i=first_word + 1; i < last_word; i++) // set whole words
+            bits->words[i] = WORD_MAX;
+
+        bits->words[last_word] |= bitmask64(loffset+1);     // set last word
+    }
+
     DEBUG_VALIDATE (bits);
 }
-
 
 // Clear all the bits in a region
 void bits_clear_region_do (BitsP bits, uint64_t start, uint64_t len, FUNCLINE)
 {
     if (!len) return; // nothing to do 
 
-    ASSERT (start + len - 1 <= bits->nbits, "called from %s:%u: Expecting: start(%"PRId64") + len(%"PRId64") - 1 <= bits->nbits(%"PRId64")",
+    ASSERT (start + len <= bits->nbits, "called from %s:%u: Expecting: start=%"PRId64" + len=%"PRId64" <= nbits=%"PRId64,
             func, code_line, start, len, bits->nbits); // divon fixed bug
 
-    CLEAR_REGION (bits, start, len);
-    DEBUG_VALIDATE (bits);
-}
+    uint64_t first_word   = bitset64_wrd(start);
+    uint64_t last_word    = bitset64_wrd(start + len - 1);
+    word_offset_t foffset = bitset64_idx(start);
+    word_offset_t loffset = bitset64_idx(start + len - 1);
 
-//
-// Set, clear all bits at once
-//
-
-void bits_set_all (BitsP bits)
-{
-    if (!bits->nwords) return; // nothing to do
+    if (__builtin_expect (first_word == last_word, false)) {
+        uint64_t mask = bitmask64(len) << foffset;
+        bits->words[first_word] &= ~mask;
+    }
     
-    memset (bits->words, 0xFF, bits->nwords * sizeof(uint64_t));
-    bits_clear_excess_bits_in_top_word (bits, true);
-    DEBUG_VALIDATE(bits);
-}
+    else {
+        bits->words[first_word] &= bitmask64(foffset);      // clear first word
 
-void bits_clear_all (BitsP bits)
-{
-    if (!bits->nwords) return; // nothing to do
+        for (uint64_t i=first_word + 1; i < last_word; i++) // clear whole words
+            bits->words[i] = (uint64_t)0;
 
-    memset (bits->words, 0, bits->nwords * sizeof(uint64_t));
-    DEBUG_VALIDATE(bits);
+        bits->words[last_word] &= ~bitmask64(loffset+1);    // clear last word
+    }
+
+    DEBUG_VALIDATE (bits);
 }
 
 //
@@ -570,14 +519,14 @@ void bits_print_substr_bases (rom msg, ConstBitsP bits, uint64_t start_base, uin
     fputc ('\n', file);
 }
 
-//
-// Clone and copy
-//
-
-// destination and source may be the same bits
-// and src/dst regions may overlap
-static void _array_copy (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx, uint64_t length)
+// destination and source may be the same bits and src/dst regions may overlap
+void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx, uint64_t length, FUNCLINE)
 {
+    DEBUG_VALIDATE(src);
+
+    ASSERT (dstindx + length <= dst->nbits, "called from %s:%u dstindx(%"PRIu64") + length(%"PRIu64") > dst->nbits(%"PRIu64")", func, code_line, dstindx, length, dst->nbits);
+    ASSERT (srcindx + length <= src->nbits, "called from %s:%u srcindx(%"PRIu64") + length(%"PRIu64") > src->nbits(%"PRIu64")", func, code_line, srcindx, length, src->nbits);
+
     // Num of full words to copy
     uint64_t num_of_full_words = length / WORD_SIZE;
     uint64_t i;
@@ -618,20 +567,8 @@ static void _array_copy (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t s
             _set_word (dst, dstindx, word);
         }
     }
-}
 
-// destination and source may be the same bits
-// and src/dst regions may overlap
-void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx, uint64_t length, FUNCLINE)
-{
-    DEBUG_VALIDATE(src);
-
-    ASSERT (dstindx + length <= dst->nbits, "called from %s:%u dstindx(%"PRIu64") + length(%"PRIu64") > dst->nbits(%"PRIu64")", func, code_line, dstindx, length, dst->nbits);
-    ASSERT (srcindx + length <= src->nbits, "called from %s:%u srcindx(%"PRIu64") + length(%"PRIu64") > src->nbits(%"PRIu64")", func, code_line, srcindx, length, src->nbits);
-
-    _array_copy (dst, dstindx, src, srcindx, length);
-
-    // note: only zero top word if copy reaches it
+    // note: only zero top word if copy reaches it WHY IS THIS NEEDED?
     if (dstindx + length == dst->nbits)
         bits_clear_excess_bits_in_top_word(dst, true);
 

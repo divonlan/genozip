@@ -12,6 +12,7 @@
 #else
 #include <fcntl.h>
 #include <errno.h>
+#include <pwd.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -22,12 +23,10 @@
 #endif
 #include "ref_private.h"
 #include "file.h"
-#include "refhash.h"
+#include "refhash_friend.h"
 #include "arch.h"
 #include "filename.h"
 #include "tip.h"
-
-#define REF_CACHE_FORMAT_VERSION 0
 
 bool ref_cache_is_cached     (void) { return gref.cache_state == CACHE_READY;      }
 bool ref_cache_is_populating (void) { return gref.cache_state == CACHE_POPULATING; }
@@ -37,29 +36,18 @@ bool ref_cache_is_populating (void) { return gref.cache_state == CACHE_POPULATIN
 
 #define NO_SHM ((void *)-1)
 
-void ref_cache_remove_do (bool cache_exists, bool verbose)
-{
-    ASSINP (cache_exists, "There is currently no cache for reference file %s", gref.filename);
-    if (!gref.cache) return; // fail silently (could happen with --no-cache)
+#ifdef _WIN32
+#define CACHE_ITERATOR_CB(func) bool func (uint32_t ref_i, int pid)
 
-#ifndef _WIN32    
-    ASSERT (shmctl (gref.cache_shm, IPC_RMID, NULL) != -1,
-            "Failed to remove cache of reference file %s: %s (try: ipcrm -m %u)", 
-            gref.filename, strerror(errno), gref.cache_shm);
+// messages genozip -> holder process (Windows)
+#define MSG_LIST      "List" 
+#define MSG_TERMINATE "Terminate"
 
-#else // Windows
-    gref.cache->terminate_holder = true; // Windows memory model ensures this will be immediately visible to the holder process
-
+#else
+#define CACHE_ITERATOR_CB(func) bool func (uint32_t ref_i, int shmid, RefCache *cache)
 #endif
+typedef CACHE_ITERATOR_CB ((*RefCacheIteratorCallback));
 
-    if (flag.show_cache) iprint0 ("show-cache: shmctl removed shm.\n");
-
-    if (verbose) 
-        iprintf ("Removing cache of reference file %s from shared memory.\n"
-                 "If there are running genozip processes using this reference, it will be removed when the last process exits.\n",
-                 gref.filename);
-
-}
 
 static RefCacheState ref_cache_set_ready (void)
 {
@@ -131,21 +119,6 @@ static RefCacheState ref_cache_handle_existing (uint64_t data_size,
     return 0; // bogus return
 }
 
-// Windows-only, run by cache-hold process: since it inherited the file mapping handle, the file mapping
-// will remain in memory as long as this process is alive. It dies when it is asked to.
-void noreturn ref_cache_hold (rom handle_str)
-{
-#ifdef _WIN32
-    HANDLE h = (HANDLE)atoll (handle_str); // inherited from cache creator process
-
-    const RefCache *ref_cache = MapViewOfFile (h, FILE_MAP_READ, 0, 0, sizeof (RefCache));
-    
-    while (!ref_cache->terminate_holder) 
-        sleep(2); // it will take us up to 2 seconds get the termination order. that's fine - user is not waiting on this.
-#endif
-    exit (0);
-}
-
 // maps cache to reference if shm exists, or creates a new shm if it doesn't, or creates genome in memory if no shm
 // returns true if ref_cache can be used
 bool ref_cache_initialize_genome (void)
@@ -163,13 +136,16 @@ bool ref_cache_initialize_genome (void)
     ASSERT0 (flag.reading_reference && z_file && z_file->file, "not reading reference");
 
     uint64_t shm_size = sizeof (RefCache) + genome_size + refhash_size;
+    uint32_t holder_pid = 0;
     
 #ifndef _WIN32
-    key_t key = ftok (gref.filename, 20010802);
-
     struct stat st;
     ASSGOTO (stat64 (gref.filename, &st) >= 0, FAIL_MSG "stat (%s) failed: %s", gref.filename, strerror(errno));
-    
+
+    // since 15.0.82: key by inode (up to 15.0.81: ftok (ref_basename, 20010802), ref_basename as in command line)
+    // note: inode is consistent across docker containers mounting the same filesystem, 
+    // and in case of a symlink, it is the inode of the actual target file
+    key_t key = fibonacci (st.st_ino + 20010802/*salt*/, 31); // 31 to avoid negative keys, which cause mis-indentation in /proc/sysvipc/shm that we parse
     int permissions = 0600 | (st.st_mode & 066); // RW permissions to "groups" and "other" copied from the reference file
 
     // note: a new shm segment is initialized by the OS to 0.
@@ -228,15 +204,15 @@ bool ref_cache_initialize_genome (void)
         
         ASSERT (SetHandleInformation (gref.cache_shm, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT), "SetHandleInformation failed: %s", str_win_error());
 
-        // Limitation: when running a *Windows* genozip.exe executable from a WSL session, the holder process
-        // will die when the parent process dies.
         ASSERT (CreateProcessA (exec, cmd, NULL, NULL, true, 
                                 BELOW_NORMAL_PRIORITY_CLASS |  // also used by ref_cache_remove_all to idetify the holder processes
-                                CREATE_NEW_PROCESS_GROUP,      // without this, some shells will kill ALL cache holder processes created in this shell, if a genozip process is stopped with Ctrl-C
+                                CREATE_NEW_PROCESS_GROUP |     // without this, some shells will kill ALL cache holder processes created in this shell, if a genozip process is stopped with Ctrl-C
+                                DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB, // Running a Windows exe on WSL2: this prevents Linux from killing the Windows cache holder process when the main genozip.exe process finishes
                                 NULL, NULL, &si, &pi),
                 "Failed to create cache holder process for %s: \"%s\": %s", gref.filename, cmd, str_win_error());
         
         CloseHandle (pi.hThread); // child process's main thread
+        holder_pid = pi.dwProcessId;
     }
 
     if (gref.cache_shm != CACHE_SHM_NONE) {
@@ -275,8 +251,10 @@ bool ref_cache_initialize_genome (void)
         gref.cache->creator_pid = getpid();
         gref.cache->magic = GENOZIP_MAGIC;
         gref.cache->genozip_version = code_version().major;
-        gref.cache->cache_format_version = REF_CACHE_FORMAT_VERSION;
+        gref.cache->RefCache_ver = 0;
         gref.cache->shm_size = shm_size;
+        gref.cache->holder_pid = holder_pid; // 15.0.82
+        gref.cache->unused = 0;
         filename_base (gref.filename, false, "<unknown>", gref.cache->ref_basename, sizeof (gref.cache->ref_basename));
 
         __atomic_thread_fence (__ATOMIC_RELEASE); 
@@ -291,10 +269,13 @@ cache_ok:
     if (flag.show_cache) iprintf ("show-cache: attached genome_buf (%"PRIu64" bases) to %s shm\n", gref.genome_nbases, gref.cache_state == CACHE_READY ? "READONLY" : "READWRITE");
 
     // attach the cache data (read-write if CACHE_POPULATING - we will switch to read-only in ref_cache_done_populating; read-only if CACHE_READY)
-    buf_attach_to_shm (evb, &refhash_buf, gref.cache->genome_data + genome_size, refhash_size, "refhash_buf");
-    refhash_buf.len = refhash_size;
+    if (refhash_exists()) {
+        buf_attach_to_shm (evb, &refhash_buf, gref.cache->genome_data + genome_size, refhash_size, "refhash_buf");
+        refhash_buf.len = refhash_size;
+        
+        if (flag.show_cache) iprintf ("show-cache: attached refhash_buf (len=%"PRIu64") to %s shm\n", refhash_buf.len, gref.cache_state == CACHE_READY ? "READONLY" : "READWRITE");
+    }
     
-    if (flag.show_cache) iprintf ("show-cache: attached refhash_buf (len=%"PRIu64") to %s shm\n", refhash_buf.len, gref.cache_state == CACHE_READY ? "READONLY" : "READWRITE");
     return true;
 
 error:
@@ -324,9 +305,35 @@ void ref_cache_remove (void)
     ref_load_external_reference (&chrom_ctx); // this will call ref_cache_remove_do
 }
 
-unsigned ref_cache_iterator (bool (*callback)(int shmid, RefCache *cache))
+unsigned ref_cache_iterator (RefCacheIteratorCallback (callback), bool dormant_only)
 {
     unsigned count = 0;
+
+#ifdef _WIN32
+    // find and terminate all holder process
+    DWORD pids[16384], size; //  a large number
+    ASSERT (EnumProcesses (pids, sizeof (pids), &size), "EnumProcesses failed: %s", str_win_error());
+
+    for (int pid_i=0; pid_i < size / sizeof(DWORD); pid_i++) {
+        HANDLE process = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE, false, pids[pid_i]);
+        if (!process) continue;
+
+        // we use the priority to differentiate holder processes from normal genozip processes
+        if (GetPriorityClass(process) != BELOW_NORMAL_PRIORITY_CLASS) {
+            CloseHandle (process);
+            continue;
+        }
+
+        char filename[MAX_PATH+1];
+        uint32_t filename_len = GetProcessImageFileNameA (process, filename, MAX_PATH);
+        filename[filename_len] = 0;
+        CloseHandle (process);
+
+        if (strstr (filename, "genozip") || strstr (filename, "genounzip") || strstr (filename, "genocat")) 
+            count += callback (count, pids[pid_i]);
+    }
+
+#else
 
 #ifdef __linux__
     ASSERTNOTINUSE (evb->scratch);
@@ -340,89 +347,159 @@ unsigned ref_cache_iterator (bool (*callback)(int shmid, RefCache *cache))
         char *shmid_str = (char *)&lines[i][11];
         uint32_t shmid_str_len = 10;
         shmid_str[10] = 0;
-        str_trim (qSTRa(shmid_str));;
+        str_trim (qSTRa(shmid_str));
 
-        int shmid = atoi(shmid_str);
+        int shmid = atoi (shmid_str);
 
 #else // Mac and Unixes
     // brute-force scan for valid shm_id's... surely there is a better way
     for (int shmid = 0; shmid <= 1 MB; shmid++) { 
-#endif
+#endif // mac & unix
 
-#ifndef _WIN32
+        // filter out non-dormant if needed. note: must test for dormancy before attaching!
+        if (dormant_only) { 
+            struct shmid_ds ds = {};
+            if (shmctl (shmid, IPC_STAT, &ds) == -1) continue; // fail silently
+
+            time_t ago = time(0) - MAX_(ds.shm_atime, ds.shm_dtime);
+
+            if (ago < 60 * 60 * 24) // not dormant (attached or detached in the past 24 hours)
+                continue;
+        }
+
         RefCache *cache = shmat (shmid, NULL, SHM_RDONLY);
         if ((cache != NO_SHM) && (cache->magic == GENOZIP_MAGIC)) 
-            count += callback (shmid, cache);
+            count += callback (count, shmid, cache);
         
         shmdt (cache);
-#endif
     }
-
-    if (!count) WARN0 ("No in-memory cached reference files found");
+#endif // not windows
 
     return count;
 }
 
-#ifndef _WIN32
-static bool do_remove (int shmid, RefCache *cache)
+#ifdef _WIN32
+StrText ref_cache_win_pipe_name (int pid)
 {
-    WARN ("Unloading reference cache \"%s\"", cache->ref_basename);
-    bool success = (shmctl (shmid, IPC_RMID, NULL) != -1); 
+    if (!pid) // server side
+        pid = GetProcessId (GetCurrentProcess());
 
-    return success;
+    StrText s;
+    snprintf (s.s, sizeof(s.s), "\\\\.\\pipe\\genozip_%d", pid);
+    return s;
+}
+
+static bool ref_cache_msg_holder_process (int pid, rom request, StrText1K *response)
+{
+
+    // 2. Open the pipe as a file
+    HANDLE named_pipe = CreateFileA (
+        ref_cache_win_pipe_name (pid).s,
+        GENERIC_READ | GENERIC_WRITE,
+        0,              // No sharing
+        NULL,           // Default security
+        OPEN_EXISTING,  // Open existing pipe
+        0,              // Default attributes
+        NULL);          // No template file
+
+    ASSRET(named_pipe != INVALID_HANDLE_VALUE, false, 
+           "opening pipe to cache holder failed: %s", str_win_error());
+
+    DWORD bytes;
+    ASSRET (WriteFile(named_pipe, request, strlen (request)+1, &bytes, NULL), false,
+           "sending request to cache holder failed: %s", str_win_error());
+           
+    ASSRET (ReadFile(named_pipe, response->s, sizeof(response->s), &bytes, NULL), false,
+           "reading response from cache holder failed: %s", str_win_error());
+
+    CloseHandle (named_pipe); // pipe leaked in case of failure
+    return true;
 }
 #endif
 
-// remove all Genozip cache shm segments 
-void ref_cache_remove_all (void)
+
+static CACHE_ITERATOR_CB(do_remove)
 {
-#ifndef _WIN32
-    ref_cache_iterator (do_remove);
+    rom name;
 
-#elif defined _WIN32
-    // find and terminate all holder process
-    DWORD pids[16384], size; //  a large number
-    ASSERT (EnumProcesses (pids, sizeof (pids), &size), "EnumProcesses failed: %s", str_win_error());
+#ifdef _WIN32
+    StrText1K response;
+    bool success = ref_cache_msg_holder_process (pid, MSG_TERMINATE, &response);
+    name = response.s;
+#else
+    bool success = (shmctl (shmid, IPC_RMID, NULL) != -1); 
+    ASSERTW (success, "shmctl failed: %s", strerror (errno));
 
-    int count = 0;
-    for (int pid_i=0; pid_i < size / sizeof(DWORD); pid_i++) {
-        HANDLE process = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE, false, pids[pid_i]);
-        if (!process) continue;
+    name = cache->ref_basename;
+#endif
 
-        // we use the priority to differentiate holder processes from normal genozip processes
-        if (GetPriorityClass(process) != BELOW_NORMAL_PRIORITY_CLASS) continue;
+    if (IS_RM_CACHE || flag.show_cache)
+        WARN ("Unloaded reference cache \"%s\"", name);
 
-        char filename[MAX_PATH+1];
-        uint32_t filename_len = GetProcessImageFileNameA (process, filename, MAX_PATH);
-        filename[filename_len] = 0;
-
-        if (strstr (filename, "genozip") || strstr (filename, "genounzip") || strstr (filename, "genocat")) {
-            bool success = TerminateProcess (process, 0); 
-            ASSERTW (success, "TerminateProcess of pid=%u exec=%s failed: %s", (uint32_t)pids[pid_i], filename, str_win_error());
-            if (success) count++;
-        }
-    }
-
-    if (count) WARN ("Unloading reference cache of %d reference file%s", STRfN(count));
-#endif 
+    return success;
 }
 
-static bool do_ls (int shmid, RefCache *cache)
+void ref_cache_remove_do (bool cache_exists, bool verbose)
 {
+    ASSINP (cache_exists, "There is currently no cache for reference file %s", gref.filename);
+    if (!gref.cache) return; // fail silently (could happen with --no-cache)
+
+#ifndef _WIN32    
+    do_remove (0, gref.cache_shm, gref.cache);
+#else // Windows  
+    do_remove (0, gref.cache->holder_pid);    
+#endif
+
+    if (verbose) 
+        iprintf ("Removing cache of reference file %s from shared memory.\n"
+                 "If there are running genozip processes using this reference, it will be removed when the last process exits.\n",
+                 gref.filename);
+}
+
+// remove all Genozip cache shm segments 
+void ref_cache_remove_all (RefCacheRemoveType rm_type)
+{
+    if (rm_type == REF_CACHE_REMOVE_DORMANT && flag.is_windows) return; // not supported for Windows
+    
+    unsigned n_removed = ref_cache_iterator (do_remove, rm_type == REF_CACHE_REMOVE_DORMANT);
+    
+    WARN_IF0 (!n_removed && rm_type == REF_CACHE_REMOVE_ALL, "No in-memory cached reference files found");
+}
+
+static CACHE_ITERATOR_CB (do_list)
+{
+#ifdef _WIN32
+    if (ref_i == 0) // first reference
+        iprint0 ("pid    size        loaded               name\n");
+
+    StrText1K response;
+    if (!ref_cache_msg_holder_process (pid, MSG_LIST, &response))
+        return false;
+
+    iprintf ("%s", response.s);
+    return true;
+    
+#else
+    if (ref_i == 0) // first reference
+        iprint0 ("shmid  owner     perm size        loaded               name\n");
+
+    struct shmid_ds ds = {};
+    ASSERT (shmctl (shmid, IPC_STAT, &ds) != -1, "shmctl failed: %s", strerror (errno));
+
     StrText time_str = {};
     struct tm *time_info = localtime ((time_t *)&cache->creation_ts); // assumes time_t is 64 bit
     strftime (time_str.s, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", time_info);
-    iprintf ("%s (shmid=%u size=%"PRIu64" loaded=%s)%s\n", 
-             cache->ref_basename, shmid,cache->shm_size, time_str.s, (cache->is_populated ? "" : " NOT READY"));
-    
+    iprintf ("%-5u  %-8s  %03o  %-10"PRIu64"  %19s  %s  %s\n", 
+             shmid, getpwuid (ds.shm_perm.uid)->pw_name, ds.shm_perm.mode & 0777, cache->shm_size,
+             time_str.s, cache->ref_basename, (cache->is_populated ? "" : " NOT READY"));
     return true;
+#endif
 }
 
 void ref_cache_ls (void)
 {
-    ASSINP0 (!flag.is_windows, "genols --cache option is not available on Windows");
-
-    ref_cache_iterator (do_ls);
+    if (!ref_cache_iterator (do_list, false))
+        WARN0 ("No in-memory cached reference files found");
 }
 
 // note: buffers attached to this cache become invalid after shm is detached. best to free/destroy them before.
@@ -449,4 +526,63 @@ void ref_cache_detach (void)
 rom cache_state_name (RefCacheState cs)
 {
     return IN_RANGE (cs, 0, NUM_CACHE_STATES) ? (rom[])CACHE_STATE_NAMES[cs] : "InvalidRefCacheState";
+}
+
+// Windows-only, run by cache-hold process: since it inherited the file mapping handle, the file mapping
+// will remain in memory as long as this process is alive. It dies when it is asked to.
+void noreturn ref_cache_hold (rom handle_str)
+{
+#ifdef _WIN32
+    HANDLE h = (HANDLE)atoll (handle_str); // inherited from cache creator process
+
+    RefCache *cache = MapViewOfFile (h, FILE_MAP_READ, 0, 0, sizeof (RefCache));
+
+    // wait indefinitely for requests from user
+    while (1) {
+        #define REQUEST_SIZE 64/*bytes*/
+        HANDLE pipe_handle = CreateNamedPipeA ( // a new instance of the pipe
+            ref_cache_win_pipe_name(0).s, PIPE_ACCESS_DUPLEX,
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+            PIPE_UNLIMITED_INSTANCES, sizeof (StrText1K), REQUEST_SIZE, 0, NULL);
+        
+        if (pipe_handle == INVALID_HANDLE_VALUE) stall(); // can't receive messages, but is held
+
+        // wait for a client to connect to this instance
+        if (ConnectNamedPipe (pipe_handle, NULL) || GetLastError() == ERROR_PIPE_CONNECTED) {
+            char req[REQUEST_SIZE] = {};
+            DWORD bytes;
+            bool terminate = false;
+
+            if (ReadFile (pipe_handle, req, REQUEST_SIZE-1, &bytes, NULL) && bytes) {
+                StrText1K response = {};
+                
+                if (!strcmp (req, MSG_TERMINATE)) {
+                    terminate = true;
+                    strcpy (response.s, cache->ref_basename);
+                }
+
+                else if (!strcmp (req, MSG_LIST)) {
+                    StrText time_str = {};
+                    struct tm *time_info = localtime ((time_t *)&cache->creation_ts); // assumes time_t is 64 bit
+                    strftime (time_str.s, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", time_info);
+
+                    snprintf (response.s, sizeof(response)-1, "%-5u  %-10"PRIu64"  %19s  %s  %s\n", 
+                              cache->holder_pid, cache->shm_size, time_str.s, cache->ref_basename, (cache->is_populated ? "" : " NOT READY"));
+                }
+
+                else
+                    strcpy (response.s, "Invalid request to cache holder process");
+
+                WriteFile (pipe_handle, response.s, strlen (response.s)+1/*NUL*/, &bytes, NULL);
+
+                FlushFileBuffers (pipe_handle);
+                DisconnectNamedPipe (pipe_handle);
+                CloseHandle (pipe_handle);
+
+                if (terminate) break;
+            }
+       }    
+    }
+#endif
+    exit (0); // now that the holder process has exited, the shared memory will be destroyed by Windows when last user process terminates
 }

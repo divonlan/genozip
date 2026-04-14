@@ -315,11 +315,11 @@ bool sam_cigar_textual_to_binary (VBlockP vb, STRp(cigar), BufferP binary_cigar,
 }
 
 // display first 10K characters of a binary cigar - textually
-StrTextMegaLong dis_binary_cigar (VBlockP vb, ConstBamCigarOpP cigar, uint32_t cigar_len/*in ops*/, BufferP working_buf)
+StrText16K dis_binary_cigar (VBlockP vb, ConstBamCigarOpP cigar, uint32_t cigar_len/*in ops*/, BufferP working_buf)
 {
     ASSERTNOTINUSE (*working_buf);
 
-    StrTextMegaLong out = {};
+    StrText16K out = {};
     sam_cigar_binary_to_textual (vb, STRa(cigar), false, working_buf);
     uint32_t len = MIN_(working_buf->len32, sizeof(out.s)-1);
     memcpy (out.s, working_buf->data, len);

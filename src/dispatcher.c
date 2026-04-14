@@ -47,7 +47,7 @@ typedef struct DispatcherData {
     uint32_t num_running_compute_threads;
     uint32_t next_vb_i;
     uint32_t max_threads;
-    StrTextLong filename;
+    StrText1K filename;
     
     Timestamp init_timestamp;
     uint32_t total_compute_time; // in msec
@@ -100,8 +100,7 @@ void dispatcher_increment_progress (rom where, int64_t increment)
 
     double portion_of_task  = d->target_progress ? MIN_(1.0, ((double)load_relaxed (d->progress) / (double)d->target_progress)) : 0;
     double portion_of_total = ((double)pc_of_total_completed / 100.0) + portion_of_task * ((double)d->task_pc_of_total / 100.0);
-// printf ("xxx %s portion_of_task=%1.1f portion_of_total=%1.1f progress=%"PRIu64" target_progress=%"PRIu64"\n", 
-// task_name(d->task), portion_of_task, portion_of_total, d->progress, d->target_progress);
+
     if (progress_stage == PROG_PERCENT)
         progress_update (d->task, portion_of_total, portion_of_task, false);
 }
@@ -129,7 +128,7 @@ static rom dispatcher_pre_progress_msg (Task task)
 // estimated % of time spend on the ZIP task: progress bar will allocate this % as the "100%" of each task
 static int dispatcher_task_percent_of_total (Task task)
 {
-    if (IS_PIZ && ធ(PIZ))
+    if (IS_PIZ && ធ(PIZ)) // note: reading internal reference is about ~0.2% in a WGS BAM
         return 100;
 
     else if (IS_PIZ) // all PIZ other tasks
@@ -138,16 +137,21 @@ static int dispatcher_task_percent_of_total (Task task)
     else if (flag.seg_only) 
         return ធ(ZIP) ? 100 : 0;
     
-    else if (flag.make_reference)
-        return ធ(ZIP)           ? 25
-             : ធ(MAKE_REF_COMP) ? 25
-             : ធ(MRH_OCCUPY)    ? 25
-             : ធ(MRH_COMPRESS)  ? 25
+    else if (IN_RANGX (flag.make_reference, MAKE_REF_TINY, MAKE_REF_LARGE))
+        return ធ(ZIP)           ? 31 // very roughly divide equally to 4 tasks - varies a lot
+             : ធ(MAKE_REF_COMP) ? 23
+             : ធ(MRH_OCCUPY)    ? 23
+             : ធ(MRH_COMPRESS)  ? 23
              :                   0;
 
-    else if (z_file && (IS_REF_INTERNAL || IS_REF_EXT_STORE))
-        return ធ(ZIP)           ? 93
-             : ធ(COMPRESS_REF)  ? 7
+    else if (flag.make_reference == MAKE_REF_MINIMAL) 
+        return ធ(ZIP)           ? 72 // very roughly divide equally to 4 tasks - varies a lot
+             : ធ(MAKE_REF_COMP) ? 28
+             :                   0;
+
+    else if (z_file && IS_REF_INTERNAL) // note: not IS_REF_EXT_STORE as sections are copied as-is from external reference, so very fast
+        return ធ(ZIP)           ? 97
+             : ធ(COMPRESS_REF)  ? 3
              :                    0;
 
     else 
@@ -198,7 +202,7 @@ Dispatcher dispatcher_init (Task task,
     task_time[task] = arch_timestamp() / 1000000000.0; // seconds
 
     if (filename)
-        strncpy (d->filename.s, filename, sizeof (StrTextLong)-1);
+        strncpy (d->filename.s, filename, sizeof (StrText1K)-1);
 
     ASSERT (max_threads <= global_max_threads, "expecting max_threads=%u <= global_max_threads=%u", max_threads, global_max_threads);
 
@@ -242,6 +246,7 @@ void dispatcher_pause (Dispatcher d)
     d->next_vb_i--;
 
     start_time_initialized = false;
+    pc_of_total_completed  = 0; // we will start a new progress bar upon resume
 }
 
 // PIZ: reinit dispatcher, used when splitting a genozip file to its components, using a single dispatcher object
@@ -252,11 +257,12 @@ void dispatcher_resume (Dispatcher d, uint32_t target_progress, CompIType comp_i
     d->filename        = txtheader_get_txt_filename_from_section (comp_i);
     d->progress        = 0;
     d->target_progress = target_progress;
+    curr = d;
 
-    if (d->paused) 
+    if (d->paused) {
         progress_new_component (d->filename.s, "0\%", start_time_initialized ? &start_time : NULL);    
-
-    d->paused          = false;
+        d->paused = false;
+    }
 }
 
 uint32_t dispatcher_get_next_vb_i (Dispatcher d)
@@ -513,7 +519,8 @@ void dispatcher_end_task (Dispatcher d)
 {
     if (d->pool_type == POOL_MAIN) {
         pc_of_total_completed += d->task_pc_of_total;
-        progress_update (d->task, (double)pc_of_total_completed / 100.0, 1, pc_of_total_completed == 100);
+        if (d->task_pc_of_total)
+            progress_update (d->task, (double)pc_of_total_completed / 100.0, 1, pc_of_total_completed == 100);
         curr = 0;
     }
 
@@ -527,7 +534,7 @@ void dispatcher_end_task (Dispatcher d)
 
     if (flag.show_tasks) {
         progress_newline();
-        iprintf ("End task %s 🕑=%1.2f\"\n", task_name (d->task), task_time[d->task]);
+        iprintf ("End task %s 🕑=%1.2f seconds\n", task_name (d->task), task_time[d->task]);
     }
 
     if (!dispatcher_keep_after_ending (d->task)) // free dispatcher, unless caller will take care of it

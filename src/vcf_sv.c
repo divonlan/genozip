@@ -117,7 +117,7 @@ static void vcf_piz_sv_recon_ID_from_mate (VBlockVCFP vb, ContextP ctx, bool rec
                     break;
 
                 case MATE_PBSV: {
-                    extern StrTextLong vcf_pbsv_get_mate_id (STRp(id), uint32_t *len/*out*/);
+                    extern StrText1K vcf_pbsv_get_mate_id (STRp(id), uint32_t *len/*out*/);
                     STR(id);
                     id = vcf_pbsv_get_mate_id (STRa(mate_id), &id_len).s;
                     RECONSTRUCT_str (id);

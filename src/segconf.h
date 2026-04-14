@@ -386,7 +386,7 @@ extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType3
 extern void segconf_test_multiseq (VBlockP vb, Did nonref);
 extern StrText segconf_get_qual_histo (QualHistType qht);
 extern unsigned segconf_get_num_qual_scores (QualHistType qht);
-extern StrTextLong segconf_get_optimizations (void);
+extern StrText1K segconf_get_optimizations (void);
 extern void segconf_piz_initialize (void);
 
 #define segconf_running __builtin_expect (segconf.running, false)

@@ -307,11 +307,11 @@ void refhash_make_refhash (void)
     buf_destroy (hash_hits_by_entry);
     ref_destroy_genome();
     return_freed_memory_to_kernel();
-// xxx why not out of order?
+
     // pass four: (dispatch refhash blocks) compress and write the hash table to the reference file being created
     dispatcher_fan_out_task (TASK_MRH_COMPRESS, NULL, 
                              /*target_progress=*/ref_hash_len * 3, 
-                             JOIN_OUT_OF_ORDER, // SEC_REF_HASH sections may be writtens out-of-order
+                             JOIN_OUT_OF_ORDER, // SEC_REF_HASH sections may be written out-of-order
                              false, 0, 5000,
                              refhash_prepare_for_compress, 
                              refhash_compress_one_vb, 
@@ -326,7 +326,7 @@ void refhash_make_refhash (void)
     if (flag.show_ref_hash) {
         iprintf ("\n\nReference hash summary for %s:\n", z_name);
         iprintf ("Algorithm parameters:\n\trefhash_size = %s\n\tbases_per_hash_in = %u\n\tbits_per_hash_out = %u\n\tn_hash_ents = %s\n\n", 
-                 ref_hash_sizes[flag.make_reference], BASES_PER_HASH, bits_per_hash_out, str_int_commas (ref_hash_len).s);
+                 make_ref_size_name (flag.make_reference), BASES_PER_HASH, bits_per_hash_out, str_int_commas (ref_hash_len).s);
         iprintf ("FASTA:\n\tgenome_nbases = %s\n\tgpos_bytes = %u\n\thooks_in_genome = %s (%1.1f%% of bases)\n\n", // note: genome_nbases include padding on every range, so a bit more than the number of biological bases
                  str_int_commas (*p_genome_nbases).s, (int)gpos_bytes, str_int_commas (hooks_in_genome).s, percent (hooks_in_genome, *p_genome_nbases)); 
         iprintf ("Performance:\n\thash_ents_occupied = %1.1f%%\n\thooks_in_hash_table = %s (%1.1f%% of hooks in genome)\n",
@@ -343,5 +343,5 @@ void ref_make_genozip_header (SectionHeaderGenozipHeaderP header)
     header->ref.bits_per_hash_out = bits_per_hash_out;
     header->ref.gpos_bytes        = gpos_bytes;
     header->ref.bases_per_hash    = BASES_PER_HASH;
-    header->ref.make_ref_flag     = flag.make_reference;
+    header->ref.make_ref_size     = flag.make_reference;
 }

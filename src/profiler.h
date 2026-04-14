@@ -18,9 +18,9 @@
         file_open_z, file_close, buf_low_level_free, buflist_find_buf, buflist_sort, buflist_test_overflows_do,\
         read, compute, compressor_bz2, compressor_lzma, compressor_bsc, \
         write, zriter_write, piz_read_one_vb, vb_get_vb,\
-        compressor_domq, compressor_actg, mgzip_uncompress_during_read, igzip_uncompress_during_read, \
+        compressor_domq, compressor_acgt, compressor_xcgt, mgzip_uncompress_during_read, igzip_uncompress_during_read, \
         piz_get_line_subfields, b250_zip_generate, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\
-        zfile_uncompress_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, compressor_homp, compressor_t0, \
+        zfile_uncompress_section, zfile_uncompress_ref_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, compressor_homp, compressor_t0, \
         compressor_rans, compressor_arith, compressor_normq, compressor_pacb, compressor_smux, compressor_oq, \
         codec_domq_reconstruct, codec_domq_reconstruct_dom_run, codec_longr_reconstruct, codec_homp_reconstruct, \
         codec_t0_reconstruct, codec_pacb_reconstruct, codec_smux_reconstruct, codec_oq_reconstruct, \
@@ -70,7 +70,7 @@
         refhash_revcomp_genome_do, ref_contigs_compress,\
         zip_write_global_area, zip_finalize, \
         piz_read_global_area, ref_load_stored_reference, reference_re_digest_genome, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
-        ref_read_one_range, ref_uncompress_one_range, vb_release_vb_do, vb_destroy_vb, buflist_free_vb, buflist_compact,\
+        ref_read_multiple_ranges, ref_uncompress_multiple_ranges, vb_release_vb_do, vb_destroy_vb, buflist_free_vb, buflist_compact,\
         sam_load_groups_add_one_prim_vb, sam_load_groups_move_comp_to_zfile, sam_load_groups_move_comp_to_zfile_idle, \
         sam_load_groups_add_qnames, sam_load_groups_add_flags, sam_load_groups_add_seq, sam_load_groups_add_seq_pack, sam_load_groups_add_qual, sam_load_groups_add_cigars, \
         sam_load_groups_add_SA_alns, sam_load_groups_add_solo_data, sam_load_groups_add_grps, \
@@ -81,7 +81,7 @@
         zip_handle_unique_words_ctxs, random_access_merge_in_vb, \
         vcf_seg_PROBE_A, vcf_seg_QUAL, \
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,\
-        ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file,\
+        ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file, ref_uncompact_ref, \
         piz_main_loop_idle, zip_main_loop_idle, zip_free_undeeded_zctx_bufs_after_seg, \
         piz_uncompress_all_ctxs__recon, piz_uncompress_all_ctxs__fasta_writer_init, piz_uncompress_all_ctxs__fastq_read_r1, piz_uncompress_all_ctxs__sam_load_sag,\
         gencomp_absorb_vb_gencomp_lines, gencomp_flush, gencomp_offload_DEPN_to_disk, gencomp_reread_lines_as_prescribed, gencomp_do_offload_write, \
@@ -164,4 +164,4 @@ extern void profiler_initialize (void);
 extern void profiler_add_evb_and_print_report (void);
 extern void profiler_new_z_file (void);
 extern void profiler_set_avg_compute_vbs (float avg_compute_vbs);
-extern StrTextSuperLong profiler_get_avg_compute_vbs (char sep);
+extern StrText4K profiler_get_avg_compute_vbs (char sep);

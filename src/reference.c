@@ -7,6 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include <errno.h>
+#include <stdalign.h>
 #include "ref_private.h"
 #include "dispatcher.h"
 #include "zfile.h"
@@ -64,9 +65,9 @@ void ref_get_genome (const Bits **genome, PosType64 *genome_nbases)
 // if revcomp: seq generated is still between [gpos, (gpos + seq_len - 1)], just revcomped 
 rom ref_get_textual_seq (PosType64 gpos, STRc(ref), bool revcomp)
 {
-    static union { 
-        char b4[256][4];      // 256 possibilities of 4 bases in a 2bit-representation.
-        uint32_t b4_int[256]; // integer access to b4. also forces s to be 4B-aligned.
+    alignas(64) static union { // fits into 16 L1 cache lines
+        char b4[256][4];       // 256 possibilities of 4 bases in a 2bit-representation.
+        uint32_t b4_int[256];  // integer access to b4. also forces s to be 4B-aligned.
     } s = { .b4 = { 
         // last base A
         "AAAA", "CAAA", "GAAA", "TAAA",   "ACAA", "CCAA", "GCAA", "TCAA", // last 2 bases: AA
@@ -106,7 +107,7 @@ rom ref_get_textual_seq (PosType64 gpos, STRc(ref), bool revcomp)
         "AGTT", "CGTT", "GGTT", "TGTT",   "ATTT", "CTTT", "GTTT", "TTTT",  
     } };
 
-    static union {
+    alignas(64) static union {
         char b4[256][4];
         uint32_t b4_int[256];
     } s_rev = { .b4 = {
@@ -327,8 +328,10 @@ ConstRangeP ref_piz_get_range (VBlockP vb, FailType soft_fail)
 // -------------------------------------------------------------------------------------------------------
 
 // PIZ: uncompact a region within ref - called by compute thread of reading the reference
-static void ref_uncompact_ref (RangeP r, int64_t first_bit, int64_t last_bit, const Bits *compacted)
+static void ref_uncompact_ref (VBlockP vb, RangeP r, int64_t first_bit, int64_t last_bit, const Bits *compacted)
 {
+    START_TIMER;
+
     uint64_t start_1_offset=first_bit, start_0_offset, len_1; // coordinates into r->is_set (in nucleotides)
     uint64_t next_compacted=0; // coordinates into compacted (in nucleotides)
 
@@ -358,6 +361,8 @@ static void ref_uncompact_ref (RangeP r, int64_t first_bit, int64_t last_bit, co
 
     ASSERT (next_compacted * 2 == compacted->nbits, "expecting next_compacted(%"PRId64") * 2 == compacted->nbits(%"PRId64")",
             next_compacted, compacted->nbits);
+
+    COPY_TIMER (ref_uncompact_ref);
 }
 
 // Compute thread: called by ref_uncompress_one_range
@@ -433,11 +438,9 @@ static void ref_show_sequence (void)
 // vb->z_data contains a SEC_REFERENCE section and sometimes also a SEC_REF_IS_SET section
 static void ref_uncompress_one_range (VBlockP vb)
 {
-    START_TIMER;
+    if (!vb->z_data.len) return; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
 
-    if (!vb->z_data.len) goto finish; // we have no data in this VB because it was skipped due to --regions or genocat --show-headers
-
-    SectionHeaderReferenceP h = (SectionHeaderReferenceP)B1ST8(vb->z_data);
+    SectionHeaderReferenceP h = (SectionHeaderReferenceP)B8(vb->z_data, *B32(vb->z_section_headers, vb->z_section_headers.next++));
 
     WordIndex chrom            = (WordIndex)BGEN32 (h->chrom_word_index);
     uint32_t uncomp_len        = BGEN32 (h->data_uncompressed_len);
@@ -524,7 +527,7 @@ static void ref_uncompress_one_range (VBlockP vb)
             ref_print_is_set (r, -1, info_stream);
 
         // prepare for uncompressing the next section - which is the SEC_REFERENCE
-        h = (SectionHeaderReferenceP)B8(vb->z_data, *B32(vb->z_section_headers, 1));
+        h = (SectionHeaderReferenceP)B8(vb->z_data, *B32(vb->z_section_headers, vb->z_section_headers.next++));
 
         if (flag.show_reference && primary_command == PIZ && r) 
             iprintf ("vb_i=%u Uncompressing %-14s chrom=%u ('%.*s') gpos=%"PRId64" pos=%"PRId64" num_bases=%u comp_bytes=%u\n", 
@@ -593,7 +596,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
         lock = ref_lock (sec_start_gpos, ref_sec_len + 63); // +63 to ensure lock covers entire last word
     
-        ref_uncompact_ref (r, sec_start_within_contig, sec_end_within_contig, compacted);
+        ref_uncompact_ref (vb, r, sec_start_within_contig, sec_end_within_contig, compacted);
     }
 
     else {
@@ -608,63 +611,76 @@ static void ref_uncompress_one_range (VBlockP vb)
     }
 
     ref_unlock (&lock);
-
-    buf_destroy (vb->scratch); // this is a lot of data so better destroy than free and let it stay for the rest of the execution (10% of all RAM consumption in some cases)
-    buf_destroy (vb->z_data);
-
-finish:
-    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined. 
-
-    if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
-
-    COPY_TIMER (ref_uncompress_one_range);
+    buf_free (vb->scratch);
 }
 
-static Section sec = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
-static void ref_read_one_range (VBlockP vb)
+static void ref_uncompress_multiple_ranges (VBlockP vb)
 {
     START_TIMER;
 
-    if (!sections_next_sec2 (&sec, SEC_REFERENCE, SEC_REF_IS_SET)) return;  // no more reference sections
+    while (vb->z_section_headers.next < vb->z_section_headers.len) 
+        ref_uncompress_one_range (vb); // uncompresses 1 or 2 sections: maybe SEC_REF_IS_SET, and certainly SEC_REFERENCE
+
+    buf_destroy (vb->scratch); // this might be a lot of data so better destroy than free and let it stay for the rest of the execution (10% of all RAM consumption in some cases)
+    buf_destroy (vb->z_data);
+
+    if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
+
+    vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined. 
+
+    COPY_TIMER (ref_uncompress_multiple_ranges);
+}
+
+static Section sec = NULL; // NULL -> first call to this sections_get_next_ref_range() will reset cursor 
+static void ref_read_multiple_ranges (VBlockP vb)
+{
+    // if sections are smaller, we will aggregate multiple to avoid cases of thread thrashing due
+    // to a very large number of tiny contigs
+    #define REF_MIN_Z_SIZE (3 MB) // based on testing on KaparaBook .exe  
+    START_TIMER;
+    SectionType prev_st = SEC_NONE;
+
+    buf_alloc (vb, &vb->z_section_headers, 0, 1 KB, int32_t, 0, "z_section_headers"); // initial
+
+    while ((vb->z_data.len < REF_MIN_Z_SIZE || prev_st == SEC_REF_IS_SET) &&
+           sections_next_sec2 (&sec, SEC_REFERENCE, SEC_REF_IS_SET)) {
         
-    unsigned header_len = (Z_DT(SAM) && z_file->z_flags.dts_ref_internal) ? crypt_padded_len (sizeof (SectionHeaderReference)) // REF_INTERNAL sections are encrypted if --password
-                                                                          : sizeof (SectionHeaderReference); // data originating from a reference file is never encrypted
-    if (((sec+1)->offset - sec->offset) == header_len) return; // final, terminating header-only section sometimes exists (see ref_compress_ref)
-    
-    // note since v14 - sec->vblock_i != vb->vblock_i because REFERENCE sections can be written out-of-order
+        unsigned header_len = (Z_DT(SAM) && z_file->z_flags.is_ref_internal) ? crypt_padded_len (sizeof (SectionHeaderReference)) // REF_INTERNAL sections are encrypted if --password
+                                                                             : sizeof (SectionHeaderReference); // data originating from a reference file is never encrypted
+        if (((sec+1)->offset - sec->offset) == header_len) break; // final, terminating header-only section sometimes exists (see ref_compress_ref)
+        
+        // note since v14 - sec->vblock_i != vb->vblock_i because REFERENCE sections can be written out-of-order
 
-    // if the user specified --regions, check if this ref range is needed
-    bool range_is_included = true;
-    RAEntry *ra = NULL;
-    if (IS_PIZ && flag.regions &&
-        !(Z_DT(REF) || Z_DT(BAM) || Z_DT(SAM) || Z_DT(FASTQ))) { // SAM/BAM/FASTQ: we need the reference even for excluded contigs, so recon can consume FASTQ_SEQMIS/SAM_SEQMIS (also always when reading external referene, as we don't yet know which files it will be use for)
-        if (sec->vblock_i > gref.stored_ra.len32) return; // we're done - no more ranges to read, per random access (this is the empty section)
+        // if the user specified --regions, check if this ref range is needed
+        bool range_is_included = true;
+        RAEntry *ra = NULL;
+        if (IS_PIZ && flag.regions &&
+            !(Z_DT(REF) || Z_DT(BAM) || Z_DT(SAM) || Z_DT(FASTQ))) { // SAM/BAM/FASTQ: we need the reference even for excluded contigs, so recon can consume FASTQ_SEQMIS/SAM_SEQMIS (also always when reading external referene, as we don't yet know which files it will be use for)
+            if (sec->vblock_i > gref.stored_ra.len32) break; // we're done - no more ranges to read, per random access (this is the empty section)
 
-        ra = B(RAEntry, gref.stored_ra, vb->vblock_i-1);
-        ASSERT (ra->vblock_i == sec->vblock_i, "expecting ra->vblock_i(%u) == sec->vblock_i(%u)", ra->vblock_i, sec->vblock_i);
+            ra = B(RAEntry, gref.stored_ra, vb->vblock_i-1);
+            ASSERT (ra->vblock_i == sec->vblock_i, "expecting ra->vblock_i(%u) == sec->vblock_i(%u)", ra->vblock_i, sec->vblock_i);
 
-        range_is_included = regions_is_ra_included (ra);
+            range_is_included = regions_is_ra_included (ra);
+        }
+
+        if (range_is_included) { 
+            int32_t offset = zfile_read_section (z_file, vb, sec->vblock_i, &vb->z_data, "z_data", sec->st, sec);
+            buf_append_one (vb->z_section_headers, offset);
+        }
+
+        prev_st = sec->st;
     }
-
-    if (range_is_included) { 
-        buf_alloc (vb, &vb->z_section_headers, 0, 2, int32_t, 0, "z_section_headers"); // room for 2 section headers  
-        ASSERT0 (vb->z_section_headers.len < 2, "unexpected 3rd recursive entry");
-
-        BNXT (int32_t, vb->z_section_headers) = zfile_read_section (z_file, vb, sec->vblock_i, &vb->z_data, "z_data", sec->st, sec);
-    }
-
-    // if this is SEC_REF_IS_SET, read the SEC_REFERENCE section now (even if its not included - we need to advance the cursor)
-    if (sec->st == SEC_REF_IS_SET) 
-        ref_read_one_range (vb);
 
     if (flag.only_headers) 
         vb->z_data.len = 0; // roll back if we're only showing headers
 
-    vb->dispatch = READY_TO_COMPUTE; // to simplify the code, we will dispatch the thread even if we skip the data, but we will return immediately. 
-
     if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
-    COPY_TIMER (ref_read_one_range);
+    if (vb->z_section_headers.len)
+        vb->dispatch = READY_TO_COMPUTE; // for simplicity, even if only_headers
+
+    COPY_TIMER (ref_read_multiple_ranges);
 }
 
 // PIZ: loading a reference stored in the genozip file - this could have been originally stored as REF_INTERNAL or REF_EXT_STORE
@@ -688,13 +704,13 @@ bool ref_load_stored_reference (void)
     // decompress reference using Dispatcher
     bool populating = ref_cache_is_populating();
 
-    // If not already present in shm, load the reference
+    // interal ref, or loading external if not already present in shm
     bool loaded_reference = populating || !ref_cache_is_cached();
     if (loaded_reference) { 
         dispatcher_fan_out_task (flag.reading_reference ? TASK_LOAD_EXT_REF : TASK_LOAD_STORED_REF, 
                                  NULL, 0, JOIN_OUT_OF_ORDER, false, 0, 100,
-                                 ref_read_one_range, 
-                                 ref_uncompress_one_range, 
+                                 ref_read_multiple_ranges, 
+                                 ref_uncompress_multiple_ranges, 
                                  NO_CALLBACK);
 
         if (flag.show_cache) iprint0 ("show-cache: done reading genome from disk\n");
@@ -704,7 +720,8 @@ bool ref_load_stored_reference (void)
     // --make-reference, stored in GENOZIP_HEADER.genome_digest
     if (flag.reading_reference && VER(15)) {
         START_TIMER;
-        Digest digest = digest_do (STRb(gref.genome_buf), gref.genome_digest_alg, "genome"); 
+        uint64_t bytes_to_digest = VER2(15,82) ? gref.genome_buf.nwords * sizeof (uint64_t) : gref.genome_buf.nwords/*defect 2026-04-12*/;  
+        Digest digest = digest_do (gref.genome_buf.data, bytes_to_digest, gref.genome_digest_alg, "genome"); 
         COPY_TIMER_EVB (ref_load_digest);
 
         // verify that digest of genome is memory is as calculated by make-reference (since v15). If not, its a bug.
@@ -725,10 +742,12 @@ bool ref_load_stored_reference (void)
     }
 
     // if we're populating the cache, also load refhash (even if not needed for compressing current file)
+
     if (populating) {
-        flag.aligner_available = true; // since refhash will exist
-        
-        refhash_load();
+        if (refhash_exists()) {
+            flag.aligner_available = true; // since refhash will exist
+            refhash_load();
+        }
 
         // finalizing loading the genome and refhash, and detaching read-write shm.
         ref_cache_done_populating(); 
@@ -739,9 +758,11 @@ bool ref_load_stored_reference (void)
         if (flag.show_cache) iprintf ("show-cache: re-attached genome_buf (%"PRIu64" bases) to READONLY shm\n", gref.genome_nbases);
         reoverlay_ranges_on_loaded_genome (delta_bytes); 
         
-        buf_attach_to_shm (evb, &refhash_buf, gref.cache->genome_data + gref.genome_buf.size, refhash_buf.len, "refhash_buf");
-        refhash_buf.len = refhash_buf.size;
-        if (flag.show_cache) iprintf ("show-cache: re-attached refhash_buf (len=%"PRIu64") to READONLY shm\n", refhash_buf.len);
+        if (refhash_exists()) {
+            buf_attach_to_shm (evb, &refhash_buf, gref.cache->genome_data + gref.genome_buf.size, refhash_buf.len, "refhash_buf");
+            refhash_buf.len = refhash_buf.size;
+            if (flag.show_cache) iprintf ("show-cache: re-attached refhash_buf (len=%"PRIu64") to READONLY shm\n", refhash_buf.len);
+        }
     }
 
     // case: using REF_EXT_STORE with a cached reference file: generate a private genome, as it will be compacted for writing to SEC_REFERENCE
@@ -789,11 +810,14 @@ bool ref_load_stored_reference (void)
 }
 
 // re-calculate the digest of a loaded reference genome - in case digest is needed using a different alg
-Digest reference_re_digest_genome (DigestAlg alg)
+Digest reference_re_digest_genome (DigestAlg alg, bool full_genome_digest)
 {
     START_TIMER;
     gref.genome_digest_alg = alg;
-    gref.genome_digest = digest_do (STRb(gref.genome_buf), gref.genome_digest_alg, "genome"); 
+
+    uint64_t bytes_to_digest = full_genome_digest ? gref.genome_buf.nwords * sizeof (uint64_t) : gref.genome_buf.nwords/*defect 2026-04-12*/;  
+
+    gref.genome_digest = digest_do (gref.genome_buf.data, bytes_to_digest, gref.genome_digest_alg, "genome"); 
 
     COPY_TIMER_EVB (reference_re_digest_genome);
     return gref.genome_digest;
@@ -833,8 +857,9 @@ RangeP ref_seg_get_range (VBlockP vb, WordIndex chrom, STRp(chrom_name),
     // we even observed BAM files in the wild with chrM POS=16572 (with the contig len = 16571) - which is why this is a warning and not an error
     if (pos < range->first_pos || (pos + ref_consumed - 1) > range->last_pos) {
         if (pos > range->last_pos) // warn only if entire SEQ is outside of range - i.e. don't warn for a read at the end of a circular contig, but still return NULL
+            // TO DO: don't print warning if @SQ field of contig has TP:circular 
             WARN_ONCE ("FYI: %s: contig=\"%.*s\"(%u) pos=%"PRIu64" ref_consumed=%u exceeds contig.last_pos=%"PRIu64". This might be an indication that the wrong reference file is being used (this message will appear only once)",
-                    LN_NAME, STRf(range->chrom_name), ref_index, pos, ref_consumed, range->last_pos);
+                       LN_NAME, STRf(range->chrom_name), ref_index, pos, ref_consumed, range->last_pos);
         return NULL;
     }
 
@@ -1113,7 +1138,7 @@ static void ref_compress_one_range (VBlockP vb)
     }
 
     // insert this range sequence into the ref_hash (included in the reference file, for use to compress of FASTQ, unaligned SAM and FASTA)
-    if (flag.make_reference >= MAKE_REF_TINY)
+    if (IN_RANGX (flag.make_reference, MAKE_REF_TINY, MAKE_REF_LARGE))
         refhash_calc_one_range (vb, REFHASH_COUNT_INSTANCES); // pass one of refhash generation
 
     // note: last_pos not the perfect messure, because the region might be compacted, so contain a lot less
@@ -1192,7 +1217,8 @@ void ref_compress_ref (void)
     else {
         ref_make_prepare_ranges_for_compress();
 
-        refhash_make_initialize();
+        if (flag.make_reference != MAKE_REF_MINIMAL)
+            refhash_make_initialize();
     }
 
     // copy already-compressed SEC_REFERENCE sections from the genozip reference file, but only such sections that are almost entirely
@@ -1272,7 +1298,7 @@ void ref_set_reference (rom filename, ReferenceType ref_type, bool is_explicit)
     
     rom env = getenv (GENOZIP_REFERENCE);
     unsigned filename_len;
-    StrTextLong alt_name;
+    StrText1K alt_name;
 
     if (!filename) { // called from setting flags
         if (!env || !env[0]) return; 
@@ -1369,12 +1395,12 @@ void ref_display_ref (void)
 
             int64_t adjust = flag.gpos ? r->gpos - r->first_pos : 0;
 
-            // case: normal sequence
+            // case: normal sequence (output to stdout)
             if (!revcomp) {
                 if (display_first_pos == display_last_pos)
-                    iprintf ("%"PRIu64"\t", display_first_pos + adjust);
+                    printf ("%"PRIu64"\t", display_first_pos + adjust);
                 else
-                    iprintf ("%"PRIu64"-%"PRIu64"\t", display_first_pos + adjust, display_last_pos + adjust);
+                    printf ("%"PRIu64"-%"PRIu64"\t", display_first_pos + adjust, display_last_pos + adjust);
 
                 for (PosType64 pos=display_first_pos, next_iupac_pos=display_first_pos ; pos <= display_last_pos ; pos++) {
                     char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (r, pos, false, &next_iupac_pos) : 0;
@@ -1383,12 +1409,12 @@ void ref_display_ref (void)
                 }
             }
 
-            // case: reverse complement
+            // case: reverse complement (output to stdout)
             else {
                 if (display_first_pos == display_last_pos)
-                    iprintf ("COMPLEM %"PRIu64"\t", display_first_pos + adjust);
+                    printf ("COMPLEM %"PRIu64"\t", display_first_pos + adjust);
                 else 
-                    iprintf ("COMPLEM %"PRIu64"-%"PRIu64"\t", display_last_pos + adjust, display_first_pos + adjust);
+                    printf ("COMPLEM %"PRIu64"-%"PRIu64"\t", display_last_pos + adjust, display_first_pos + adjust);
 
                 for (PosType64 pos=display_last_pos, next_iupac_pos=display_last_pos; pos >= display_first_pos; pos--) {
                     char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (r, pos, true, &next_iupac_pos) : 0;
@@ -1425,7 +1451,7 @@ void ref_load_external_reference (ContextP chrom_ctx)
     flag.no_writer = flag.no_writer_thread = true;
     flag.show_contigs = false;
     flag.show_gheader = false;
-    flag.show_time_comp_i = COMP_NONE;
+    // flag.show_time_comp_i = COMP_NONE;
     flag.t_offset = flag.t_size = 0; 
     ASSERTISNULL (z_file);
     ASSERTISNULL (txt_file);
@@ -1593,9 +1619,9 @@ typedef struct { PosType64 min_pos, max_pos; } MinMax;
 //---------------------------------------
 // Printing
 //---------------------------------------
-StrTextLong ref_display_range (ConstRangeP r)
+StrText1K ref_display_range (ConstRangeP r)
 {
-    StrTextLong s;
+    StrText1K s;
 
     snprintf (s.s, sizeof (s.s), "chrom=\"%.*s\"(%d) ref.num_bits=%"PRIu64" is_set.num_bits=%"PRIu64" first_pos=%"PRId64
              " last_pos=%"PRId64" gpos=%"PRId64,

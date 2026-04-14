@@ -134,3 +134,5 @@ Execute Application
 explorer
 <InstallPath>
 
+Shell Execute
+genozip.exe --no-cache

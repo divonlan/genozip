@@ -43,8 +43,8 @@ typedef union SectionFlags {
 
     struct FlagsGenozipHeader {
         // note: if updating dts_* flags, update in zfile_compress_genozip_header, sections_show_header too
-        #define dts_ref_internal dt_specific // SAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference) (introduced v6)
-        #define v14_dts_paired   dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13 until v14, since v15 moved to TxtHeader)
+        #define is_ref_internal  dt_specific // SAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference) (introduced v6)
+        #define v14_is_paired    dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13 until v14, since v15 moved to TxtHeader)
         uint8_t dt_specific      : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ 
         uint8_t aligner          : 1;  // SAM, FASTQ: our aligner may have used to align sequences to the reference (always with FASTQ if compressed with a reference, sometimes with SAM)
         uint8_t txt_is_bin       : 1;  // BAM: Source file is binary 
@@ -54,8 +54,8 @@ typedef union SectionFlags {
         uint8_t has_gencomp      : 1;  // SAM/BAM: PRIM and/or DEPN components exist (v14)
                                        // v12 to 15.0.41: VCF: file supports dual coordinates - last two components are the "liftover rejects" data (v12-15.0.41)
         uint8_t has_taxid        : 1;  // obsolete: each line in the file has Taxonomic ID information
-        #define dts2_deep        dt_specific2 // SAM: this file is compressed with --deep (v15)
-        #define dts2_bamass      dt_specific2 // FASTQ: this file was compressed with --bamass (15.0.77)
+        #define is_deep          dt_specific2 // SAM: this file is compressed with --deep (v15)
+        #define is_bamass        dt_specific2 // FASTQ: this file was compressed with --bamass (15.0.77)
         uint8_t dt_specific2     : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ (v15, "unused" up to v14)
     } genozip_header;
 
@@ -139,66 +139,66 @@ typedef struct FlagsMgzip FlagsMgzip;
 
 #define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
 
-typedef struct SectionHeader {         // 28 bytes
+typedef struct SectionHeader {  // 28 bytes
     union {
     uint32_t     magic; 
-    uint32_t     uncomp_adler32;       // used if --verify-codec is specified (a diagnostic)
-    uint32_t     section_i;            // PIZ: section number in z_file->section_list. replaces magic (in memory only) after it is verified (15.0.66)
+    uint32_t     uncomp_adler32;              // used if --verify-codec is specified (a diagnostic)
+    uint32_t     section_i;                   // PIZ: section number in z_file->section_list. replaces magic (in memory only) after it is verified (15.0.66)
     };
     union {
-    uint32_t     v14_compressed_offset;// up to v14: number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding) (32b up to v14, but upper 16b always 0)
-    uint32_t     z_digest;             // Adler32 of the compressed/encrypted data of this section (v15)
+    uint32_t     v14_compressed_offset;       // up to v14: number of bytes from the start of the header that is the start of compressed data (sizeof header + header encryption padding) (32b up to v14, but upper 16b always 0)
+    uint32_t     z_digest;                    // Adler32 of the compressed/encrypted data of this section (v15)
     };
-    uint32_t     data_encrypted_len;   // = data_compressed_len + padding if encrypted, 0 if not
+    uint32_t     data_encrypted_len;          // = data_compressed_len + padding if encrypted, 0 if not
     uint32_t     data_compressed_len;
     uint32_t     data_uncompressed_len;
-    uint32_t     vblock_i;             // VB with in file starting from 1 ; 0 for non-VB sections
-    SectionType  section_type;         // 1 byte
-    Codec        codec;                // 1 byte - primary codec in which this section is compressed
+    uint32_t     vblock_i;                    // VB with in file starting from 1 ; 0 for non-VB sections
+    SectionType  section_type;                // 1 byte
+    Codec        codec;                       // 1 byte - primary codec in which this section is compressed
     union { // 1 byte: section_type specific
-    Codec        sub_codec;            // SEC_LOCAL : sub codec, in case primary codec invokes another codec
-    uint8_t      dict_helper;          // SEC_DICT  : value passed to/from ctx->dict_helper (since 15.0.42).
+    Codec        sub_codec;                   // SEC_LOCAL : sub codec, in case primary codec invokes another codec
+    uint8_t      dict_helper;                 // SEC_DICT  : value passed to/from ctx->dict_helper (since 15.0.42).
     };
-    SectionFlags flags;                // 1 byte
+    SectionFlags flags;                       // 1 byte
 } SectionHeader, *SectionHeaderP; 
 
 typedef struct {
     SectionHeader;
     uint8_t  genozip_version;
-    EncryptionType encryption_type;    // one of EncryptionType
-    uint16_t data_type;                // one of DataType
-    uint64_t recon_size;               // data size of reconstructed file (note: for MAIN VBs in SAM gencomp, this excludes any PRIM/DEPN lines)
-    uint64_t genozip_minor_ver : 14;   // populated since 15.0.28. 10 bits until 15.0.59 (Little Endian!)
-    uint64_t is_modified       : 1;    // ZIP modified the txt_data (e.g. --optimize). Since 15.0.60      
-    uint64_t private_file      : 1;    // this file can only be decompressed by user with the specified license_hash (15.0.30)
-    uint64_t num_lines_bound   : 48;   // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
-    uint32_t num_sections;             // number sections in this file (including this one)
+    EncryptionType encryption_type;           // one of EncryptionType
+    uint16_t data_type;                       // one of DataType
+    uint64_t recon_size;                      // data size of reconstructed file (note: for MAIN VBs in SAM gencomp, this excludes any PRIM/DEPN lines)
+    uint64_t genozip_minor_ver : 14;          // populated since 15.0.28. 10 bits until 15.0.59 (Little Endian!)
+    uint64_t is_modified       : 1;           // ZIP modified the txt_data (e.g. --optimize). Since 15.0.60      
+    uint64_t private_file      : 1;           // this file can only be uncompressed by user with the specified license_hash (15.0.30)
+    uint64_t num_lines_bound   : 48;          // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
+    uint32_t num_sections;                    // number sections in this file (including this one)
     union {
-        struct {                       // since v14
-            uint16_t old_vb_size;      // v14 to 15.0.64: segconf.vb_size in MB (if not exact MB in zip - rounded up to nearest MB) (replaced by segconf_vb_size)
+        struct {                              // since v14
+            uint16_t old_vb_size;             // v14 to 15.0.64: segconf.vb_size in MB (if not exact MB in zip - rounded up to nearest MB) (replaced by segconf_vb_size)
             char unused;                       
-            CompIType num_txt_files;   // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
+            CompIType num_txt_files;          // number of txt bound components in this file (1 if no binding). We don't count generated components (gencomp).
         };
-        uint32_t v13_num_components;   // up to v13: number of txt bound components in this file (1 if no binding)
+        uint32_t v13_num_components;          // up to v13: number of txt bound components in this file (1 if no binding)
     };
     union { // 16 bytes
-        Digest genome_digest;          // DT_REF: Digest of genome as loaded to memory (algorithm determined by genozip_header.not_md5) (since v15)
-        Digest v14_REF_fasta_md5;      // DT_REF: MD5 of original FASTA file (v14, buggy)
-        Digest FASTQ_v13_digest_bound; // DT_FASTQ: up to v13 "digest_bound": digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
+        Digest genome_digest;                 // DT_REF: Digest of genome as loaded to memory (algorithm determined by genozip_header.not_md5) (since v15)
+        Digest v14_REF_fasta_md5;             // DT_REF: MD5 of original FASTA file (v14, buggy)
+        Digest FASTQ_v13_digest_bound;        // DT_FASTQ: up to v13 "digest_bound": digest of concatenated pair of FQ (regarding other bound files in v13 - DVCF has digest 0, and other bound files are not reconstructable with v14+)    
     };
     #define PASSWORD_TEST "WhenIThinkBackOnAllTheCrapIlearntInHighschool"
-    uint8_t  password_test[16];        // short encrypted block - used to test the validy of a password
+    uint8_t  password_test[16];               // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
-    char     created[FILE_METADATA_LEN];  // nul-terminated metadata
-    Digest   license_hash;             // MD5(license_num)
+    char     created[FILE_METADATA_LEN];      // nul-terminated metadata
+    Digest   license_hash;                    // MD5(license_num)
 #define REF_FILENAME_LEN 256
     union {
-    char ref_filename[REF_FILENAME_LEN];   // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN (up to 15.0.41): LUFT reference filename.
-    char fasta_filename[REF_FILENAME_LEN]; // DT_REF: fasta file used to generated this reference
+    char ref_filename[REF_FILENAME_LEN];      // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN (up to 15.0.41): LUFT reference filename.
+    char fasta_filename[REF_FILENAME_LEN];    // DT_REF: fasta file used to generated this reference
     }; 
     union {
-        Digest ref_genome_digest;      // Used if REF_EXTERNAL: SectionHeaderGenozipHeader.genome_digest of the reference file (in-memory digest of reference files since v15, MD5 of FASTA earlier)
-        Digest refhash_digest;         // DT_REF: digest of refhash (v15)
+        Digest ref_genome_digest;             // Used if REF_EXTERNAL: SectionHeaderGenozipHeader.genome_digest of the reference file. since 15.0.82: in-memory digest of reference genome ; since v15: digest of the first 1/8 of the in-memory reference (defect 2026-04-12) ; since v6: MD5 of FASTA
+        Digest refhash_digest;                // DT_REF: digest of refhash (v15)
     };
     union { // (272 bytes minus the fields at the very bottom) - data-type specific - since v12
         struct {
@@ -251,7 +251,7 @@ typedef struct {
         } fastq;
 
         struct {
-            uint32_t segconf_has_RGQ      : 1; // VCF: copied from segconf.has[FORMAT_RGQ]. added v14.
+            uint32_t segconf_has_RGQ      : 1; // VCF: v14
             uint32_t segconf_GQ_method    : 3; // VCF: 15.0.37
             uint32_t segconf_FMT_DP_method: 2; // VCF: 15.0.37
             uint32_t segconf_del_svlen_is_neg : 1; // VCF: 15.0.48
@@ -278,20 +278,20 @@ typedef struct {
         } vcf;
 
         struct {
-            uint8_t bases_per_hash;    // REF: number of bases input to hash. 15.0.81
-            uint8_t bits_per_hash_out; // REF: output length in bits of hash: 2^ this is the hash table length. 15.0.81
-            uint8_t gpos_bytes;        // REF: 4 or 5. 15.0.81
-            uint8_t make_ref_flag;     // REF: value of flag.make_reference with which this reference file was created. 15.0.81
+            uint8_t bases_per_hash;            // REF: number of bases input to hash. 15.0.81
+            uint8_t bits_per_hash_out;         // REF: output length in bits of hash: 2^ this is the hash table length. 15.0.81
+            uint8_t gpos_bytes;                // REF: 4 or 5. 15.0.81
+            uint8_t make_ref_size;             // REF: MakeRefSize with which this reference file was created. 15.0.81
             uint8_t unused[259];
         } ref;
     };
 
     // ⇧ New non-data-type-specific fields grow upwards at the expense of unused[] ⇧ 
-    uint8_t  ref_genome_digest_alg;    // digest algorithm (DigestAlg) used to generate ref_genome_digest. 15.0.81
-    uint8_t  ref_genozip_ver;          // version of genozip used to create the external reference file with each this file is compressed. added 15.0.81.
-    uint16_t ref_genozip_minor_ver;    // ( " )
-    uint32_t segconf_vb_size;          // in bytes (replaced old_vb_size). 15.0.65
-    uint8_t  lic_type;                 // LicenseType: license type used to create this file. 15.0.59.
+    uint8_t  ref_genome_digest_alg;            // digest algorithm (DigestAlg) used to generate ref_genome_digest. 15.0.81
+    uint8_t  ref_genozip_ver;                  // version of genozip used to create the external reference file with each this file is compressed. added 15.0.81.
+    uint16_t ref_genozip_minor_ver;            // ( " )
+    uint32_t segconf_vb_size;                  // in bytes (replaced old_vb_size). 15.0.65
+    uint8_t  lic_type;                         // LicenseType: license type used to create this file. 15.0.59.
 } SectionHeaderGenozipHeader, *SectionHeaderGenozipHeaderP;
 typedef const SectionHeaderGenozipHeader *ConstSectionHeaderGenozipHeaderP;
 
@@ -649,7 +649,7 @@ extern void sections_list_memory_to_file_format (void);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
 extern bool sections_is_paired (void);
 
-extern void sections_set_show_headers (char *name);
+extern void sections_set_show_headers (rom name);
 extern uint32_t st_header_size (SectionType sec_type);
 
 // display functions
@@ -663,6 +663,7 @@ extern void sections_show_section_list (DataType dt, BufferP section_list, Secti
 extern rom st_name (SectionType sec_type);
 extern rom lt_name (LocalType lt);
 extern rom store_type_name (StoreType store);
+extern rom make_ref_size_name (MakeRefSize size);
 extern DictId sections_get_dict_id (ConstSectionHeaderP header);
 
 extern StrText vb_name (VBlockP vb);

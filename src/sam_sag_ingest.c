@@ -65,7 +65,7 @@ void sam_gencomp_trim_memory (void)
         if (IS_SAG_SA && z_file->sag_cigars.size) 
                                          iprintf ("sag_cigars:     %s (compression=%s)\n", str_size (z_file->sag_cigars.size).s, (IS_ZIP || VER2(15,68)) ? "huffman" : "none");
         if (IS_SAG_SOLO && z_file->sag_solo_data.size) { 
-            StrTextLong solos;
+            StrText1K solos;
             uint32_t solos_len=0;
             for (int solo = 0; solo < NUM_SOLO_TAGS; solo++)
                 if (!VER2(15,68) || huffman_exists (solo_props[solo].did_i)) // for files since 15.0.68, we store only fields with a huffman

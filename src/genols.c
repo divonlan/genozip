@@ -109,10 +109,10 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     if (Z_DT(REF))
         digest = header.genome_digest;
     
-    else if (header.genozip_version <= 13 && Z_DT(FASTQ) && z_file->z_flags.v14_dts_paired)
+    else if (header.genozip_version <= 13 && Z_DT(FASTQ) && z_file->z_flags.v14_is_paired)
         digest = header.FASTQ_v13_digest_bound;
 
-    else if (!sections_is_paired() && !z_file->z_flags.dts2_deep // digest for paired FASTQs and Deep will be shown only with --list 
+    else if (!sections_is_paired() && !z_file->z_flags.is_deep // digest for paired FASTQs and Deep will be shown only with --list 
         && (txt_header_sec = sections_first_sec (SEC_TXT_HEADER, SOFT_FAIL))) 
         digest = zfile_read_section_header (evb, txt_header_sec, SEC_TXT_HEADER).txt_header.digest;
 

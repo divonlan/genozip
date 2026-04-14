@@ -754,7 +754,7 @@ TXTHEADER_TRANSLATOR (sam_header_sam2bam)
     // contigs would produce lengths that don't match actual reference files - rendering the BAM file useless for downstream
     // analysis. Better give an error here than create confusion downstream. 
     ASSINP (n_ref ||  // has SQ records
-            !z_file->z_flags.dts_ref_internal || // has external reference
+            !z_file->z_flags.is_ref_internal || // has external reference
             ZCTX(SAM_POS)->word_list.len==1, // has only one POS word = "Delta 0" = unaligned SAM that doesn't need contigs 
             "Failed to convert %s from SAM to BAM: the SAM header must have SQ records (see https://samtools.github.io/hts-specs/SAMv1.pdf section 1.3), or alternatively the file should be genozipped with --reference or --REFERENCE", z_name);
 

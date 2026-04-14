@@ -51,11 +51,19 @@ extern const bool is_fastq_seq[256];
 #define S(s)  ((s) ? (s) : "(none)")
 
 extern StrText char_to_printable (char c);
+extern StrText char_to_printable_json (char c);
 
 extern uint32_t str_to_printable (STRp(in), char *out, int out_len);
-static inline StrTextSuperLong str_to_printable_(STRp(in)) { // for bound-length short texts
-    StrTextSuperLong s;
+static inline StrText4K str_to_printable_(STRp(in)) { // for bound-length short texts
+    StrText4K s;
     str_to_printable (STRa(in), s.s, sizeof (s.s));
+    return s;
+}
+
+extern uint32_t str_to_printable_json (STRp(in), char *s, int s_len);
+static inline StrText4K str_to_printable_json_(STRp(in)) { // for bound-length short texts
+    StrText4K s;
+    str_to_printable_json (STRa(in), s.s, sizeof (s.s));
     return s;
 }
 
@@ -217,10 +225,10 @@ extern StrText str_bases (uint64_t num_bases);
 extern StrText str_int_commas (int64_t n);
 extern StrText str_uint_commas_limit (uint64_t n, uint64_t limit);
 extern StrText str_int_s (int64_t n);
-extern StrTextLong str_int_s_(rom label, int64_t n);
+extern StrText1K str_int_s_(rom label, int64_t n);
 #define cond_int(cond, label, n) ((cond) ? str_int_s_((label), (n)).s : "") // note: n does not evaluate if cond is false!
 
-extern StrTextLong str_str_s_(rom label, STRp(str));
+extern StrText1K str_str_s_(rom label, STRp(str));
 #define cond_str(cond, label, str)  ((cond) ? ({ rom str_=(str); str_str_s_((label), str_, strlen (str_)).s; }) : "") /* note: str evaluates once, but only if cond is true */
 #define cond_stra(cond, label, str) ((cond) ? str_str_s_((label), str, str_len).s : "") 
 
@@ -292,7 +300,7 @@ extern uint32_t str_unpack_bases (char *bases, bytes packed, uint32_t num_bases)
 // textual length of a non-negative integer
 extern uint32_t str_get_uint_textual_len (uint64_t n);
 
-extern StrTextLong str_time (void);
+extern StrText1K str_time (void);
 extern StrText str_human_time (unsigned secs, bool compact);
 
 #define FLOAT_FORMAT_LEN 12

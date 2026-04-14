@@ -467,7 +467,9 @@ static void zip_write_global_area (void)
     if (flag.make_reference) {
         THREAD_DEBUG (compress_iupacs);
         ref_iupacs_compress();
+    }
 
+    if (IN_RANGX (flag.make_reference, MAKE_REF_TINY, MAKE_REF_LARGE)) {
         THREAD_DEBUG (make_refhash);
         refhash_make_refhash();
     }
@@ -762,16 +764,20 @@ void zip_one_file (bool is_last_user_txt_file)  // the last user-specified txt f
         zip_complete_processing_one_vb);
 
     // verify that entire file was read (with some exceptions)
-    bool appending = false;
+    
+    // case: compressing a local file with --truncate while it was being appended (e.g. while downloading)
+    if (txt_file->disk_size < txt_file->disk_so_far && flag.truncate && !txt_file->is_remote && !txt_file->redirected) {
+        WARN ("%s was being appended by an external process while compression was in progress", txt_name);
+
+        txt_file->disk_size = txt_file->disk_so_far; // increase to reflect additional data read since first calculating disk_size
+    }
+
     ASSERT (txt_file->disk_so_far == txt_file->disk_size || // all good: entire file was read from disk
             !txt_file->disk_size                         || // we don't know the disk size (e.g. redirected) 
             flag_has_head                                || // only of a subset of the file was compressed, at user request
             is_read_via_ext_decompressor (txt_file)      || // we don't know how much was read from disk, because an external process did the reading
-            (!txt_file->is_remote && !txt_file->redirected && flag.truncate && (appending = (txt_file->disk_size != file_get_size (txt_file->name)))), // edge case: compressed a local file while it was being appended (e.g. while downloading)
             "Failed to compress entire file: file size is %s, but only %s bytes were compressed",
             str_int_commas (txt_file->disk_size).s, str_int_commas (txt_file->disk_so_far).s);
-
-    WARN_IF (appending, "%s was being appended by an external process while compression was in progress", txt_name);
 
     bgzf_finalize_discovery(); 
 
@@ -824,6 +830,9 @@ finish:
 
     zip_display_compression_ratio (flag.md5 ? digest_snapshot (&z_file->digest_state, NULL) : DIGEST_NONE); // Done for reference + final compression ratio calculation
     
+    if (flag.show_seg_summary)
+        stats_show_seg_summary();
+        
     if (flag.md5 && flag.bind && z_file->z_closes_after_me &&
         ((flag.bind == BIND_FQ_PAIR && z_file->num_txts_so_far == 2) ||
          (flag.bind == BIND_SAM && z_file->num_txts_so_far == 3)))

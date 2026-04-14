@@ -6,6 +6,7 @@ docs
 test
 scripts
 launch.json
+telemetry.json
 *.back
 .conda-timestamp
 .archive.tar.gz

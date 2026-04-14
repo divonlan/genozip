@@ -12,6 +12,7 @@
 #include "refhash.h"
 #include "chrom.h"
 #include "sorter.h"
+#include "tip.h"
 
 #ifdef __linux__ 
 extern int strncasecmp (rom s1, rom s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
@@ -399,9 +400,14 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (STRp(chrom_name),
 
     // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
     if (ref_contig_index == WORD_INDEX_NONE) {
-        if (IS_ZIP && !has_dup_len) // no warning if this is merely a dup_len 
-            WARN_ONCE ("FYI: header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. If the file contains many %ss with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
-                        txt_file->basename, STRf(chrom_name), gref.filename, DTPT(line_name));
+        if (IS_ZIP && !has_dup_len) { // no warning if this is merely a dup_len 
+            if (IS_REF_EXT_STORE) 
+                WARN_ONCE ("Warning: header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. Genozip will try its best to compress anyway.\n"_TIP" If Genozip fails, use the same reference file used to created this %s, or use --reference instead of %s",
+                           txt_file->basename, STRf(chrom_name), gref.filename, z_dt_name(), OT("REFERENCE", "E"));
+            else
+                WARN_ONCE ("FYI: header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. If the file contains many %ss with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
+                           txt_file->basename, STRf(chrom_name), gref.filename, DTPT(line_name));
+        }
         return WORD_INDEX_NONE;
     }
 

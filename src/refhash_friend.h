@@ -30,6 +30,7 @@ extern Digest refhash_digest;
 // FLAT (new) refhash: since 15.0.81
 extern int gpos_bytes;
 extern int hash_shift;
+extern MakeRefSize make_ref_size;
 
 #define ref_hash_len (1ULL << bits_per_hash_out)  // number of hash enrtries. each entry is uint32_t or uint40_t depending on reference length
 

@@ -17,13 +17,14 @@ extern StrText arch_get_z_filesystem (void);
 
 extern rom arch_get_endianity (void);
 extern void arch_set_locale (void);
+extern rom arch_str_error (void);
 
 #define NET_ID_SIZE 32
 extern rom arch_get_os (void);
 extern rom arch_get_scheduler (void);
 extern rom arch_get_glibc (void);
-extern StrTextSuperLong arch_get_executable (void);
-extern StrTextSuperLong arch_get_genozip_executable (void);
+extern StrText4K arch_get_executable (void);
+extern StrText4K arch_get_genozip_executable (void);
 extern rom arch_get_argv0 (void);
 extern bool arch_is_valgrind (void);
 extern bool arch_is_docker (void);

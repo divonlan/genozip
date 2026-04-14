@@ -20,6 +20,7 @@ int bits_per_hash_out=0;         // FLAT: determined by genome size. // hash tab
 int bases_per_hash=0;            // length of input to the hash function
 int bits_per_hash_in=0;          // bases_per_hash * 2
 int hash_shift=0;                // (64 - bits_per_hash_out)
+MakeRefSize make_ref_size;       // of reference currently loaded
 Buffer refhash_buf = {};         // One buffer that includes all layers
 Digest refhash_digest = DIGEST_NONE;
 
@@ -81,11 +82,12 @@ static void refhash_uncompress_one_vb (VBlockP vb)
 }
 
 // when reading a reference file: set info from reference file's GENOZIP_HEADER section
-void refhash_set_ref_file_info (Digest digest, uint8_t ref_bases_per_hash, uint8_t ref_bits_per_hash_out, uint8_t ref_gpos_bytes)
+void refhash_set_ref_file_info (Digest digest, uint8_t ref_bases_per_hash, uint8_t ref_bits_per_hash_out, uint8_t ref_gpos_bytes, MakeRefSize my_make_ref_size)
 {
     refhash_digest  = digest;
-    refhash_is_flat = VER2(15,81); 
-
+    make_ref_size   = my_make_ref_size;
+    refhash_is_flat = (make_ref_size != MAKE_REF_OLD); // true since 15.0.81
+    
     if (refhash_is_flat) { 
         gpos_bytes        = ref_gpos_bytes;
         bases_per_hash    = ref_bases_per_hash;
@@ -99,6 +101,14 @@ void refhash_set_ref_file_info (Digest digest, uint8_t ref_bases_per_hash, uint8
     }
 
     bits_per_hash_in = bases_per_hash * 2;
+}
+
+// check if this reference file has refhash
+bool refhash_exists (void)
+{
+    ASSERTNOTZERO (make_ref_size); // this function only works after reference is loaded
+
+    return make_ref_size != MAKE_REF_MINIMAL;
 }
 
 // ZIP: needed before using aligner
@@ -142,8 +152,10 @@ void refhash_load (void)
 
         Digest digest = digest_do (STRb(refhash_buf), alg, "refhash"); 
         
+        // a different refhash_digest is an indication that the reference file is not the file that is cached (perhaps is was 
+        // re-made: every make results in a different refhash_digest), so we remove the shm to avoid a debuggability nightmare
         if (!digest_is_equal (digest, refhash_digest)) {
-            ref_cache_remove_do (true, false);
+            ref_cache_remove_do (true, false); 
             ABORT ("Bad reference file: In-memory %s digest of refhash is %s, different than calculated by make-reference: %s",
                    digest_alg_name(alg), digest_display_(digest, alg).s, digest_display_(refhash_digest, alg).s);
         }

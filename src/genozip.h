@@ -149,11 +149,11 @@ typedef struct HuffmanCodes *HuffmanCodesP;
 typedef union BamCigarOp *BamCigarOpP;
 typedef const union BamCigarOp *ConstBamCigarOpP;
 
-typedef struct { char s[80];    } StrText;
-typedef struct { char s[1 KB];  } StrTextLong;
-typedef struct { char s[4 KB];  } StrTextSuperLong;
-typedef struct { char s[16 KB]; } StrTextMegaLong; 
-typedef struct { char s[128 KB]; } StrTextUltraLong; 
+typedef struct { char s[80];     } StrText;
+typedef struct { char s[1 KB];   } StrText1K;
+typedef struct { char s[4 KB];   } StrText4K;
+typedef struct { char s[16 KB];  } StrText16K; 
+typedef struct { char s[128 KB]; } StrText128K; 
 
 #include "version.h" // must be after StrText definition
 
@@ -227,6 +227,10 @@ typedef const char *restrict romរ;
 typedef const uint8_t *bytes;   // read-only array of bytes
 
 typedef uint8_t Ploidy;         // ploidy of a genotype
+
+// note: part of SectionHeaderGenozipHeader and RefCache structures
+typedef packed_enum { NO_MAKE_REF, MAKE_REF_TINY, MAKE_REF_SMALL, MAKE_REF_MEDIUM, MAKE_REF_LARGE, MAKE_REF_MINIMAL, MAKE_REF_OLD, NUM_MAKE_REF } MakeRefSize; 
+#define MAKE_REF_SIZE_NAMES { "N/A",       "tiny",        "small",        "medium",        "large",        "minimal",        "old",             }
 
 // a reference into txt_data
 typedef struct { uint32_t index, len; } TxtWord; // 32b as VBs are limited to 2GB (usually used as reference into txt_data)
@@ -368,7 +372,7 @@ typedef enum { SKIP_PURPOSE_RECON,    // true if this section should be skipped 
 typedef IS_SKIP ((*Skip));
 
 // PIZ / ZIP inspired by "We don't sell Duff. We sell Fudd"
-typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP=140, SHOW_HEADERS=10, SHOW_BAI=11, SHOW_FLAVOR=156, SHOW_GZ=157, DUMP_GZ_BLOCK=158, TEST_AFTER_ZIP } CommandType;
+typedef enum { NO_COMMAND=-1, ZIP='z', PIZ='d' /* this is unzip */, LIST='l', LICENSE='L', VERSION='V', HELP=140, SHOW_HEADERS=10, SHOW_BAI=11, SHOW_FLAVOR=156, SHOW_GZ=157, DUMP_GZ_BLOCK=158, RM_CACHE=256, TEST_AFTER_ZIP } CommandType;
 extern CommandType command, primary_command;
 #define IS_ZIP           (command == ZIP)
 #define IS_PIZ           (command == PIZ)
@@ -378,7 +382,7 @@ extern CommandType command, primary_command;
 #define IS_SHOW_GZ       (command == SHOW_GZ)
 #define IS_DUMP_GZ_BLOCK (command == DUMP_GZ_BLOCK)
 #define IS_SHOW_FLAVOR   (command == SHOW_FLAVOR)
-
+#define IS_RM_CACHE      (command == RM_CACHE)
 typedef enum { VB_ID_EVB=-1, VB_ID_WRITER=-2, VB_ID_SEGCONF=-3, VB_ID_SCAN_VB=-4, VB_ID_COMPRESS_DEPN=-5, VB_ID_NONE=-999 } VBID;
 #define NUM_NONPOOL_VBs 5
 
@@ -419,6 +423,7 @@ typedef int ThreadId;
 #define SQR(x) ((x)*(x)) 
 #endif
 static inline double percent (double numerator, double denominator) { return denominator ? 100.0 * numerator / denominator : 0.0; }
+static inline uint64_t fibonacci (uint64_t n, int n_bits) { return ((n * 11400714819323198485ULL) >> (64-n_bits)); }
 
 #define MINIMIZE(var,new_val) ({ if ((new_val) < (var)) var = (new_val); })
 #define MAXIMIZE(var,new_val) ({ if ((new_val) > (var)) var = (new_val); })
@@ -695,7 +700,7 @@ extern void progress_newline(void);
 #define ABORTINP(format, ...)                ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false);} )
 #define ABORTINP0(string)                    ABORTINP (string "%s", "")
 
-extern StrTextLong str_time (void);
+extern StrText1K str_time (void);
 
 extern StrText license_get_number (void);
 
@@ -712,10 +717,12 @@ extern rom report_support_if_unexpected (void);
 #define ASSERTINRANGE(n, min, after)         ASSERT (IN_RANGE((n), (min), (after)), "%s=%"PRId64" ∉ [%"PRId64",%"PRId64")", #n, (int64_t)(n), (int64_t)(min), ((int64_t)(after)))
 #define ASSERTINRANGX(n, min, max)           ASSERT (IN_RANGX((n), (min), (max)),   "%s=%"PRId64" ∉ [%"PRId64",%"PRId64"]", #n, (int64_t)(n), (int64_t)(min), ((int64_t)(max)))
 
-#define ASSERTW(condition, format, ...)      ( { if (__builtin_expect (!(condition), 0) && !flag.quiet) { progress_newline(); fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
+#define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
+#define WARN0(string)                        WARN (string "%s", "")
 #define WARN_IF(condition, format, ...)      ( { if (__builtin_expect ((condition), 0) && !flag.explicit_quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
-#define ASSERTW0(condition, string)          ASSERTW ((condition), string "%s", "")
 #define WARN_IF0(condition, string)          WARN_IF ((condition), string "%s", "")
+#define ASSERTW(condition, format, ...)      ( { if (__builtin_expect (!(condition), 0) && !flag.quiet) { progress_newline(); fprintf (stderr, "\n%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n\n"); fflush (stderr); }} )
+#define ASSERTW0(condition, string)          ASSERTW ((condition), string "%s", "")
 #define ASSERTWD(condition, format, ...)     ( { if (__builtin_expect (!(condition), 0) && flag.debug && !flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); }} )
 #define ASSERTWD0(condition, string)         ASSERTWD (condition, string "%s", "")
 #define ASSRET(condition, ret, format, ...)  ( { if (__builtin_expect (!(condition), 0)) { progress_newline(); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); return ret; }} )
@@ -728,8 +735,6 @@ extern rom report_support_if_unexpected (void);
 #define ABORT0(string)                       ABORT (string "%s", "")
 #define RESTART(add_cmd_option, format, ...) ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); error_restart(add_cmd_option);} )
 #define RESTART0(add_cmd_option, string)     RESTART (add_cmd_option, string "%s", "")
-#define WARN(format, ...)                    ( { if (!flag.quiet) { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } } )
-#define WARN0(string)                        WARN (string "%s", "")
 #define NOISYWARN(format, ...)               ( { progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); } )
 #define NOISYWARN0(string)                   NOISYWARN (string "%s", "")
 

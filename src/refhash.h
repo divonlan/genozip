@@ -19,11 +19,12 @@ extern void refhash_make_refhash (void);
 extern Digest refhash_get_digest (void);
 
 // stuff for loading and using refhash when ZIPping a fastq or sam/bam file
-extern void refhash_set_ref_file_info (Digest digest, uint8_t ref_bases_per_hash, uint8_t ref_bits_per_hash_out, uint8_t ref_gpos_bytes);
+extern void refhash_set_ref_file_info (Digest digest, uint8_t ref_bases_per_hash, uint8_t ref_bits_per_hash_out, uint8_t ref_gpos_bytes, MakeRefSize make_ref_size);
 extern uint64_t refhash_get_refhash_size (void);
 extern void refhash_load (void);
 extern void refhash_load_standalone (void);
 extern void refhash_destroy (void);
+extern bool refhash_exists (void);
 
 typedef enum { REFHASH_COUNT_INSTANCES, REFHASH_OCCUPY } RefhashCalcType;
 extern void refhash_calc_one_range (VBlockP vb, RefhashCalcType calc_type);

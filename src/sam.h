@@ -703,7 +703,6 @@ COMPRESSOR_CALLBACK(sam_zip_BD_BI);
 extern void sam_zip_initialize (void);
 extern void sam_zip_after_segconf (VBlockP vb);
 extern void sam_zip_finalize (bool is_last_user_txt_file);
-extern bool sam_zip_dts_flag (int dts);
 extern void sam_zip_after_compute (VBlockP vb);
 extern void sam_zip_after_vbs (void);
 extern void sam_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
@@ -712,7 +711,7 @@ extern void sam_sa_prim_finalize_ingest (void);
 
 // CRAM stuff
 extern void cram_inspect_file (FileP file);
-extern StrTextSuperLong cram_get_samtools_option_T (void);
+extern StrText4K cram_get_samtools_option_T (void);
 
 // HEADER stuff
 extern bool sam_header_inspect (VBlockP txt_header_vb, BufferP txt_header, struct FlagsTxtHeader txt_header_flags);

@@ -23,9 +23,9 @@
 #include "libdeflate_1.19/libdeflate.h"
 
 // part of ASSSEG
-StrTextLong seg_error (VBlockP vb)
+StrText1K seg_error (VBlockP vb)
 {
-    StrTextLong s;
+    StrText1K s;
     snprintf (s.s, sizeof(s.s), 
               "\nTechnical details: pos_in_vb=%u pos_in_file=%"PRIu64" txt_data.len=%u vb_size=%"PRIu64"\n"
               "To get vblock: \"genozip --biopsy %d %s\". Offending line:\n",

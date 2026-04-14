@@ -128,13 +128,13 @@ static void sam_get_sa_grp_qual (VBlockSAMP vb, const Sag *g)
 }
 
 // main thread (not thread-safe): called from sam_show_sag_one_grp for getting first few characters of alignment cigar
-StrTextUltraLong sam_display_qual_from_sag (VBlockP vb, const Sag *g)
+StrText128K sam_display_qual_from_sag (VBlockP vb, const Sag *g)
 {
-    if (g->no_qual) return (StrTextUltraLong){ "*" };
+    if (g->no_qual) return (StrText128K){ "*" };
 
     sam_get_sa_grp_qual (VB_SAM, g); // into vb->scratch
 
-    StrTextUltraLong s;
+    StrText128K s;
     bool truncated = (evb->scratch.len > sizeof(s) - 4);
     snprintf (s.s, sizeof(s.s), "%.*s%s", truncated ? (int)sizeof(s) - 4 : evb->scratch.len32, B1STc(evb->scratch), truncated ? "..." : "");
 

@@ -1,4 +1,4 @@
-#define GENOZIP_CODE_VERSION "15.0.81"
+#define GENOZIP_CODE_VERSION "15.0.82"
 // ⇑ MUST be first line, analyzed by scripts ⇑
 
 #pragma once
@@ -9,6 +9,7 @@ typedef struct __attribute__ ((packed)) {
 } Version;
 #define VER_LT(a, b) ((a).major < (b).major || ((a).major == (b).major && (a).minor < (b).minor))
 #define VER_GE(a, b) (!VER_LT((a), (b)))
+#define VER_GE_(a, major, minor) VER_GE((a), ((Version){(major), (minor)}))
 
 extern bool version_is_devel (void);
 extern Version code_version (void);

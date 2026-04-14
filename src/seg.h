@@ -342,7 +342,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define SEG_EOL(f,account_for_ascii10) ({ seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); })
 
-extern StrTextLong seg_error (VBlockP vb);
+extern StrText1K seg_error (VBlockP vb);
 
 #define ASSSEG(condition, format, ...)                                                                  \
     ASSINP ((condition), "%s %s:%s: " format "%s%s\n", str_time().s, txt_name, LN_NAME, __VA_ARGS__,    \

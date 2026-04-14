@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------
 //   txtheader.c
-//   Copyright (C) 2o21-2026 Genozip Limited. Patent Pending.
+//   Copyright (C) 2021-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
@@ -10,9 +10,10 @@
 #include "seg.h"
 #include "file.h"
 #include "biopsy.h"
+#include "arch.h"
 
 static Buffer biopsy_vb_i = { .name = "biopsy_vb_i" };
-static StrTextSuperLong biopsy_fn;
+static StrText4K biopsy_fn;
 static int biopsy_fn_len = 0;
 
 void biopsy_init (rom optarg)
@@ -119,7 +120,7 @@ start_biopsy: {
     ASSERT (fp, "failed to open biopsy file %s: %s", biopsy_fn.s, strerror (errno));
 
     ASSERT (fwrite (B1STtxt, 1, Ltxt, fp) == Ltxt, "failed to write %u bytes to biopsy file %s: %s", 
-            Ltxt, biopsy_fn.s, strerror (errno));
+            Ltxt, biopsy_fn.s, arch_str_error());
 
     ASSERT (!fclose (fp), "failed to close biopsy file %s: %s", biopsy_fn.s, strerror (errno)); 
     

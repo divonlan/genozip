@@ -524,7 +524,7 @@ extern void sam_reconstruct_from_buddy_get_textual_snip (VBlockSAMP vb, ContextP
 extern rom buddy_type_name (BuddyType bt);
 
 // FLAG stuff
-extern StrTextLong sam_dis_FLAG (SamFlags f);
+extern StrText1K sam_dis_FLAG (SamFlags f);
 extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes);
 #define last_flags ((SamFlags){ .value = CTX(SAM_FLAG)->last_value.i })
 
@@ -629,7 +629,7 @@ extern void sam_piz_deep_SEQ_cb (VBlockSAMP vb, STRp(recon));
 extern void sam_piz_deep_QUAL_cb (VBlockSAMP vb, STRp(recon));
 
 #define SA_QUAL_DISPLAY_LEN 20
-extern StrTextUltraLong sam_display_qual_from_sag (VBlockP vb, const Sag *g);
+extern StrText128K sam_display_qual_from_sag (VBlockP vb, const Sag *g);
 
 // MD:Z stuff
 extern void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(md), PosType32 pos);

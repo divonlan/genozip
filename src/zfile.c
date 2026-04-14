@@ -27,6 +27,7 @@
 #include "zriter.h"
 #include "b250.h"
 #include "tip.h"
+#include "arch.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, ConstBufferP b250_data, bool detailed)
@@ -45,7 +46,7 @@ static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, C
 
     if (detailed) {
         ContextP zctx = ZCTX(zctx_get_existing_did_i (h->dict_id));
-        zctx = CTX(zctx->dict_did_i); // ctx->did_i is different than did_i if its an ALIAS_CTX
+        zctx = ZCTX(zctx->dict_did_i); // ctx->did_i is different than did_i if its an ALIAS_CTX
         
         WordIndex last_wi = 0;
         uint32_t count_in_vb=0; 
@@ -85,6 +86,50 @@ static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, C
     }
 
     mutex_unlock (show_b250_mutex);
+}
+
+// command: genocat --show-b250 (possibly in combination with --one-vb)
+void noreturn zfile_show_b250_only (void)
+{
+    ASSERTNOTNULL (z_file);
+    
+    Section sec = flag.one_vb ? sections_vb_header (flag.one_vb) : NULL;
+    bool found=false;
+
+    ASSINP (flag.one_vb < z_file->vb_sections_index.len32, "--one-vblock out of range: [1,%u]",
+            z_file->vb_sections_index.len32-1);
+
+    while (sections_next_sec (&sec, SEC_B250)) {
+        // case: no more relevant sections for the requested --one-vb
+        if (flag.one_vb && sec->vblock_i != flag.one_vb) {
+            if (!found && flag.show_b250_δ.num)
+                iprintf ("No B250 section for dict=%s in vblock_i=%u\n", dis_dict_id (flag.show_b250_δ).s, flag.one_vb);
+            break;
+        }
+
+        evb->comp_i    = sec->comp_i;
+        evb->vblock_i  = sec->vblock_i;
+        evb->data_type = (Z_DT(SAM) && sec->comp_i >= SAM_COMP_FQ00) ? DT_FASTQ : z_file->data_type;
+
+        // case: we need to print this B250 section
+        if (!flag.show_b250_δ.num || dict_id_typeless(sec->dict_id).num == flag.show_b250_δ.num) {
+            ASSERTNOTINUSE (evb->z_data);
+            ASSERTNOTINUSE (evb->scratch);
+
+            found = true;
+            zfile_read_section (z_file, evb, sec->vblock_i, &evb->z_data, "z_data", SEC_B250, sec);
+            SectionHeaderCtxP h = (SectionHeaderCtxP)B1ST8(evb->z_data);
+
+            zfile_uncompress_section (evb, h, &evb->scratch, "scratch", sec->vblock_i, SEC_B250);
+
+            zfile_show_b250_section (evb, h, &evb->scratch, flag.show_b250_δ.num != 0);
+
+            buf_free (evb->scratch);
+            buf_free (evb->z_data);
+        }
+    } 
+
+    exit_ok;
 }
 
 // Write uncompressed, unencrypted section to <section-type>.<vb>.<dict_id>.[header|body]. 
@@ -218,7 +263,8 @@ void zfile_uncompress_section (VBlockP vb,
             exit_ok;
     }
 
-    if (vb) COPY_TIMER (zfile_uncompress_section);
+    if (HEADER_IS(REFERENCE) || HEADER_IS(REF_IS_SET)) COPY_TIMER (zfile_uncompress_ref_section);
+    else COPY_TIMER (zfile_uncompress_section);
 }
 
 // uncompress into a specific offset in a pre-allocated buffer
@@ -406,7 +452,7 @@ static void *zfile_read_from_disk (FileP file, VBlockP vb, BufferP buf, uint32_t
     char *start = BAFTc (*buf);
     uint32_t bytes = fread (start, 1, len, GET_FP(file));
     ASSERT (bytes == len, "reading %s%s read only %u bytes out of len=%u: %s", 
-            st_name (st), cond_str(dict_id.num, " dict_id=", dis_dict_id(dict_id).s), bytes, len, strerror(errno));
+            st_name (st), cond_str(dict_id.num, " dict_id=", dis_dict_id(dict_id).s), bytes, len, arch_str_error());
 
     buf->len += bytes;
 
@@ -457,7 +503,7 @@ int32_t zfile_read_section_do (FileP file,
     // move the cursor to the section. file_seek is smart not to cause any overhead if no moving is needed
     if (sec) file_seek (file, sec->offset, SEEK_SET, READ, HARD_FAIL);
 
-    SectionHeaderP h = zfile_read_from_disk (file, vb, data, header_size, expected_sec_type, IS_DICTED_SEC(sec->st) ? sec->dict_id : DICT_ID_NONE); 
+    SectionHeaderP h = zfile_read_from_disk (file, vb, data, header_size, expected_sec_type, (sec && IS_DICTED_SEC(sec->st)) ? sec->dict_id : DICT_ID_NONE); 
     uint32_t bytes_read = header_size;
 
     ASSERT (h, "called from %s:%u: Failed to read data from file %s while expecting section type %s: %s", 
@@ -551,7 +597,7 @@ SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec,
     uint32_t bytes = fread (&h, 1, header_size, GET_FP(z_file));
     
     ASSERT (bytes == header_size, "called from %s:%u: Failed to read header of section type %s from file %s: %s (bytes=%u header_size=%u)", 
-            func, code_line, st_name(sec->st), z_name, strerror (errno), bytes, header_size);
+            func, code_line, st_name(sec->st), z_name, arch_str_error(), bytes, header_size);
 
     bool is_magical = BGEN32 (h.common.magic) == GENOZIP_MAGIC;
 
@@ -986,14 +1032,15 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
         
         if (VER(15))
             refhash_set_ref_file_info (h->refhash_digest, // non-zero since v15
-                                       h->ref.bases_per_hash, h->ref.bits_per_hash_out, h->ref.gpos_bytes); // non-zero since 15.0.81, and derefereneble since v12
+                                       h->ref.bases_per_hash, h->ref.bits_per_hash_out, h->ref.gpos_bytes, // non-zero since 15.0.81, and derefereneble since v12
+                                       VER2(15,81) ? h->ref.make_ref_size : MAKE_REF_OLD); 
         else
-            refhash_set_ref_file_info (DIGEST_NONE, 0, 0, 0);
+            refhash_set_ref_file_info (DIGEST_NONE, 0, 0, 0, MAKE_REF_OLD);
 
         buf_free (evb->z_data);
 
         extern bool input_files_has_FASTQ;
-        if (is_genozip && input_files_has_FASTQ && !VER2(15,81))
+        if (is_genozip && input_files_has_FASTQ && !flag.deep && !VER2(15,81))
             TIP ("%s was made with an older version of Genozip. Re-make it for ~25%% faster FASTQ compression%s:\n"
                  "genozip --make-reference %.*s",
                  z_name, 

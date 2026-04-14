@@ -3,6 +3,11 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.82 14/4/2025
+- Reference files cached in shared memory are now removed after 24 hours of non-use
+- Support for "minimal" references (see genozip.com/reference)
+- diagnostics: --show-seg-summary
+
 15.0.81 3/4/2025
 - Improved references files for better FASTQ compression. With reference files created 
 (genozip --make-reference) with this release:
@@ -148,7 +153,7 @@ Note on versioning:
 - bash: autocomplete of files and command line options in bash. .bashrc is modified during registration to activate the autocompletion. For existing users, you may manually add the following line to your .bashrc :
    source <...genozip-directory...>/autocomplete.sh ; complete -F _genozip genozip; complete -F _genounzip genounzip ; complete -F _genocat genocat ; complete -F _genols genols
 - feature matrix changes: --optimize is now available only in Genozip Enterprise, Premium and Academic (not Genozip Standard) (no change for current Genozip Standard customers)
-- some command line options renamed: --show-reference, --show-ref-contigs, show-ref-iupacs and --show-filename have been renamed to --print-reference, --print-ref-contigs, print-ref-iupacs and --print-filename respectively. The old names still work too, for backward compatability.
+- some command line options renamed: --show-reference, --show-ref-contigs, show-ref-iupacs and --show-filename have been renamed to --print-reference, --print-ref-contigs, print-ref-iupacs and --print-filename respectively. The old names still work too, for backward compatibility.
 - new diagnostic options: --no-FAF and --no-interleaved to disable the FAF and Interleaved methods respectively ; --debug-upgrade
 
 15.0.57 21/4/2024
@@ -990,7 +995,7 @@ Cleanup:
 - Added --optimize-SEQ for FASTQ, FASTA, SAM optimization
 - Added many options including --list-chroms, --dump-one-local, --show-reference, --show-ref-index, --show-ref-seq, --show-chrom2ref,
   --show-ref-contigs, --show-ref-hash
-- Removed backward compatability with versions v1 and v5. Use genozip version 5 to uncompress files of all previous versions.
+- Removed backward compatibility with versions v1 and v5. Use genozip version 5 to uncompress files of all previous versions.
 
 5.0.9 16/June/2020
 - fix bug with compressing VCF / GVF with an INFO / ATTRS field of '.'

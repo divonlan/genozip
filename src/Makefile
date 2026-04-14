@@ -156,8 +156,8 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  sam_star.c sam_abra2.c sam_minimap2.c sam_modify.c sam_recon_plan_piz.c gencomp_zip.c gencomp_piz.c	\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c fastq_aux.c    \
 		  deep.c																								\
-		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c 									\
-		  buffer.c buf_struct.c buf_list.c random_access.c sections.c base64.c mgzip.c mgzip_sections.c      	\
+		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c base64.c							\
+		  buffer.c buf_struct.c buf_list.c random_access.c sections.c sections_show.c mgzip.c mgzip_sections.c  \
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c					\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
 		  codec_smux.c codec_oq.c																				\

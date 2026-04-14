@@ -728,7 +728,7 @@ static void cigar_remove_flanking_0_ops (BufferP cigar)
         cigar->len32--;
 }
 
-static inline StrTextMegaLong display_bamass_cigar (VBlockP vb, thool is_fwd)
+static inline StrText16K display_bamass_cigar (VBlockP vb, thool is_fwd)
 {
     ARRAY (BamCigarOp, cigar, vb_bamass_cigar);
     
@@ -742,7 +742,7 @@ static inline StrTextMegaLong display_bamass_cigar (VBlockP vb, thool is_fwd)
         }
     }
     
-    StrTextMegaLong s = dis_binary_cigar (vb, cigar_L_flank, vb_bamass_cigar.len32, &vb->codec_bufs[6]);
+    StrText16K s = dis_binary_cigar (vb, cigar_L_flank, vb_bamass_cigar.len32, &vb->codec_bufs[6]);
 
     return s;
 }
@@ -848,9 +848,9 @@ void fastq_bamass_retrieve_ent (VBlockP vb, // note: doesn't require FASTQ VB, c
 }
 
 // displays bamass_ents AFTER linking
-StrTextLong bamass_dis_ent (VBlockP vb, const BamAssEnt *e, uint64_t qname_hash)
+StrText1K bamass_dis_ent (VBlockP vb, const BamAssEnt *e, uint64_t qname_hash)
 {
-    StrTextLong s;
+    StrText1K s;
     uint32_t s_len = 0;
 
     // save bamass_cigar

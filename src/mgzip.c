@@ -1549,7 +1549,7 @@ void show_gz (rom filename)
             size_width = -str_get_uint_textual_len (block_txt_len);
 
         uint32_t h_len;
-        StrTextLong header_str = display_gz_header_ex (show_gz_next, block_gz_len, false, &h_len);
+        StrText1K header_str = display_gz_header_ex (show_gz_next, block_gz_len, false, &h_len);
 
         printf ("i=%-2u: disk=%-8"PRIu64" isize=%*"PRIu64" (%-7s) bsize=%*"PRIu64" digest=%08x gz_header=%s.L=%u %s%s%s\n", 
                 i, evb->z_data.next, size_width, (uint64_t)block_txt_len, str_size (block_txt_len).s, size_width, (uint64_t)block_gz_len, 
@@ -1676,7 +1676,7 @@ void dump_gz_block (rom filename)
     }
 
     ASSERT (fread (&data[BGZF_HEADER_LEN], (h->bsize+1) - BGZF_HEADER_LEN, 1, fp) == 1, 
-                   "fread of block %u failed (2): %s", flag.dump_gz_block, strerror (errno));
+                   "fread of block %u failed (2): %s", flag.dump_gz_block, arch_str_error());
  
     char dump_fn[128];
     snprintf (dump_fn, sizeof (dump_fn), "gz-block.zip.%u.gz", flag.dump_gz_block);

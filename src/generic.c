@@ -138,22 +138,24 @@ SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
     return NO_NEW_VALUE;
 }
 
-StrTextLong generic_get_magic (void)
+StrText4K generic_get_magic (void)
 {
-    StrTextLong s = {};
-    s.s[0] = '"';
-    int len = 1 + str_to_printable (magic, strlen(magic), &s.s[1], sizeof(s.s) - MAGIC_SIZE*3 - 10);
-    s.s[len++] = '"';
-    s.s[len++] = ' ';
+    StrText4K s = str_to_printable_json_(magic, strnlen (magic, MAGIC_SIZE));
+    int s_len = strlen(s.s);
+    
+    memmove (&s.s[2], s.s, s_len);
+    s.s[0] = s.s[s_len+2] = '\\';
+    s.s[1] = s.s[s_len+3] = '\"';
+    s.s[s_len + 4] = ' ';
 
-    str_to_hex_((bytes)magic, strlen(magic), &s.s[len], true);
+    str_to_hex_((bytes)magic, strlen(magic), &s.s[s_len+5], true);
 
     return s;
 }
 
-rom generic_get_ext (void)
+StrText4K generic_get_ext (void)
 {
-    return ext;
+    return str_to_printable_json_(ext, strlen (ext));
 }
  
 // to be called from segconf of other data types, if it is discovered that the file is not actually of that data type

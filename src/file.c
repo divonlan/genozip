@@ -30,6 +30,7 @@
 #include "filename.h"
 #include "huffman.h"
 #include "tip.h"
+#include "arch.h"
 
 // globals
 FileP z_file   = NULL;
@@ -128,9 +129,9 @@ FileType file_get_default_z_ft_of_data_type (DataType dt)
 }
 
 // possible arguments for --input
-StrTextLong file_compressible_extensions (bool plain_only)
+StrText1K file_compressible_extensions (bool plain_only)
 {
-    StrTextLong s;
+    StrText1K s;
     int s_len = 0;
 
     for (DataType dt=1; dt < NUM_DATATYPES; dt++) { // start from 1, excluding DT_REFERENCE
@@ -539,7 +540,7 @@ FileP file_open_txt_read (rom filename)
                 if (file->src_codec == CODEC_GZ || file->src_codec == CODEC_NONE) goto gz; // actually, this is a GZ file (possibly BAM)
             }
             
-            StrTextSuperLong samtools_T_option = cram_get_samtools_option_T();
+            StrText4K samtools_T_option = cram_get_samtools_option_T();
 
             file_open_ext_decompessor (file, "samtools", "view", CODEC_BGZF, true, (rom[7]){  
                                        "--bam", "--uncompressed",           // BAM with BGZF blocks in which the payload is not compressed
@@ -645,7 +646,7 @@ FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_lev
         case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
 
         case CODEC_CRAM : {
-            StrTextSuperLong samtools_T_option = cram_get_samtools_option_T();
+            StrText4K samtools_T_option = cram_get_samtools_option_T();
             file_redirect_output_to_stream (file, "samtools", "view", "-OCRAM", 
                                             file_samtools_no_PG(), 
                                             samtools_T_option.s[0] ? samtools_T_option.s : NULL); 
@@ -1185,7 +1186,7 @@ uint64_t file_get_size (rom filename)
     struct stat64 st;
     
     int ret = stat64(filename, &st);
-    ASSERT (!ret, "stat64 failed on '%s': %s", filename, flag.is_windows ? str_win_error() : strerror(errno));
+    ASSERT (!ret, "stat64 failed on '%s': %s", filename, arch_str_error());
     
     return st.st_size;
 }
@@ -1218,7 +1219,7 @@ void file_mkdir (rom dirname)
 #else
     int ret = mkdir (dirname, 0777);
 #endif
-    ASSERT (!ret, "mkdir(%s) failed: %s", flag.out_dirname, flag.is_windows ? str_win_error() : strerror (errno));
+    ASSERT (!ret, "mkdir(%s) failed: %s", flag.out_dirname, arch_str_error());
 }
 
 // reads an entire file into a buffer. if filename is "-", reads from stdin
@@ -1242,7 +1243,7 @@ void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
     ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));
 
     buf->len = fread (buf->data, 1, size, file);
-    ASSERT (is_stdin || max_size || buf->len == size, "Error reading file %s: %s", filename, strerror (errno));
+    ASSERT (is_stdin || max_size || buf->len == size, "Error reading file %s: %s", filename, arch_str_error());
 
     ASSINP (ver_type != VERIFY_ASCII || str_is_printable (STRb(*buf)), "Expecting %s to contain text (ASCII)", filename);
     ASSINP (ver_type != VERIFY_UTF8  || str_is_utf8      (STRb(*buf)), "Expecting %s to contain ASCII or UTF-8 text", filename);

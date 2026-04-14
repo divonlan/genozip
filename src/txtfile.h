@@ -18,7 +18,7 @@ extern void txtfile_fwrite (const void *data, uint32_t size);
 extern void txtfile_query_first_bytes_in_file (rom filename, uint32_t len);
 extern void txtfile_initialize_igzip (FileP file);
 extern StrText txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data);
-extern StrTextLong txtfile_codec_name (FileP z_file, CompIType comp_i, bool obscure_fname);
+extern StrText1K txtfile_codec_name (FileP z_file, CompIType comp_i, bool obscure_fname);
 extern void txtfile_zip_finalize_codecs (void);
 extern void txtfile_read_header (bool is_first_txt);
 extern uint32_t txt_data_alloc_size (uint32_t vb_size) ;
@@ -36,5 +36,5 @@ extern int32_t def_is_header_done (bool is_eof);
 extern DataType txtfile_zip_get_file_dt (rom filename);
 
 // misc
-extern StrTextLong display_gz_header (STR8p(h), bool obscure_fname);
-extern StrTextLong display_gz_header_ex (STR8p(h), bool obscure_fname, uint32_t *out_h_len/*out*/);
+extern StrText1K display_gz_header (STR8p(h), bool obscure_fname);
+extern StrText1K display_gz_header_ex (STR8p(h), bool obscure_fname, uint32_t *out_h_len/*out*/);

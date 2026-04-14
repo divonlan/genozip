@@ -65,9 +65,9 @@ void vcf_pbsv_seg_initialize (VBlockVCFP vb)
     seg_mux_init (vb, id1_ctx->did_i, VCF_SPECIAL_DEMUX_BY_VARTYPE, false, pbsv_I1D);
 }
 
-StrTextLong vcf_pbsv_get_mate_id (STRp(id), uint32_t *len/*out*/)
+StrText1K vcf_pbsv_get_mate_id (STRp(id), uint32_t *len/*out*/)
 {
-    StrTextLong mate_id = {};
+    StrText1K mate_id = {};
     *len = 0;
 
     if (id_len >= sizeof (mate_id.s) || id_len <= 9 || memcmp (id, "pbsv.BND.", 9))

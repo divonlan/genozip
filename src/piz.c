@@ -84,7 +84,7 @@ static VBIType piz_get_standalone_vb_i (CompIType comp_i, // if COMP_NONE, we wi
          :                                              vb_i;
 }
 
-static StrTextLong piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) // one of the two is needed
+static StrText1K piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) // one of the two is needed
 {
     if (comp_i == COMP_NONE)
         comp_i = sections_vb_header (vb_i)->comp_i;
@@ -93,7 +93,7 @@ static StrTextLong piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) /
                 : (flag.deep && comp_i >= SAM_COMP_FQ00)               ? (1 + comp_i - SAM_COMP_FQ00)
                 :                                                        comp_i;
 
-    StrTextLong s = {};
+    StrText1K s = {};
     if (IS_ZIP) 
         strncpy (s.s, main_input_filename (file_i), sizeof(s)-1);
     
@@ -106,9 +106,9 @@ static StrTextLong piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) /
     return s;
 }
 
-StrTextLong piz_advise_biopsy (VBlockP vb)
+StrText1K piz_advise_biopsy (VBlockP vb)
 {
-    StrTextLong s;
+    StrText1K s;
     snprintf (s.s, sizeof(s), "To see the same data in the original file:\n"
                               "genozip --biopsy %u%.20s%.20s%s %.768s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
               piz_get_standalone_vb_i (vb->comp_i, vb->vblock_i),
@@ -122,14 +122,14 @@ StrTextLong piz_advise_biopsy (VBlockP vb)
     return s;
 }
 
-StrTextLong piz_advise_biopsy_line (CompIType comp_i, // if COMP_NONE, we will look it up
+StrText1K piz_advise_biopsy_line (CompIType comp_i, // if COMP_NONE, we will look it up
                                     VBIType vblock_i, LineIType line_i, 
                                     rom filename) // optional
 {
     if (!filename) 
         filename = piz_get_filename_by_comp_i (comp_i, vblock_i).s;
 
-    StrTextLong s;
+    StrText1K s;
     snprintf (s.s, sizeof(s), "genozip --biopsy-line %u/%u%.20s%.20s%s %.768s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
               piz_get_standalone_vb_i (comp_i, vblock_i), line_i, // vb_i if genozip is run on this file alone
               // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
@@ -143,7 +143,7 @@ StrTextLong piz_advise_biopsy_line (CompIType comp_i, // if COMP_NONE, we will l
 
 void asspiz_text (VBlockP vb, FUNCLINE)
 {
-    StrTextSuperLong s;
+    StrText4K s;
     int s_len = 0;
 
     for (int i=0; i < vb->con_stack_len; i++)
@@ -582,6 +582,9 @@ DataType piz_read_global_area (void)
     // Note: some dictionaries are skipped based on skip() and all flag logic should implemented there
     dict_io_read_all_dictionaries(); 
 
+    if (is_genocat && (flag.show_b250 || flag.show_b250_δ.num))
+        zfile_show_b250_only(); // doesn't return
+
     if (!flag.header_only) {
         // mapping of the file's chroms to the reference chroms (for files originally compressed with REF_EXTERNAL/EXT_STORE and have alternative chroms)
         chrom_2ref_load(); 
@@ -630,9 +633,10 @@ DataType piz_read_global_area (void)
             ref_iupacs_load();
 
             // load the refhash, if we are compressing FASTA/FASTQ/SAM/BAM, or if user requested to see it
-            if (  (primary_command == ZIP && flag.aligner_available) ||
-                  (flag.show_ref_hash && is_genocat) ||
-                  ref_cache_is_populating())
+            if (refhash_exists() &&
+                  ((primary_command == ZIP && flag.aligner_available) ||
+                   (flag.show_ref_hash && is_genocat) ||
+                   ref_cache_is_populating()))
                 refhash_load();
 
             // exit now if all we wanted was just to see the reference (we've already shown it)
@@ -833,18 +837,21 @@ void piz_allow_out_of_order (void)
 
 static uint64_t piz_target_progress (CompIType comp_i)
 {
+    int steps = flag.no_writer_thread ? 2 : 3; // read, compute and (sometimes) write
+
     if (comp_i == COMP_MAIN && Z_DT(SAM))      
-        return 3 * sections_get_num_vbs_(SAM_COMP_MAIN, SAM_COMP_DEPN) + sections_get_num_vbs (SAM_COMP_PRIM); // VBs pre-processed
+        return steps * sections_get_num_vbs_(SAM_COMP_MAIN, SAM_COMP_DEPN) + 
+               sections_get_num_vbs (SAM_COMP_PRIM); // VBs pre-processed
         
     else if (Z_DT(FASTQ) && flag.interleaved) 
-        return 3 * sections_get_num_vbs_(FQ_COMP_R1, FQ_COMP_R2);
+        return steps * sections_get_num_vbs_(FQ_COMP_R1, FQ_COMP_R2);
     
     else if (Z_DT(SAM) && flag.deep && flag.interleaved)
-        return 3 * sections_get_num_vbs_(SAM_COMP_FQ00, SAM_COMP_FQ01);
+        return steps * sections_get_num_vbs_(SAM_COMP_FQ00, SAM_COMP_FQ01);
 
     else {
         if (comp_i == COMP_NONE) comp_i = COMP_MAIN;
-        return 3 * sections_get_num_vbs_(comp_i, comp_i);
+        return steps * sections_get_num_vbs_(comp_i, comp_i);
     }
 }
 
@@ -959,7 +966,7 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
                 iprintf ("AFTER_COMPUTE(task=piz id=%d) vb=%s/%u num_running_compute_threads(after)=%u\n", 
                          vb->id, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
             
-            dispatcher_increment_progress ("preproc_or_recon", 1 + (!vb->preprocessing && flag.no_writer_thread)); // done preprocessing or reconstructing (+1 if skipping writing)
+            dispatcher_increment_progress ("preproc_or_recon", 1); // done preprocessing or reconstructing 
             if (!vb->preprocessing) 
                 piz_handle_reconstructed_vb (dispatcher, vb, &num_nondrop_lines);
             else

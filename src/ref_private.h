@@ -24,19 +24,17 @@ typedef enum { CACHE_INITITAL, CACHE_READY/*shm read-only*/, CACHE_POPULATING/*s
 extern rom cache_state_name (RefCacheState cs);
 
 // a reference cache is a shared memory segment consisting of a RefCache struct, followed by the genome, follewed by the refhash
-typedef struct ref_cache { 
+//xxx deleteme
+typedef struct RefCache { 
     uint32_t magic;               // set to GENOZIP_MAGIC - used to detect whether this shm segment is a Genozip reference cache
     uint32_t creator_pid;
     uint64_t creation_ts;         // if set - cache is ready OR currently being populated
     uint64_t shm_size;                
     uint8_t genozip_version;      // Genozip version that created this cache (NOT genozip version of reference file)
     bool is_populated;            // if set - cache is ready
-    struct {
-    uint8_t terminate_holder : 1; // Windows: a message to the holder process that it can terminate now
-    uint8_t unused_bits      : 7;
-    };
-    uint8_t cache_format_version; // currently 0
-    uint8_t unused[4];            // start genome_data 64b-word-aligned
+    uint8_t RefCache_ver;         // currently 0
+    uint8_t unused;               
+    uint32_t holder_pid;          // Windows only. since 15.0.82
     char ref_basename[256];       // nul-terminated basename of reference filename, or <unused> if too long
     char genome_data[0];
 } RefCache;

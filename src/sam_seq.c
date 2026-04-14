@@ -409,13 +409,14 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
 
     // we don't need to lock if the entire ref_consumed of this read was already is_set by previous reads (speed optimization)
     bool no_lock = IS_REF_EXTERNAL || ((vb->chrom_node_index == vb->consec_is_set_chrom) && (pos >= vb->consec_is_set_pos) && (pos + ref_consumed <= vb->consec_is_set_pos + vb->consec_is_set_len));
-
+    
     RefLock lock = REFLOCK_NONE;
     RangeP range = vb->cigar_missing ? NULL : ref_seg_get_range (VB, vb->chrom_node_index, STRa(vb->chrom_name), pos, ref_consumed, WORD_INDEX_NONE, (no_lock ? NULL : &lock));
 
     // Cases where we don't consider the refernce and just copy the seq as-is
     // 1. (denovo:) this contig defined in @SQ went beyond the maximum genome size of 4B and is thus ignored
     // 2. (loaded:) case contig doesn't exist in the reference, or POS is out of range of contig (observed in the wild with chrM)    
+    // note: alignments that circle back to chromosome start are dropped here. circular chromosomes are supported by SAM spec §2.7, but circling-back alignments are rarely seen in BAM, and even if seen, are too few to worry about.
     if (!range) {
         COPY_TIMER (sam_seg_SEQ_vs_ref);
         return MAPPING_NO_MAPPING; // seg as a verbatim copy or use aligner
@@ -450,19 +451,24 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
 
     uint32_t pos_index = pos - range->first_pos;
     uint32_t next_ref  = pos_index;
+    uint32_t range_len = range->last_pos - range->first_pos + 1;
 
     uint32_t i=0, n=0;
     BamCigarOpType op = BC_NONE;
 
-    uint32_t range_len = (range->last_pos - range->first_pos + 1);
-    
-    if (IS_REF_EXT_STORE && !no_lock) 
-        bits_set_region (&range->is_set, pos_index, ref_consumed); // we will need this ref to reconstruct
-
-    bool has_D_N = false;
-    decl_acgt_decode;
-
     bool is_ref_internal = IS_REF_INTERNAL;
+    
+    bool is_ref_ext_store = IS_REF_EXT_STORE;
+    
+    // decide if and when to set is_set
+    enum { DONT_SET, SET_ONE_BY_ONE, SET_TOGETHER } is_set_mode = 
+        no_lock                                             ? DONT_SET       // all are set already
+      : (is_ref_internal && (vb->deletions || vb->introns)) ? SET_ONE_BY_ONE // if we have holes due to D or N, we can't set together since in INTERNAL those holes might not have reference bases at all
+      : (is_ref_ext_store && vb->introns)                   ? SET_ONE_BY_ONE // we store in the file even unneeded small D holes because the saving of a bit a reference storage is canceled by the extra is_set entropy, however we don't store long N (intron) gaps. 
+      :                                                       SET_TOGETHER;  // we can set all the bits together
+
+    // bool has_D_N = false;
+    decl_acgt_decode;
 
     while (i < seq_len || next_ref < pos_index + ref_consumed) {
 
@@ -475,7 +481,6 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
         }
 
         switch (op) {
-
             case BC_M: case BC_E: case BC_X: // alignment match or sequence match or mismatch
 
                 ASSERT (n > 0 && n <= (seq_len - i), 
@@ -485,7 +490,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
                 uint32_t bit_i = bitmap_ctx->next_local; // copy to automatic variable for performance
                 uint32_t save_n = n;
 
-                if (vb->bisulfite_strand) {
+                if (__builtin_expect (vb->bisulfite_strand, false)) {
                     sam_seg_bisulfite_M (vb, range, range_len, next_ref, &seq[i], n, i, bitmap, bit_i, seqmis_ctx);
                     next_ref += n;
                     i += n;
@@ -493,35 +498,34 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
                 }
                 
                 else while (n && next_ref < pos_index + ref_consumed) {
-
                     bool normal_base = IS_ACGT (seq[i]);
-
-                    // circle around to beginning of chrom if out of range (can only happen with external reference, expected only with circular chromosomes) 
-                    uint32_t idx = (next_ref >= range_len) ? next_ref - range_len : next_ref; 
 
                     // case: we have not yet set a value for this site - we set it now. note: in ZIP, is_set means that the site
                     // will be needed for pizzing. With REF_INTERNAL, this is equivalent to saying we have set the ref value for the site
-                    if (is_ref_internal && !no_lock && !ref_is_nucleotide_set (range, idx)) { 
-
-                        // note: in case this is a non-normal base (eg N), set the reference to an arbitrarily to 'A' as we 
-                        // we will store this non-normal base in seqmis_ctx multiplexed by the reference base (i.e. in seqmis_ctx['A']).
-                        ref_set_nucleotide (range, idx, normal_base ? seq[i] : 'A');
+                    if (is_ref_internal && !no_lock && !ref_is_nucleotide_set (range, next_ref)) { 
                         
-                        bits_set (&range->is_set, idx); // we will need this ref to reconstruct
+                        if (is_set_mode == SET_ONE_BY_ONE) 
+                            bits_set (&range->is_set, next_ref); // we will need this ref to reconstruct
 
-                        if (normal_base) 
+                        if (__builtin_expect (normal_base, true)) {
+                            ref_set_nucleotide_acgt (range, next_ref, seq[i]);
                             bit_i++; 
-                        else
+                        }
+                        else { // e.g. 'N'
+                            // set the reference to an arbitrarily to 'A' as we will store this non-normal base 
+                            // in seqmis_ctx multiplexed by the reference base (i.e. in seqmis_ctx['A']).
+                            ref_set_nucleotide_acgt (range, next_ref, 'A');
                             goto mismatch;
+                        }
                     }
 
                     // case: our seq is identical to the reference at this site
-                    else if (normal_base && seq[i] == REF(idx)) 
+                    else if (normal_base && seq[i] == REF(next_ref)) 
                         bit_i++; // bit remains set. 
 
                     // case: ref is set to a different value - we store our value in seqmis_ctx
                     else mismatch: {
-                        uint8_t ref_base_2bit = bits_get2 (&range->ref, idx * 2);
+                        uint8_t ref_base_2bit = bits_get2 (&range->ref, next_ref * 2);
                         BNXTc (seqmis_ctx[ref_base_2bit].local) = seq[i];
                         bits_clear (bitmap, bit_i++);
                         vb->mismatch_bases_by_SEQ++; // used by NM:i and MD:Z
@@ -555,12 +559,20 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
                 n = 0;
                 break;
 
+
+            case BC_D: 
+                // in EXT_STORE we set is_set for D as well, as copying these bases from the external reference
+                // to the file is faster and probably better compression than adding entropy to is_set
+                if (is_ref_ext_store && is_set_mode == SET_ONE_BY_ONE) 
+                    for (uint64_t i=next_ref; i < next_ref + n; i++)
+                        bits_set (&range->is_set, i); // usually n=1 or =2, not worth a bits_set_range
+                // fall through
+            
             // for Deletion or Skipping - we move the next_ref ahead
-            case BC_D: case BC_N: {
+            case BC_N: {
                 unsigned ref_consumed_skip = (is_ref_internal ? MIN_(n, range_len - next_ref) : n);
                 next_ref += ref_consumed_skip;
                 n        -= ref_consumed_skip;
-                has_D_N  =  true;
                 break;
             }
 
@@ -589,20 +601,29 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
     ASSERT (i == seq_len, "%s: expecting i(%u) == seq_len(%u) pos=%d range=[%.*s %"PRId64"-%"PRId64"] (possibly reason: inconsistency between seq_len and CIGAR=\"%s\")", 
             LN_NAME, i, seq_len, pos, STRf(range->chrom_name), range->first_pos, range->last_pos, (vb->last_cigar ? vb->last_cigar : ""));
 
-    // if we set the entire consecutive reference range covered by this read - extend consec_is_set 
-    if (segconf.is_sorted && !no_lock && (IS_REF_EXT_STORE || !has_D_N/*REF_INTERNAL*/)) {
-        // case: current region is not consecutive - start a new region
-        if (vb->consec_is_set_chrom != vb->chrom_node_index || vb->consec_is_set_pos + vb->consec_is_set_len < pos) {
+    if (is_set_mode == SET_TOGETHER) {
+        // case: current region is not consecutive (including unsorted) - start a new region
+        if (vb->consec_is_set_chrom != vb->chrom_node_index 
+              || vb->consec_is_set_pos + vb->consec_is_set_len < pos
+              || pos < vb->consec_is_set_pos) { // unsorted (note: PRIM and DEPN are always unsorted)
             vb->consec_is_set_chrom = vb->chrom_node_index;
             vb->consec_is_set_pos   = pos;
             vb->consec_is_set_len   = ref_consumed;
+           
+            bits_set_region (&range->is_set, pos_index, ref_consumed); // we will need this ref to reconstruct        
         }
 
-        // case: extend current region
-        else if (vb->consec_is_set_pos + vb->consec_is_set_len < pos + ref_consumed)
+        // case: extend current region (if it needs to be extended)
+        else if (vb->consec_is_set_pos + vb->consec_is_set_len < pos + ref_consumed) {
+            // only set bits that are not already set
+            uint64_t new_set_pos_index = (vb->consec_is_set_pos + vb->consec_is_set_len) - range->first_pos;
+            uint64_t n_new_bits_to_set = (pos_index + ref_consumed) - new_set_pos_index;
+            bits_set_region (&range->is_set, new_set_pos_index, n_new_bits_to_set); 
+
             vb->consec_is_set_len = (pos + ref_consumed) - vb->consec_is_set_pos;
+        }
     }
-    
+
     // verify - does MD:Z correctly reflect matches and mismatches of M/X/=
     bool use_un = segconf.MD_NM_by_unconverted && vb->bisulfite_strand;
     sam_MD_Z_verify_due_to_seq (vb, STRa(seq), pos, 
@@ -1179,7 +1200,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
                     else mismatch: {
                         char base = v14 ? ({ ContextP mis_ctx = &seqmis_ctx[nuke_encode (ref[ref_consumed+i])] ; // note: a "not enough data" error here is often an indication that pos is wrong
-                                                *Bc(mis_ctx->local, mis_ctx->next_local++); })
+                                             *Bc(mis_ctx->local, mis_ctx->next_local++); })
                                         : *nonref++;
 
                         *recon++ = base;

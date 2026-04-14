@@ -59,9 +59,9 @@ Digest digest_do (rom data, uint64_t data_len, DigestAlg alg, rom show_digest_ms
 {
     Digest digest;
     switch (alg) {
-        case DIGEST_ADLER : digest = (Digest){ .adler32 = BGEN32 (adler32 (1, STRa(data))) };  break;
+        case DIGEST_ADLER : digest = (Digest){ .adler32 = BGEN32 (adler32 (1, STRa(data))) }; break;
         case DIGEST_XXH3  : digest = (Digest){ .xxh3   = BGEN64 (XXH3_64bits (STRa(data))) }; break;
-        case DIGEST_MD5   : digest = md5_do (STRa(data)); break;
+        case DIGEST_MD5   : digest = md5_do (STRa(data));                                     break;
         default           : ABORT ("Invalid digest alg=%d", alg);
     }
 
@@ -146,7 +146,7 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
         if (flag.test) { 
             snprintf (s, sizeof (s), "verified as identical to the %s %s", 
                       segconf.zip_txt_modified ? "modified" : "original", // in case ZIP modified, e.g. with --optimize
-                      dt_name_faf (txt_file->data_type));
+                      dt_name_faf());
             progress_finalize_component (s); 
         }
 
@@ -160,7 +160,7 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
         if (digest_recon_is_equal (decompressed_file_digest, z_file->digest)) {
             if (flag.test || IS_MD5) { 
                 snprintf (s, sizeof (s), "verified as identical to the original %s (%s=%s)", 
-                          dt_name_faf (txt_file->data_type), digest_name(), digest_display (decompressed_file_digest).s);
+                          dt_name_faf(), digest_name(), digest_display (decompressed_file_digest).s);
                 progress_finalize_component (s); 
             }
         }
@@ -176,7 +176,7 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
             piz_digest_failed = true; // inspected by main_genounzip
             WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s (txt_file=%s txt_file_i=%u)", 
                   digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
-                  dt_name_faf (txt_file->data_type), digest_display (z_file->digest).s, txt_name, txt_file_i);
+                  dt_name_faf(), digest_display (z_file->digest).s, txt_name, txt_file_i);
         }
     }
 }
@@ -351,7 +351,7 @@ Digest digest_txt_header (BufferP txt_data, Digest piz_expected_digest, CompITyp
 // test for matching digest between loaded external reference and reference specified in SectionHeaderGenozipHeader
 void digest_verify_correct_external_reference_is_loaded (void)
 {
-    // case: we loaded an external ref, even though the file was not comprssed with one. E.g. when translating 23andMe to VCF.    
+    // case: we loaded an external ref, even though the file was not compressed with one. E.g. when translating 23andMe to VCF.    
     if (digest_is_zero (z_file->ref_genome_digest)) return;
 
     Digest loaded_ref_digest = ref_get_genome_digest();
@@ -376,8 +376,10 @@ void digest_verify_correct_external_reference_is_loaded (void)
         if (VER(15)) { // file and loaded reference are both v15
             // case: file was compressed with a different external reference digested with a different alg
             // but it might be still ok if the genome is the same. re-digest the genome with the the alg recorded in the compressed file
-            if (z_file->ref_genome_digest_alg != loaded_ref_alg) 
-                loaded_ref_digest = reference_re_digest_genome (z_file->ref_genome_digest_alg);
+            if (z_file->ref_genome_digest_alg != loaded_ref_alg ||
+                VER_GE_(z_file->ref_genozip_ver, 15, 82) != VER_GE_(loaded_ref_ver, 15, 82)) // one digested the entire genome and one only 1/8 (defect 2026-04-12)
+                loaded_ref_digest = reference_re_digest_genome (z_file->ref_genome_digest_alg, 
+                                                                VER_GE_(z_file->ref_genozip_ver, 15, 82)); 
 
             ASSINP (digest_is_equal (z_file->ref_genome_digest, loaded_ref_digest), 
                     "%s: Incorrect reference file:\n%s with %s was used for compressing (ref_genozip_version=%s)\nBut %s has %s (ref_genozip_version=%s)",

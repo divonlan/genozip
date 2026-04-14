@@ -48,7 +48,7 @@ static void zriter_write_do (BufferP data, BufferP section_list, int64_t offset_
 
     // error if failed to write to file
     ASSERT (bytes_written == data->len, "wrote only %"PRId64" of the expected %"PRId64" bytes to %s on a %s filesystem: %s", 
-            bytes_written, data->len, z_file->name, arch_get_z_filesystem().s, strerror(errno));
+            bytes_written, data->len, z_file->name, arch_get_z_filesystem().s, arch_str_error());
 
     // writing to an offset - return to the end of the file
     if (offset_in_z_file != -1) {

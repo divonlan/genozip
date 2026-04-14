@@ -25,6 +25,7 @@
 #include "qname_filter.h"
 #include "mgzip.h"
 #include "license.h"
+#include "refhash.h"
 
 #define dict_id_is_fastq_qname_sf dict_id_is_type_1
 #define dict_id_is_fastq_aux      dict_id_is_type_2
@@ -711,6 +712,10 @@ void fastq_segconf_finalize (VBlockP vb)
                  "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n", 
                  DT_NAME, (FAF ? "60%-80%" : "20%-60%"), arch_get_argv0(), txt_file->name);
     }
+
+    else if (IS_REF_LOADED_ZIP && !refhash_exists())
+        ABORTINP ("%s is a \"minimal\" reference file, unsuitable for compressing %s files. %s", 
+                  ref_get_filename(), dt_name_faf(), WEBSITE_REFERENCE);
 
     // cases where aligner is available (note: called even if reference is not loaded, so that it errors in segconf_calculate)
     if (flag.best || flag.deep || flag.bam_assist)
@@ -1491,7 +1496,7 @@ void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header)
     header->fastq.segconf_std_seq_len        = BGEN32(segconf.std_seq_len); // 15.0.69
     header->fastq.segconf_use_ins_ctxs       = segconf.use_insertion_ctxs;  // 15.0.69
     
-    header->flags.genozip_header.dts2_bamass = (flag.bam_assist != NULL);   // 15.0.77
+    header->flags.genozip_header.is_bamass = (flag.bam_assist != NULL);     // 15.0.77
 }
 
 void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
@@ -1507,5 +1512,5 @@ void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
     }
 
     if (VER2(15,77))
-        flag.bam_assist            = header->flags.genozip_header.dts2_bamass ? "bamass" : NULL; 
+        flag.bam_assist            = header->flags.genozip_header.is_bamass ? "bamass" : NULL; 
 }

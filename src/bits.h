@@ -206,27 +206,13 @@ static inline void bits_toggle (BitsP arr, uint64_t i) { bitset_tgl(arr->words, 
 static inline void bits_assign (BitsP arr, uint64_t i, bool value) { bitset_cpy(arr->words, i, value); }
 static inline void bits_assign2(BitsP arr, uint64_t i/*even number*/, uint8_t value/*0,1,2 or 3*/) { bitset_cpy2(arr->words, i, value); }
 
-// Reverse the whole array or part of it
 extern void bits_reverse (BitsP bits);
-
-// Set all the bits in a region
 extern void bits_set_region (BitsP bits, uint64_t start, uint64_t len);
 
-// Clear all the bits in a region
 #define bits_clear_region(bits,start,len) bits_clear_region_do (bits, start, len, __FUNCLINE)
 extern void bits_clear_region_do (BitsP bits, uint64_t start, uint64_t len, rom func, unsigned code_line);
 
-//
-// Set, clear and toggle all bits at once
-//
-
-// Set all bits in this array to 1
-extern void bits_set_all(BitsP bits);
-
-// Set all bits in this array to 0
-extern void bits_clear_all(BitsP bits);
-
-extern void bits_bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit,  uint32_t num_bits);
+extern void bits_bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit, uint32_t num_bits);
 
 //
 // Get and set words (low level -- no bounds checking)
@@ -248,11 +234,9 @@ static inline uint64_t _get_word(ConstBitsP bits, uint64_t start)
     return result;
 }
 
-
-// Set 64 bits from a particular start position
-// Doesn't extend bit array
 #define WORD_MAX  (~(uint64_t)0) // word of all 1s
 
+// Set 64 bits from a particular start position
 static inline void _set_word (BitsP bits, uint64_t start, uint64_t word)
 {
     uint64_t word_index = bitset64_wrd(start);

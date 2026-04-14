@@ -73,29 +73,77 @@ StrText char_to_printable (char c)
     }
 }
 
-// returns length (excluding \0). out should be allocated by caller to (in_len*4 + 1), out is null-terminated
-uint32_t str_to_printable (STRp(in), char *out, int out_len)
+// same as char_to_printable, but escaped for json
+StrText char_to_printable_json (char c)  
 {
-    char *start = out;
+    switch ((uint8_t)c) {
+        case 32 ... '"' - 1 :
+        case '"'+1 ... '\\'-1:
+        case '\\'+1 ... 126 : return (StrText) { .s[0] = c     };
+        case '"'            : return (StrText) { .s = "\\\""   };
+        case '\\'           : return (StrText) { .s = "\\\\"   };
+        case '\t'           : return (StrText) { .s = "\\\\t"  };
+        case '\n'           : return (StrText) { .s = "\\\\n"  };
+        case '\r'           : return (StrText) { .s = "\\\\r"  };
+        case '\b'           : return (StrText) { .s = "\\\\b"  };
+        case 0 ... 7        : return (StrText) { .s = { '\\', '\\', '0'+c } };
+        
+        default             : { // unprintable - output eg \xf 
+            StrText p = {};
+            snprintf (p.s, sizeof(p.s), "\\x%x", (uint8_t)c);
+            return p;
+        }
+    }
+}
 
-    for (uint32_t i=0; i < in_len && out_len > 5; i++) // 5 = 4 characters + nul
+// returns length (excluding \0). out should be allocated by caller to (in_len*4 + 1), out is null-terminated
+uint32_t str_to_printable (STRp(in), char *s, int s_len)
+{
+    char *start = s;
+
+    for (uint32_t i=0; i < in_len && s_len > 5; i++) // 5 = 4 characters + nul
         switch (in[i]) {
             case 32 ... '\\'-1: case '\\'+1 ... 126:
-                           *out++ = in[i];                     ; out_len -= 1; break;
-            case '\t'    : *out++ = '\\'; *out++ = 't'         ; out_len -= 2; break;
-            case '\n'    : *out++ = '\\'; *out++ = 'n'         ; out_len -= 2; break;
-            case '\r'    : *out++ = '\\'; *out++ = 'r'         ; out_len -= 2; break;
-            case '\b'    : *out++ = '\\'; *out++ = 'b'         ; out_len -= 2; break;
-            case '\\'    : *out++ = '\\'; *out++ = '\\'        ; out_len -= 2; break;
-            case 0 ... 7 : *out++ = '\\'; *out++ = '0' + in[i] ; out_len -= 2; break;
-            default      : *out++ = '\\'; *out++ = 'x' ; 
-                           *out++ = NUM2HEXDIGIT((uint8_t)in[i] >> 4); 
-                           *out++ = NUM2HEXDIGIT((uint8_t)in[i] & 0xf); 
-                           out_len -= 4; 
+                           *s++ = in[i];                   ; s_len -= 1; break;
+            case '\t'    : *s++ = '\\'; *s++ = 't'         ; s_len -= 2; break;
+            case '\n'    : *s++ = '\\'; *s++ = 'n'         ; s_len -= 2; break;
+            case '\r'    : *s++ = '\\'; *s++ = 'r'         ; s_len -= 2; break;
+            case '\b'    : *s++ = '\\'; *s++ = 'b'         ; s_len -= 2; break;
+            case '\\'    : *s++ = '\\'; *s++ = '\\'        ; s_len -= 2; break;
+            case 0 ... 7 : *s++ = '\\'; *s++ = '0' + in[i] ; s_len -= 2; break;
+            default      : *s++ = '\\'; *s++ = 'x' ; 
+                           *s++ = NUM2HEXDIGIT((uint8_t)in[i] >> 4); 
+                           *s++ = NUM2HEXDIGIT((uint8_t)in[i] & 0xf); 
+                           s_len -= 4; 
         }
     
-    *out = 0;
-    return out - start;
+    *s = 0;
+    return s - start;
+}
+
+uint32_t str_to_printable_json (STRp(in), char *s, int s_len)
+{
+    char *start = s;
+
+    for (uint32_t i=0; i < in_len && s_len > 6; i++) // 6 = 5 characters + nul
+        switch (in[i]) {
+            case 32 ... '"' - 1 : case '"'+1 ... '\\'-1: case '\\'+1 ... 126:
+                           *s++ = in[i];           ; s_len -= 1; break;
+            case '\t'    : memcpy (s, "\\\\t", 3)  ; s_len -= 3; break;
+            case '\n'    : memcpy (s, "\\\\n", 3)  ; s_len -= 3; break;
+            case '\r'    : memcpy (s, "\\\\r", 3)  ; s_len -= 3; break;
+            case '\b'    : memcpy (s, "\\\\b", 3)  ; s_len -= 3; break;
+            case '\\'    : *s++ = '\\'; *s++ = '\\'; s_len -= 2; break;
+            case '"'     : *s++ = '\\'; *s++ = '"' ; s_len -= 2; break;
+            case 0 ... 7 : *s++ = '\\'; *s++ = '\\'; *s++ = '0' + in[i] ; s_len -= 3; break;
+            default      : *s++ = '\\'; *s++ = '\\'; *s++ = 'x' ; 
+                           *s++ = NUM2HEXDIGIT((uint8_t)in[i] >> 4); 
+                           *s++ = NUM2HEXDIGIT((uint8_t)in[i] & 0xf); 
+                           s_len -= 5; 
+        }
+    
+    *s = 0;
+    return s - start;
 }
 
 StrText str_size (uint64_t size)
@@ -167,11 +215,11 @@ StrText str_int_s (int64_t n)
     return s;
 }
 
-StrTextLong str_int_s_(rom label/*max 59 chars*/, int64_t n)
+StrText1K str_int_s_(rom label/*max 59 chars*/, int64_t n)
 {
-    StrTextLong s = {};
+    StrText1K s = {};
     int label_len = strlen (label);
-    ASSERT (label_len < sizeof(StrTextLong)-20/*max len of int64*/ -1/*\0*/, "label \"%s\" it too long (len=%u)", STRa(label)); 
+    ASSERT (label_len < sizeof(StrText1K)-20/*max len of int64*/ -1/*\0*/, "label \"%s\" it too long (len=%u)", STRa(label)); 
 
     memcpy (s.s, label, label_len);
     str_int (n, &s.s[label_len]);
@@ -179,9 +227,9 @@ StrTextLong str_int_s_(rom label/*max 59 chars*/, int64_t n)
     return s;
 }
 
-StrTextLong str_str_s_(rom label, STRp(str))
+StrText1K str_str_s_(rom label, STRp(str))
 {
-    StrTextLong s = {};
+    StrText1K s = {};
     int label_len = strlen (label);
 
     bool truncated = (label_len + str_len > sizeof(s)-1);
@@ -1283,9 +1331,9 @@ StrText str_human_time (unsigned secs, bool compact)
 }
 
 // current date and time
-StrTextLong str_time (void)
+StrText1K str_time (void)
 {
-    StrTextLong s = {}; // long, in case of eg Chinese language time zone strings
+    StrText1K s = {}; // long, in case of eg Chinese language time zone strings
 
 #ifdef _WIN32
     int s_len = GetDateFormatA (LOCALE_USER_DEFAULT, DATE_SHORTDATE, NULL, NULL, s.s, sizeof(s.s)-1) - 1;

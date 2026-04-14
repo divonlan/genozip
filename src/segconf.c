@@ -717,10 +717,13 @@ StrText segconf_get_qual_histo (QualHistType qht)
     for (int i=0; i < 16; i++) {
         if (!segconf.qual_histo[qht][i].count) break;
 
+        // similar escaping as in stats_subs_seps_in_name
         switch (segconf.qual_histo[qht][i].q + '!') {
-            case ';' : memcpy (next, "；", STRLEN("；")); next += STRLEN("；"); break; // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
-            case '=' : memcpy (next, "≐", STRLEN("≐")); next += STRLEN("≐"); break; 
-            default  : *next++ = segconf.qual_histo[qht][i].q + '!';
+            case ';'  : memcpy (next, "；",   STRLEN("；"));   next += STRLEN("；");   break; // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
+            case '='  : memcpy (next, "≐",    STRLEN("≐"));   next += STRLEN("≐");    break; 
+            case '\\' : memcpy (next, "\\\\", STRLEN("\\\\")); next += STRLEN("\\\\"); break; 
+            case '"'  : memcpy (next, "\\\"", STRLEN("\\\"")); next += STRLEN("\\\""); break; 
+            default   : *next++ = segconf.qual_histo[qht][i].q + '!';
         }
     }
 
@@ -736,11 +739,11 @@ unsigned segconf_get_num_qual_scores (QualHistType qht)
     return count;
 }
 
-StrTextLong segconf_get_optimizations (void)
+StrText1K segconf_get_optimizations (void)
 {
     ASSERTNOTNULL (z_file);
 
-    StrTextLong s;
+    StrText1K s;
     uint32_t s_len=0;
 
     for_zctx

@@ -26,4 +26,4 @@ extern bool license_is_standard (void);
 extern bool license_is_enterprise (void);
 extern bool license_is_academic (void);
 extern bool license_piz_prepare_genozip_header (SectionHeaderGenozipHeaderP header, FailType fail_type);
-extern StrTextLong license_academic_tip (void);
+extern StrText1K license_academic_tip (void);

@@ -84,7 +84,7 @@ extern void ref_get_is_set_bytemap (VBlockP vb, PosType64 gpos, uint32_t num_bas
 extern void ref_set_genome_is_used (PosType64 gpos, uint32_t len);
 extern DigestAlg ref_get_genome_digest_alg (void);
 extern rom ref_get_textual_seq (PosType64 gpos, STRc(ref), bool revcomp);
-extern Digest reference_re_digest_genome (DigestAlg alg);
+extern Digest reference_re_digest_genome (DigestAlg alg, bool full_genome_digest);
 
 // ZIPping a reference
 extern void ref_compress_ref (void);
@@ -125,7 +125,8 @@ extern bool ref_cache_is_cached  (void);
 extern bool ref_cache_is_populating (void);
 extern void ref_cache_remove_do (bool cache_exists, bool verbose);
 extern void ref_cache_remove (void);
-extern void ref_cache_remove_all (void);
+typedef enum { REF_CACHE_REMOVE_ALL, REF_CACHE_REMOVE_DORMANT } RefCacheRemoveType;
+extern void ref_cache_remove_all (RefCacheRemoveType rm_type);
 extern void ref_cache_detach (void);
 extern void noreturn ref_cache_hold (rom handle_str);
 extern void ref_cache_ls (void);
@@ -141,6 +142,9 @@ extern const uint8_t acgt_encode_comp[256];
 // note that the following work on idx and not pos! (idx is the index within the range)
 static inline void ref_set_nucleotide (RangeP range, uint32_t idx, uint8_t value) 
     { bits_assign2 (&range->ref, idx*2, acgt_encode[value]); }
+
+static inline void ref_set_nucleotide_acgt (RangeP range, uint32_t idx, uint8_t value) // caller guarantees value is A,C,G or T
+    { bits_assign2 (&range->ref, idx*2, nuke_encode(value)); }
 
 static inline bool ref_is_nucleotide_set (ConstRangeP range, uint32_t idx) { return (bool)bits_get (&range->is_set, idx); }
 
@@ -172,7 +176,7 @@ static inline void ref_assert_nucleotide_available (ConstRangeP range, PosType64
 extern void ref_verify_organism (VBlockP vb);
 
 // display
-extern StrTextLong ref_display_range (ConstRangeP r);
+extern StrText1K ref_display_range (ConstRangeP r);
 extern void ref_display_all_ranges (void);
 extern void ref_print_bases_region (FILE *file, ConstBitsP bits, ConstBitsP is_set, PosType64 first_pos, uint64_t start_base, uint64_t num_of_bases, bool is_forward);
 extern void ref_print_subrange (rom msg, ConstRangeP r, PosType64 start_pos, PosType64 end_pos, FILE *file);

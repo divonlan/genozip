@@ -747,9 +747,9 @@ void buf_low_level_free (void *p, FUNCLINE)
         COPY_TIMER_EVB (buf_low_level_free);
 }
 
-static StrTextLong oom_tip (void)
+static StrText1K oom_tip (void)
 {
-    StrTextLong s;
+    StrText1K s;
     snprintf (s.s, sizeof(s), "\n" _TIP "use --low-memory or alternatively limit the number of concurrent threads with --threads "
              "(currently %d - affects speed) and/or reduce the amount of data processed by each thread with --vblock "
              "(currently %d - affects compression ratio)", global_max_threads, (int)(segconf.vb_size / (1 MB)));

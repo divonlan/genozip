@@ -72,6 +72,8 @@ extern bool zfile_advance_to_next_header (uint64_t *offset, uint64_t *gap);
 
 extern DataType zfile_piz_get_file_dt (rom filename);
 
+extern void noreturn zfile_show_b250_only (void);
+
 #ifdef __APPLE__
 #define off64_t __int64_t // needed for conda mac - otherwise zlib.h throws compilation errors
 #endif

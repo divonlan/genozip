@@ -79,9 +79,9 @@ bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32_t min_
 // FLAG
 //--------------
 
-StrTextLong sam_dis_FLAG (SamFlags f)
+StrText1K sam_dis_FLAG (SamFlags f)
 {
-    StrTextLong result;
+    StrText1K result;
     int result_len = 0;
 
     if (f.multi_segs)     SNPRINTF0 (result, "MultiSeg,");

@@ -168,12 +168,12 @@ void mutex_show_bottleneck_analsyis (void)
     qsort (lp, MAX_CODE_LINE+1, sizeof(LockPoint), mutex_sort_by_accumulator);
 
     iprint0 ("Bottleneck analysis - Time waiting on locks:\n"
-             "Millisec Mutex / Join            LockPoint\n");
+             "Millisec  Mutex / Join            LockPoint\n");
 
     for (int i=0; i <= MAX_CODE_LINE; i++) {
         if (!lp[i].accumulator) break; // done, since its sorted
 
-        iprintf ("%-8s %-23s %s:%u\n", str_int_commas (lp[i].accumulator / 1000000).s, lp[i].mutex_name, lp[i].func, lp[i].code_line);
+        iprintf ("%-9s %-23s %s:%u\n", str_int_commas (lp[i].accumulator / 1000000).s, lp[i].mutex_name, lp[i].func, lp[i].code_line);
     }
 }
 

@@ -62,7 +62,7 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
                             bool *is_new) // optional out
 {
 #ifdef DEBUG
-    if (con) con_verify_items (con, "container_seg_do");
+    if (con) con_verify_items (con, ctx, "container_seg_do");
 #endif
 
     ctx->no_stons = true; // we need the word index to for container caching
@@ -96,9 +96,9 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
 // Reconstruction
 //----------------------
 
-StrTextMegaLong container_stack (VBlockP vb)
+StrText16K container_stack (VBlockP vb)
 {
-    StrTextMegaLong s;
+    StrText16K s;
     int s_len = 0;
 
     for (int i=0; i < vb->con_stack_len; i++)
@@ -860,9 +860,9 @@ static StrText item_sep_name1 (uint8_t sep)
     return s;
 }
 
-static StrTextLong container_flags (ConstContainerP con)
+static StrText1K container_flags (ConstContainerP con)
 {
-    StrTextLong s = {};
+    StrText1K s = {};
     int s_len = 0;
 
     if (con->drop_final_repsep)                   SNPRINTF0 (s, "drop_final_repsep|");
@@ -880,9 +880,9 @@ static StrTextLong container_flags (ConstContainerP con)
     return s;
 }
 
-StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
+StrText16K container_to_json (ConstContainerP con, STRp (prefixes))
 {
-    StrTextMegaLong s;
+    StrText16K s;
     int s_len = 0;
     
     uint32_t num_items = con_nitems (*con);
@@ -905,10 +905,10 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
     
         str_split (prefixes+1, prefixes_len-2, 0, CON_PX_SEP, pr, false); // skip container initial (ZIP only, in PIZ is was already removed in container_retrieve), final CON_PX_SEP and terminator of final item (as it would cause a redundant item in str_split)
 
-        SNPRINTF (s, "[con_wide]=\"%s\", ", str_to_printable_(prs[0], MIN_(pr_lens[0], sizeof(StrTextSuperLong)/2-1)).s);
+        SNPRINTF (s, "[con_wide]=\"%s\", ", str_to_printable_(prs[0], MIN_(pr_lens[0], sizeof(StrText4K)/2-1)).s);
 
         for (unsigned i=1; i < n_prs; i++) 
-            SNPRINTF (s, "[%d]=\"%s\", ", i-1, str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrTextSuperLong)/2-1)).s);
+            SNPRINTF (s, "[%d]=\"%s\", ", i-1, str_to_printable_(prs[i], MIN_(pr_lens[i], sizeof(StrText4K)/2-1)).s);
 
         s_len -= 2; // remove last comma (exists even if num_items=0 - for container-wide prefix)
     
@@ -921,14 +921,15 @@ StrTextMegaLong container_to_json (ConstContainerP con, STRp (prefixes))
     return s;
 }
 
-void con_verify_items (ConstContainerP con, rom con_name)
+void con_verify_items (ConstContainerP con, ContextP ctx, rom con_name)
 {
     for (ConstContainerItemP item=con->items; item < con->items + con_nitems(*con); item++) {
         char sep0 = item->separator[0]; 
         char sep1 = item->separator[1]; 
         
-        if (!item->dict_id.num &&
-            !((item - con->items) == 0 && con->items[0].translator)) // item 0 can be a translator-only item
+        if (!item->dict_id.num 
+        && !((item - con->items) == 0 && con->items[0].translator) // item 0 can be a translator-only item
+        && !(TXT_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->st_did_i == VCF_INFO))) // VCF_INFO can have dict_id=0 items (valueless items)
             ABORT ("container %s item_i=%u has dict_id=0. Perhaps n_items is too large?", con_name, (int)(item - con->items));
 
         if ((sep0 == CI0_LAST_MATCH && !IS_PRINTABLE(sep1)) ||

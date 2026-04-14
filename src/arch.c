@@ -412,9 +412,9 @@ rom arch_get_glibc (void)
 
 // good summary here: https://stackoverflow.com/questions/1023306/finding-current-executables-path-without-proc-self-exe/1024937#1024937
 // returns nul-terminated executable path
-StrTextSuperLong arch_get_executable (void) 
+StrText4K arch_get_executable (void) 
 {
-    StrTextSuperLong path = {};
+    StrText4K path = {};
 
 #ifdef __linux__    
     ssize_t path_len = readlink ("/proc/self/exe", path.s, sizeof(path.s) - 1); // doesn't nul-terminate
@@ -447,9 +447,9 @@ error:
     return path;
 }
 
-StrTextSuperLong arch_get_genozip_executable (void)
+StrText4K arch_get_genozip_executable (void)
 {
-    StrTextSuperLong fn = arch_get_executable();
+    StrText4K fn = arch_get_executable();
 
     if (!is_genozip) {
         rom bn       = is_genounzip?"genounzip" : is_genocat?"genocat" : "genols";
@@ -578,3 +578,8 @@ bool curl_available (void)
 #ifdef sanitize_thread
 void *__gxx_personality_v0; // overcome "undefined reference to '__gxx_personality_v0'" when linking with --sanitize=thread
 #endif
+
+rom arch_str_error (void)
+{
+    return flag.is_windows ? str_win_error() : strerror (errno);    
+}

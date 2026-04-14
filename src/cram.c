@@ -281,12 +281,12 @@ done:
 }
 
 // returns the -T (reference) option for CRAM, derived from the genozip reference name
-StrTextSuperLong cram_get_samtools_option_T (void)
+StrText4K cram_get_samtools_option_T (void)
 {
     if (!ref_is_external_loaded()) 
-        return (StrTextSuperLong){}; 
+        return (StrText4K){}; 
 
-    StrTextSuperLong samtools_T_option;
+    StrText4K samtools_T_option;
     uint32_t samtools_T_option_len = 0;
     rom ref_filename = ref_get_filename();
     rom ref_fasta_name = ref_get_fasta_name();
@@ -298,7 +298,7 @@ StrTextSuperLong cram_get_samtools_option_T (void)
             ref_filename, REF_FILENAME_LEN-1);
 
     int samtools_T_option_size = MAX_(strlen (ref_fasta_name), strlen (ref_filename)) + 10;
-    ASSERT (samtools_T_option_size < sizeof (StrTextSuperLong), "samtools_T_option_size=%u too large: ref_fasta_name=\"%s\" ref_filename=\"%s\"", 
+    ASSERT (samtools_T_option_size < sizeof (StrText4K), "samtools_T_option_size=%u too large: ref_fasta_name=\"%s\" ref_filename=\"%s\"", 
             samtools_T_option_size, ref_fasta_name, ref_filename);
 
     // case: fasta file is in its original location

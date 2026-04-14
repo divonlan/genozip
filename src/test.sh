@@ -1217,9 +1217,21 @@ batch_backward_compatability()
     export GENOZIP_REFERENCE=$REFDIR
 
     for file in ${files[@]}; do
+        if (( $(genols --cache | wc -l ) >= 5 )); then $genozip --no-cache ; fi
+
         test_header "$file - backward compatability test"
 
-        $genounzip --no-cache -t $file || exit 1
+        ref=$( $genocat --show-header=GENOZIP $file | tr " " "\n" | grep ref= | cut -c5- | tr -d '"' | rev | cut -d/ -f1| rev )
+
+        # cases where we modify the ref specified in the file and the reference is not in $GENOZIP_REFERENCE
+        local ref_option=""
+        if [[ "$ref" == GRCh38.v11.ref.genozip ]]; then ref_option=-e$TESTDIR/11.0.11/GRCh38.ref.genozip; fi
+         
+        $genounzip $ref_option -t $file || exit 1
+        
+        if [[ "$ref" != "" ]]; then
+            local prev_ref=$ref
+        fi
     done
 
     cleanup # to do: change loop ^ to double loop, clean up after each version (to remove shm)
@@ -1562,12 +1574,13 @@ batch_test_bai()
     rm -f $TESTDIR/*.test-bai/*genounzip* # not in cleanup so we can inspect after the test
 
     # two special cases: 
-    # deep.left-right-trimming.bam: a Deep file 
-    # special.large.bam a file that bai-generate-test-data.sh compresses with -B35: beyond the 32MB threashold at which writer_flush starts to fragment
+    deep.left-right-trimming.bam: a Deep file 
+    special.large.bam a file that bai-generate-test-data.sh compresses with -B35: beyond the 32MB threashold at which writer_flush starts to fragment
     local files=( deep.left-right-trimming.bam \
                   special.large.bam \
                   `cd $TESTDIR; ls -1 test.*bam | egrep -v "test.Bismark_SE.bam|test.Bismark_pe.bam|test.NovaSeq.bam|test.bgi-CL.bam|test.header-only-no-SQ.bam|test.human3-collated.bam|test.longranger-wgs.bam|test.nanoseq.pre.bam|test.pacbio-minimap2-rna.bam|test.pacbio.ccs.10k.bam|test.pacbio.ccs.giab.bam|test.pacbio.ccs.kinetic.bam|test.pacbio.ccs.normal-tumor.normal.bam|test.pacbio.ccs.oak.bam|test.pacbio.ccs.sq-dq-iq.bam|test.pacbio.ccs.virus.bam|test.pacbio.subreads.bam|test.pacbio.subreads2.bam|test.pacbio.subreads3.bam|test.transcriptome.bam|test.ubam.bam"` ) # samtools index fails (no SQ, not sorted, or not BGZF)
 
+    export GENOZIP_REFERENCE=public
     for bam in ${files[@]}; do
         test_header "Testing BAI of $bam"
 
@@ -1601,7 +1614,7 @@ batch_test_bai()
         done
 
         for index_sam in $dir/*.index.sam ; do
-            range="$(basename "$index_sam" | rev | cut -d. -f3- | rev)" # quotes: this way, so '*' doesn't expand as an argument to basename, and not expand once again when assigning to range ; rev logic - in case contig name itself contains a '.'
+            range="$( echo "${index_sam##*/}" | rev | cut -d. -f3- | rev)" # quotes: this way, so '*' doesn't expand as an argument to basename, and not expand once again when assigning to range ; rev logic - in case contig name itself contains a '.' ; not using basename, because it doesn't work in Windows
 
             for txt_file in "$recon_bam" "$recon_sam"; do
                 echo "Testing $bam range=$range reconstructed=$(basename $txt_file)"
@@ -1620,6 +1633,8 @@ batch_test_bai()
             done
         done
     done
+
+    unset GENOZIP_REFERENCE
 }
 
 batch_test_tbi()
@@ -1650,7 +1665,7 @@ batch_test_tbi()
         fi
 
         for tabix_vcf in $dir/*.tabix.vcf ; do
-            range="$(basename "$tabix_vcf" | rev | cut -d. -f3- | rev)" # rev logic - in case contig name itself contains a '.'
+            range="$( echo "${tabix_vcf##*/}" | rev | cut -d. -f3- | rev)" # rev logic - in case contig name itself contains a '.'
 
             echo "Testing $vcf range=$range reconstructed=$(basename $txt_file)"
             
@@ -1684,7 +1699,7 @@ batch_real_world_with_ref_backcomp()
                     test.NA12878.chr22.1x.bam test.NA12878-R1.100k.fq  \
                     test.human2.filtered.snp.vcf test.solexa-headerless.sam )
 
-    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.cigar-no-seq-qual.bam)
+    local files38=( test.1KG-38.vcf.gz test.human-collated-headerless.sam test.cigar-no-seq-qual.bam )
 
     local filesT2T1_1=( test.nanopore.t2t_v1_1.bam )
 
@@ -1698,14 +1713,14 @@ batch_real_world_with_ref_backcomp()
         $genounzip -t $output || exit 1
     done
 
-    for f in ${files38[@]}; do 
+    for f in ${files38[@]}; do
         i=$(( i + 1 ))
         test_header "$f - backward compatability with prod (with reference) - 38 ($i/$total)"
         $genozip_latest $TESTDIR/$f -mf -e $GRCh38 -o $output || exit 1
         $genounzip -t $output || exit 1
     done
 
-    for f in ${filesT2T1_1[@]}; do 
+    for f in ${filesT2T1_1[@]}; do
         i=$(( i + 1 ))
         test_header "$f - backward compatability with prod (with reference) - T2T ($i/$total)"
         $genozip_latest $TESTDIR/$f -mf -e $T2T1_1 -o $output || exit 1

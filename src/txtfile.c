@@ -92,7 +92,7 @@ void txtfile_fwrite (const void *data, uint32_t size)
 
     // error if failed to write to file
     ASSERT (bytes == size, "Error writing to %s on filesystem=%s - requested %u bytes but wrote only %u: (%u)%s", 
-            txt_file->basename, arch_get_filesystem_type (txt_file).s, size, bytes, errno, strerror (errno));
+            txt_file->basename, arch_get_filesystem_type (txt_file).s, size, bytes, errno, arch_str_error());
 
     txt_file->disk_so_far += bytes;
 }
@@ -175,16 +175,16 @@ static StrText display_gz_xfl (uint8_t xfl)
     return s;
 }
 
-StrTextLong display_gz_header_ex (STR8p(h), bool obscure_fname, uint32_t *out_h_len/*out*/)
+StrText1K display_gz_header_ex (STR8p(h), bool obscure_fname, uint32_t *out_h_len/*out*/)
 {
-    StrTextLong s = {};
+    StrText1K s = {};
     uint32_t s_len = 0;
     bytes save_h = h;
     #define ADVANCE_h(n) STRinc(h, n)
 
     if (h_len < 3) goto fail;
     if (memcmp (h, BGZF_PREFIX, 3))
-        return (StrTextLong){ "<not GZIP>" };
+        return (StrText1K){ "<not GZIP>" };
 
     if (h_len < 10) goto fail;
     uint8_t flg = h[3];
@@ -274,10 +274,10 @@ StrTextLong display_gz_header_ex (STR8p(h), bool obscure_fname, uint32_t *out_h_
     return s;
 
 fail:
-    return (StrTextLong){ "<not enough data>" };
+    return (StrText1K){ "<not enough data>" };
 }
 
-StrTextLong display_gz_header (STR8p(h), bool obscure_fname)
+StrText1K display_gz_header (STR8p(h), bool obscure_fname)
 {
     return display_gz_header_ex (STRa(h), obscure_fname, NULL);
 }
@@ -1367,9 +1367,9 @@ DataType txtfile_zip_get_file_dt (rom filename)
 }
 
 // outputs details on txt_file->codec of a component, as stored in z_file
-StrTextLong txtfile_codec_name (FileP z_file/*obscures global*/, CompIType comp_i, bool obscure_fname) 
+StrText1K txtfile_codec_name (FileP z_file/*obscures global*/, CompIType comp_i, bool obscure_fname) 
 {
-    StrTextLong s;
+    StrText1K s;
 
     Codec src_codec = (z_file->comp_src_codec[comp_i] == CODEC_BAM) ? z_file->comp_eff_codec[comp_i] : z_file->comp_src_codec[comp_i]; // avoid BAM➤BGZF
 

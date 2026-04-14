@@ -151,10 +151,9 @@ void ref_make_calculate_digest (void)
     for_buf (Range, r, gref.ranges) 
         bits_copy (gref.genome, r->gpos * 2, &r->ref, 0, ref_size(r) * 2);
 
-    // bug 1238
-    ASSINP (gref.genome_buf.len < 4 GB || !flag.md5, "Genozip limitation: reference data too long for --md5 (length=%"PRIu64")", gref.genome_buf.len);
-
-    z_file->digest = digest_do (STRb(gref.genome_buf), flag.md5 ? DIGEST_MD5 : DIGEST_XXH3, "genome"); // was adler32 rather than xxh3 until 15.0.80
+    // 15.0.[0-80]: was adler32 rather than xxh3 
+    // 15.0.[0-81]: lacked the "* sizeof (uint64_t)" so digested just 1/8 of the genome (defect 2026-04-12)
+    z_file->digest = digest_do (STRb(gref.genome_buf) * sizeof (uint64_t), flag.md5 ? DIGEST_MD5 : DIGEST_XXH3, "genome"); 
     
     buf_free (gref.genome_buf);
 

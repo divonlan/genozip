@@ -232,9 +232,9 @@ static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  /
 
 // ZIP - get snip
 extern rom ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)); 
-extern StrTextMegaLong ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index);
+extern StrText16K ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index);
 extern rom ctx_get_z_snip_ex (ConstContextP zctx, WordIndex z_node_index, pSTRp(snip));
-extern StrTextMegaLong ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index); 
+extern StrText16K ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index); 
 
 extern void ctx_get_word_index_by_snip_initialize (Did did_i); // PIZ
 extern WordIndex ctx_get_word_index_by_snip (Did did_i, STRp(snip)); // PIZ

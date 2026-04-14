@@ -1608,7 +1608,7 @@ rom ctx_get_vb_snip_ex (ConstContextP vctx, WordIndex vb_node_index, pSTRp(snip)
     return out_snip;
 }
 
-StrTextMegaLong ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index)
+StrText16K ctx_get_vb_snip (ConstContextP vctx, WordIndex vb_node_index)
 { 
     STR (snip);
     ctx_get_vb_snip_ex (vctx, vb_node_index, pSTRa(snip));
@@ -1631,10 +1631,10 @@ rom ctx_get_z_snip_ex (ConstContextP zctx, WordIndex z_node_index, pSTRp(snip))
     return out_snip;
 }
 
-StrTextMegaLong ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index) 
+StrText16K ctx_get_z_snip (ConstContextP zctx, WordIndex z_node_index) 
 { 
     if (z_node_index < 0 || z_node_index >= zctx->nodes.len32) 
-        return (StrTextMegaLong){ "(out-of-range)"};
+        return (StrText16K){ "(out-of-range)"};
         
     STR (snip);
     ctx_get_z_snip_ex (zctx, z_node_index, pSTRa(snip));

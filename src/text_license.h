@@ -50,7 +50,7 @@ static rom license_text[] = {
     
     "   b. Using Genozip to compress a file is only permitted if the file is retained in its original form as well or the potential loss of data due to Genozip not being able to uncompress the compressed file would not cause any harm.",
     
-    "   c. Any changes to the Genozip's source code and/or creation of Derivative Works and/or reverse-engineering of Genozip and/or using all or part of Genozip's source code (even if modified) in another software package are forbidden, unless prior written permission is obtained from Licensor.",
+    "   c. Any changes to the Genozip's source code and/or creation of Derivative Works (including, but not limited to, forking on github) and/or reverse-engineering of Genozip and/or using all or part of Genozip's source code (even if modified) in another software package are forbidden, unless prior written permission is obtained from Licensor.",
     
     "   d. Any software source code intentionally submitted for inclusion in Genozip by You to the Licensor or the Developer, including by using a Github Pull Request, shall imply complete and irrevocable assignment by You to Licensor of all copyright in the submitted source code. Regarding any such source code You submitted for inclusion in Genozip in the past, You hereby assign all copyright in this submitted source code to Licensor.",
     

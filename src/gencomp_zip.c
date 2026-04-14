@@ -17,6 +17,7 @@
 #include "stream.h"
 #include "dispatcher.h"
 #include "sam_private.h"
+#include "arch.h"
 
 //-----------------------
 // Types & macros
@@ -351,7 +352,7 @@ static void *gencomp_do_offload (void *info_)
 
     START_TIMER;
     ASSERT (1 == fwrite (STRb(depn.thread_data_comp), 1, depn.fp), 
-            "Failed to write %"PRIu64" bytes to temporary file %s: %s", depn.thread_data_comp.len, depn.name, strerror (errno));
+            "Failed to write %"PRIu64" bytes to temporary file %s: %s", depn.thread_data_comp.len, depn.name, arch_str_error());
     COPY_TIMER_EVB (gencomp_do_offload_write);
 
     if (flag_debug_gencomp) 

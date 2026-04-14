@@ -70,19 +70,23 @@ void stats_remove_data_after_program_name (rom program)
     buf_remove (stats_programs, char, BNUM (stats_programs, sep), end - sep);
 }
 
-// option 1: substitute ; and , with their UTF-8 equivalents
-static StrTextLong stats_subs_seps_in_name (rom name)
+// substitute ; and , with their UTF-8 equivalents, replace '\' with '\\'
+static StrText1K stats_subs_seps_in_name (rom name)
 {
     ASSERT0 (sizeof (StrText) > MAX_TAG_LEN - 10, "bad string size");
 
-    StrTextLong s = {};
+    StrText1K s = {};
     char *next = s.s;
 
+    // similar escaping as in segconf_get_qual_histo
     while (*name) {
-        if (*name == ',')      { strcpy (next, "⸲"); next += strlen ("⸲"); } // Unicode "Turned Comma"
-        else if (*name == ';') { strcpy (next, "；"); next += strlen ("；"); } // Unicode "Full-width" semicolon
-        else *next++ = *name;
-
+        switch (*name) {
+            case ','  : memcpy (next, "⸲",    STRLEN("⸲"));     next += STRLEN("⸲");     break; // Unicode "Turned Comma"
+            case ';'  : memcpy (next, "；",   STRLEN("；"));   next += STRLEN("；");    break; // Unicode "Full-width" semicolon
+            case '\\' : memcpy (next, "\\\\", STRLEN("\\\\")); next += STRLEN("\\\\"); break; // a backslash must be escaped (can exist in channel context names of long muteces)
+            case '"'  : memcpy (next, "\\\"", STRLEN("\\\"")); next += STRLEN("\\\""); break;
+            default   : *next++ = *name;
+        }
         name++;
     }
 
@@ -362,7 +366,7 @@ static void stats_output_file_metadata (void)
 
             bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
                        segconf.smux_max_stdv * 100, 
-                       segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
+                       segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable_json (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_10xGen, "Feature: 10xGenomics_tags", "has_10xGen");
@@ -396,8 +400,8 @@ static void stats_output_file_metadata (void)
                                deep_pc, 
                                qtype_name (segconf.deep_qtype), TF(segconf.deep_no_qual), 
                                segconf_deep_trimming_name(),
-                               cond_str (segconf.deep_N_sam_score && segconf.deep_N_fq_score, " N_qual=", char_to_printable (segconf.deep_N_fq_score).s),
-                               cond_str (segconf.deep_N_sam_score && segconf.deep_N_fq_score, "→", char_to_printable (segconf.deep_N_sam_score).s));
+                               cond_str (segconf.deep_N_sam_score && segconf.deep_N_fq_score, " N_qual=", char_to_printable_json (segconf.deep_N_fq_score).s),
+                               cond_str (segconf.deep_N_sam_score && segconf.deep_N_fq_score, "→", char_to_printable_json (segconf.deep_N_sam_score).s));
 
                 if (flag.deep)
                     FEATURE (z_file->num_lines, "SAM qname: %s%s", "SAM_Qname=%s%s", 
@@ -496,7 +500,7 @@ static void stats_output_file_metadata (void)
 
                 bufprintf (evb, &features, "smux_max_stdv=%2.1f%% '%s';",
                         segconf.smux_max_stdv * 100.0, 
-                        segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
+                        segconf.smux_max_stdv_q=='='?"≐" : segconf.smux_max_stdv_q==';'?"；" : char_to_printable_json (segconf.smux_max_stdv_q).s); // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
 
                 if (segconf.r1_or_r2 && !flag.pair) 
                     bufprintf (evb, &features, "R1_or_R2=R%d;", (segconf.r1_or_r2 == PAIR_R1) ? 1 : 2);
@@ -587,7 +591,7 @@ static void stats_output_file_metadata (void)
             bufprintf (evb, &stats, "Vblocks: %u x %u MB  Sections: %u\n", 
                        z_file->num_vbs, (uint32_t)(segconf.vb_size >> 20), z_file->section_list.len32);
     
-            bufprintf (evb, &features, "magic=%s;extension=\"%s\";", generic_get_magic().s, generic_get_ext());
+            bufprintf (evb, &features, "magic=%s;extension=%s;", generic_get_magic().s, generic_get_ext().s);
             break;
 
         default:
@@ -1038,3 +1042,38 @@ void stats_finalize (void)
     src_comp_ratio = all_comp_ratio = 0;    
 }
  
+void stats_show_seg_summary (void)
+{
+    ASSERTNOTNULL (z_file);
+
+    uint64_t num_alignments=0, num_fq_reads=0, num_samples=0;
+    
+    if (Z_DT(SAM) || Z_DT(BAM)) {
+        num_alignments = z_file->comp_num_lines[SAM_COMP_MAIN] + z_file->comp_num_lines[SAM_COMP_PRIM] + z_file->comp_num_lines[SAM_COMP_DEPN]; // excluding Deep FQ components
+
+        for (CompIType comp_i=SAM_COMP_FQ00; comp_i < z_file->num_components; comp_i++)
+            num_fq_reads += z_file->comp_num_lines[comp_i];
+    }
+
+    else if (Z_DT(FASTQ))
+        num_fq_reads = z_file->num_lines;
+
+    else if (Z_DT(VCF))
+        num_samples = z_file->num_lines * vcf_header_get_num_samples();
+
+    #define SUMMARIZE(x, total) if (z_file->x && total) iprintf (#x "=%"PRIu64" (%1.1f%%)\n", z_file->x, percent (z_file->x, total));
+    SUMMARIZE(sam_num_seq_by_aln, num_alignments);
+    SUMMARIZE(sam_num_perfect_matches, num_alignments);
+    SUMMARIZE(sam_num_aligned, num_alignments);
+    SUMMARIZE(sam_num_verbatim, num_alignments);
+    SUMMARIZE(sam_num_by_prim, num_alignments);
+    SUMMARIZE(sam_num_tlen_pred, num_alignments);
+    SUMMARIZE(fq_num_aligned, num_fq_reads);
+    SUMMARIZE(fq_num_perfect_matches, num_fq_reads);
+    SUMMARIZE(fq_num_verbatim, num_fq_reads);
+    SUMMARIZE(fq_num_monochar, num_fq_reads);
+    SUMMARIZE(fq_num_empty_read, num_fq_reads);
+    SUMMARIZE(vcf_num_samples_copied, num_samples);
+
+    // TO DO: add deep, bamass summaries
+}

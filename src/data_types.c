@@ -79,9 +79,11 @@ rom dt_name (DataType dt)
     return type_name (dt, &dt_props[dt].name, NUM_DATATYPES);
 }
 
-rom dt_name_faf (DataType dt) 
+rom dt_name_faf (void) 
 { 
-    return FAF ? "FASTA" : dt_name (dt); 
+    ASSERTNOTNULL (txt_file);
+
+    return FAF ? "FASTA" : dt_name (txt_file->data_type); 
 }
 
 rom z_dt_name (void)

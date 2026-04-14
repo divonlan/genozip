@@ -171,7 +171,7 @@ static void tar_fwrite (const void *data, uint32_t size, rom object)
     uint32_t bytes = fwrite (data, 1, size, tar_file); 
 
     ASSERT (bytes == size, "Error writing %s to %s on filesystem=%s - requested %u bytes but wrote only %u: (%u)%s", 
-            object, tar_name, arch_get_filesystem_type (txt_file).s, size, bytes, errno, strerror (errno));
+            object, tar_name, arch_get_filesystem_type (txt_file).s, size, bytes, errno, arch_str_error());
 }
 
 // filenames that have a last component longer than 99 characters don't fit in POSIX tar. Instead, we use a GNU-specific extension

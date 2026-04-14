@@ -75,7 +75,7 @@ static void error_print_call_stack_do (CONTEXT thread_ctx)
 // bug 985 
 // #ifdef DEBUG // requires debug info    
 //     static struct backtrace_state *state = NULL;
-//     static StrTextSuperLong exe_name; // must be static
+//     static StrText4K exe_name; // must be static
 
 //     if (!state) {
 //         exe_name = arch_get_executable(); 
