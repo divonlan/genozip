@@ -24,7 +24,6 @@ typedef enum { CACHE_INITITAL, CACHE_READY/*shm read-only*/, CACHE_POPULATING/*s
 extern rom cache_state_name (RefCacheState cs);
 
 // a reference cache is a shared memory segment consisting of a RefCache struct, followed by the genome, follewed by the refhash
-//xxx deleteme
 typedef struct RefCache { 
     uint32_t magic;               // set to GENOZIP_MAGIC - used to detect whether this shm segment is a Genozip reference cache
     uint32_t creator_pid;

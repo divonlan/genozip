@@ -28,3 +28,5 @@ extern bool refhash_exists (void);
 
 typedef enum { REFHASH_COUNT_INSTANCES, REFHASH_OCCUPY } RefhashCalcType;
 extern void refhash_calc_one_range (VBlockP vb, RefhashCalcType calc_type);
+
+extern int gpos_bytes; // 4 or 5 - since 15.0.81

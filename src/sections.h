@@ -62,7 +62,8 @@ typedef union SectionFlags {
     struct FlagsTxtHeader {
         uint8_t pair             : 2;  // FASTQ component (inc. in a Deep SAM): PAIR_R1 or PAIR_R2 if this component is a paired FASTQ component (v15)
         #define v13_dvcf_comp_i pair   // v12-13: DVCF: 0=Main 1=Primary-only rejects 2=Luft-only rejects (in v14, this moved to SectionEnt.comp_i)
-        uint8_t is_txt_luft      : 1;  // v12-15.0.41: is_txt_luft: DVCF: true if original source file was a dual-coordinates file in Luft rendition (v12)
+        #define is_txt_luft dt_specific// v12-15.0.41: is_txt_luft: DVCF: true if original source file was a dual-coordinates file in Luft rendition (v12)
+        uint8_t dt_specific      : 1;  
         uint8_t no_gz_ext        : 1;  // source file was compressed with GZ/BGZF AND it did not have a .gz/.bgz extension (15.0.23) 
         uint8_t unused           : 4;
     } txt_header;
@@ -83,6 +84,11 @@ typedef union SectionFlags {
             uint8_t embedded_fasta     : 1; // this VB consists embedded FASTA and has data_type=DT_FASTA (v15)
             uint8_t unused             : 7;
         } gff;
+
+        struct FlagsVbHeaderFastq {
+            uint8_t is_nonbio          : 1; // 15.0.83 FASTQ VB (inc. in SAM deep): VB is non-biological (i.e. barcodes only)
+            uint8_t unused             : 7;
+        } fastq;
     } vb_header;
 
     struct FlagsMgzip {
@@ -102,22 +108,22 @@ typedef union SectionFlags {
         uint8_t spl_custom       : 1;  // introduced v14: similar to store_per_line, but storing is done by the context's SPECIAL function, instead of in reconstruct_store_history
         uint8_t all_the_same     : 1;  // SEC_B250: the b250 data contains only one element, and should be used to reconstruct any number of snips from this context
 
-        #define same_line        ctx_specific_flag // v13.0.5: Valid for contexts that use SNIP_OTHER_DELTA, SNIP_DIFF, SNIP_COPY(from other)(15.0.48), SPECIAL_MINUS(15.0.58), SPECIAL_PLUS(15.0.58), SPECIAL_DIVIDE_BY(15.0.58): if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
-        #define no_textual_seq   ctx_specific_flag // v14.0.0: SAM_SQBITMAP: indicates that SEQ is NOT consumed by other fields, and therefore sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
-        #define depn_clip_hard   ctx_specific_flag // v14.0.0: OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
-        #define lookback0_ok     ctx_specific_flag // v14.0.0: contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
-        #define trailing_zero_ok ctx_specific_flag // v14.0.17: INFO_QD: whether reconstruct with or without trailing zeros. 
-        #define acgt_no_x        ctx_specific_flag // v15.0.13: contexts compressed with CODEC_ACGT: (NONREF and others): this context has no _X companion context
-        uint8_t ctx_specific_flag: 1;  // v10.0.3: flag specific a context 
+        #define same_line        ctx_specific_flag // 13.0.5:  Valid for contexts that use SNIP_OTHER_DELTA, SNIP_DIFF, SNIP_COPY(from other)(15.0.48), SPECIAL_MINUS(15.0.58), SPECIAL_PLUS(15.0.58), SPECIAL_DIVIDE_BY(15.0.58): if true, reconstructs gets the value in the line (whether before or after). if false, it gets the last value.
+        #define no_textual_seq   ctx_specific_flag // 14.0.0:  SAM_SQBITMAP: indicates that SEQ is NOT consumed by other fields, and therefore sam_piz_sam2bam_SEQ doesn't need to store textual_seq. 
+        #define depn_clip_hard   ctx_specific_flag // 14.0.0:  OPTION_SA_Z in SAM_COMP_MAIN: if true: depn lines, if their CIGAR has a clipping, it is hard clipping (H)
+        #define lookback0_ok     ctx_specific_flag // 14.0.0:  contexts that are items of a container with lookback. indicates that a SNIP_LOOKBACK when lookback=0 is not an error.
+        #define trailing_zero_ok ctx_specific_flag // 14.0.17: INFO_QD: whether reconstruct with or without trailing zeros. 
+        #define acgt_no_x        ctx_specific_flag // 15.0.13: contexts compressed with CODEC_ACGT: (NONREF and others): this context has no _X companion context
+        uint8_t ctx_specific_flag: 1;  // 10.0.3: flag specific a context 
 
-        uint8_t store_per_line   : 1;  // v12.0.41: store value or text for each line - in context->history        
+        uint8_t store_per_line   : 1;  // 12.0.41: store value or text for each line - in context->history        
     } ctx;
 
     struct FlagsDict {
-        uint8_t deep_sam         : 1;  // v15: Deep: dictionary used by a SAM   
-        uint8_t deep_fastq       : 1;  // v15: Deep: dictionary used by a FASTQ 
+        uint8_t deep_sam         : 1;  // v15: Deep: dictionary used by SAM VBs   
+        uint8_t deep_fastq       : 1;  // v15: Deep: dictionary used by FASTQ VBs 
         #define MAX_ALL_THE_SAME_WI 15
-        uint8_t all_the_same_wi  : 4;  // snip of this word_index to be reconstructed in no b250 and no local sections. can be non-zero (0-15) since 15.0.51.
+        uint8_t all_the_same_wi  : 4;  // snip of this word_index to be reconstructed in no b250 and no local sections. ∈[0,15] since 15.0.51.
         uint8_t unused           : 2;
     } dictionary;
     
@@ -656,6 +662,7 @@ extern uint32_t st_header_size (SectionType sec_type);
 #define sections_read_prefix(P_prefix) ((P_prefix) ? 'P' : flag_loading_auxiliary ? 'L' : 'R')
 extern void sections_show_header (ConstSectionHeaderP header, VBlockP vb, CompIType comp_i, uint64_t offset, char rw);
 extern void noreturn genocat_show_headers (rom z_filename);
+extern void noreturn genocat_show_txt_offsets (void);
 typedef struct { char s[128]; } FlagStr;
 extern FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt, bool is_r2);
 extern void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header);

@@ -132,15 +132,15 @@ void progress_update (Task task, double portion, double portion_of_task, bool do
     // need to update progress indicator, max once a second or if 100% is reached
 
     // // case: we've reached 99% prematurely... we under-estimated the time
-    // if (!done && pc > 99 && last_seconds_so_far < seconds_so_far) {
-    //     if (!flag.show_tasks)
-    //         progress_update_status (NULL, "Finalizing...");
-    //     else {
-    //         snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s %%_of_task=%1.1f", 
-    //                   (unsigned)pc, task_name (task), 100.0 * portion_of_task);            
-    //         progress_update_status (NULL, progress_str);
-    //     }
-    // }
+    if (!done && pc > 99 && last_seconds_so_far < seconds_so_far) {
+        if (!flag.show_tasks)
+            progress_update_status (NULL, "Finalizing...");
+        else {
+            snprintf (progress_str, sizeof(progress_str), "Finalizing... %u%% task=%s %%_of_task=%1.1f", 
+                      (unsigned)pc, task_name (task), 100.0 * portion_of_task);            
+            progress_update_status (NULL, progress_str);
+        }
+    }
     
     // case: we're making progress... show % and time remaining
     // else 

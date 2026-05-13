@@ -50,7 +50,7 @@
     (a) = (((a) << (s)) | (((a) & 0xffffffff) >> (32 - (s))));  \
     (a) += (b);
 
-static __attribute__((unused)) void md5_display_state (const Md5State *x) // for debugging
+static UNUSED void md5_display_state (const Md5State *x) // for debugging
 {
     static unsigned iteration=1;
 

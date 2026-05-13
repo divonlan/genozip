@@ -65,7 +65,7 @@ extern void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP s
     bool skipped = (SECTION_SKIPPED == zfile_read_section (z_file, evb, 0, &evb->z_data, "z_data", (sec)->st, (sec))); \
     if (!skipped && (!flag.only_headers || (sec)->st == SEC_RANDOM_ACCESS)) \
         zfile_uncompress_section (evb, B1ST(SectionHeader, evb->z_data), (out_buf), (out_buf_name), 0, (sec)->st); \
-    HeaderType header __attribute__((unused)) = !skipped ? *(HeaderType *)evb->z_data.data : (HeaderType){}; /* make a copy of the header */ \
+    HeaderType header UNUSED = !skipped ? *(HeaderType *)evb->z_data.data : (HeaderType){}; /* make a copy of the header */ \
     if (!skipped) buf_free (evb->z_data); 
 
 extern bool zfile_advance_to_next_header (uint64_t *offset, uint64_t *gap);

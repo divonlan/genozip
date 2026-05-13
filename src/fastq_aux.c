@@ -31,7 +31,7 @@ static inline void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(valu
             COND(TECH(NANOPORE), seg_maybe_copy (VB, ctx, FASTQ_QNAME, STRa(value), STRa(copy_qname_snip)));
         
         case _FASTQ_AUX_start_time     : 
-            COND(TECH(NANOPORE), seg_diff (VB, ctx, NULL, STRa(value), false, value_len));
+            COND(TECH(NANOPORE), seg_diff (VB, ctx, ctx, STRa(value), false, value_len));
         
         default : fallback             : 
             seg_integer_or_not (VB, ctx, STRa(value), value_len); // also sets last_value    

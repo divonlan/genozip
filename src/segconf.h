@@ -24,8 +24,8 @@
 
 #define MAX_SEGCONF_LINES 1000 // max lines tested in segconf (even if VB is large e.g. due to reading full MGZIP block)
 
-typedef packed_enum { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUM, TECH_PACBIO, TECH_NANOPORE,     TECH_LS454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGLR, TECH_ELEMENT, TECH_ONSO, TECH_CAPILLARY, TECH_SOLID, NUM_TECHS } SeqTech;
-#define TECH_NAME   {                                          "Unknown_tech",   "Illumina", "PacBio",    "Oxford_Nanopore", "LS454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",  "Element",    "Onso",    "Capillary",    "SOLiD",              }
+typedef packed_enum { TECH_NONE=-1, TECH_ANY=-2, TECH_CONS=-3, TECH_UNKNOWN=0,   TECH_ILLUMINA, TECH_PACBIO, TECH_NANOPORE,     TECH_LS454, TECH_MGI,   TECH_IONTORR, TECH_HELICOS, TECH_NCBI, TECH_ULTIMA, TECH_SINGULAR, TECH_ELEMENT, TECH_ONSO, TECH_CAPILLARY, TECH_SOLID, TECH_SIKUN, NUM_TECHS } SeqTech;
+#define TECH_NAME   {                                          "Unknown_tech",   "Illumina",    "PacBio",    "Oxford_Nanopore", "LS454",    "MGI_Tech", "IonTorrent", "Helicos",    "NCBI",    "Ultima",    "Singular",    "Element",    "Onso",    "Capillary",    "SOLiD",    "Sikun"               }
 #define TECH(x) (segconf.tech == TECH_##x)
 
 typedef packed_enum { SQT_UNKNOWN, SQT_NUKE, SQT_AMINO } SeqType;
@@ -53,7 +53,7 @@ typedef enum  {                       MP_UNKNOWN,       MP_BSBOLT,             M
 #define SAM_MAPPER_SIGNATURE        { "Unknown_mapper", "PN:bwa	VN:BSB"/*\t*/, "PN:bwa", "PN:BWA", "PN:minimap2", "PN:STAR", "PN:bowtie2", "ID: DRAGEN", "PN:gem-mapper", "PN:gem-2-sam", "ID:Bismark", "PN:BS Seeker 2", "PN:Winnowmap", "PN:baz2bam",  "PN:BBMap", "ID:tmap", "PN:hisat2", "ID:Bowtie", "PN:novoalign", "PN:razers3", "ID:BLASR", "PN:nextgenmap-lr", "ID:Delve", "ID:TopHat", "PN:cpu", "PN:longranger.lariat", "PN:clcgenomicswb", "PN:pbmm2", "PN:ccs", "PN:SNAP", "PN:bwa-mem2", "PN:pbrun fq2bam", "PN:iSAAC", "ID:UA-",  "PN:BaseCaller", "ID:xmap_to_bam", "ID:crdna",      "PN:vg", "VN:cellranger-atac", "ID:cellranger",           }   
 #define MP(x) (segconf.sam_mapper == MP_##x)
 
-#define MAX_SHORT_READ_LEN 2500
+#define MAX_SHORT_READ_LEN 1500
 
 // also defined in sam.h
 #define SAM_MAX_QNAME_LEN 255/*exc. \0*/     // In initial SAM specification verions, the max QNAME length was 255, and reduced to 254 in Aug 2015. We support 255 to support old SAM/BAM files too. BAM specifies 255 including \0 (so 254).
@@ -92,6 +92,7 @@ typedef struct {
     uint64_t vb_size;            // ZIP/PIZ: compression VBlock size in bytes (PIZ: passed in SectionHeaderGenozipHeader.vb_size)
     bool running;                // currently in segconf_calculate()
     uint32_t gz_comp_size;       // size of segconf data in source gz compression, used if discover_during_segconf 
+    double gz_comp_ratio;        // GZ compression ratio of segconf data
     int has[MAX_DICTS];          // for select did_i's, counts the numner of times this field was encountered during segconf.running
     bool optimize[MAX_DICTS];    // true if --optimize indicates that this field should be optimized
     bool zip_txt_modified;       // ZIP/PIZ: txt data is/was modified during Seg (e.g. by --optimize, --add-line-numbers). Before segconf: true if data *might* be modifed. After segconf: true iff data is modified.
@@ -106,11 +107,12 @@ typedef struct {
     QnameFlavorProp flav_prop[NUM_QTYPES];      // ZIP: flavor properties (in PIZ: this is in z_file->flav_prop)
     bool sorted_by_qname[NUM_QTYPES];           // qnames appear in the file in a sorted order
     bool qname_flavor_rediscovered[NUM_QTYPES]; // true if flavor has been modified (used only during segconf.running)
+    bool qname_barcode2_is_alias[NUM_QTYPES];   // qname has two barcodes which are aliases
     QnameStr qname_line0[NUM_QTYPES];           // qname of line_i=0 (by which flavor is determined) (nul-terminated)
     SeqTech tech;                               // tech by QNAME flavor (more reliable)
     SeqTech tech_by_RG;                         // tech by first @RG PL field
     char tech_by_RG_unidentified[32];           // tech by first @RG PL field - if failed to identify as a known tech
-
+    
     // SAM/BAM and FASTQ
     uint32_t std_seq_len;                       // length of the longest seq_len in the segconf data 
     DictId seq_len_dict_id;                     // dict_id of one of the QNAME/QNAME2/LINE3/FASTQ_AUX contexts, which is expected to hold the seq_len for this read. 0 if there is no such item.
@@ -208,6 +210,7 @@ typedef struct {
     char CR_CB_seperator;       // ZIP: seperator within CR:Z and CB:Z fields
     bool no_gc_checking;        // ZIP: if true: vb=1 had no depn lines, so we heuristically decided not to check for gc in future VBs (note that some VBs running in parallel to vb=1 might have had depn lines)
     bool has_10xGen;            // ZIP/PIZ: has 10xGenomics tags
+    bool has_Parse;             // ZIP: has Parse Biosciences fields
     bool has_TR_TQ;             // ZIP: use cellrangerATAC-style TR:Z / TQ:Z methods             
     bool has_RSEM;              // ZIP: RSEM is used (https://github.com/bli25/RSEM_tutorial)
     RGMethod RG_method;
@@ -233,6 +236,69 @@ typedef struct {
     STRl(QT_con_snip, 64);
     STRl(CB_con_snip, 64 + SMALL_CON_NITEMS * 16);     
     STRl(MM_con_snip, 64 + SMALL_CON_NITEMS * 16);     
+
+    // FASTQ
+    union {
+        struct {            
+            uint8_t has_desc     : 4; // non-zero if any of the 4 bitfields are set
+            uint8_t unused       : 4;
+        };
+        struct {
+            uint8_t has_qname2   : 1;               
+            uint8_t has_extra    : 1;
+            uint8_t has_aux      : 1; // aux data in the format "length=7 pooptiz=2"
+            uint8_t has_saux     : 1; // aux data in SAM format "BC:Z:TATTCATA+TCCAAGCG        ZX:Z:TTAA"
+            uint8_t saux_tab_sep : 1; // has_saux AND seperator before SAUX is '\t'
+            uint8_t desc_is_l3   : 1; // either L1 or L3 can have these properties, but not both
+            uint8_t unused2      : 2;
+        };
+    };
+
+    char aux_sep;               // separator between name and value in aux fields (either '=' or ':')
+    FastqLine3Type line3;       // format of line3
+    int r1_or_r2;               // in case compression is WITHOUT --pair: our guess of whether this file is R1 or R2
+    thool is_interleaved;       // whether FASTQ file is identified as interleaved
+    char interleaved_r1;        // valid if is_interleaved: character representing R1: usually '0' or '1'
+    char interleaved_r2;        // valid if is_interleaved: character representing R2: usually '1' or '2'
+    QType deep_qtype;           // Deep ZIP/PIZ: QNAME1 or QNAME2 if for most segconf lines for which have Deep, SAM qname matches FASTQ's QNAME1 or QNAME2. QNONE means no deep, or in PIZ of Deep files up to 15.0.66, it means matching was by SEQ and QUAL only (not QNAME) 
+    bool deep_paired_qname;     // Deep: QNAME hash includes deep_is_last
+    thool deep_is_last;         // Deep: whether this FASTQ file corresponds to is_first or is_last alignments in BAM, or unknown if !segconf.deep_paired_qname 
+    bool deep_no_qual;          // Deep: true if for most segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR) 
+    bool deep_has_trimmed;      // Deep: some FASTQ reads in segconf appear in SAM trimmed (beyond cropping)
+    bool deep_has_trimmed_left; // Deep: some FASTQ reads in segconf are trimmed on the left too (not just the right)
+    char deep_N_sam_score;      // Deep: ZIP only: Base qualities of 'N' bases in the SAM are this value, regardless of their value in FASTQ
+    char deep_N_fq_score;       // Deep: ZIP/PIZ:  Base qualities of 'N' bases in the FASTQ are this value
+    char deep_1st_desc[256];    // Deep: DESC line of first FASTQ read of first FASTQ file
+    #define NUM_INSTS 6
+    unsigned n_full_mch[NUM_INSTS];      // Deep: count segconf lines where hash matches with at least one SAM line - (QNAME1 or QNAME2), SEQ, QUAL
+    unsigned n_full_mch_trimmed;// Deep: the size of the subset of n_full_mch which are trimmed     
+    unsigned n_seq_qname_mch[NUM_INSTS]; // Deep: count segconf lines where FASTQ (QNAME1 or QNAME2) hash matches with at least one SAM line - SEQ and QNAME 
+    unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
+    BamAssTrimCigarTreatment bamass_trims; // bamass: how to treat a trim in the CIGAR
+    StrText optimized_qname;    // --optimize: prefix of optimized qname
+    uint32_t optimized_qname_len;
+    uint32_t total_usable_len;  // used by bamass_segconf to calculate line_len
+    
+    // FASTQ - non-biological file (if paired - this refers to R2)
+    #define MAX_NONBIO_SEQ_LEN 255
+    enum { NONBIO_NONE, NONBIO_SPLiT_seq } nonbio_type;
+    struct split_seq {
+        Did umi_did_i; // optional: qname item that is expected to be identical to the UMI (first 10 bases of sequence).
+        uint8_t non_bio_len, linker_index[2], linker_len[2], barcode_index[3]; 
+    } split_seq;
+    STRl(nonbio_con_snip, 64 + 7/*n_items*/ * 16);     
+    STRl(copy_qname_umi_snip, 32);
+    
+    // shared FASTA/FASTQ
+    bool multiseq;              // sequences in file are variants of each others 
+    #define FAF segconf.fasta_as_fastq
+    bool fasta_as_fastq;        // ZIP/PIZ: Segging a FASTA file as a QUAL-less FASTQ (also in SAM with Deep)
+    char desc_char;             // FASTA: '>' by default, but can also be '@' ; FASTQ: normally '@', but can be '>' if fasta_as_fastq
+    #define DC segconf.desc_char
+
+    // FASTA stuff (including FASTA embedded in GFF)
+    bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
+    SeqType seq_type;           // nucleotide or protein
 
     // VCF stuff
     bool vcf_is_varscan;        // this VCF file was produced by VarScan
@@ -298,59 +364,6 @@ typedef struct {
     FieldWidth wid[NUM_VCF_FIELDS]; // most common width obversed in segconf, for fields that might be deferred and then inserted later
     float Q_to_O;              // freebayes: average ratio of QR/RO and QA/AO rounded (running: sum of)
     uint32_t n_Q_to_O;         // used during segconf: number of values added up in Q_to_O
-
-    // FASTQ
-    union {
-        struct {            
-            uint8_t has_desc     : 4; // non-zero if any of the 4 bitfields are set
-            uint8_t unused       : 4;
-        };
-        struct {
-            uint8_t has_qname2   : 1;               
-            uint8_t has_extra    : 1;
-            uint8_t has_aux      : 1; // aux data in the format "length=7 pooptiz=2"
-            uint8_t has_saux     : 1; // aux data in SAM format "BC:Z:TATTCATA+TCCAAGCG        ZX:Z:TTAA"
-            uint8_t saux_tab_sep : 1; // has_saux AND seperator before SAUX is '\t'
-            uint8_t desc_is_l3   : 1; // either L1 or L3 can have these properties, but not both
-            uint8_t unused2      : 2;
-        };
-    };
-
-    char aux_sep;               // separator between name and value in aux fields (either '=' or ':')
-    FastqLine3Type line3;       // format of line3
-    int r1_or_r2;               // in case compression is WITHOUT --pair: our guess of whether this file is R1 or R2
-    thool is_interleaved;       // whether FASTQ file is identified as interleaved
-    char interleaved_r1;        // valid if is_interleaved: character representing R1: usually '0' or '1'
-    char interleaved_r2;        // valid if is_interleaved: character representing R2: usually '1' or '2'
-    QType deep_qtype;           // Deep ZIP/PIZ: QNAME1 or QNAME2 if for most segconf lines for which have Deep, SAM qname matches FASTQ's QNAME1 or QNAME2. QNONE means no deep, or in PIZ of Deep files up to 15.0.66, it means matching was by SEQ and QUAL only (not QNAME) 
-    bool deep_paired_qname;     // Deep: QNAME hash includes deep_is_last
-    thool deep_is_last;         // Deep: whether this FASTQ file corresponds to is_first or is_last alignments in BAM, or unknown if !segconf.deep_paired_qname 
-    bool deep_no_qual;          // Deep: true if for most segconf lines which have Deep, qual doesn't match (eg, bc of undocumented BQSR) 
-    bool deep_has_trimmed;      // Deep: some FASTQ reads in segconf appear in SAM trimmed (beyond cropping)
-    bool deep_has_trimmed_left; // Deep: some FASTQ reads in segconf are trimmed on the left too (not just the right)
-    char deep_N_sam_score;      // Deep: ZIP only: Base qualities of 'N' bases in the SAM are this value, regardless of their value in FASTQ
-    char deep_N_fq_score;       // Deep: ZIP/PIZ:  Base qualities of 'N' bases in the FASTQ are this value
-    char deep_1st_desc[256];    // Deep: DESC line of first FASTQ read of first FASTQ file
-    #define NUM_INSTS 6
-    unsigned n_full_mch[NUM_INSTS];      // Deep: count segconf lines where hash matches with at least one SAM line - (QNAME1 or QNAME2), SEQ, QUAL
-    unsigned n_full_mch_trimmed;// Deep: the size of the subset of n_full_mch which are trimmed     
-    unsigned n_seq_qname_mch[NUM_INSTS]; // Deep: count segconf lines where FASTQ (QNAME1 or QNAME2) hash matches with at least one SAM line - SEQ and QNAME 
-    unsigned n_no_mch;          // Deep: count segconf lines that don't match any SAM line (perhaps because SAM is filtered)
-    BamAssTrimCigarTreatment bamass_trims; // bamass: how to treat a trim in the CIGAR
-    StrText optimized_qname;    // --optimize: prefix of optimized qname
-    uint32_t optimized_qname_len;
-    uint32_t total_usable_len;  // used by bamass_segconf to calculate line_len
-    
-    // shared FASTA/FASTQ
-    bool multiseq;              // sequences in file are variants of each others 
-    #define FAF segconf.fasta_as_fastq
-    bool fasta_as_fastq;        // ZIP/PIZ: Segging a FASTA file as a QUAL-less FASTQ (also in SAM with Deep)
-    char desc_char;             // FASTA: '>' by default, but can also be '@' ; FASTQ: normally '@', but can be '>' if fasta_as_fastq
-    #define DC segconf.desc_char
-
-    // FASTA stuff (including FASTA embedded in GFF)
-    bool fasta_has_contigs;     // the sequences in this FASTA represent contigs (as opposed to reads) - in which case we have a FASTA_CONTIG dictionary and RANDOM_ACCESS
-    SeqType seq_type;           // nucleotide or protein
     
     // GFF stuff
     int gff_version;
@@ -358,6 +371,7 @@ typedef struct {
 
     // BED stuff
     int bed_num_flds;
+    
 } SegConf;
 
 extern SegConf segconf; // ZIP: set based on segging a sample of a few first lines of the file

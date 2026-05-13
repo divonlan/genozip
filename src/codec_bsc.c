@@ -41,7 +41,7 @@ COMPRESS (codec_bsc_compress)
         ASSERTNOTINUSE (vb->scratch);
         buf_alloc (vb, &vb->scratch, 0, *uncompressed_len, char, 1.2, "scratch");
 
-        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
+        for_line {
             char *start1=0;
             uint32_t len1=0;        
             

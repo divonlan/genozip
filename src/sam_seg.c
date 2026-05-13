@@ -66,6 +66,11 @@ Did buddied_Z_dids[NUM_MATED_Z_TAGS] = MATED_Z_DIDs;
 // Seg stuff
 // ----------------------
 
+Multiplexer2P sam_get_illum_v_mux (VBlockP vb)
+{
+    return &VB_SAM->mux_illum_v;
+}
+
 static bool is_headerful_sam (STRp(header))
 {
     #define H(x) !memcmp (header, "@" #x "\t", 4)
@@ -98,6 +103,52 @@ bool is_sam (STRp(header), bool *need_more)
     return is_headerful_sam (STRa(header)) || is_headerless_sam (STRa(header));
 }
 
+static void sam_zip_initialize_snips (void)
+{
+    seg_prepare_snip_other (SNIP_COPY, _SAM_POS,                false, 0, copy_POS_snip);
+    seg_prepare_snip_other (SNIP_COPY, _OPTION_GX_Z,            false, 0, copy_GX_snip);
+    seg_prepare_snip_other (SNIP_COPY, _OPTION_sn_B_f,          false, 0, copy_sn_snip);
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q1NAME,      true,  0, copy_Q1NAME_int);   
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q2NAME,      true,  0, copy_Q2NAME_int);   
+    seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q3NAME,      true,  0, copy_Q3NAME_int);   
+    seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
+    seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_TX_LOOKBACK, false, 0, TX_lookback_snip);
+    seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_AN_LOOKBACK, false, 0, AN_lookback_snip);
+    seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_CR_Z_X,   false, 0, redirect_to_CR_X_snip);
+    seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_GR_Z_X,   false, 0, redirect_to_GR_X_snip);
+    seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_GY_Z_X,   false, 0, redirect_to_GY_X_snip);
+    seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_RX_Z_X,   false, 0, redirect_to_RX_X_snip);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_PNEXT,   copy_mate_PNEXT_snip,  '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_PNEXT,   copy_saggy_PNEXT_snip, '0' + BUDDY_SAGGY);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_POS,     copy_mate_POS_snip,    '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNAME,   copy_mate_RNAME_snip,  '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNAME,   copy_saggy_RNAME_snip, '0' + BUDDY_SAGGY);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNEXT,   copy_mate_RNEXT_snip,  '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_MAPQ,    copy_mate_MAPQ_snip,   '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_MQ_i, copy_mate_MQ_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_PQ_i, copy_mate_PQ_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_ms_i, copy_mate_ms_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_nM_i, copy_mate_nM_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_YS_i, copy_mate_YS_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_AS_i, copy_mate_AS_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_NH_i, copy_buddy_NH_snip,    '0' + BUDDY_EITHER);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_rb_Z, copy_mate_rb_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_mb_Z, copy_mate_mb_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_GP_i, copy_mate_GP_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_MP_i, copy_mate_MP_snip,     '0' + BUDDY_MATE);
+    seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_CIGAR, _SAM_CIGAR, copy_mate_CIGAR_snip, '0' + BUDDY_MATE);
+    seg_prepare_plus_snip (SAM, 3, ((DictId[]){ {_OPTION_XX_i}, {_OPTION_YY_i}, {_OPTION_XY_i} }), XC_snip);
+
+    // note: we seg into mux channels, but we copy from the parent
+    for (MatedZFields f=0; f < NUM_MATED_Z_TAGS; f++) {
+        copy_buddy_Z_snips[f][0]  = SNIP_SPECIAL;
+        copy_buddy_Z_snip_lens[f] = sizeof (copy_buddy_Z_snips[f]) - 1;
+        seg_prepare_snip_other_do (SAM_SPECIAL_COPY_BUDDY, ZCTX(buddied_Z_dids[f])->dict_id,
+                                   true, 0, '0' + BUDDY_EITHER, &copy_buddy_Z_snips[f][1], &copy_buddy_Z_snip_lens[f]);
+        copy_buddy_Z_snip_lens[f]++;
+    }
+} 
+
 // main thread, called for each component. called after reading txt header, before segconf.
 void sam_zip_initialize (void)
 {
@@ -111,51 +162,7 @@ void sam_zip_initialize (void)
 
     qname_zip_initialize();
 
-    DO_ONCE {
-        seg_prepare_snip_other (SNIP_COPY, _SAM_POS, false, 0, copy_POS_snip);
-        seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q1NAME, true, 0, copy_Q1NAME_int);   
-        seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q2NAME, true, 0, copy_Q2NAME_int);   
-        seg_prepare_snip_other (SNIP_OTHER_DELTA, _SAM_Q3NAME, true, 0, copy_Q3NAME_int);   
-        seg_prepare_snip_other (SNIP_COPY, _OPTION_GX_Z, false, 0, copy_GX_snip);
-        seg_prepare_snip_other (SNIP_COPY, _OPTION_sn_B_f, false, 0, copy_sn_snip);
-        seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_XA_LOOKBACK, false, 0, XA_lookback_snip);
-        seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_TX_LOOKBACK, false, 0, TX_lookback_snip);
-        seg_prepare_snip_other (SNIP_LOOKBACK, _OPTION_AN_LOOKBACK, false, 0, AN_lookback_snip);
-        seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_CR_Z_X, false, 0, redirect_to_CR_X_snip);
-        seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_GR_Z_X, false, 0, redirect_to_GR_X_snip);
-        seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_GY_Z_X, false, 0, redirect_to_GY_X_snip);
-        seg_prepare_snip_other (SNIP_REDIRECTION, _OPTION_RX_Z_X, false, 0, redirect_to_RX_X_snip);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_PNEXT, copy_mate_PNEXT_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_PNEXT, copy_saggy_PNEXT_snip, '0' + BUDDY_SAGGY);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_POS, copy_mate_POS_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNAME, copy_mate_RNAME_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNAME, copy_saggy_RNAME_snip, '0' + BUDDY_SAGGY);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_RNEXT, copy_mate_RNEXT_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _SAM_MAPQ, copy_mate_MAPQ_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_MQ_i, copy_mate_MQ_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_PQ_i, copy_mate_PQ_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_ms_i, copy_mate_ms_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_nM_i, copy_mate_nM_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_YS_i, copy_mate_YS_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_AS_i, copy_mate_AS_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_NH_i, copy_buddy_NH_snip, '0' + BUDDY_EITHER);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_rb_Z, copy_mate_rb_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_mb_Z, copy_mate_mb_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_GP_i, copy_mate_GP_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY, _OPTION_MP_i, copy_mate_MP_snip, '0' + BUDDY_MATE);
-        seg_prepare_snip_special_other (SAM_SPECIAL_COPY_BUDDY_CIGAR, _SAM_CIGAR, copy_mate_CIGAR_snip, '0' + BUDDY_MATE);
-        seg_prepare_plus_snip (SAM, 3, ((DictId[]){ {_OPTION_XX_i}, {_OPTION_YY_i}, {_OPTION_XY_i} }), XC_snip);
-
-        // we seg into mux channels, but we copy from the parent
-        for (MatedZFields f = 0; f < NUM_MATED_Z_TAGS; f++)
-        {
-            copy_buddy_Z_snips[f][0] = SNIP_SPECIAL;
-            copy_buddy_Z_snip_lens[f] = sizeof (copy_buddy_Z_snips[f]) - 1;
-            seg_prepare_snip_other_do (SAM_SPECIAL_COPY_BUDDY, ZCTX(buddied_Z_dids[f])->dict_id,
-                                       true, 0, '0' + BUDDY_EITHER, &copy_buddy_Z_snips[f][1], &copy_buddy_Z_snip_lens[f]);
-            copy_buddy_Z_snip_lens[f]++;
-        }
-    }
+    DO_ONCE sam_zip_initialize_snips();
 
     sam_MM_zip_initialize();
 
@@ -230,7 +237,7 @@ void sam_zip_after_compute (VBlockP vb_)
         gencomp_sam_prim_vb_has_been_ingested (VB);
 
     // increment stats accumulators
-    z_file->sam_num_perfect_matches += vb->num_perfect_matches; 
+    z_file->sam_num_aligned_perfect += vb->num_aligned_perfect;
     z_file->sam_num_aligned         += vb->num_aligned;
     z_file->sam_num_seq_by_aln      += vb->num_seq_by_aln;
     z_file->sam_num_verbatim        += vb->num_verbatim;
@@ -362,6 +369,7 @@ void sam_seg_initialize (VBlockP vb_)
                       SAM_RNAME, SAM_RNEXT, OPTION_OA_RNAME, OPTION_XA_RNAME, OPTION_SA_RNAME, OPTION_CC_Z, // BAM reconstruction needs RNAME, RNEXT word indices. also needed for random access. Also including all ALIAS_DICTs of SAM_RNAME.
                       SAM_POS, SAM_PNEXT, OPTION_mc_i, OPTION_OP_i, OPTION_Z5_i, OPTION_CP_i, // required by seg_pos_field
                       T(IS_PRIM(vb), OPTION_SA_CIGAR), // no_stons even if the entire VB is singletons: index needed by sam_load_groups_add_aln_cigar
+                      OPTION_GX_GN_ARR,
                       DID_EOL);
 
     ctx_set_ltype (VB, LT_STRING, OPTION_MD_Z,
@@ -422,7 +430,8 @@ void sam_seg_initialize (VBlockP vb_)
     // in --stats, consolidate stats
     ctx_consolidate_stats (VB, SAM_SQBITMAP, SAM_NONREF, SAM_NONREF_X, SAM_GPOS, SAM_STRAND, 
                            SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, 
-                           SAM_SEQINS_A, SAM_SEQINS_C, SAM_SEQINS_G, SAM_SEQINS_T, DID_EOL);
+                           SAM_SEQINS_A, SAM_SEQINS_C, SAM_SEQINS_G, SAM_SEQINS_T, 
+                           SAM_GPOS_GAP, SAM_JUNCTION, DID_EOL);
     ctx_consolidate_stats (VB, SAM_QUAL, SAM_BADQUAL, SAM_DOMQRUNS, SAM_QUALMPLX, SAM_DIVRQUAL, SAM_QUALSA, SAM_QUAL_PACBIO_DIFF,
                            SAM_QUAL_FLANK, SAM_QUAL_FLANK_DOMQRUNS, SAM_QUAL_FLANK_QUALMPLX, SAM_QUAL_FLANK_DIVRQUAL, SAM_CQUAL, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_OQ_Z, OPTION_OQ_DOMQRUNS, OPTION_OQ_QUALMPLX, OPTION_OQ_DIVRQUAL, DID_EOL);
@@ -442,6 +451,7 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_consolidate_stats (VB, OPTION_GY_Z, OPTION_GY_Z_X, DID_EOL);
     ctx_consolidate_stats (VB, SAM_QNAME, SAM_BUDDY, SAM_QNAMESA, SAM_FQ_AUX, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_BD_BI, OPTION_BI_Z, OPTION_BD_Z, DID_EOL);
+    ctx_consolidate_stats (VB, OPTION_GX_GN, OPTION_GX_Z, OPTION_GN_Z, OPTION_gx_Z, OPTION_gn_Z, DID_EOL);
     ctx_consolidate_stats_(VB, CTX(OPTION_MM_Z), (ContainerP)&segconf.MM_con);
 
     if (segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z] && !MP(NOVOALIGN))
@@ -472,7 +482,8 @@ void sam_seg_initialize (VBlockP vb_)
     if (MP(STAR))                  sam_star_seg_initialize     (vb);
     if (TECH(PACBIO))              sam_pacbio_seg_initialize   (vb);
     if (segconf.is_minimap2)       sam_minimap2_seg_initialize (vb);
-    if (segconf.sam_has_xcons)     sam_xcons_seg_initialize (vb);
+    if (segconf.sam_has_xcons)     sam_xcons_seg_initialize    (vb);
+    if (segconf.has_Parse)         sam_parse_seg_initialize    (vb);
 
     if (segconf.sam_has_BWA_XS_i) // XS:i is as defined some aligners
         seg_mux_init (vb, OPTION_XS_i, SAM_SPECIAL_BWA_XS, false, XS);
@@ -672,11 +683,38 @@ void sam_segconf_set_by_MP (void)
         segconf.SA_CIGAR_abbreviated = no; 
 }
 
+static void sam_segconf_finalize_set_sorted (void)
+{
+    // if we have @HD-SO "coordinate" or "queryname", then we take that as definitive. Otherwise, we go by our segconf sampling.
+    if (sam_hd_so == HD_SO_COORDINATE) {
+        segconf.is_sorted = true;
+        segconf.is_collated = false;
+    }
+
+    else if (sam_hd_so == HD_SO_QUERYNAME || // file is sorted alphabetically by QNAME
+             (sam_hd_so == HD_SO_UNSORTED && sam_hd_go == HD_GO_QUERY)) { // same QNAMEs are grouped together, but there is no order between groups
+        segconf.is_collated = true;
+        segconf.is_sorted = false;
+    }
+
+    else {
+        // case: if we haven't found any pair of consecutive lines with the same CHROM and non-descreasing POS, this is not a sorted file, despite no evidence of "not sorted". eg could be unique CHROMs.
+        if (!segconf.evidence_of_sorted)
+            segconf.is_sorted = false;
+        
+        // we have at least one pair of lines with the same QNAME, and the file is not sorted
+        if (!segconf.is_sorted && segconf.evidence_of_collated)
+            segconf.is_collated = true;
+    }
+} 
+
 // finalize Seg configuration parameters
 void sam_segconf_finalize (VBlockP vb_)
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
     
+    sam_segconf_finalize_set_sorted();
+
     segconf.sam_qname_line0 = segconf.qname_line0[QNAME1]; // survives to fastq in deep/bamass
     segconf.std_seq_len     = vb->longest_seq_len;
     segconf.is_long_reads   = segconf_is_long_reads();
@@ -719,13 +757,9 @@ void sam_segconf_finalize (VBlockP vb_)
 
     segconf_set_use_insertion_ctxs();
 
-    if (MP(STAR)) segconf.sag_has_AS = true;
-
     // evidence of STARsolo or cellranger (this is also detected in the SAM header)
     if ((MP(STAR) || MP(UNKNOWN)) &&
         (((segconf.has[OPTION_UB_Z] > 0) + (segconf.has[OPTION_UR_Z] > 0) + (segconf.has[OPTION_UY_Z] > 0) >= 2) ||
-         (segconf.has[OPTION_gn_Z] && segconf.has[OPTION_gx_Z]) ||
-         (segconf.has[OPTION_GN_Z] && segconf.has[OPTION_GX_Z]) ||
          (segconf.has[OPTION_2R_Z] && segconf.has[OPTION_2Y_Z]) ||
          (segconf.has[OPTION_GR_Z] && segconf.has[OPTION_GY_Z]) ||
          (segconf.has[OPTION_UR_Z] && segconf.has[OPTION_UY_Z]) ||
@@ -736,6 +770,15 @@ void sam_segconf_finalize (VBlockP vb_)
         segconf.star_solo  = true; // must be before sam_set_sag_type
         segconf.has_10xGen = true; // STAR Solo mimics cellranger's tags
     }
+
+    if ((MP(STAR) || MP(UNKNOWN)) && segconf.is_collated &&
+        segconf.has[OPTION_pN_Z] && segconf.has[OPTION_pB_Z]) {
+
+        segconf.sam_mapper = MP_STAR;
+        segconf.has_Parse = true;
+    }
+
+    if (MP(STAR)) segconf.sag_has_AS = true;
 
     // set optimizations
     if (flag.optimize) 
@@ -779,28 +822,6 @@ void sam_segconf_finalize (VBlockP vb_)
     
     if (segconf.has[OPTION_rb_Z] && segconf.has[OPTION_rb_Z] == segconf.has[OPTION_mb_Z])
         segconf.sam_is_nanoseq = true;
-
-    // if we have @HD-SO "coordinate" or "queryname", then we take that as definitive. Otherwise, we go by our segconf sampling.
-    if (sam_hd_so == HD_SO_COORDINATE) {
-        segconf.is_sorted = true;
-        segconf.is_collated = false;
-    }
-
-    else if (sam_hd_so == HD_SO_QUERYNAME || // file is sorted alphabetically by QNAME
-             (sam_hd_so == HD_SO_UNSORTED && sam_hd_go == HD_GO_QUERY)) { // same QNAMEs are grouped together, but there is no order between groups
-        segconf.is_collated = true;
-        segconf.is_sorted = false;
-    }
-
-    else {
-        // case: if we haven't found any pair of consecutive lines with the same CHROM and non-descreasing POS, this is not a sorted file, despite no evidence of "not sorted". eg could be unique CHROMs.
-        if (!segconf.evidence_of_sorted)
-            segconf.is_sorted = false;
-        
-        // we have at least one pair of lines with the same QNAME, and the file is not sorted
-        if (!segconf.is_sorted && segconf.evidence_of_collated)
-            segconf.is_collated = true;
-    }
 
     segconf.disable_random_access = !segconf.is_sorted;
 
@@ -1193,6 +1214,11 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(xq_i, 'X', 'Q', 'i');
             TEST_AUX(cm_i, 'c', 'm', 'i');
 
+            // indices of either GX:Z or gx:Z go into idx_GX_Z and same with gn:Z or GN:Z
+            TEST_AUX(GX_Z, 'G', 'X', 'Z');
+            TEST_AUX(GX_Z, 'g', 'x', 'Z');
+            TEST_AUX(GN_Z, 'G', 'N', 'Z');
+            TEST_AUX(GN_Z, 'g', 'n', 'Z');
             default: {}
         }
     }
@@ -1483,7 +1509,7 @@ static inline BuddyType sam_seg_saggy (VBlockSAMP vb, SamFlags f, STRp (qname), 
         // case: two alignments with the same QNAME, FLAG.is_first, and both are primary: usually a sign of defective BAM 
         if (vb->saggy_is_prim && !sam_is_depn (f)) {
 #ifdef DEBUG // turns out this is quite common
-            WARN_ONCE ("FYI: %s file violates the SAM specification: Found two alignments with the same QNAME, FLAG.IS_FIRST, and both are non-secondary, non-supplementary: QNAME=\"%.*s\". No worries, Genozip will still compress this file correctly.",
+            WARN_ONCE ("DEBUG: %s file violates the SAM specification: Found two alignments with the same QNAME, FLAG.IS_FIRST, and both are non-secondary, non-supplementary: QNAME=\"%.*s\". Not an issue for Genozip.",
                        dt_name (vb->data_type), STRf(qname));
 #endif
             goto no_saggy;

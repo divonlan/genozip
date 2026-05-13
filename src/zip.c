@@ -390,7 +390,10 @@ static void zip_free_undeeded_zctx_bufs_after_seg (void)
     for_zctx {
         buf_destroy (zctx->ston_hash);
         buf_destroy (zctx->ston_ents);
+
+        uint64_t save_len = zctx->global_hash.len; // save for stats 
         buf_destroy (zctx->global_hash);
+        zctx->global_hash.len = save_len;
     }
 
     if (z_has_gencomp) {
@@ -830,7 +833,7 @@ finish:
 
     zip_display_compression_ratio (flag.md5 ? digest_snapshot (&z_file->digest_state, NULL) : DIGEST_NONE); // Done for reference + final compression ratio calculation
     
-    if (flag.show_seg_summary)
+    if (flag.show_seg_summary && z_file->z_closes_after_me)
         stats_show_seg_summary();
         
     if (flag.md5 && flag.bind && z_file->z_closes_after_me &&

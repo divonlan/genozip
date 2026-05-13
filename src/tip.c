@@ -23,8 +23,8 @@ void tip_dt_encountered (DataType dt)
     dt_encountered[dt] = true;
 }
 
-// called in ZIP, or sometimes in PIZ if ZIP ends to non-returnable --test. 
-void tip_print (void)
+// called in genozip, or, if --test and genounzip --test does not return, after the testing is completed 
+void tip_print_genozip (void)
 {
     #define E(dt) dt_encountered[DT_##dt]
 
@@ -113,4 +113,13 @@ void tip_print (void)
 
     flag.no_tip = true;
     sam_destroy_deep_tip();
+}
+
+// called when uncompressing with genounzip (not when just testing)
+void tip_print_genounzip (void)
+{
+    if (!license_is_activated()) 
+        TIP ("Use genozip to compress FASTQ, BAM, VCF and other genomic files. %s", WEBSITE_QUICK_GUIDE);
+
+    flag.no_tip = true;
 }

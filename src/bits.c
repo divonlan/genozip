@@ -715,3 +715,25 @@ void LTEN_bits (BitsP bits)
         bits->words[i] = LTEN64 (bits->words[i]);
 #endif
 }
+
+// xor the entire dst bit array, with a subset of xor_with
+void bits_xor_with (BitsP dst, ConstBitsP xor_with, uint64_t xor_with_bit)
+{
+    ASSERT (xor_with_bit + dst->nbits <= xor_with->nbits, 
+            "Expecting xor_with_bit=%"PRId64" + dst->nbits=%"PRId64" <= xor_with->nbits=%"PRId64, 
+            xor_with_bit, dst->nbits, xor_with->nbits);
+
+    uint64_t num_of_full_words = dst->nbits / WORD_SIZE;
+
+    // full words
+    for (uint64_t word_i=0; word_i < num_of_full_words; word_i++, xor_with_bit += 64)
+        dst->words[word_i] ^= _get_word (xor_with, xor_with_bit);
+
+    // last partial word - combine xored part of the word, part of the dst word beyond the requested range
+    uint8_t remaining_bits = dst->nbits & 0x3f;
+    if (remaining_bits) 
+        dst->words[dst->nwords-1] ^= _get_word (xor_with, xor_with_bit) & bitmask64 (remaining_bits);
+
+    DEBUG_VALIDATE(dst);
+}
+

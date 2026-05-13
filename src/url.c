@@ -314,11 +314,15 @@ rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size)
 // returns error string if curl/wget itself (not server) failed, or NULL if successful
 static void url_read_string_do (rom url, rom user, rom password, 
                                 rom post, // NUL-termianted for POST, NULL for GET
-                                qSTRp(data), qSTRp(error), bool blocking, bool follow_redirects) 
+                                qSTRp(data), qSTRp(error), bool blocking, bool follow_redirects,
+                                StreamP *url_stream) 
 {
-    StreamP url_stream = url_open (NULL, url, user, password, false, post, false);
-    FILE *data_stream  = stream_from_stream_stdout (url_stream);
-    FILE *error_stream = stream_from_stream_stdout (url_stream);
+    store_release (*url_stream, (StreamP)NULL);
+
+    store_release (*url_stream, url_open (NULL, url, user, password, false, post, false));
+
+    FILE *data_stream  = stream_from_stream_stdout (*url_stream);
+    FILE *error_stream = stream_from_stream_stdout (*url_stream);
 
 #ifndef _WIN32
     // set non-blocking (unfortunately _pipes in Windows are always blocking)
@@ -339,7 +343,7 @@ static void url_read_string_do (rom url, rom user, rom password,
             *error_len = strlen (error);
             *data_len = 0;
 
-            stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS);
+            stream_close (url_stream, STREAM_DONT_WAIT_FOR_PROCESS);
             return;
         }
     
@@ -352,7 +356,7 @@ static void url_read_string_do (rom url, rom user, rom password,
     *error_len = fread (error, 1, CURL_RESPONSE_LEN-1, error_stream); 
     error[*error_len] = '\0'; // terminate string
 
-    int exit_code = stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
+    int exit_code = stream_close (url_stream, STREAM_DONT_WAIT_FOR_PROCESS); // Don't wait for process - Google Forms call hangs if waiting
     if (!exit_code) 
         return; // curl/wget itself is good - we may have or not an error in "error" from the server or in case of no connection
 
@@ -397,7 +401,8 @@ static void url_verify_url_legality (rom url)
 // reads a string response from a URL, returns a nul-terminated string and the number of characters (excluding \0), or -1 if failed
 int32_t url_read_string (rom url, rom user, rom password,
                          rom post, // NUL-termianted for POST, NULL for GET
-                         STRc(data), bool blocking, bool follow_redirects, rom show_errors)
+                         STRc(data), bool blocking, bool follow_redirects, rom show_errors,
+                         StreamP *url_stream) // optional
 {
     rom action = show_errors ? show_errors : "url_read_string";
 
@@ -415,7 +420,11 @@ int32_t url_read_string (rom url, rom user, rom password,
 
     response     = data ? data     : local_response;
     response_len = data ? data_len : CURL_RESPONSE_LEN;
-    url_read_string_do (url, user, password, post, qSTRa(response), qSTRa(error), blocking, follow_redirects);
+
+    StreamP my_url_stream = NULL;
+    if (!url_stream) url_stream = &my_url_stream;
+
+    url_read_string_do (url, user, password, post, qSTRa(response), qSTRa(error), blocking, follow_redirects, url_stream);
 
     // an Alibaba script failed - see alibaba logs
 

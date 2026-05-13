@@ -64,8 +64,6 @@ void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i,
     nonref_ctx->no_stons    = true;       // we're storing the sequencing in local, so we can't also have singletons
     nonref_ctx->flags.acgt_no_x = !has_x;
 
-    if (vb->vblock_i == 1)
-
     if (has_x) {
         ContextP nonref_x_ctx   = nonref_ctx + 1;
         nonref_x_ctx->ltype     = LT_SUPP;
@@ -149,7 +147,7 @@ COMPRESS (codec_acgt_compress)
         ASSERT0 (has_x, "ACGT compression with get_line_cb is only support with has_X"); // we can easily add support if needed in the future
         
         buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, C_LOCAL);
-        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
+        for_line {
 
             STRw0(data_1);
             get_line_cb (vb, ctx, line_i, pSTRa(data_1), *uncompressed_len - nonref_x_ctx->local.len32, NULL);

@@ -18,37 +18,39 @@
 // ZIP side
 //--------------
 
-static bool is_illumina_binned_qual (Did did_i)
+static bool is_domq_better (Did did_i)
 {
     QualHistType qht = did_i_to_qht (did_i);
     if (qht < 0) return false;
 
-    for (int i=0; i < 94; i++)
-        if (segconf.qual_histo[qht][i].count && i != 'F'-33 && i != ':'-33 && i != ','-33 && i != '#'-33)
-            return false; // contains qual score other than F : , # - definitely not Illumina binned
+    int used_scores=0, total_count=0, highest_score=0;
+    for (int i=0; i < 94; i++) {
+        int score_i = segconf.qual_histo[qht][i].count;
+        total_count += score_i;
 
-    return segconf.qual_histo[qht]['F'-33].count && 
-           segconf.qual_histo[qht][':'-33].count && 
-           segconf.qual_histo[qht][','-33].count;
+        if (score_i) used_scores++;
+
+        MAXIMIZE (highest_score, score_i);
+    }
+
+    return used_scores <= 4 || // Illumina binned
+           percent (highest_score, total_count) > 80; // over 80% of scores are the dom
 }
 
 static bool codec_homp_qual_data_is_a_fit_for_homp (VBlockP vb, ContextP qual_ctx, LocalGetLineCB qual_callback)
 {
-    // special case: if this is illumina binned, it may look like HOMP bc of long dom runs,
+    // case: if this is illumina (or illumina-style) binned, it may look like HOMP bc of long dom runs,
     // but we're better off with DOMQ
-    if (TECH(UNKNOWN) && is_illumina_binned_qual (qual_ctx->did_i)) {
-        segconf.tech = TECH_ILLUM; // if QUAL data of any did_i has this illumina signature and TECH is unknown (eg bc qname is SRA), then the data is Illumina data
+    if (is_domq_better (qual_ctx->did_i)) 
         return false;
-    }
 
     LocalGetLineCB *seq_callback = (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq);
 
     #define NUM_HPS_IN_SAMPLE 100  // test at least this number of HPs (or as many as are available)
-    #define SUCCESS_CRITERION 0.85 // at least 85% of tested homopolymers are condensable
 
-    uint32_t count[2] = {}; // [0]=count non-condensable homopolymers [1]=condensable
+    uint32_t n_hp_examined = 0;
 
-    for (LineIType line_i=0; line_i < vb->lines.len32 && (count[false] + count[true] < NUM_HPS_IN_SAMPLE); line_i++) {   
+    for (LineIType line_i=0; line_i < vb->lines.len32 && n_hp_examined < NUM_HPS_IN_SAMPLE; line_i++) {   
         STRw(qual);
         qual_callback (vb, qual_ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
         
@@ -57,59 +59,66 @@ static bool codec_homp_qual_data_is_a_fit_for_homp (VBlockP vb, ContextP qual_ct
         STRw(seq);
         seq_callback (vb, NULL, line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, NULL);
 
-        for (unsigned i=0; i < seq_len; i++) {
+        for (unsigned i=0; i < seq_len; ) {
             unsigned hp_len = homopolymer_len (STRa(seq), i);
 
-            if (hp_len > 1) {
+            if (hp_len > 1 && 
+                i && i + hp_len < seq_len) { // don't examine homopolymers at the edge of the sequence, as they might have been trimmed
+
                 char prev_qual = 0;
-                bool condensable = true; // optimistic
 
                 for (unsigned h=0; h < (hp_len + 1) / 2; h++) {
                     char this_qual   = qual[i + h];
                     char mirror_qual = qual[i + hp_len - 1 - h];
 
                     if (this_qual != mirror_qual || (prev_qual == TOP_QUAL && this_qual != TOP_QUAL)) {
-                        condensable = false;
-                        break;
+                        printf ("HOMP: %s: found non-compliant '%c' homopolymer: line_i=%u seq_i=%u hp_len=%u\nSEQ =%.*s\nQUAL=%.*s\n", 
+                                VB_NAME, seq[i], line_i, i, hp_len, STRf(seq), seq_len, qual);
+                        return false; // found proof of non-homp
                     }
 
                     prev_qual = this_qual;
                 }
-
-                i += hp_len - 1; // skip to end of homopolymer
-                count[condensable]++;
+                n_hp_examined++;
             }
+
+            i += hp_len; // skip to after homopolymer
         }
     }
-
-    bool success = (count[true] || count[false]) && 
-                   ((double)count[true] / (double)(count[true] + count[false])) > SUCCESS_CRITERION; 
     
-    if (flag.show_qual) 
-        printf ("HOMP: breakdown of first %u homopolymers in %10s: [condensable]=%u [non-condensable]=%u success=%s\n",
-                 count[true] + count[false], VB_NAME, count[true], count[false], TF(success));
+    if (flag.show_qual) {
+        if (n_hp_examined) printf ("HOMP: %s: examined %u homopolymers and all are compliant with HOMP\n", VB_NAME, n_hp_examined);
+        else               printf ("HOMP: %s: no homopolymers found\n", VB_NAME);
+    }
 
-    return success;
+    return n_hp_examined > 0; // fail if no HPs
 }
 
 bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb, bool force)
 {
     ContextP qual_ctx = CTX(qual_did_i);
+    bool is_ultima = TECH(ULTIMA) || MP(ULTIMA);
+    bool is_fit = false;
 
     if (force || flag.force_qual_codec == CODEC_HOMP) {}
 
-    else if ((!TECH(ULTIMA) && !TECH(UNKNOWN) && !MP(ULTIMA)) || // either the TECH or the mapper are an indication of potentially Ultima data 
-        qual_did_i != FASTQ_QUAL /* =SAM_QUAL */                         ||
-        !codec_homp_qual_data_is_a_fit_for_homp (vb, qual_ctx, get_line_cb))
+    // All Ultimate generate homp qual
+    else if (flag.no_homp                     
+         || (!is_ultima && !TECH(UNKNOWN))   // either the TECH or the mapper are an indication of potentially Ultima data 
+         || qual_did_i != FASTQ_QUAL/*=SAM_QUAL*/ 
+         || (!is_ultima && !(is_fit = codec_homp_qual_data_is_a_fit_for_homp (vb, qual_ctx, get_line_cb)))) // note: we don't test if knowt to be Ultima - HOMP is always better 
         return false;
-
+    
     qual_ctx->ltype     = LT_CODEC;
     qual_ctx->lcodec    = CODEC_HOMP;
     qual_ctx->local_dep = DEP_L1; // yield to other codecs (eg CODEC_OQ) that need to query QUAL before we destroy it
+    
+    if (TECH(UNKNOWN)) segconf.tech = TECH_ULTIMA; // a HOMP is definitive signature of Ultima
 
-    if (segconf_running && TECH(UNKNOWN)) 
-        segconf.tech = TECH_ULTIMA; // if tech is unknown, given HOMP compatability, it is likely Ultima
-        
+    // show_qual: if is_fit was not run (because is_ultima=true) - run it just to display stats
+    if (flag.show_qual && !is_fit)
+        codec_homp_qual_data_is_a_fit_for_homp (vb, qual_ctx, get_line_cb);
+
     return true;
 }
 
@@ -123,10 +132,11 @@ COMPRESS (codec_homp_compress)
     LocalGetLineCB *seq_callback = (VB_DT(FASTQ) ? fastq_zip_seq : sam_zip_seq);
     void (*update_qual_len)(VBlockP, uint32_t, uint32_t) = (VB_DT(FASTQ) ? fastq_update_qual_len : sam_update_qual_len);
 
-    add_relaxed (z_file->homp_lines, vb->lines.len);
+    if (ctx->did_i == SAM_QUAL/*==FASTQ_QUAL*/) 
+        add_relaxed (z_file->homp_lines, vb->lines.len);
 
     // first pass - condese qual scores of homopolymers by removing redundant scores
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         STRw(qual);
         get_line_cb (vb, ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
 

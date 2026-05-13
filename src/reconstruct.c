@@ -116,19 +116,28 @@ static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, ReconType
 
 static void reconstruct_from_diff (VBlockP vb, ContextP ctx, STRp(snip), ReconType reconstruct)
 {
-    ContextP base_ctx;
-    if (snip_len >= 10) // a base64 dict_id is of length 14, larger than the largest uint32_t = 10  
+    ContextP base_ctx = NULL;
+    if (snip[1] == '*')      // diff vs first word in dict (15.0.83)
+        STRinc(snip, 2);     // skip SNIP_DIFF and '*'
+
+    else if (snip_len >= 10) // a base64 dict_id is of length 14, larger than the largest uint32_t = 10  
         base_ctx = reconstruct_get_other_ctx_from_snip (vb, ctx, pSTRa(snip)); // also updates snip and snip_len
+    
     else {
         base_ctx = ctx;
-        snip++;
-        snip_len--;
+        STRinc(snip, 1);
     }
     STR(base);
 
+    // case: base is first word in dict (15.0.83)
+    if (!base_ctx) {
+        base     = B1STc(ctx->dict);
+        base_len = B1ST(CtxWord, ctx->word_list)->snip_len;
+    }
+
     // case: we get a value from the same line - set last_txt for the value on this line
     // note: we don't check here that there is actually a value on the line - the segger should do that
-    if (ctx->flags.same_line && ctx != base_ctx) 
+    else if (ctx->flags.same_line && ctx != base_ctx) 
         reconstruct_peek (vb, base_ctx, pSTRa(base));
     
     else 
@@ -147,8 +156,18 @@ static void reconstruct_from_diff (VBlockP vb, ContextP ctx, STRp(snip), ReconTy
 
     else { 
         ASSERT_IN_BOUNDS_BEFORE(diff_len);
-    
-        if (VER(14))
+        
+        if (!base_ctx)  // DIFF_SEQ_VS_1ST_SNIP_IN_DICT (15.0.83)
+            for (int64_t i=0; i < diff_len; i++) {
+                char b = base[i], d = diff[i];
+                recon[i] = b=='A' ? (d==0?'A' : d==1?'G' : d==2?'C' : d==3?'T' : d) 
+                         : b=='C' ? (d==0?'C' : d==1?'T' : d==2?'A' : d==3?'G' : d)
+                         : b=='G' ? (d==0?'G' : d==1?'A' : d==2?'T' : d==3?'C' : d)
+                         : b=='T' ? (d==0?'T' : d==1?'C' : d==2?'A' : d==3?'G' : d)
+                         :          (d==0?b                                    : d);
+            }
+
+        else if (VER(14))
             for (int64_t i=0; i < diff_len; i++)
                 recon[i] = diff[i] ? diff[i] : base[i];
 

@@ -15,12 +15,12 @@
 #define _ID_BND1 DICT_ID_MAKEF_5("I1pos")
 #define _ID_BND2 DICT_ID_MAKEF_6("I1mate")
 
-#define decl_pbsv_ID_ctxs                                                               \
-    ContextP id0_ctx  __attribute__((unused)) = ctx_get_ctx (vb, _ID0);  \
-    ContextP id1_ctx  __attribute__((unused)) = ctx_get_ctx (vb, _ID1);  \
-    ContextP bnd0_ctx __attribute__((unused)) = ctx_get_ctx (vb, _ID_BND0); \
-    ContextP bnd1_ctx __attribute__((unused)) = ctx_get_ctx (vb, _ID_BND1); \
-    ContextP bnd2_ctx __attribute__((unused)) = ctx_get_ctx (vb, _ID_BND2); 
+#define decl_pbsv_ID_ctxs                                   \
+    ContextP id0_ctx  UNUSED = ctx_get_ctx (vb, _ID0);      \
+    ContextP id1_ctx  UNUSED = ctx_get_ctx (vb, _ID1);      \
+    ContextP bnd0_ctx UNUSED = ctx_get_ctx (vb, _ID_BND0);  \
+    ContextP bnd1_ctx UNUSED = ctx_get_ctx (vb, _ID_BND1);  \
+    ContextP bnd2_ctx UNUSED = ctx_get_ctx (vb, _ID_BND2); 
 
 static SmallContainer id_bnd_con = { // goes into I1D
     .nitems_lo = 3,

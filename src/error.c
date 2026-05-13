@@ -346,10 +346,13 @@ void noreturn error_exit (bool show_stack, bool is_error)
         if (!arch_is_valgrind())
             flag.let_OS_cleanup_on_exit = true;  
 
-        if (!is_error && (IS_ZIP || (IS_PIZ && flag.check_latest)/*non-returning test after compress*/)) {
+        if (!is_error && (IS_ZIP || (IS_PIZ && flag.test && flag.check_latest)/*non-returning test after compress*/)) {
             version_print_notice_if_has_newer();
-            tip_print();
+            tip_print_genozip();
         }
+
+        if (!is_error && is_genounzip && !flag.test)
+            tip_print_genounzip();
 
         if (is_error && flag.debug_threads)
             threads_write_log (true);
@@ -472,10 +475,12 @@ void noreturn error_restart (rom add_cmd_option)
         ABORT ("Failed to restart process: execvp(%s) failed: %s", argv[0], strerror (errno));
 
 #else
-        // free most memory, as this process will still be alive while the child process runs
-        error_free_all(); 
-        return_freed_memory_to_kernel();
-        
+        // free most memory if possible, as this process will still be alive while the child process runs
+        if (threads_am_i_writer_thread()) {
+            error_free_all(); 
+            return_freed_memory_to_kernel();
+        }
+
         STARTUPINFO si = { .cb = sizeof (STARTUPINFO) };
         PROCESS_INFORMATION pi = {};
         rom exec = arch_get_genozip_executable().s;

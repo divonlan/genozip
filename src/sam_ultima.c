@@ -419,32 +419,3 @@ void sam_seg_ultima_a3 (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t a3, unsigned 
     seg_by_did (VB, STRa(snip), OPTION_a3_i, add_bytes);
 }
 
-// used by SAM and FASTQ
-void ultima_c_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value))
-{
-    bool is_fq = VB_DT(FASTQ);
-    Multiplexer2P mux = is_fq ? fastq_get_ultima_c_mux (vb) : &VB_SAM->mux_ultima_c;
-    
-    if (!ctx->is_initialized) {
-        seg_mux_init_(VB, ctx->did_i, 2, (is_fq ? FASTQ_SPECIAL_ULTIMA_C : SAM_SPECIAL_ULTIMA_C), false, (MultiplexerP)mux);
-
-        seg_by_ctx (VB, STRa(mux->snip), ctx, 0);  // all-the-same (not ctx_create node bc we need the b250 to carry the flags)
-        
-        ctx->is_initialized = true;
-        
-        (ctx-1)->flags.store = STORE_INT;
-    }
-
-    int channel_i = ctx_has_value_in_line_(vb, ctx-1) && ((ctx-1)->last_value.i == 2);
-
-    ContextP channel_ctx = seg_mux_get_channel_ctx (vb, ctx->did_i, (MultiplexerP)mux, channel_i);
-
-    seg_integer_or_not (vb, channel_ctx, STRa(value), value_len);
-}
-
-SPECIAL_RECONSTRUCTOR (ultima_c_piz_special_DEMUX_BY_Q4NAME)
-{
-    int channel_i = ctx_has_value_in_line_(vb, ctx-1) && ((ctx-1)->last_value.i == 2);
-
-    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);    
-}

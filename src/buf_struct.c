@@ -28,7 +28,6 @@
 #include "file.h"
 #include "threads.h"
 #include "arch.h"
-#include "tip.h"
 
 #define DISPLAY_ALLOCS_AFTER 0 // display allocations, except the first X allocations. reallocs are always displayed
 
@@ -67,7 +66,7 @@ uint16_t buf_decrement_user_count (BufferP buf)
 
 #define reset_memory_pointer(buf)                                                       \
     /* careful to make sure that instructions are not re-ordered in either direction */ \
-    char *old_memory __attribute__((unused)) = (buf)->memory;                           \
+    char *old_memory UNUSED = (buf)->memory;                           \
     store_release ((buf)->memory, (void*)0);                                            \
     __atomic_thread_fence (__ATOMIC_ACQ_REL); 
 

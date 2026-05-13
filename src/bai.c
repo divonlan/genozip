@@ -216,7 +216,7 @@ static inline rom bai_get_line_vcf (rom next, rom after_vb,
                                     WordIndex *rname, PosType32 *pos, 
                                     BaiBinType *bin, uint32_t *ref_consumed, pSTRp(id))
 {
-    typedef enum { RNAME, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT } VcfFields __attribute__((unused)); // quick way to define constants
+    typedef enum { RNAME, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT } VcfFields UNUSED; // quick way to define constants
     extern uint32_t vcf_num_samples; 
 
     // get the fields efficiently (10x faster than str_split_by_tab) taking advantage of the data already tested during seg and verified in recon

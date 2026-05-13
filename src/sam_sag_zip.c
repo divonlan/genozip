@@ -84,7 +84,7 @@ void sam_set_sag_type (void)
         segconf.sag_type = SAG_NONE;
 
     else if (MP(LONGRANGER))
-        segconf.sag_type = SAG_NONE; // TO DO - new SAG_BY_LONGRANGER SamGcVbInfo : longranger has non-standard SA:Z format
+        segconf.sag_type = SAG_NONE;  // TO DO - new SAG_BY_LONGRANGER SamGcVbInfo : longranger has non-standard SA:Z format
 
     else if (MP(NOVOALIGN))
         segconf.sag_type = SAG_BY_NH; // NovoAlign may have both NH and SA, we go by NH
@@ -450,7 +450,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), boo
     // verify QUAL (a bad QUAL can be segged normally but not gencomp because it can't be huffman-compressed during ingestion)
     if (comp_i != COMP_MAIN && 
         (  (is_bam  && *B8(vb->txt_data, dl->QUAL.index) != 0xff && !str_is_in_range (STRtxt(dl->QUAL), 0, 93))
-        || (!is_bam && *B8(vb->txt_data, dl->QUAL.index) != '*'  && !str_is_in_range (STRtxt(dl->QUAL), 33, 126))))
+        || (!is_bam && *B8(vb->txt_data, dl->QUAL.index) != '*'  && !str_is_qual_scores (STRtxt(dl->QUAL)))))
          comp_i = COMP_MAIN; // bad qual
 
     if (comp_i != COMP_MAIN) {
@@ -863,7 +863,7 @@ void sam_zip_set_vb_header_specific (VBlockP vb_, SectionHeaderVbHeaderP vb_head
 
     if (IS_PRIM(vb)) {
         uint32_t total_seq_len=0;
-        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) 
+        for_line 
             total_seq_len += DATA_LINE (line_i)->SEQ.len;   // length in bases, not bytes
 
         vb_header->sam_prim_seq_len         = BGEN32 (total_seq_len);

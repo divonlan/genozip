@@ -969,6 +969,21 @@ uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_pre
 
                 while (str < after_str && !IS_DIGIT(*str)) str++;  
 
+                ASSSPLIT (str < after_str, "item_i=%u reached end of string without finding a DIGIT separator \"%.*s\"", 
+                          item_i, str_len, save_str);
+
+                *item_lens = str - *items;
+                break;
+
+            case CI0_ACGTN: // items goes until a A,C,G,T or N, but not less than sep[1] characters
+                *items = str;
+
+                str += (uint8_t)con->items[item_i].separator[1]; // minimum number of character
+                while (str < after_str && !IS_ACGTN(*str)) str++;  
+
+                ASSSPLIT (str < after_str, "item_i=%u reached end of string without finding a ACGTN separator \"%.*s\"", 
+                          item_i, str_len, save_str);
+
                 *item_lens = str - *items;
                 break;
 

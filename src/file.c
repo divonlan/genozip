@@ -238,7 +238,7 @@ static void file_ask_user_to_confirm_overwrite (rom filename)
 {
     if (!strcmp (filename, "/dev/null")) return; // don't ask for /dev/null
     
-    fprintf (stderr, "%s: output file %s already exists: in the future, you may use --force to overwrite\n", global_cmd, filename);
+    fprintf (stderr, "%s: output file %s already exists. "_TIP"Use --force to overwrite\n", global_cmd, filename);
     
     if (!isatty(0) || !isatty(2)) exit_on_error(false); // if we stdin or stderr is redirected - we cannot ask the user an interactive question
     
@@ -425,7 +425,7 @@ static void file_open_txt_read_gz (FileP file)
     file->file = file->is_remote  ? url_open_remote_file (NULL, file->name)  
                : file->redirected ? fdopen (STDIN_FILENO,  "rb") 
                :                    fopen (file->name, READ);
-
+    
     ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
 
     if (!file->is_remote && !file->redirected) {
@@ -438,7 +438,7 @@ static void file_open_txt_read_gz (FileP file)
     // case: discovery deferred to the end of segconf when we know segconf.tech
     if (file->data_type == DT_FASTQ || file->data_type == DT_FASTA) {  // note: even if --no-bgzf: so we can report correct src_codec in stats
         file->effective_codec = file->src_codec = txtfile_is_gzip (file) ? CODEC_GZ : CODEC_NONE; // based on the first 3 bytes
-        file->discover_during_segconf = !flag.no_bgzf && (file->effective_codec == CODEC_GZ);
+        file->discover_during_segconf = !flag.no_bgzf && (file->effective_codec == CODEC_GZ) && !IS_BIOPSY_BYTES;
         txtfile_initialize_igzip (file);
     }
 
@@ -872,6 +872,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
     if (file_exists (filename) && 
         !flag.force            && 
         !flag.zip_no_z_file    && // not zip with --seg-only
+        !flag.restarted        && // if restarted, user already approved overwrite in previous process
         !file->is_in_tar)   
 
         file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"

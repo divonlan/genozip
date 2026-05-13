@@ -77,7 +77,7 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
     uint32_t num_values = 0;
 
     if (callback)
-        for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
+        for_line {
             uint8_t *values; uint32_t values_len;
             callback (vb, ctx, line_i, (char **)pSTRa(values), Ltxt, NULL);
             
@@ -179,12 +179,13 @@ COMPRESS (codec_longr_compress)
     STRw(seq); STRw (qual); 
     bool is_rev;
 
-    add_relaxed (z_file->longr_lines, vb->lines.len);
+    if (ctx->did_i == SAM_QUAL/*==FASTQ_QUAL*/) 
+        add_relaxed (z_file->longr_lines, vb->lines.len);
 
     // calculate state->base_chan - the channel for each base. reads are treated in their
     // original (FASTQ) orientation.
     uint32_t total_len=0;
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
+    for_line {
 
         get_line_cb (vb, ctx, line_i, pSTRa(qual), Ltxt, NULL);
         if (!qual_len) continue; // this can happen, for example, if a SAM DEPN line is compressed against SA Group
@@ -215,7 +216,7 @@ COMPRESS (codec_longr_compress)
         next_of_chan[chan] = next_of_chan[chan-1] + state->chan_num_bases[chan-1];
 
     uint32_t base_i=0;
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
+    for_line {
         get_line_cb (vb, ctx, line_i, pSTRa(qual), Ltxt, &is_rev);
 
         // we create a sorted_qual array, which contains LONGR_NUM_CHANNELS segments, one for each channel,

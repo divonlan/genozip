@@ -12,10 +12,10 @@
 #include "compressor.h"
 #include "vcf_private.h"
 
-#define decl_pbwt_contexts                                              \
-    ContextP runs_ctx __attribute__((unused)) = CTX(FORMAT_PBWT_RUNS);  \
-    ContextP fgrc_ctx __attribute__((unused)) = CTX(FORMAT_PBWT_FGRC);  \
-    ContextP ht_ctx   __attribute__((unused)) = CTX(FORMAT_GT_HT);
+#define decl_pbwt_contexts                             \
+    ContextP runs_ctx UNUSED = CTX(FORMAT_PBWT_RUNS);  \
+    ContextP fgrc_ctx UNUSED = CTX(FORMAT_PBWT_FGRC);  \
+    ContextP ht_ctx   UNUSED = CTX(FORMAT_GT_HT);
 
 typedef struct {
     Allele allele;      // copied from line on which permutation is applied

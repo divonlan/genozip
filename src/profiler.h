@@ -17,7 +17,7 @@
 #define profiled \
         file_open_z, file_close, buf_low_level_free, buflist_find_buf, buflist_sort, buflist_test_overflows_do,\
         read, compute, compressor_bz2, compressor_lzma, compressor_bsc, \
-        write, zriter_write, piz_read_one_vb, vb_get_vb,\
+        write, zriter_write, piz_read_one_vb, vb_get_vb, segconf_calculate,\
         compressor_domq, compressor_acgt, compressor_xcgt, mgzip_uncompress_during_read, igzip_uncompress_during_read, \
         piz_get_line_subfields, b250_zip_generate, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\
         zfile_uncompress_section, zfile_uncompress_ref_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, compressor_homp, compressor_t0, \
@@ -45,8 +45,8 @@
         sam_seg_QUAL, sam_seg_is_gc_line, sam_seg_aux_all, sam_seg_MD_Z_analyze, sam_seg_bsseeker2_XG_Z_analyze,\
         sam_seg_bismark_XM_Z, sam_seg_bsbolt_XB, sam_seg_AS_i, sam_seg_NM_i, sam_seg_SA_Z, sam_seg_BWA_XS_i,\
         sam_seg_TX_AN_Z, sam_seg_barcode_qual, sam_seg_CB_Z, sam_seg_CR_Z, sam_seg_RX_Z, sam_seg_BX_Z, sam_seg_ULTIMA_tp,\
-        sam_seg_QX_Z, sam_seg_BC_Z, sam_seg_gene_name_id, sam_seg_fx_Z, sam_seg_other_seq, sam_seg_GR_Z, sam_seg_GY_Z,\
-        sam_seg_sag_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, aligner_seg_seq, sam_header_inspect,\
+        sam_seg_QX_Z, sam_seg_BC_Z, sam_seg_GX_GN, sam_seg_fx_Z, sam_seg_other_seq, sam_seg_GR_Z, sam_seg_GY_Z,\
+        sam_seg_sag_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, sam_header_inspect,\
         sam_header_add_contig, contigs_create_index, sam_header_zip_inspect_PG_lines, sam_header_zip_inspect_RG_lines, sam_header_zip_inspect_HD_line, \
         sam_header_inspect_SQ_lines, cram_inspect_file, \
         sam_deep_zip_merge, sam_piz_con_item_cb, sam_piz_deep_compress, sam_piz_deep_add_qname, sam_piz_deep_add_seq, sam_piz_deep_add_qual,\
@@ -66,7 +66,7 @@
         txtheader_zip_read_and_compress, txtheader_compress, txtheader_compress_one_fragment, txtheader_piz_read_and_reconstruct,\
         digest, digest_txt_header, ref_make_calculate_digest, refhash_load_digest, ref_load_digest, refhash_make_refhash, \
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, \
-        aligner_best_match, aligner_update_best, aligner_seq_to_bitmap, aligner_tight_loop, \
+        aligner_seg_seq, aligner_best_match, aligner_get_junction, aligner_update_best, aligner_seq_to_bitmap, aligner_best_match_FLAT_search, aligner_best_match_FLAT_search2, \
         refhash_revcomp_genome_do, ref_contigs_compress,\
         zip_write_global_area, zip_finalize, \
         piz_read_global_area, ref_load_stored_reference, reference_re_digest_genome, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
@@ -102,8 +102,8 @@ typedef struct {
 typedef struct timespec TimeSpecType;
 
 #define START_TIMER_ALWAYS TimeSpecType profiler_timer; clock_gettime(CLOCK_REALTIME, &profiler_timer); 
-#define CHECK_TIMER_ALWAYS ({ \
-    TimeSpecType tb; \
+#define CHECK_TIMER ({                  \
+    TimeSpecType tb;                    \
     clock_gettime(CLOCK_REALTIME, &tb); \
     ((uint64_t)((tb).tv_sec-(profiler_timer).tv_sec))*1000000000ULL + ((int64_t)(tb).tv_nsec-(int64_t)(profiler_timer).tv_nsec); \
 })
@@ -114,48 +114,46 @@ typedef struct timespec TimeSpecType;
 #define START_TIMER TimeSpecType profiler_timer; \
                     if (__builtin_expect(flag.show_time_comp_i != COMP_NONE, false)) clock_gettime(CLOCK_REALTIME, &profiler_timer); 
 
-#define CHECK_TIMER CHECK_TIMER_ALWAYS
-
 extern void show_time_one (VBlockP vb, rom res, uint64_t delta);
 #define COPY_TIMER_FULL(vb,res,atomic) ({ /* str - print in case of specific show-time=<res> */ \
-    if (HAS_SHOW_TIME(vb)) { \
-        uint64_t delta = CHECK_TIMER; \
-        if (flag.show_time[0] && !strcmp (#res, flag.show_time)) \
-            show_time_one ((VBlockP)(vb), #res, delta);\
-        if (atomic) { \
-            add_relaxed ((vb)->profile.nanosecs.res, delta); \
-            increment_relaxed ((vb)->profile.count.res); \
-        } \
-        else { \
-            (vb)->profile.nanosecs.res += delta; \
-            (vb)->profile.count.res++; \
-        } \
-    } \
+    if (HAS_SHOW_TIME(vb)) {                                        \
+        uint64_t delta = CHECK_TIMER;                               \
+        if (flag.show_time[0] && !strcmp (#res, flag.show_time))    \
+            show_time_one ((VBlockP)(vb), #res, delta);             \
+        if (atomic) { /* note: this if statement is optimized away and only the requested branch survives */ \
+            add_relaxed ((vb)->profile.nanosecs.res, delta);        \
+            increment_relaxed ((vb)->profile.count.res);            \
+        }                                                           \
+        else {                                                      \
+            (vb)->profile.nanosecs.res += delta;                    \
+            (vb)->profile.count.res++;                              \
+        }                                                           \
+    }                                                               \
 })
 
 #define COPY_TIMER(res) COPY_TIMER_FULL(vb, res, false)
 #define COPY_TIMER_EVB(res) ({ if (evb) COPY_TIMER_FULL(evb, res, true); })
 #define COPY_TIMER_COMPRESS(res)  ({ if (!in_assign_codec) COPY_TIMER(res); }) // account only if not running from codec_assign_best_codec, because it accounts for itself
 
-#define PAUSE_TIMER(vb) \
-    TimeSpecType on_hold_timer; \
-    rom save_name=0, save_subname=0; \
-    if (HAS_SHOW_TIME(vb)) { \
-        clock_gettime(CLOCK_REALTIME, &on_hold_timer); \
-        save_name = vb->profile.next_name; \
-        save_subname = vb->profile.next_subname; \
+#define PAUSE_TIMER(vb)                                 \
+    TimeSpecType on_hold_timer;                         \
+    rom save_name=NULL, save_subname;                   \
+    if (HAS_SHOW_TIME(vb)) {                            \
+        clock_gettime(CLOCK_REALTIME, &on_hold_timer);  \
+        save_name    = vb->profile.next_name;           \
+        save_subname = vb->profile.next_subname;        \
     }
 
-#define RESUME_TIMER(vb,res)\
-    if (HAS_SHOW_TIME(vb)) { \
-        TimeSpecType tb; \
-        clock_gettime(CLOCK_REALTIME, &tb); \
-        vb->profile.next_name = save_name; \
-        vb->profile.next_subname = save_subname; \
+#define RESUME_TIMER(vb,res)                            \
+    if (__builtin_expect(save_name != NULL, false)) {   \
+        TimeSpecType tb;                                \
+        clock_gettime(CLOCK_REALTIME, &tb);             \
+        vb->profile.next_name = save_name;              \
+        vb->profile.next_subname = save_subname;        \
         (vb)->profile.nanosecs.res -= (tb.tv_sec-on_hold_timer.tv_sec)*1000000000ULL + ((int64_t)tb.tv_nsec-(int64_t)on_hold_timer.tv_nsec); \
     } 
 
-#define PRINT_TIMER(str) { TimeSpecType tb; \
+#define PRINT_TIMER(str) { TimeSpecType tb;             \
                            clock_gettime(CLOCK_REALTIME, &tb); \
                            iprintf ("%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
 

@@ -87,7 +87,7 @@ void sam_qual_produce_huffman (VBlockSAMP vb)
     // create huffman compressor for QUAL based on segconf data
     huffman_start_chewing (SAM_QUAL, 0, 0, 0, 1);
 
-    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
+    for_line {
         ZipDataLineSAMP dl = DATA_LINE(line_i);
         if (dl->no_qual) continue;
 
@@ -298,7 +298,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
     }
 
     // case: bad QUAL
-    else if (!vb->qual_missing && !str_is_in_range (STRa(qual), 33, 126)) {
+    else if (!vb->qual_missing && !str_is_qual_scores (STRa(qual))) {
         dl->dont_compress_QUAL = true; // this line is excluded from the usual QUAL codec compression
         bad_qual = true;
         seg_add_to_local_fixed (VB, CTX(SAM_BADQUAL), STRa(qual), LOOKUP_NONE, add_bytes); 

@@ -252,10 +252,13 @@ Codec codec_assign_best_codec (VBlockP vb,
     CodecTest tests[] = { { CODEC_NONE }, 
                           { CODEC_RANB }, { CODEC_RANW }, { CODEC_RANb }, { CODEC_RANw }, 
                           { CODEC_ARTB }, { CODEC_ARTW }, { CODEC_ARTb }, { CODEC_ARTw },
-                          { CODEC_BZ2 }, { CODEC_BSC }, { CODEC_LZMA } }; 
+                          { CODEC_BZ2  }, { CODEC_BSC  }, { CODEC_LZMA } }; 
     
     // don't allow LZMA or BSC in buffers being compressed in the main thread - too slow (unless --best)
-    const unsigned num_tests = ARRAY_LEN(tests) - (flag.best ? 0 : 2*(vb == evb)); 
+    unsigned num_tests = ARRAY_LEN(tests) - (flag.best ? 0 : 2*(vb == evb)); 
+
+    if (flag.no_lzma && num_tests == ARRAY_LEN(tests))
+        num_tests--;
 
     // set data
     if (!data)
@@ -365,7 +368,7 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
             case CODEC_LONGR : codec_longr_comp_init (vb, did_i, true);           break;
             case CODEC_SMUX  : codec_smux_comp_init  (vb, did_i, callback, true); break;
             case CODEC_PACB  : codec_pacb_comp_init  (vb, did_i, callback, true); break;
-            case CODEC_HOMP  : codec_homp_comp_init  (vb, did_i, callback, true); break;
+            case CODEC_HOMP  : codec_homp_comp_init  (vb, did_i, callback, true); break; 
             case CODEC_DOMQ  : codec_domq_comp_init  (vb, did_i, callback, true); break;
             case CODEC_NORMQ : codec_normq_comp_init (vb, did_i, maybe_revcomped, true); break;
             default          : ABORT ("Can't force codec %s", codec_name (forced_codec));
@@ -444,9 +447,9 @@ void codec_qual_show_stats (void)
     uint32_t longr = z_file->longr_lines;
     uint32_t normq = z_file->normq_lines;
 
-    uint32_t other = z_file->num_lines - domq - divr - homp - pacb - longr - normq; 
+    int32_t other = z_file->num_lines - domq - divr - homp - pacb - longr - normq; // allow negative to catch bugs
 
-    iprintf ("\nQUAL codec stats (# lines): DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) LONGR=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%u (%.1f%%)\n",
+    iprintf ("\nQUAL codec stats (# lines): DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) LONGR=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%d (%.1f%%)\n",
              domq,  percent (domq,  z_file->num_lines), 
              divr,  percent (divr,  z_file->num_lines), 
              homp,  percent (homp,  z_file->num_lines), 
@@ -454,6 +457,8 @@ void codec_qual_show_stats (void)
              longr, percent (longr, z_file->num_lines), 
              normq, percent (normq, z_file->num_lines), 
              other, percent (other, z_file->num_lines));
+
+    ASSERT (other >= 0, "expected other=%d >= 0", other);
 }
 
 UNCOMPRESS (codec_hapmat_uncompress)

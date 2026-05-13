@@ -115,6 +115,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (txtheader_compress, 2);
         PRINT (txtheader_compress_one_fragment, 3); 
         PRINT (digest_txt_header, 2);
+        PRINT (segconf_calculate, 1);
         PRINT (sam_sag_by_flag_scan_for_depn, 1);
         PRINT (sam_sag_by_flag_scan_sag_depn_index, 2);
         PRINT (sam_sag_by_flag_scan_sort_qname_index, 2);
@@ -210,9 +211,11 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_analyze_copied_SEQ, 3);
         PRINT (aligner_seg_seq, 3);
         PRINT (aligner_best_match, 4);
-        PRINT (aligner_tight_loop, 5);
+        PRINT (aligner_best_match_FLAT_search, 5);
+        PRINT (aligner_best_match_FLAT_search2, 5);
         PRINT (aligner_update_best, 5);
         PRINT (aligner_seq_to_bitmap, 5);
+        PRINT (aligner_get_junction, 5);
         PRINT (fastq_seg_DESC, 2);
         PRINT (fastq_seg_saux, 2);
         if (!flag.bam_assist) PRINT (bam_seq_to_sam, 2);
@@ -240,7 +243,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_seg_BX_Z, 3);
         PRINT (sam_seg_QX_Z, 3);
         PRINT (sam_seg_BC_Z, 3);
-        PRINT (sam_seg_gene_name_id, 3);
+        PRINT (sam_seg_GX_GN, 3);
         PRINT (sam_seg_fx_Z, 3);
         PRINT (sam_seg_other_seq, 3);
         PRINT (sam_seg_GR_Z, 3);

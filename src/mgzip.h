@@ -9,6 +9,8 @@
 #include "sections.h"
 #include "flags.h"
 
+// See: "Dev Docs" → "FASTQ gz formats"
+
 #define IS_BGZF(codec)  ((codec)==CODEC_BGZF)
 #define IS_MGZF(codec)  ((codec)==CODEC_MGZF)
 #define IS_MGSP(codec)  ((codec)==CODEC_MGSP)
@@ -16,6 +18,7 @@
 #define IS_IL4M(codec)  ((codec)==CODEC_IL4M)
 #define IS_EMFL(codec)  ((codec)==CODEC_EMFL)
 #define IS_EMVL(codec)  ((codec)==CODEC_EMVL)
+#define IS_GZBL(codec)  ((codec)==CODEC_GZBL)
 #define IS_GZ(codec)    ((codec)==CODEC_GZ)
 #define IS_BZ2(codec)   ((codec)==CODEC_BZ2)
 #define IS_NONE(codec)  ((codec)==CODEC_NONE)
@@ -27,6 +30,7 @@
 #define IS_VB_SIZE_BY_BLOCK(codec) (IS_MGZF(codec) || IS_EMVL(codec))             // codecs that are all of these: 1. variable-length 2. reads are never split between blocks 3. we use one VB per gz block
 #define IS_VB_SIZE_BY_MGZIP(codec) (IS_VB_SIZE_BY_BLOCK(codec) || IS_MGSP(codec)) // like IS_VB_SIZE_BY_BLOCK, but VB can be a group of gz blocks
 #define GZ_HEADER_HAS_BSIZE(codec) (IS_BGZF(codec) || IS_MGZF(codec)) // gz header contains bsize
+#define VAR_LENGTH_NO_BSIZE(codec) (IS_GZBL(codec) || IS_EMVL(codec))
 #define IS_EXACTABLE(codec)        (IS_BGZF(codec)) // codecs for which we can we discover library⁀level and can reconstruct exactly  
 
 #define TXT_IS(c)               (txt_file->effective_codec == CODEC_##c)
@@ -50,7 +54,6 @@
 
 #define ILxM_PREFIX "\x1f\x8b\x08\x00\x00\x00\x00\x00" // first 8 bytes of ILxM gz header, to be followed by XFL (can be 0,2,4) and OS (3)
 #define ILxM_PREFIX_LEN 8 
-#define ILxM_HEADER_LEN 10
 #define IL1M_ISIZE  "\x00\x00\x10\x00" // isize == 1MB in most blocks (except the last, and mid-blocks due to file concatenation)
 #define IL4M_ISIZE  "\x00\x00\x40\x00" // isize == 4MB 
 
@@ -63,7 +66,6 @@
 
 // MGI: constant isize for all gz blocks that go into a particular VB (last block in group might slightly bigger)
 #define MGSP_HEADER     "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03"
-#define MGSP_HEADER_LEN 10
 #define MGSP_EOF_LEN    20
 #define MGSP_EOF MGSP_HEADER BGZF_EOF_CDATA BGZF_EMPTY_BLK_CRC_ISIZE
 
@@ -71,12 +73,8 @@
 #define MGSB_HEADER "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"
 
 // Element: constant isize of all gz blocks in file (last block might be smaller)
-#define EMFL_HEADER_LEN 10
-
 #define EMVL_HEADER "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff"
-#define EMVL_HEADER_LEN 10
 #define EMVL_FIRST_BLOCK EMVL_HEADER "\x01\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00" // EMVL files begin with this empty block and have no EOF block
-
 
 typedef bool (*IsValidSize)(FileP, uint32_t proposed_isize, bool is_eof, bool discovering, bool *is_end_of_vb);
 

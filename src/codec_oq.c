@@ -30,7 +30,7 @@
 bool codec_oq_comp_init (VBlockP vb)
 {
     // verify that OQ can be segged against QUAL (i.e. QUAL exists iff OQ exists)
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {
+    for_line {
         ZipDataLineSAMP dl = DATA_LINE (line_i);
         if (dl->OQ && dl->SEQ.len != dl->QUAL.len) return false;
     }
@@ -59,7 +59,7 @@ COMPRESS (codec_oq_compress)
 
     // first pass - count qual scores to allocate memory and allocate txt_len
     int32_t count_q[NUM_OQ_CTXS] = {};
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         ZipDataLineSAMP dl = DATA_LINE (line_i);
         txtSTR (qual, dl->QUAL);
 
@@ -85,7 +85,7 @@ COMPRESS (codec_oq_compress)
     }
 
     // second pass - seg OQ into channels - mux by QUAL
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         ZipDataLineSAMP dl = DATA_LINE (line_i);
         txtSTR (qual, dl->QUAL);
         rom oq = Btxt(dl->OQ);

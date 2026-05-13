@@ -1012,6 +1012,9 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
             if (is_genocat) exit_ok; // in genocat, exit after showing the requested data
         }
 
+        if (flag.show_txt_offsets) // genocat only
+            genocat_show_txt_offsets(); // doesn't return
+
         z_file->section_list.param = 1;
     }
 

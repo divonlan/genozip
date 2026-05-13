@@ -148,7 +148,7 @@ void codec_smux_calc_stats (VBlockP vb)
 }
 
 // ZIP: called for QUAL-like dids
-bool codec_smux_maybe_used (Did did_i)
+static bool codec_smux_maybe_used (Did did_i)
 {
     #define SMUX_STDV_THREADHOLD 0.08 // between 0 and 1. The higher this is, the more drastic differences between the quality histogram associated with each base is needed to qualify for SMUX
 
@@ -192,7 +192,7 @@ COMPRESS (codec_smux_compress)
     bool is_rev;
 
     // first pass - count bases to allocate memory and allocate txt_len
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         get_line_cb (vb, ctx, line_i, pSTRa(qual), CALLBACK_NO_SIZE_LIMIT, NULL);
         if (!qual_len) continue;
 
@@ -219,7 +219,7 @@ COMPRESS (codec_smux_compress)
     }
 
     // second pass - move each qual base to its correct A,C,G,T or N context.
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         
         get_line_cb (vb, ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
         if (!qual_len) continue;

@@ -32,15 +32,15 @@
 #define LAST_Q  126 // last printable ascii
 #define NUM_Qs (LAST_Q-FIRST_Q+1)
 
-#define declare_domq_contexts(ctx)                                \
-             qual_ctx     __attribute__((unused)) = (ctx);        \
-    ContextP domqruns_ctx __attribute__((unused)) = qual_ctx + 1; \
-    ContextP qualmplx_ctx __attribute__((unused)) = qual_ctx + 2; \
-    ContextP divrqual_ctx __attribute__((unused)) = qual_ctx + 3
+#define declare_domq_contexts(ctx)               \
+             qual_ctx     UNUSED = (ctx);        \
+    ContextP domqruns_ctx UNUSED = qual_ctx + 1; \
+    ContextP qualmplx_ctx UNUSED = qual_ctx + 2; \
+    ContextP divrqual_ctx UNUSED = qual_ctx + 3
  
-static void show_denormalize (VBlockP vb, bytes denormalize, const uint32_t lines_with_dom[NUM_Qs], rom cdom_to_dom, uint8_t width, uint8_t num_cdoms)
+static void show_denormalize (VBlockP vb, ContextP qual_ctx, bytes denormalize, const uint32_t lines_with_dom[NUM_Qs], rom cdom_to_dom, uint8_t width, uint8_t num_cdoms)
 {
-    iprintf ("%s: Doms present and the normalized QUAL values in each dom:\n", VB_NAME);
+    iprintf ("%s: %s Doms present and the normalized values in each dom:\n", VB_NAME, qual_ctx->tag_name);
 
     for (uint8_t cdom=0; cdom < num_cdoms; cdom++) {
         if (cdom_to_dom)
@@ -173,7 +173,8 @@ static void codec_domq_calc_histogram (VBlockP vb, ContextP qual_ctx, ContextP d
     }
 
     if (flag.show_qual) 
-        iprintf ("\nDOMQ: %s: %u/%u dom-encoded qual scores (%1.1f%%)\n", VB_NAME, n_dom_encoded_scores, n_scores, percent (n_dom_encoded_scores, n_scores));
+        iprintf ("\nDOMQ: %s: %s %u/%u dom-encoded qual scores (%1.1f%%)\n", 
+                 VB_NAME, qual_ctx->tag_name, n_dom_encoded_scores, n_scores, percent (n_dom_encoded_scores, n_scores));
 }
 
 static uint8_t inline codec_domq_compact_histogram (uint32_t histogram[NUM_Qs][NUM_Qs], uint32_t lines_with_dom[NUM_Qs], 
@@ -286,7 +287,7 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, ContextP ctx, LocalGetL
             ql->dom = dom_to_cdom[ql->dom]; // ql->dom is now cdom
 
     if (flag.show_qual) 
-        show_denormalize (vb, (uint8_t*)denormalize, lines_with_dom, cdom_to_dom, NUM_Qs, num_cdoms);
+        show_denormalize (vb, ctx, (uint8_t*)denormalize, lines_with_dom, cdom_to_dom, NUM_Qs, num_cdoms);
 
     return num_norm_qs; 
 }
@@ -321,9 +322,9 @@ bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
         return false; // sampled VB qual scores not a good fit for domqual
 }
 
-static void codec_domq_show_normalized_qual_histogram (VBlockP vb, ContextP domqruns_ctx)
+static void codec_domq_show_normalized_qual_histogram (VBlockP vb, ContextP qual_ctx, ContextP domqruns_ctx)
 {
-    iprintf ("%s: QUAL histogram after normalization:", VB_NAME);
+    iprintf ("%s: %s histogram after normalization:", VB_NAME, qual_ctx->tag_name);
 
     uint32_t hgram[NUM_Qs] = {}, total=0;
     for_buf2 (DomqLine, ql, line_i, ql_buf) {
@@ -361,7 +362,7 @@ static void codec_domq_normalize_qual (VBlockP vb, ContextP qual_ctx, ContextP d
     }
 
     if (flag.show_qual) 
-        codec_domq_show_normalized_qual_histogram (vb, domqruns_ctx);
+        codec_domq_show_normalized_qual_histogram (vb, qual_ctx, domqruns_ctx);
 }
 
 static inline void codec_domq_add_runs (BufferP qdomruns_buf, uint32_t runlen)
@@ -485,9 +486,11 @@ COMPRESS (codec_domq_compress)
         buf_free (vb->scratch);
     }
 
-    add_relaxed (z_file->divr_lines, n_divr_lines);
-    add_relaxed (z_file->domq_lines, vb->lines.len - n_divr_lines);
-
+    if (ctx->did_i == SAM_QUAL/*==FASTQ_QUAL*/) {
+        add_relaxed (z_file->divr_lines, n_divr_lines);
+        add_relaxed (z_file->domq_lines, vb->lines.len - n_divr_lines);
+    }
+    
     qual_ctx->lcodec = CODEC_UNKNOWN;
     
     // all diverse - compress 1 byte in local anyway, just so codec_domq_reconstruct gets called
@@ -644,7 +647,7 @@ bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx, uint8_t dom_
         domqruns_ctx->domq_denorm.len32 = base64_decode (snip, &snip_len, B1ST8(domqruns_ctx->domq_denorm), -1);
 
         if (flag.show_qual)
-            show_denormalize (vb, B1ST8(domqruns_ctx->domq_denorm), NULL, NULL, num_norm_qs, domqruns_ctx->domq_denorm.len32 / (uint32_t)num_norm_qs);
+            show_denormalize (vb, domqruns_ctx-1, B1ST8(domqruns_ctx->domq_denorm), NULL, NULL, num_norm_qs, domqruns_ctx->domq_denorm.len32 / (uint32_t)num_norm_qs);
     }
 
     return B8(domqruns_ctx->domq_denorm, (uint32_t)dom_i * (uint32_t)num_norm_qs);    

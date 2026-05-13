@@ -15,7 +15,7 @@
 #define BAM_MAGIC  "BAM\1" // first 4 bytes of a BAM file
 #define CRAM_MAGIC "CRAM"  // first 4 bytes of a CRAM file
 
-typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields __attribute__((unused)); // quick way to define constants
+typedef enum { QNAME, FLAG, RNAME, POS, MAPQ, CIGAR, RNEXT, PNEXT, TLEN, SEQ, QUAL, AUX } SamFields UNUSED; // quick way to define constants
 
 #define MAX_POS_SAM MAX_POS32 // according to SAM specification
 

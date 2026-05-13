@@ -199,9 +199,12 @@ typedef struct {
     Buffer section_list;          /* ZIP: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     union { \
     uint32_t num_sequences;       /* ZIP: FASTA: num DESC lines encountered in this VB */ \
-    uint32_t num_perfect_matches; /* ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
+    uint32_t num_aligned_perfect; /* ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
     }; \
     uint32_t num_aligned;         /* ZIP: SAM/BAM/FASTQ: number of lines successfully aligned by the aligner. for stats */ \
+    uint32_t num_aligned_spliced; /* ZIP: SAM/BAM/FASTQ: number of lines successfully aligned by the aligner. for stats */ \
+    uint32_t num_perfect_spliced; /* ZIP: SAM/BAM/FASTQ: spliced without mismatches */ \
+    uint32_t num_perfect_r2;      /* ZIP: FASTQ: subset of num_aligned_perfect which come from R2.  */ \
     uint32_t num_verbatim;        /* ZIP: SAM/BAM/FASTQ number of lines with SEQ stored verbatim. for stats */ \
     \
     /* copies of the values in flag, for flags that may change during the execution */\
@@ -285,3 +288,6 @@ static inline uint32_t get_vb_size (DataType dt)
 
 extern void vb_add_to_deferred_q (VBlockP vb, ContextP ctx, DeferredSeg seg, int16_t idx, Did seg_after_did_i);
 extern void vb_display_deferred_q (VBlockP vb, rom func);
+
+#define for_line \
+    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++)

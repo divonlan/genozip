@@ -24,6 +24,7 @@
 #include "mgzip.h"
 #include "huffman.h"
 #include "sorter.h"
+#include "fastq.h"
 
 #define SHORT_HEADER "NAME                   GENOZIP      %       TXT      %   RATIO\n"
 
@@ -142,6 +143,15 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
 
     if (segconf.sam_malformed_XA[0]) 
         bufprintf (evb, &exceptions, "%sBAD_XA,%s", (need_sep++ ? ";" : ""), str_replace_letter (segconf.sam_malformed_XA, strlen(segconf.sam_malformed_XA),  ',', -127)); 
+
+    // nonbio linkers, but unrecognized format
+    int n_linkers = fastq_nonbio_get_n_linkers();
+    if (n_linkers && !segconf.nonbio_type) {
+        bufprintf (evb, &exceptions, "%sNonbio_Linkers,,", need_sep++ ? ";" : "");
+
+        for (int i=0; i < n_linkers + 1/*umi*/; i++)
+            bufprintf (evb, &exceptions, ",%s", fastq_nonbio_get_linker_for_stats(i).s); 
+    }
 }
 
 // stats of contexts and sections contribution to Z
@@ -370,6 +380,7 @@ static void stats_output_file_metadata (void)
 
             FEATURE0 (segconf.sam_bisulfite, "Feature: Bisulfite", "Bisulfite");
             FEATURE0 (segconf.has_10xGen, "Feature: 10xGenomics_tags", "has_10xGen");
+            FEATURE0 (segconf.has_Parse, "Feature: Parse_tags", "has_Parse");
 
             if (segconf.sam_ms_type) {
                 rom names[] = ms_type_NAME;
@@ -418,7 +429,7 @@ static void stats_output_file_metadata (void)
                     bufprintf (evb, &features, "seq_by_prim=%.1f%%;", percent (z_file->sam_num_by_prim, num_alignments)); 
 
                 if (z_file->sam_num_aligned)    // seg SEQ vs external reference using our aligner
-                    bufprintf (evb, &features, "seq_by_aligner (perfect)=%.1f%% (%.1f%%);", percent (z_file->sam_num_aligned, num_alignments), percent (z_file->sam_num_perfect_matches, num_alignments)); // report even if num_aligned=0 (i.e. wrong reference)           
+                    bufprintf (evb, &features, "seq_by_aligner (perfect)=%.1f%% (%.1f%%);", percent (z_file->sam_num_aligned, num_alignments), percent (z_file->sam_num_aligned_perfect, num_alignments)); // report even if num_aligned=0 (i.e. wrong reference)           
 
                 if (z_file->sam_num_verbatim)   // seg SEQ by storing verbatim
                     bufprintf (evb, &features, "seq_by_verbatim=%.1f%%;", percent (z_file->sam_num_verbatim, num_alignments));
@@ -432,7 +443,11 @@ static void stats_output_file_metadata (void)
                     bufprintf (evb, &features, "fq_deep=%.1f%%;", percent (z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM], num_fq_reads));
 
                 if (z_file->fq_num_aligned)
-                    bufprintf (evb, &features, "fq_aligner_ok (perfect)=%.1f%% (%.1f%%);", percent (z_file->fq_num_aligned, num_fq_reads), percent (z_file->fq_num_perfect_matches, num_fq_reads)); // report even if num_aligned=0 (i.e. wrong reference)           
+                    bufprintf (evb, &features, "fq_aligner_ok (perfect|spliced|per&spl)=%.1f%% (%.1f%% | %.1f%% | %.1f%%);", 
+                               percent (z_file->fq_num_aligned, num_fq_reads), 
+                               percent (z_file->fq_num_aligned_perfect, num_fq_reads),  // this includes all perfect matches - spliced or not
+                               percent (z_file->fq_num_aligned_spliced, num_fq_reads),  // this includes all spliced matches - perfect or not
+                               percent (z_file->fq_num_perfect_spliced, num_fq_reads)); // report even if num_aligned=0 (i.e. wrong reference)           
 
                 if (z_file->fq_num_verbatim)
                     bufprintf (evb, &features, "fq_verbatim=%.1f%%;", percent (z_file->fq_num_verbatim, num_fq_reads));
@@ -457,6 +472,7 @@ static void stats_output_file_metadata (void)
             FEATURE0 (FAF, "FASTA-as-FASTQ", "FASTA-as-FASTQ=True");
             FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
             FEATURE0 (segconf.is_interleaved, "Interleaved", "interleaved=True");
+            if (segconf.nonbio_type) bufprintf (evb, &features, "nonbio_type=%s;", fastq_nonbio_type_name());
 
             double bamass_pc = percent (z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM], z_file->deep_stats[NDP_FQ_READS]);
 
@@ -479,13 +495,19 @@ static void stats_output_file_metadata (void)
                 bufprintf (evb, &features, "bamass=%.1f%%;", bamass_pc);
 
             if (z_file->fq_num_aligned) 
-                bufprintf (evb, &features, "aligner_ok (perfect)=%.1f%% (%.1f%%);", percent (z_file->fq_num_aligned, z_file->num_lines), percent (z_file->fq_num_perfect_matches, z_file->num_lines)); // report even if num_aligned=0 (i.e. wrong reference)           
-
+                bufprintf (evb, &features, "aligned (perfect|spliced|per&spl)=%.1f%% (%.1f%% | %.1f%% | %.1f%%);",
+                           percent (z_file->fq_num_aligned,         z_file->num_lines), 
+                           percent (z_file->fq_num_aligned_perfect, z_file->num_lines),  // this includes all perfect matches - spliced or not
+                           percent (z_file->fq_num_aligned_spliced, z_file->num_lines),  // this includes all spliced matches - perfect or not
+                           percent (z_file->fq_num_perfect_spliced, z_file->num_lines)); // argument ignored if !fq_num_nonbio
             if (z_file->fq_num_monochar) 
                 bufprintf (evb, &features, "monochar=%.1f%%;", percent (z_file->fq_num_monochar, z_file->num_lines));
 
             if (z_file->fq_num_empty_read) 
                 bufprintf (evb, &features, "empty_read=%.1f%%;", percent (z_file->fq_num_empty_read, z_file->num_lines));
+
+            if (z_file->fq_num_nonbio) 
+                bufprintf (evb, &features, "nonbio=%.1f%%;", percent (z_file->fq_num_nonbio, z_file->num_lines));
 
             if (z_file->fq_num_verbatim)
                 bufprintf (evb, &features, "verbatim=%.1f%%;", percent (z_file->fq_num_verbatim, z_file->num_lines));
@@ -755,8 +777,8 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
 
     // add diagnostic info
     if (flag.show_stats_comp_i == COMP_NONE) {
-        bufprintf (evb, &STATS, "\nSystem info: OS=%s cores=%u endianity=%s\n", 
-                   arch_get_os(), arch_get_num_cores(), arch_get_endianity());
+        bufprintf (evb, &STATS, "\nSystem info: OS=%s cores=%u RAM=%1.1f GB\n", 
+                   arch_get_os(), arch_get_num_cores(), arch_get_physical_mem_size());
         bufprintf (evb, &STATS, "\nSections (sorted by %% of genozip file):%s\n", "");
     }
 
@@ -784,7 +806,7 @@ static void stats_output_STATS (StatsByLine *s, unsigned num_stats,
         bufprintf (evb, &STATS, "TOTAL                                                                               "
                 "%9s %9s %9s %9s %9s %9s %6.1fX %5.1f%% %5.1f%%\n", 
                 str_size (all_uncomp_dict).s, str_size (all_comp_dict).s, str_size (all_comp_b250).s, 
-                str_size (all_comp_local).s,   str_size (all_z_size).s,    str_size (all_txt_len).s, 
+                str_size (all_comp_local).s,  str_size (all_z_size).s,    str_size (all_txt_len).s, 
                 all_comp_ratio, all_pc_of_txt, all_pc_of_z);
 }
 
@@ -925,7 +947,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
                                ST_NAME (SEC_REF_CONTIGS), ST_NAME (SEC_CHROM2REF_MAP),
                                ST_NAME (SEC_REF_IUPACS));
 
-    stats_consolidate_non_ctx (sbl, sbl_buf.len32, "Other", 19 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
+    stats_consolidate_non_ctx (sbl, sbl_buf.len32, "Other", 20 + (DTPZ(txt_header_required) == HDR_NONE), "E1L", "E2L", "EOL", 
                                "SAMPLES", "AUX", TOPLEVEL, "TOP2BAM", "TOP2NONE", "TOP2VCF", "BAM_BIN", "LINEMETA", "CONTIG", "SAG", "SAALN",
                                ST_NAME (SEC_DICT_ID_ALIASES), ST_NAME (SEC_RECON_PLAN), ST_NAME (SEC_GENCOMP),
                                ST_NAME (SEC_VB_HEADER), ST_NAME (SEC_GZ_ISIZES), ST_NAME (SEC_GZ_DIGESTS), ST_NAME(SEC_TXT_HEADER)/*must be last*/);
@@ -956,7 +978,8 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     // expected to be the sum of txt_len. However, this NOT the size of the original file which is stored in
     // z_file->txt_data_so_far_bind_0.
     ASSERT (!flag.debug_or_test || flag.show_stats_comp_i != COMP_NONE || all_txt_len == txt_size || segconf.zip_txt_modified || flag.make_reference, 
-            "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d)", 
+            "Hmm... incorrect calculation for %s sizes: total section sizes=%s but file size is %s (diff=%d). "
+            _TIP"Use --debug-recon-size for debugging this", 
             z_dt_name(), str_int_commas (all_txt_len).s, str_int_commas (txt_size).s, 
             (int32_t)(txt_size - all_txt_len)); 
 
@@ -1041,7 +1064,8 @@ void stats_finalize (void)
     all_txt_len = 0;
     src_comp_ratio = all_comp_ratio = 0;    
 }
- 
+
+// called if --show-seg-summary
 void stats_show_seg_summary (void)
 {
     ASSERTNOTNULL (z_file);
@@ -1061,19 +1085,33 @@ void stats_show_seg_summary (void)
     else if (Z_DT(VCF))
         num_samples = z_file->num_lines * vcf_header_get_num_samples();
 
-    #define SUMMARIZE(x, total) if (z_file->x && total) iprintf (#x "=%"PRIu64" (%1.1f%%)\n", z_file->x, percent (z_file->x, total));
-    SUMMARIZE(sam_num_seq_by_aln, num_alignments);
-    SUMMARIZE(sam_num_perfect_matches, num_alignments);
-    SUMMARIZE(sam_num_aligned, num_alignments);
-    SUMMARIZE(sam_num_verbatim, num_alignments);
-    SUMMARIZE(sam_num_by_prim, num_alignments);
-    SUMMARIZE(sam_num_tlen_pred, num_alignments);
-    SUMMARIZE(fq_num_aligned, num_fq_reads);
-    SUMMARIZE(fq_num_perfect_matches, num_fq_reads);
-    SUMMARIZE(fq_num_verbatim, num_fq_reads);
-    SUMMARIZE(fq_num_monochar, num_fq_reads);
-    SUMMARIZE(fq_num_empty_read, num_fq_reads);
-    SUMMARIZE(vcf_num_samples_copied, num_samples);
+    iprint0 ("\nSeg summary:\n");
+
+    #define SUMMARIZE(x, total, level)        if (z_file->x && (total)) iprintf ("%.*s" #x "=%"PRIu64" (%1.1f%%)\n", level*2, "          ",         z_file->x, percent (z_file->x, total));
+    #define SUMMARIZE_(x, total, level, name) if (z_file->x && (total)) iprintf ("%.*s%s=%"PRIu64" (%1.1f%%)\n",    level*2, "          ", (name), z_file->x, percent (z_file->x, total));
+    if (num_alignments) iprintf ("sam_num_alignments=%"PRIu64" (100%%)\n", num_alignments);
+    SUMMARIZE(sam_num_seq_by_aln,       num_alignments, 1);
+    SUMMARIZE(sam_num_aligned,          num_alignments, 1);
+    SUMMARIZE(sam_num_aligned_perfect,  num_alignments, 2);
+    SUMMARIZE(sam_num_verbatim,         num_alignments, 1);
+    SUMMARIZE(sam_num_by_prim,          num_alignments, 1);
+    SUMMARIZE(sam_num_tlen_pred,        num_alignments, 1);
+    
+    if (num_fq_reads) iprintf ("fq_num_reads=%"PRIu64" (100%%)\n", num_fq_reads);
+    SUMMARIZE_(deep_stats[NDP_DEEPABLE],      num_fq_reads, 1, (flag.bam_assist ? "fq_num_bamass" : "fq_num_deep"));
+    SUMMARIZE_(deep_stats[NDP_DEEPABLE_TRIM], num_fq_reads, 1, (flag.bam_assist ? "fq_num_bamass_trim" : "fq_num_deep_trim"));
+    SUMMARIZE(fq_num_nonbio,            num_fq_reads, 1);
+    SUMMARIZE(fq_num_aligned,           num_fq_reads, 1);
+    SUMMARIZE(fq_num_aligned_perfect,   num_fq_reads, 2);
+    SUMMARIZE(fq_num_perfect_r2,        num_fq_reads, 3);
+    SUMMARIZE(fq_num_r2_gpos_Δ,         num_fq_reads, 2);
+    SUMMARIZE(fq_num_aligned_spliced,   num_fq_reads, 2);
+    SUMMARIZE(fq_num_perfect_spliced,   num_fq_reads, 3);
+    SUMMARIZE(fq_num_monochar,          num_fq_reads, 1);
+    SUMMARIZE(fq_num_verbatim,          num_fq_reads, 1);
+    SUMMARIZE(fq_num_empty_read,        num_fq_reads, 1);
+    
+    SUMMARIZE(vcf_num_samples_copied,   num_samples,  1);
 
     // TO DO: add deep, bamass summaries
 }

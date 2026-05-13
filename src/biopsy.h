@@ -15,3 +15,7 @@ extern void biopsy_take (VBlockP vb);
 extern bool biopsy_is_done (void);
 extern void biopsy_data_is_exhausted (void);
 extern void biopsy_finalize (void);
+
+extern void biopsy_bytes_init (rom optarg);
+extern void noreturn biopsy_bytes (rom filename);
+

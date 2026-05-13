@@ -394,7 +394,7 @@ int stream_wait_for_exit (StreamP stream,
     stream->exit_status = WIFEXITED (exit_status) ? WEXITSTATUS (exit_status) : exit_status;
 
     ASSERTW (killed || WIFEXITED (exit_status), "Child process pid=%d exited abnormally (i.e. not via exit()). I waited for it %u milliseconds",          
-             stream->pid, (unsigned)(CHECK_TIMER_ALWAYS / 1000000ULL));
+             stream->pid, (unsigned)(CHECK_TIMER / 1000000ULL));
 
     // in Windows, the main process fails to CreateProcess it exits. In Unix, it is the child process that 
     // fails to execv, and exits and code EXIT_STREAM. The main process catches it here, and exits silently.

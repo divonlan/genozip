@@ -17,7 +17,6 @@
 #include "contigs.h"
 #include "stats.h"
 #include "arch.h"
-#include "tip.h"
 #include "bai.h"
 
 // globals
@@ -423,17 +422,17 @@ static void sam_header_zip_inspect_RG_lines (BufferP txt_header)
 
                     static struct { rom name/*case insensitive*/; SeqTech tech; } PL_to_tech[] = {
                         // standard                       // observed non-standard
-                        { "Illumina",   TECH_ILLUM     }, 
+                        { "Illumina",   TECH_ILLUMINA  }, 
                         { "DNBSEQ",     TECH_MGI       }, { "mgi", TECH_MGI },
                         { "PacBio",     TECH_PACBIO    }, 
                         { "Ultima",     TECH_ULTIMA    }, 
                         { "ONT",        TECH_NANOPORE  }, 
                         { "IonTorrent", TECH_IONTORR   }, 
                         { "Element",    TECH_ELEMENT   }, 
-                        { "Singular",   TECH_SINGLR    }, 
+                        { "Singular",   TECH_SINGULAR  }, 
                         { "Capillary",  TECH_CAPILLARY }, 
                         { "Helicos",    TECH_HELICOS   },  
-                        { "LS454",      TECH_LS454       }, 
+                        { "LS454",      TECH_LS454     }, 
                         { "SOLiD",      TECH_SOLID     }, 
                     };
                     

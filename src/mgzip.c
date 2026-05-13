@@ -23,22 +23,35 @@
 #include "writer.h"
 #include "gencomp.h"
 #include "strings.h"
-#include "tip.h"
 #include "codec.h"
+
+typedef union {
+    struct {
+        uint8_t text    : 1;
+        uint8_t hcrc    : 1;
+        uint8_t extra   : 1;
+        uint8_t name    : 1;
+        uint8_t comment : 1;
+        uint8_t unused  : 3;
+    };
+    uint8_t value;
+} GzipFlags;
 
 typedef struct __attribute__ ((packed, aligned(1))) GzipHeader { // 10 bytes
     uint8_t id1;    // Gzip id            - must be 31  (0x1f)
     uint8_t id2;    // Gzip id            - must be 139 (0x8b)
     uint8_t cm;     // Compression Method - must be 8
-    uint8_t flg;    // Flags              
+    GzipFlags flg;  // Flags              
     uint32_t mtime; // Modification Time  
     uint8_t xfl;    // eXtra Flags. Standard values: 0, 2=best compression 4=fastest compression
     uint8_t os;     // Operating System   - (e.g. Unix=3)
 } GzipHeader;
 
+#define GZ_HEADER_LEN 10
+
 // all data in Little Endian. Defined in https://datatracker.ietf.org/doc/html/rfc1952 and https://samtools.github.io/hts-specs/SAMv1.pdf
 typedef struct __attribute__ ((packed, aligned(1))) BgzfHeader { // 18 bytes
-    GzipHeader;     // note: flg=4 (FEXTRA)
+    GzipHeader;     // note: flg=4 (extra)
     uint16_t xlen;  // Size of extra fields - 6 if contain only BGZF (may be more)
     uint8_t si1;    // bsize field id - must be 66  (0x42)
     uint8_t si2;    // bsize field id - must be 67  (0x43)
@@ -48,7 +61,7 @@ typedef struct __attribute__ ((packed, aligned(1))) BgzfHeader { // 18 bytes
 
 // see: https://docs.google.com/document/d/11yeGa1HzXi96D3VTeMwReW2BzG9hmspyKFxx-yRpLPo/edit
 typedef struct __attribute__ ((packed, aligned(1))) MgzfHeader { // 29 bytes
-    GzipHeader;     // note: flg=20 (0x14) (FEXTRA | FCOMMENT); mtime=0; xfl=0; os=0xff
+    GzipHeader;     // note: flg=20 (0x14) (extra + comment); mtime=0; xfl=0; os=0xff
     uint16_t xlen;  // Size of extra fields - must be 8 
     uint8_t si1;    // bsize field id - must be (0x49)
     uint8_t si2;    // bsize field id - must be (0x47)
@@ -67,11 +80,12 @@ typedef struct __attribute__ ((packed, aligned(1))) GzipFooter {
 static const uint8_t mgzip_header_len[NUM_CODECS] = { 
     [CODEC_BGZF] = BGZF_HEADER_LEN,
     [CODEC_MGZF] = MGZF_HEADER_LEN,
-    [CODEC_EMFL] = EMFL_HEADER_LEN,
-    [CODEC_IL1M] = ILxM_HEADER_LEN,
-    [CODEC_IL4M] = ILxM_HEADER_LEN,
-    [CODEC_MGSP] = MGSP_HEADER_LEN,
-    [CODEC_EMVL] = STRLEN(EMVL_HEADER),
+    [CODEC_EMFL] = GZ_HEADER_LEN,
+    [CODEC_IL1M] = GZ_HEADER_LEN,
+    [CODEC_IL4M] = GZ_HEADER_LEN,
+    [CODEC_MGSP] = GZ_HEADER_LEN,
+    [CODEC_EMVL] = GZ_HEADER_LEN,
+    [CODEC_GZBL] = GZ_HEADER_LEN,
 };
 
 static const int igzip_level_buf_lens[ISAL_DEF_MAX_LEVEL+1] = 
@@ -430,13 +444,15 @@ static bool is_header_prefix (bytes header, STR8p(prefix))
 
 static GzStatus mgzip_block_verify_header (FileP file, // option 1
                                            FILE *fp, STR8p(h), // option 2
-                                           bool discovering, int header_len, STR8p(prefix))
+                                           bool discovering, GzipFlags expected_flg, STR8p(prefix))
 {
     if (file) {
         fp = (FILE *)file->file;
         h = B1ST8 (file->gz_data);
         h_len = file->gz_data.len32;
     }
+
+    GzipHeader *gz_header = (GzipHeader *)h;
 
     // no data at all
     if (h_len == 0 && feof (fp)) {
@@ -445,7 +461,7 @@ static GzStatus mgzip_block_verify_header (FileP file, // option 1
     }
     
     // truncated mid-way through header
-    if (h_len < header_len) {
+    if (h_len < GZ_HEADER_LEN) {
         if (discovering)
             return GZ_NOT_GZIP; // file smaller than a gzip header - its not GZIP
         
@@ -458,7 +474,7 @@ static GzStatus mgzip_block_verify_header (FileP file, // option 1
     }
 
     // case: this is not a GZIP block at all (see: https://tools.ietf.org/html/rfc1952)
-    else if (h[0] != 31 || h[1] != 139 || h[2] != 8) {
+    else if (gz_header->id1 != 31 || gz_header->id2 != 139 || gz_header->cm != 8) {
         if (discovering)
             return GZ_NOT_GZIP;
         else
@@ -466,8 +482,9 @@ static GzStatus mgzip_block_verify_header (FileP file, // option 1
                    codec_name (file->effective_codec), file->basename, (int64_t)ftello64 (fp) - h_len);
     }
 
-    // case: this is GZIP block (by the magic) but it is NOT a valid (BGZF | IL1M | ...) block
-    else if (!is_header_prefix (h, STRa(prefix))) {
+    // case: this GZIP block is NOT of the structure expected by the specific gz codec
+    else if (expected_flg.value != gz_header->flg.value || // this works in discovery too, important for codecs with a prefix that is only known after discovery (EMVL, GZBL)
+             !is_header_prefix (h, STRa(prefix))) {
         if (discovering)
             return GZ_IS_OTHER_FORMAT;
         else 
@@ -494,7 +511,7 @@ bool bgzf_read_and_uncomp_final_block (rom filename, qSTRp(uncomp))
     // search for BGZF block
     for (int32_t i=comp_len - BGZF_EOF_LEN - 1; i >= 0; i--) // block must contain at least 1 byte bigger than an empty EOF block
         if (comp[i] == 31 && comp[i+1] == 139 && comp[i+2] == 8 && 
-            mgzip_block_verify_header (NULL, fp, comp+i, comp_len-i, true, BGZF_HEADER_LEN, _8(BGZF_PREFIX)) == GZ_SUCCESS) {
+            mgzip_block_verify_header (NULL, fp, comp+i, comp_len-i, true, (GzipFlags){ .extra=1 }, _8(BGZF_PREFIX)) == GZ_SUCCESS) {
             fclose (fp);
 
             struct libdeflate_decompressor *gz_inflate_mem = libdeflate_alloc_decompressor (evb, __FUNCLINE);
@@ -550,6 +567,11 @@ static bool EMVL_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eo
     return (proposed_isize < 512 MB); // sanity check
 }
 
+static bool GZBL_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool discovering, bool *is_end_of_vb)
+{
+    return (proposed_isize < 512 MB); // sanity check
+}
+
 static bool MGSP_is_valid_isize (FileP file, uint32_t proposed_isize, bool is_eof, bool discovering, bool *is_end_of_vb)
 {
     if (proposed_isize > 64 MB) return false; // sanity
@@ -591,12 +613,13 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
     } params;
 
     switch (codec) {
-        #define SET_IF(c,valid_3,max_bsize,gz_hdr,gz_hdr_len) case CODEC_##c: params = (typeof(params)){ valid_3, gz_hdr_len, max_bsize, (bytes)gz_hdr, c##_is_valid_isize }; break
-        SET_IF (MGSP, true,  4  MB, MGSP_HEADER,     MGSP_HEADER_LEN );
-        SET_IF (IL1M, true,  1  MB, ILxM_PREFIX,     ILxM_PREFIX_LEN );
-        SET_IF (IL4M, true,  4  MB, ILxM_PREFIX,     ILxM_PREFIX_LEN );
-        SET_IF (EMVL, false, 32 MB, EMVL_HEADER,     EMVL_HEADER_LEN );
-        SET_IF (EMFL, true,  4  MB, file->gz_header, EMFL_HEADER_LEN );
+        #define SET_IF(c,valid_3,max_bsize,gz_hdr,gz_prefix_len) case CODEC_##c: params = (typeof(params)){ valid_3, ((gz_prefix_len) ? (gz_prefix_len) : mgzip_header_len[CODEC_##c]), max_bsize, (bytes)gz_hdr, c##_is_valid_isize }; break
+        SET_IF (MGSP, true,  4  MB, MGSP_HEADER,     0);
+        SET_IF (IL1M, true,  1  MB, ILxM_PREFIX,     ILxM_PREFIX_LEN);
+        SET_IF (IL4M, true,  4  MB, ILxM_PREFIX,     ILxM_PREFIX_LEN);
+        SET_IF (EMVL, false, 32 MB, EMVL_HEADER,     0);
+        SET_IF (EMFL, true,  4  MB, file->gz_header, 0);
+        SET_IF (GZBL, false, 32 MB, file->gz_header, 0);
         default: ABORT0 ("codec missing");
     }
 
@@ -609,7 +632,9 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
     // top up gz_data to max_comp_size (or less if EOF)
     txtfile_fread (file, fp, NULL, (int32_t)params.max_bsize - (int32_t)file->gz_data.len32, &file->disk_so_far);
     
-    GzStatus status = mgzip_block_verify_header (file, 0,0,0, discovering, params.gz_hdr_len, STRa(params.gz_hdr));
+    GzStatus status = mgzip_block_verify_header (file, 0,0,0, discovering, 
+                                                 (GzipFlags){}, // note: all "no bsize" flavors have flgs=0 (so far)
+                                                 STRa(params.gz_hdr));
     if (status == GZ_EOF_WITHOUT_EOF_BLOCK) {
         if (!discovering) file->no_more_blocks = true;
         return GZ_SUCCESS;
@@ -617,21 +642,50 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
 
     if (status != GZ_SUCCESS) return status;
         
-    // search for block size by beginning of next block. note: we do this even if EOF,
-    // because gz_data might contain several gz blocks. note: also NULL if data is too short.
-    uint8_t *next_blk = memmem (B8(file->gz_data, params.gz_hdr_len), file->gz_data.len32 - params.gz_hdr_len, params.gz_hdr, params.gz_hdr_len);
+    // search for block size by beginning of next block, and an isize that "makes sense" relative to bsize
+    // note: we do this even if EOF, because gz_data might contain several gz blocks. note: also NULL if data is too short.
+    uint8_t *next_blk = B8(file->gz_data, params.gz_hdr_len) - 1;
+    uint32_t bsize=0, isize=0, n_blks=0;
+    do {
+        next_blk = memmem (next_blk + 1, BAFT8(file->gz_data) - next_blk, params.gz_hdr, params.gz_hdr_len);
+        n_blks++;
+    }
+    // if codec is variable length (is_valid_isize doesn't work well), we take the extra precaution of verifying its bsize makes sense  
+    // mgzip "no_bsize" is only used for FASTQ for which the file is quite uniform, so we can bind the ratio relatively narrowly
+#   define RATIO_MULT 1.7
+    while (next_blk &&  
+           (({  isize = GET_UINT32 (next_blk - 4);
+                bsize = BNUM (file->gz_data, next_blk);
+                double ratio = (double)isize / (double)bsize;
+                if (discovering && flag.show_bgzf) 
+                    iprintf ("Discovery %s: isize=%u bsize=%u ratio=%1.1f ∈ [%1.1f, %1.1f]\n", 
+                             codec_name (codec), isize, bsize, ratio, segconf.gz_comp_ratio / RATIO_MULT, segconf.gz_comp_ratio * RATIO_MULT);   
+                
+                // case: while attempting to skip bogus gz headers, we inadvertedly skipped a real one (because didn't match the expected format or ratio)
+                // symptom: ratio just gets worse and worse with every block we read (bsize keeps growing but not isize), 
+                // and if we don't stop, we will read he entire file
+                if (ratio < 0.95)
+                    RESTART ("--no-bgzf", "Failed to identify next gz-block's gz header, marking the close of this block. file=%s codec=%s offset=%"PRIu64" file_size=%"PRIu64, 
+                            codec_name (codec), file->basename, (uint64_t)ftello64 ((FILE *)file->file) - file->gz_data.len, file->disk_size);
+                            
+                // loop back to extend the block, if the ratio doesn't make sense, but not if bsize is too small to judge ratio
+                bsize > 2 KB && 
+                (ratio < segconf.gz_comp_ratio / RATIO_MULT || ratio > segconf.gz_comp_ratio * RATIO_MULT); })));
+    
     bool is_end_of_vb = false;
 
     // case: a block was found, and it is not the last block
-    if (next_blk && params.is_valid_isize (file, GET_UINT32 (next_blk - 4), false/* there IS a next block so not EOF*/, discovering, &is_end_of_vb)) {
+    if (next_blk && params.is_valid_isize (file, isize, false/* there IS a next block so not EOF*/, discovering, &is_end_of_vb)) {
         
-        file->gz_data.uncomp_len = GET_UINT32 (next_blk - 4);    // isize is the last field of the block ending before next_blk
-        file->gz_data.comp_len   = BNUM (file->gz_data, next_blk);
+        file->gz_data.uncomp_len = isize;    // isize is the last field of the block ending before next_blk
+        file->gz_data.comp_len   = bsize;
     }
 
     // case: remaining data could be a final gz block, or could be a truncated block, 
     // we will know for sure when trying to uncompress it
-    else if (feof (fp) && file->gz_data.len32 >= params.gz_hdr_len + GZIP_FOOTER_LEN &&
+    else if (!next_blk && feof (fp) && 
+             !(discovering && n_blks == 1) && // discovery: likely this is a single gz-block file - not MGZIP at all (uncompress in main, to allow correct divvying up to VBs)
+             file->gz_data.len32 >= params.gz_hdr_len + GZIP_FOOTER_LEN &&
              params.is_valid_isize (file, GET_UINT32 (BAFT8 (file->gz_data) - 4), true, discovering, &is_end_of_vb)) {
         
         file->gz_data.uncomp_len = GET_UINT32 (BAFT8(file->gz_data) - 4);
@@ -736,7 +790,7 @@ static bool mgzf_get_bsize (FileP file, uint32_t *bsize)
     return true;
 }
 
-// ZIP: reads and validates a BGZF block
+// ZIP: reads and validates a MGZF block
 // returns: discoverying: GZ_SUCCESS, GZ_NOT_GZIP, GZ_IS_OTHER_FORMAT
 //          otherwise:    GZ_SUCCESS, GZ_EOF_WITHOUT_EOF_BLOCK, GZ_TRUNCATED
 static GzStatus mgzf_read_block_do (FileP file, // txt_file is not yet assigned when called from txtfile_discover_specific_gz
@@ -756,7 +810,7 @@ static GzStatus mgzf_read_block_do (FileP file, // txt_file is not yet assigned 
             txtfile_fread (file, fp, NULL, chunk_size - (int32_t)file->gz_data.len32, &file->disk_so_far);
         }
 
-    GzStatus status = mgzip_block_verify_header (file, 0,0,0, discovering, MGZF_HEADER_LEN, _8(MGZF_PREFIX));
+    GzStatus status = mgzip_block_verify_header (file, 0,0,0, discovering, (GzipFlags){ .extra=1, .comment=1 }, _8(MGZF_PREFIX));
     if (status != GZ_SUCCESS) return status;
     
     status = bgzf_mgzf_set_block_lens (file, bsize, discovering); 
@@ -794,14 +848,14 @@ static GzStatus bgzf_read_block_do (FileP file, // txt_file is not yet assigned 
 
     // top-up if needed 
     if (file->gz_data.len32 < BGZF_MAX_BLOCK_SIZE && !feof (fp)) {
-        int32_t chunk_size = flag.zip_uncompress_source_during_read ? 150 KB // a bit more than the default block-device read-ahead buffer (128KB) for best parallelization between disk read-ahead and CPU decompression
-                                                                    : BGZF_MAX_CHUCK_SIZE; // bigger block is faster if we are prepared to yield the CPU when waiting for the disk 
+        int32_t chunk_size = txtfile_uncompress_mgzip_at_read() ? 150 KB // a bit more than the default block-device read-ahead buffer (128KB) for best parallelization between disk read-ahead and CPU decompression
+                                                                : BGZF_MAX_CHUCK_SIZE; // bigger block is faster if we are prepared to yield the CPU when waiting for the disk 
         txtfile_fread (file, fp, NULL, chunk_size - (int32_t)file->gz_data.len32, &file->disk_so_far);
     }
 
     uint32_t bsize = (uint32_t)LTEN16 (B1ST(BgzfHeader, file->gz_data)->bsize) + 1;
 
-    GzStatus status = mgzip_block_verify_header (file, 0,0,0, discovering, BGZF_HEADER_LEN, _8(BGZF_PREFIX));
+    GzStatus status = mgzip_block_verify_header (file, 0,0,0, discovering, (GzipFlags){ .extra=1 }, _8(BGZF_PREFIX));
     if (status != GZ_SUCCESS) return status;
 
     status = bgzf_mgzf_set_block_lens (file, bsize, discovering); 
@@ -912,6 +966,13 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
 
     // account for the case of decompression, and also the case bb is discarded due to a certain truncate situation (see below).
     inc_disk_gz_uncomp_or_trunc (txt_file, bb->gz_size);
+
+    // case: wrong isize, likely becuase the gz block is actually multiple gz blocks - we missed the header 
+    // of the pervious block(s) (e.g. because gz compression was outside of ratio, or header differed from first header)
+    // note: normally we catch this in mgzip_read_block_no_bsize, but there could be edge cases where bsize/isize ratio appears ok and we arrive here
+    while (ret == LIBDEFLATE_INSUFFICIENT_SPACE && !TXT_GZ_HEADER_HAS_BSIZE)
+        RESTART ("--no-bgzf", "Main thread mis-divided gz blocks. codec=%s bb=%s gz_index=%u vb->comp_txt_data.len=%"PRIu64, 
+                 codec_name (txt_file->effective_codec), display_bb (bb).s, bb->gz_index, vb->comp_txt_data.len);
 
     // case: final ILxM block, which is truncated, but we have --truncate, and the garbage last word
     // unluckily < xMB so it went undetected as a legimiate block in ILxM_is_valid_isize. we drop this block now.
@@ -1462,7 +1523,7 @@ void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), CompIType com
     }
 }
 
-// used by test/Makefile
+// used by test/Makefile: stdin to stdout
 void generate_il1m (void)
 {
     FlagsMgzip mgzip_flags = { .library=BGZF_IGZIP, .level=3 };
@@ -1471,31 +1532,38 @@ void generate_il1m (void)
     char *in = MALLOC (2 MB), *out = MALLOC (4 MB);
     uint32_t in_len;
 
-    // note: if combined with --no-bgzf - 3rd block is artifically non-compliance (2 MB instead of 1 MB)
-    for (int i=0; (in_len = fread (in, 1, (i==2 && flag.no_bgzf) ? (2 MB) : (1 MB), stdin)); i++) {
+    // note: if combined with --no-bgzf - 3rd block is artifically non-compliant
+    for (int i=0; (in_len = fread (in, 1, 1 MB, stdin)); i++) {
         GzipFooter footer = { .crc32 = LTEN32 (crc32 (0, in, in_len)),
                               .isize = LTEN32 (in_len) };
 
         uint32_t out_len = gz_deflate (evb, mgzip_flags, in, in_len, out, 4 MB, false);
 
-        ASSERT0 (1 == fwrite (_S(ILxM_PREFIX), 1, stdout), "fwrite failed #1");
-        ASSERT0 (1 == fwrite (flag.best?"\x02\x03" : flag.fast?"\x04\x03" : "\x00\x03", 2, 1, stdout), "fwrite failed #2");        
+        
+        GzipHeader h = { .id1=31, .id2=139, .cm=8, .xfl=flag.best?2 : flag.fast?4 : 0, .os=3 };
+        if (i==2 && flag.no_bgzf) 
+            h.mtime = 1971; // user requested that 3rd block is non-compliant to ILxM - we modify mtime
+
+        ASSERT0 (1 == fwrite (&h, sizeof (h), 1, stdout), "fwrite failed #1");
         ASSERT  (1 == fwrite (STRa(out), 1, stdout), "fwrite failed: #3 out_len=%u", out_len);
         ASSERT0 (1 == fwrite (&footer, sizeof (footer), 1, stdout), "fwrite failed #4");
     }
 
     fflush (stdout);
-    exit (0);
 }
 
 // reads block and removes it from z_data
 #define show_gz_next      B8(evb->z_data, evb->z_data.next)
 #define show_gz_remaining (evb->z_data.len - evb->z_data.next)
-static bool show_gz_read_block (rom filename, size_t *block_txt_len, size_t *block_gz_len)
+static bool show_gz_uncompress_gz_block (rom filename, size_t *block_txt_len, size_t *block_gz_len)
 {
-    enum libdeflate_result ret = 
-        libdeflate_gzip_decompress_ex (evb->gz_inflate_mem, show_gz_next, show_gz_remaining,  
-                                       STRb(evb->txt_data), block_gz_len, block_txt_len);
+    enum libdeflate_result ret;
+    
+    while ((ret = libdeflate_gzip_decompress_ex (evb->gz_inflate_mem, show_gz_next, show_gz_remaining,  
+                                       STRb(evb->txt_data), block_gz_len, block_txt_len))
+            == LIBDEFLATE_INSUFFICIENT_SPACE)
+            // double the size of txt_data if not enough txt space
+            buf_alloc_exact (evb, evb->txt_data, evb->txt_data.len * 2, char, NULL); 
     
     if (ret == LIBDEFLATE_INSUFFICIENT_DATA 
      || ret == LIBDEFLATE_BAD_DATA) // can happen if we read the entire data and its stop abruptly because it is truncated
@@ -1518,131 +1586,161 @@ void show_gz (rom filename)
 
     ASSINP (file_exists (filename), "Error: file not found: %s", filename);
     
-    uint64_t file_size = file_get_size (filename);
+    uint64_t file_size = file_get_size (filename), file_remaining=file_size, offset=0;
     ASSINP (file_size, "Error: file is empty: %s", filename);
 
-    file_get_file (evb, filename, &evb->z_data, "z_data", 100 MB, VERIFY_NONE, false);
+    FILE *fp = fopen (filename, "rb");
+    ASSERT (fp, "Failed to open %s: %s", filename, arch_str_error());
+
+    buf_alloc (evb, &evb->z_data, 0, MIN_(100 MB, file_size), char, 0, "z_data");
+
+    // file_get_file (evb, filename, &evb->z_data, "z_data", 100 MB, VERIFY_NONE, false);
 
     // uncompress first gz block of gz_data
     evb->gz_inflate_mem = libdeflate_alloc_decompressor (evb, __FUNCLINE);
-    buf_alloc_exact (evb, evb->txt_data, 5 * evb->z_data.len, char, "txt_data");
+    buf_alloc_exact (evb, evb->txt_data, 5 * evb->z_data.size, char, "txt_data");
     int size_width=0;
 
-    for (int i=0; true ; i++) { // show the first gz blocks (but only analyze once)
-        size_t block_txt_len, block_gz_len;
+    int gz_blk_i=0; // sequential number of gz block in file
+    while (file_remaining) {
         
-        if (!show_gz_read_block (filename, &block_txt_len, &block_gz_len)) {
-            if (show_gz_remaining > 40 && !flag.explicit_quiet)
-                printf ("PARTIAL GZ BLOCK #%u: gz_header=%s\n", i, display_gz_header (show_gz_next, show_gz_remaining, false).s);
+        // move previously read final partial block to beginning of z_data
+        memmove (B1ST8(evb->z_data), show_gz_next, show_gz_remaining);
+        evb->z_data.len  = show_gz_remaining;
+        evb->z_data.next = 0;
+        
+        // top up z_data as much as possible
+        uint64_t bytes_to_read = MIN_(evb->z_data.size - evb->z_data.len, file_remaining);
+        ASSERT (fread (BAFT8(evb->z_data), bytes_to_read, 1, fp) == 1, "Failed to read %"PRIu64" bytes from %s\n", bytes_to_read, filename);
+        evb->z_data.len += bytes_to_read;
+        file_remaining -= bytes_to_read;
 
-            if (!i && !flag.explicit_quiet) {
-                if (show_gz_remaining >= STRLEN(MGSB_HEADER) && !memcmp (show_gz_next, MGSB_HEADER, STRLEN(MGSB_HEADER)))
-                    printf ("Codec: Single gz-block MGI (based on header)\n"); // TODO: verify qname flavor
-                else
-                    printf ("Cannot find a complete GZ block in the first %s - likely single-block GZIP\n", str_size (evb->z_data.len).s);
+        // show all gz blocks currently in z_data 
+        while (true) { 
+            size_t block_txt_len, block_gz_len;
+            
+            // case: only partial block is available at end of z_data
+            if (!show_gz_uncompress_gz_block (filename, &block_txt_len, &block_gz_len)) {
+                // case: we haven't read the entire file yet - top up for data and try again
+                if (file_remaining)
+                    break;
+
+                if (show_gz_remaining > 40 && !flag.explicit_quiet)
+                    printf ("PARTIAL GZ BLOCK #%u offset=%"PRIu64": gz_header=%s\n", 
+                            gz_blk_i, offset, display_gz_header (show_gz_next, show_gz_remaining, false).s);
+
+                if (!gz_blk_i && !flag.explicit_quiet) {
+                    if (show_gz_remaining >= STRLEN(MGSB_HEADER) && !memcmp (show_gz_next, MGSB_HEADER, STRLEN(MGSB_HEADER)))
+                        printf ("Codec: Single gz-block MGI (based on header)\n"); // TODO: verify qname flavor
+                    else
+                        printf ("Cannot find a complete GZ block in the first %s - likely single-block GZIP\n", str_size (evb->z_data.len).s);
+                }
+
+                goto done;
             }
 
-            goto done;
-        }
+            if (!size_width && block_txt_len) 
+                size_width = -str_get_uint_textual_len (block_txt_len);
 
-        if (!size_width && block_txt_len) 
-            size_width = -str_get_uint_textual_len (block_txt_len);
+            uint32_t h_len;
+            StrText1K header_str = display_gz_header_ex (show_gz_next, block_gz_len, false, &h_len);
 
-        uint32_t h_len;
-        StrText1K header_str = display_gz_header_ex (show_gz_next, block_gz_len, false, &h_len);
+            printf ("i=%-2u: offset=%-10"PRIu64" isize=%*"PRIu64" (%-7s) bsize=%*"PRIu64" digest=%08x gz_header=%s.L=%u %s%s%s\n", 
+                    gz_blk_i, offset, size_width, (uint64_t)block_txt_len, str_size (block_txt_len).s, size_width, (uint64_t)block_gz_len, 
+                    (uint32_t)XXH3_64bits (show_gz_next, block_gz_len), // 32b digest
+                    header_str.s, h_len,
+                    (!block_txt_len && str_issame_((rom)show_gz_next, block_gz_len, BGZF_EOF, BGZF_EOF_LEN)) ? "⇐ BGZF_EOF" : "",
+                    (!block_txt_len && str_issame_((rom)show_gz_next, block_gz_len, MGZF_EOF, MGZF_EOF_LEN)) ? "⇐ MGZF_EOF" : "",
+                    (!block_txt_len && str_issame_((rom)show_gz_next, block_gz_len, MGSP_EOF, MGSP_EOF_LEN)) ? "⇐ MGSP_EOF" : "");
+                    
 
-        printf ("i=%-2u: disk=%-8"PRIu64" isize=%*"PRIu64" (%-7s) bsize=%*"PRIu64" digest=%08x gz_header=%s.L=%u %s%s%s\n", 
-                i, evb->z_data.next, size_width, (uint64_t)block_txt_len, str_size (block_txt_len).s, size_width, (uint64_t)block_gz_len, 
-                (uint32_t)XXH3_64bits (show_gz_next, block_gz_len), // 32b digest
-                header_str.s, h_len,
-                (!block_txt_len && str_issame_((rom)show_gz_next, block_gz_len, BGZF_EOF, BGZF_EOF_LEN)) ? "⇐ BGZF_EOF" : "",
-                (!block_txt_len && str_issame_((rom)show_gz_next, block_gz_len, MGZF_EOF, MGZF_EOF_LEN)) ? "⇐ MGZF_EOF" : "",
-                (!block_txt_len && str_issame_((rom)show_gz_next, block_gz_len, MGSP_EOF, MGSP_EOF_LEN)) ? "⇐ MGSP_EOF" : "");
+            if (!block_txt_len) 
+                is_emvl_empty_block = str_issame_(EMVL_FIRST_BLOCK, STRLEN(EMVL_FIRST_BLOCK), (rom)show_gz_next, block_gz_len);
+
+            // analyze first block of at least 1 KB
+            if (!is_analyzed && block_gz_len > 1 KB) {
+
+                // analyze header (possibly multiple options)
+                GzipHeader *h = (GzipHeader *)show_gz_next;
+                bool is_bgzf = false;
+
+                if (block_gz_len >= BGZF_PREFIX_LEN && !memcmp (h, BGZF_PREFIX, BGZF_PREFIX_LEN)) {
+                    printf ("Codec: BGZF (based on header)\n");
+                    is_bgzf = true;
+                }
+
+                if (block_gz_len >= ILxM_PREFIX_LEN && !memcmp (h, ILxM_PREFIX, ILxM_PREFIX_LEN) && 
+                    h->os == 3 && (h->xfl==0 || h->xfl==2 || h->xfl==4)) {
+                    if      (block_txt_len == 1 MB) printf ("Codec: IL1M (based on header and isize)\n");
+                    else if (block_txt_len == 4 MB) printf ("Codec: IL4M (based on header and isize)\n");
+                }
+
+                if (block_gz_len > MGZF_PREFIX_LEN && !memcmp (h, MGZF_PREFIX, MGZF_PREFIX_LEN))
+                    printf ("Codec: MGZF (based on header)\n");
+
+                if (is_emvl_empty_block)
+                    printf ("Codec: EMVL (based on first block being the EMVL empty block)\n");
+
+                // TODO: MGSP, EMFL a bit more tricky to identify - would be helpful to get the qname flavor
+
+                // detect library⁀level : recompress and compare
+                FlagsMgzip ll[200] = {};
+                int n_lls = 0;
                 
+                for (int l=0; l <= IGZIP_MAX_LEVEL; l++) // first because fastest
+                    ll[n_lls++] = (FlagsMgzip){ .library = BGZF_IGZIP,        .level = l};
 
-        if (!block_txt_len) 
-            is_emvl_empty_block = str_issame_(EMVL_FIRST_BLOCK, STRLEN(EMVL_FIRST_BLOCK), (rom)show_gz_next, block_gz_len);
+                for (int l=0; l <= LIBDEFLATE_MAX_LEVEL; l++) // level=0 only here, bc it would be the same in all libraries
+                    ll[n_lls++] = (FlagsMgzip){ .library = BGZF_LIBDEFLATE19, .level = l};
 
-        if (!is_analyzed && block_txt_len > 1000) {
+                for (int l=0; l <= LIBDEFLATE_MAX_LEVEL; l++)
+                    ll[n_lls++] = (FlagsMgzip){ .library = BGZF_LIBDEFLATE7,  .level = l};
 
-            // analyze header (possibly multiple options)
-            GzipHeader *h = (GzipHeader *)show_gz_next;
-            bool is_bgzf = false;
+                for (int l=0; l <= ZLIB_MAX_LEVEL; l++)
+                    ll[n_lls++] = (FlagsMgzip){ .library = BGZF_ZLIB,         .level = l};
 
-            if (block_gz_len >= BGZF_PREFIX_LEN && !memcmp (h, BGZF_PREFIX, BGZF_PREFIX_LEN)) {
-                printf ("Codec: BGZF (based on header)\n");
-                is_bgzf = true;
-            }
+                ASSERTNOTINUSE (evb->scratch);
+                buf_alloc_exact (evb, evb->scratch, evb->txt_data.len * 1.2, uint8_t, stringfy(evb->scratch)); // 1.2 in case deflate actually slightly grows rather than shrinks (unlikely edge cases)
+                
+                bytes payload = B8(evb->z_data, h_len);
+                uint32_t payload_len = block_gz_len - h_len - sizeof(GzipFooter);
 
-            if (block_gz_len >= ILxM_PREFIX_LEN && !memcmp (h, ILxM_PREFIX, ILxM_PREFIX_LEN) && 
-                h->os == 3 && (h->xfl==0 || h->xfl==2 || h->xfl==4)) {
-                if      (block_txt_len == 1 MB) printf ("Codec: IL1M (based on header and isize)\n");
-                else if (block_txt_len == 4 MB) printf ("Codec: IL4M (based on header and isize)\n");
-            }
+                #define eraser "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
+                #define spaces "                                                                                                                                                                "
 
-            if (block_gz_len > MGZF_PREFIX_LEN && !memcmp (h, MGZF_PREFIX, MGZF_PREFIX_LEN))
-                printf ("Codec: MGZF (based on header)\n");
+                bool found=false;
+                for (int i=0; i < n_lls; i++) {
+                    // for large blocks, skip the super slow compression levels that are unlikely to be used by the software the geenerated these files
+                    if (block_txt_len > 8 MB) {
+                        if (ll[i].library==BGZF_LIBDEFLATE7  && ll[i].level >= 9)  continue; 
+                        if (ll[i].library==BGZF_LIBDEFLATE19 && ll[i].level >= 10) continue; 
+                        if (ll[i].library==BGZF_ZLIB         && ll[i].level >= 7)  continue; 
+                    }
 
-            if (is_emvl_empty_block)
-                printf ("Codec: EMVL (based on first block being the EMVL empty block)\n");
+                    int len = printf ("Testing %-9s level=%-2u  ", bgzf_library_name (ll[i].library, false), ll[i].level);
+                    fflush (stdout);
 
-            // TODO: MGSP, EMFL a bit more tricky to identify - would be helpful to get the qname flavor
+                    uint32_t test_bsize = gz_deflate (evb, ll[i], B1STc(evb->txt_data), block_txt_len, STRb(evb->scratch), is_bgzf);
 
-            // detect library⁀level : recompress and compare
-            FlagsMgzip ll[200] = {};
-            int n_lls = 0;
-            
-            for (int l=0; l <= IGZIP_MAX_LEVEL; l++) // first because fastest
-                ll[n_lls++] = (FlagsMgzip){ .library = BGZF_IGZIP,        .level = l};
-
-            for (int l=0; l <= LIBDEFLATE_MAX_LEVEL; l++) // level=0 only here, bc it would be the same in all libraries
-                ll[n_lls++] = (FlagsMgzip){ .library = BGZF_LIBDEFLATE19, .level = l};
-
-            for (int l=0; l <= LIBDEFLATE_MAX_LEVEL; l++)
-                ll[n_lls++] = (FlagsMgzip){ .library = BGZF_LIBDEFLATE7,  .level = l};
-
-            for (int l=0; l <= ZLIB_MAX_LEVEL; l++)
-                ll[n_lls++] = (FlagsMgzip){ .library = BGZF_ZLIB,         .level = l};
-
-            ASSERTNOTINUSE (evb->scratch);
-            buf_alloc_exact (evb, evb->scratch, evb->txt_data.len * 1.2, uint8_t, stringfy(evb->scratch)); // 1.2 in case deflate actually slightly grows rather than shrinks (unlikely edge cases)
-            
-            bytes payload = B8(evb->z_data, h_len);
-            uint32_t payload_len = block_gz_len - h_len - sizeof(GzipFooter);
-
-            #define eraser "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
-            #define spaces "                                                                                                                                                                "
-
-            bool found=false;
-            for (int i=0; i < n_lls; i++) {
-                // for large blocks, skip the super slow compression levels that are unlikely to be used by the software the geenerated these files
-                if (block_txt_len > 8 MB) {
-                    if (ll[i].library==BGZF_LIBDEFLATE7  && ll[i].level >= 9)  continue; 
-                    if (ll[i].library==BGZF_LIBDEFLATE19 && ll[i].level >= 10) continue; 
-                    if (ll[i].library==BGZF_ZLIB         && ll[i].level >= 7)  continue; 
+                    if (str_issame_((rom)STRa(payload), B1STc(evb->scratch), test_bsize)) {
+                        printf ("Plausible\n"); 
+                        found = true;
+                    }
+                    else 
+                        printf ("%.*s%.*s%.*s", len, eraser, len, spaces, len, eraser);
+                    fflush (stdout);
                 }
 
-                int len = printf ("Testing %-9s level=%-2u  ", bgzf_library_name (ll[i].library, false), ll[i].level);
-                fflush (stdout);
+                if (!found) printf ("This file not compressed with any of the library⁀levels tested\n");
 
-                uint32_t test_bsize = gz_deflate (evb, ll[i], B1STc(evb->txt_data), block_txt_len, STRb(evb->scratch), is_bgzf);
-
-                if (str_issame_((rom)STRa(payload), B1STc(evb->scratch), test_bsize)) {
-                    printf ("Plausible\n"); 
-                    found = true;
-                }
-                else 
-                    printf ("%.*s%.*s%.*s", len, eraser, len, spaces, len, eraser);
-                fflush (stdout);
+                is_analyzed = true;
             }
 
-            if (!found) printf ("This file not compressed with any of the library⁀levels tested\n");
-
-            is_analyzed = true;
+            gz_blk_i++;
+            evb->z_data.next += block_gz_len;
+            offset += block_gz_len;
+            buf_free (evb->scratch);  
         }
-
-        evb->z_data.next += block_gz_len;
-        buf_free (evb->scratch);  
     }
 
 done:

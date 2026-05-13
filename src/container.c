@@ -24,7 +24,7 @@
 //----------------------
 
 void container_prepare_snip (ConstContainerP con, STRp(prefixes), 
-                             char *snip, unsigned *snip_len) // in / out
+                             qSTRp(snip)) // in / out
 {
     ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is beyond maximum of %u",
             prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
@@ -102,7 +102,7 @@ StrText16K container_stack (VBlockP vb)
     int s_len = 0;
 
     for (int i=0; i < vb->con_stack_len; i++)
-        SNPRINTF (s, "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
+        SNPRINTF (s, "%s[%u]➔ ", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
 
     if (s_len >= 2) s.s[s_len-2] = 0; // remove final "->"
 
@@ -347,7 +347,7 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
             DT_FUNC(vb, con_item_cb)(vb, item, reconstruction_start, BAFTtxt - reconstruction_start);
     }
     
-    if (!item->separator[0] || item->separator[0] == CI0_DIGIT)
+    if (!item->separator[0] || item->separator[0] == CI0_DIGIT || item->separator[0] == CI0_ACGTN)
         return 0;
 
     else if (translating && IS_CI0_SET (CI0_TRANS_NUL)) {
@@ -838,6 +838,7 @@ static StrText item_sep_name0 (uint8_t sep)
         case CI0_VAR_0_PAD    : strcpy (s.s, "VAR_0_PAD");    break;
         case CI0_SKIP         : strcpy (s.s, "SKIP");         break;
         case CI0_DIGIT        : strcpy (s.s, "DIGIT");        break;
+        case CI0_ACGTN        : strcpy (s.s, "SEQ");          break;
         case CI0_LAST_MATCH   : strcpy (s.s, "LAST_MATCH");   break;
         default               : snprintf (s.s, sizeof (s.s), "'%.5s'", char_to_printable (sep).s); 
     }
@@ -933,7 +934,7 @@ void con_verify_items (ConstContainerP con, ContextP ctx, rom con_name)
             ABORT ("container %s item_i=%u has dict_id=0. Perhaps n_items is too large?", con_name, (int)(item - con->items));
 
         if ((sep0 == CI0_LAST_MATCH && !IS_PRINTABLE(sep1)) ||
-            ((sep0 == CI0_FIXED_0_PAD || sep0 == CI0_VAR_0_PAD )&& !sep1))
+            ((sep0 == CI0_FIXED_0_PAD || sep0 == CI0_VAR_0_PAD ) && !sep1))
             ABORT ("container %s item_i=%u has sep0=%s, expecting sep1≠0", con_name, (int)(item - con->items), item_sep_name0(sep0).s);
 
         if ((sep0 == CI0_DIGIT || sep0 == CI0_SKIP || sep0 == CI0_NONE || sep0 == CI0_INVISIBLE) && sep1 > CI1_LAST_SPECIAL)

@@ -12,7 +12,6 @@
 #include "refhash.h"
 #include "chrom.h"
 #include "sorter.h"
-#include "tip.h"
 
 #ifdef __linux__ 
 extern int strncasecmp (rom s1, rom s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
@@ -383,7 +382,7 @@ static BINARY_SEARCHER_WITH_INDEX (ref_contigs_get_by_LN, Contig, PosType64, max
 // ZIP SAM/BAM and VCF: verify that we have the specified chrom (name & last_pos) loaded from the reference at the same index. 
 // called by sam_header_add_contig, vcf_header_consume_contig. returns true if contig is in reference
 WordIndex ref_contigs_ref_chrom_from_header_chrom (STRp(chrom_name), 
-                                                   PosType64 *hdr_LN) // if 0, set from reference, otherwise verify
+                                                   PosType64𐤐 hdr_LN) // if 0, set from reference, otherwise verify
 {               
     WordIndex ref_contig_index = ref_contigs_get_by_name (STRa(chrom_name), true, SOFT_FAIL); // including alts
     bool has_dup_len = false; // true if chrom_name is not in reference, but there are 2+ ref contigs with the same length

@@ -12,7 +12,7 @@
 #include "txtfile.h"
 
 // main thread: called for each txt file, after reading global area, before reading txt header
-bool vcf_piz_initialize (__attribute__((unused)) CompIType comp_i)
+bool vcf_piz_initialize (UNUSED CompIType comp_i)
 {
     ctx_get_word_index_by_snip_initialize (VCF_CHROM);
 

@@ -1,4 +1,4 @@
-#define GENOZIP_CODE_VERSION "15.0.82"
+#define GENOZIP_CODE_VERSION "15.0.83"
 // ⇑ MUST be first line, analyzed by scripts ⇑
 
 #pragma once
@@ -7,8 +7,9 @@ typedef struct __attribute__ ((packed)) {
     uint8_t major;
     uint16_t minor; // up to 16383 - limited by GenozipHeader.genozip_minor_ver. Populated for files since 15.0.28
 } Version;
-#define VER_LT(a, b) ((a).major < (b).major || ((a).major == (b).major && (a).minor < (b).minor))
-#define VER_GE(a, b) (!VER_LT((a), (b)))
+#define NO_VERSION ((Version){})
+
+#define VER_GE(a, b) (((a).minor >= (b).minor && (a).major == (b).major) || (a).major > (b).major)
 #define VER_GE_(a, major, minor) VER_GE((a), ((Version){(major), (minor)}))
 
 extern bool version_is_devel (void);

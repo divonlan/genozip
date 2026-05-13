@@ -49,6 +49,7 @@ extern WordIndex seg_integer_as_snip_do (VBlockP vb, ContextP ctx, int64_t n, un
 
 extern void seg_simple_lookup (VBlockP vb, ContextP ctx, unsigned add_bytes);
 extern void seg_lookup_with_length (VBlockP vb, ContextP ctx, int32_t length, unsigned add_bytes);
+extern void seg_lookup_with_length_other (VBlockP vb, ContextP ctx, DictId other_dict_id, int32_t length/*can be negative*/, unsigned add_bytes);
 
 extern bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(this_value), unsigned add_bytes); // segs integer in local if possible
 extern bool seg_integer_or_not_cb (VBlockP vb, ContextP ctx, STRp(int_str), uint32_t repeat);
@@ -105,6 +106,7 @@ static inline void seg_delta_vs_other_dictN (VBlockP vb, ContextP ctx, ContextP 
 static inline void seg_delta_vs_other_dictS (VBlockP vb, ContextP ctx, ContextP other_ctx, STRp(value), int64_t max_delta)
     { seg_delta_vs_other_do (vb, ctx, other_ctx, STRa(value), 0, max_delta, false, value_len); }
 
+#define DIFF_SEQ_VS_1ST_SNIP_IN_DICT NULL
 extern void seg_diff (VBlockP vb, ContextP ctx, ContextP base_ctx, STRp(value), bool entire_snip_if_same, unsigned add_bytes);
 
 typedef bool (*SegCallback) (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat); // returns true if segged successfully
@@ -274,8 +276,8 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 // TAB separator between fields
 
 #define FIELD(f) \
-    rom f##_str __attribute__((unused)) = field_start;  \
-    unsigned    f##_len __attribute__((unused)) = field_len
+    rom f##_str UNUSED = field_start;  \
+    unsigned    f##_len UNUSED = field_len
 
 #define GET_NEXT_ITEM(f) \
     field_start = next_field; \

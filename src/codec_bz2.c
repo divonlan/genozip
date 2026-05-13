@@ -73,7 +73,7 @@ COMPRESS (codec_bz2_compress)
     else if (get_line_cb) {
 
         uint32_t in_so_far = 0;
-        for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
+        for_line {
 
             ASSERT (!strm.avail_in, "%s: \"%s\": expecting strm.avail_in to be 0, but it is %u. ctx=%s", VB_NAME, name, strm.avail_in, TAG_NAME);
 

@@ -36,6 +36,7 @@ typedef struct ContainerItem {
     #define CI0_DIGIT        ((uint8_t)0x04) // item is terminated by first digit (the digit will belong to the next item)
     #define CI0_VAR_0_PAD    ((uint8_t)0x05) // variable width, but has at least sep[1] digits, zero padded if needed (introduced 15.0.75)
     #define CI0_LAST_MATCH   ((uint8_t)0x06) // item is terminated by LAST occurance of seperator of sep[1] in the string (introduced 15.0.80)
+    #define CI0_ACGTN        ((uint8_t)0x07) // item is terminated by first A,C,G,T or N character - but not less than sep[1] characters (may be 0) (the ACGTN character will belong to the next item) (15.0.83)
 
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags
@@ -89,7 +90,7 @@ typedef struct ContainerItem {
 typedef struct Container       { CONTAINER_FIELDS(MAX_FIELDS)        } Container;
 typedef struct MiniContainer   { CONTAINER_FIELDS(1)                 } MiniContainer;
 
-#define SMALL_CON_NITEMS 16
+#define SMALL_CON_NITEMS 18
 typedef struct SmallContainer  { CONTAINER_FIELDS(SMALL_CON_NITEMS)  } SmallContainer;
 
 #define MEDIUM_CON_NITEMS 100

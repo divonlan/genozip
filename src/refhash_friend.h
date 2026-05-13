@@ -28,7 +28,6 @@ extern int bits_per_hash_out;
 extern Digest refhash_digest;
 
 // FLAT (new) refhash: since 15.0.81
-extern int gpos_bytes;
 extern int hash_shift;
 extern MakeRefSize make_ref_size;
 

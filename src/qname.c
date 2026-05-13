@@ -15,9 +15,11 @@
 #include "file.h"
 #include "codec.h"
 #include "dyn_int.h"
-#include "tip.h"
+#include "reconstruct.h"
 
-sSTRl(copy_qname, 16);
+sSTRl(copy_qname,  16);
+sSTRl(copy_q5name, 16);
+sSTRl(copy_q6name, 16);
 sSTRl(snip_redirect_to_QNAME2, 16);
 
 QnameFlavor qname_get_optimize_qf (void)
@@ -143,13 +145,6 @@ void qname_zip_initialize (void)
             else
                 qfs->con = *qfs->con_template; // create container
 
-            // generate barcode_item2 if we have a barcode with a '+' separator
-            if (qfs->barcode_item != -1 && qfs->barcode_item != qfs->con.nitems_lo - 1 &&
-                qfs->con.items[qfs->barcode_item].separator[0] == '+')
-                qfs->barcode_item2 = qfs->barcode_item + 1;
-            else
-                qfs->barcode_item2 = -1;
-
             // verify that the fields are consecutive Q*NAME contexts, and verify QmNAME requirements
             if (!flag.show_flavor) { // no z_file in --show-flavor
                 ContextP expected_zctx = ZCTX(SAM_Q0NAME);
@@ -256,10 +251,6 @@ void qname_zip_initialize (void)
 
             for (unsigned i=0; qfs->in_local[i] != -1; i++) {
                 qfs->is_in_local[qfs->in_local[i]] = true;
-
-                ASSERT (qfs->barcode_item != qfs->in_local[i], err_both_fmt, qfs->name, qfs->barcode_item, "in_local and barcode_item");
-
-                ASSERT (qfs->barcode_item2 != qfs->in_local[i], err_both_fmt, qfs->name, qfs->barcode_item2, "in_local and barcode_item2");                        
             }
             
             if (qfs->barcode_item != -1) {
@@ -281,6 +272,10 @@ void qname_zip_initialize (void)
 
                 ASSERT (qfs->barcode_item2 != qfs->seq_len_item, err_both_fmt, qfs->name, qfs->barcode_item2, "a seq_len_item and barcode_item2");
             }
+
+            if (qfs->barcode_item2 != -1)
+                ASSERT (qfs->barcode_item != -1, 
+                        err_both_fmt, qfs->name, qfs->barcode_item2, "barcode_item2 defined, but barcode_item not defined");
 
             ASSERT (qfs->ordered_item1 == -1 || qfs->is_integer[qfs->ordered_item1] || qfs->is_numeric[qfs->ordered_item1] || qfs->is_hex[qfs->ordered_item1], 
                     "Bad definition of QNAME flavor=%s: item=%u is one of \"ordered_item\" - expecting it to be is_integer or is_numeric or is_hex", qfs->name, qfs->ordered_item1);
@@ -354,6 +349,9 @@ void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i)
             dyn_int_init_ctx (vb, item_ctx, 0);  // required by seg_integer_or_not / seg_numeric_or_not
             if (IS(hex)) item_ctx->ltype = LT_DYN_INT_h;
         }
+
+        else if (qfs->in_local[i] == qfs->barcode_item || qfs->in_local[i] == qfs->barcode_item2)
+            item_ctx->ltype = LT_BLOB;
         
         else // textual
             item_ctx->ltype = LT_STRING;
@@ -392,11 +390,23 @@ void qname_segconf_finalize (VBlockP vb)
     }
 
     for (QType q=QNAME1; q < NUM_QTYPES; q++) 
-        if (segconf.qname_flavor[q])
+        if (segconf.qname_flavor[q]) {
             segconf.sorted_by_qname[q] = VB_DT(FASTQ) ||
                                          segconf.is_collated || segconf.sam_is_unmapped || segconf.qname_flavor[q]->sam_qname_sorted || 
                                          (!segconf.is_sorted && !segconf.is_paired);
             
+            // if flavor has two barcodes, create dict alias if they have sequences in commons
+            if (!flag.show_flavor && segconf.qname_flavor[q]->barcode_item != -1 && segconf.qname_flavor[q]->barcode_item2 != -1) {
+                Did did_i_bc1 = did_by_q (q) + 1 + segconf.qname_flavor[q]->barcode_item;
+                Did did_i_bc2 = did_by_q (q) + 1 + segconf.qname_flavor[q]->barcode_item2;
+                
+                if (ctx_segconf_do_ctxs_share_snips (vb, did_i_bc1, did_i_bc2)) {
+                    ZCTX(did_i_bc2)->dict_did_i = did_i_bc1;
+                    segconf.qname_barcode2_is_alias[q] = true;
+                }
+            }
+        }
+
     // if only consensus reads exist, or is unknown
     if (segconf.tech == TECH_CONS || segconf.tech == TECH_UNKNOWN)
         segconf.tech = segconf.tech_by_RG; // usually tech by QNAME is more reliable, but if not available, go by the PL field of @RG in the SAM header (which might also be unavailable)
@@ -458,6 +468,12 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
     if (qfs->is_mated && (item_lens[n_items-1] != 1 || (*items[n_items-1] != '1' && *items[n_items-1] != '2')))
         return QTR_BAD_MATE; // mate is expected to be "1" or "2" - better check than NO_MATE - after splitting
     
+    if (qfs->barcode_item != -1 && !str_is_ACGTN (STRi(item, qfs->barcode_item)))
+        return QTR_BARCODE_NOT_ACGTN;
+        
+    if (qfs->barcode_item2 != -1 && !str_is_ACGTN (STRi(item, qfs->barcode_item2)))
+        return QTR_BARCODE_NOT_ACGTN;
+        
     if (!qfs->validate_flavor (STRas(item)))
         return QTR_FAILED_VALIDATE_FUNC;
 
@@ -527,13 +543,6 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             iprintf ("%.*s - flavor is NOT DISCOVERED - for %s\n", STRf(qname), qtype_name(q));
     }
 
-    // set up dict id alias. need to do explicitly, because not predefined
-    if (!flag.show_flavor && segconf.qname_flavor[q] && segconf.qname_flavor[q]->barcode_item2 != -1) {
-        Did did_i_bc1 = did_by_q (q) + 1 + segconf.qname_flavor[q]->barcode_item;
-        Did did_i_bc2 = did_by_q (q) + 1 + segconf.qname_flavor[q]->barcode_item2;
-        ZCTX(did_i_bc2)->dict_did_i = did_i_bc1;
-    }
-
     if (FLAVOR(q, PACBIO_lbl) && qname_len > 4 && !memcmp (&qname[qname_len-4], "/ccs", 4))
         segconf.is_pacbio_ccs = true;
                 
@@ -546,14 +555,17 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 
                 if (flag.debug_qname) iprintf ("Unit-testing qname flavor=\"%s\" example=\"%s\"\n", qfs->name, qfs->example[i]);
                 QnameTestResult reason = qname_test_flavor (qfs->example[i], strlen(qfs->example[i]), QANY, qfs, !flag.debug_qname); 
-                ASSERT (reason == QTR_SUCCESS, "Failed to identify qname \"%s\" as %s: reason=%s", qfs->example[i], qfs->name, reasons[reason]);
+                ASSERT (reason == QTR_SUCCESS, "Failed to identify qname \"%s\" as %s: reason=%s. %s", 
+                        qfs->example[i], qfs->name, reasons[reason],
+                        (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split) ? _TIP "Use --debug-split for more details, but ignore all errors but the last one" : "");
             }
         }
 }
 
 void qname_show_flavor (void)
 {
-    ASSINP0 (flag.show_flavor, "--show-flavor expects an argument: a qname for which the flavor is requested");
+    ASSINP0 (flag.show_flavor, "--show-flavor expects an argument: a qname for which the flavor is requested:\n\n"
+                               "Example:\ngenozip --show-flavor=\"qname:goes:here\"");
 
     qname_zip_initialize();
     flag.quiet = true;
@@ -668,6 +680,9 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
             else if (qfs->is_numeric[item_i])
                 seg_numeric_or_not (vb, item_ctx, STRa(str), str_len); // hex or not
 
+            else if (item_i == qfs->barcode_item || item_i == qfs->barcode_item2)
+                seg_add_to_local_fixed (vb, item_ctx, STRa(str), LOOKUP_WITH_LENGTH, str_len);
+
             else 
                 seg_add_to_local_string (vb, item_ctx, STRa(str), LOOKUP_SIMPLE, str_len);
         }
@@ -687,6 +702,8 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
         if (item_ctx->flags.store == STORE_INT && !ctx_has_value_in_line_(vb, item_ctx) &&
             (value >= 0 || str_get_int (STRa(str), &value)))
             ctx_set_last_value (vb, item_ctx, value); 
+        else
+            ctx_set_encountered (vb, item_ctx);
 
         set_last_txtC (item_ctx, str, str_len); 
     }
@@ -824,23 +841,25 @@ rom segconf_qf_name (QType q)
              :                           "N/A";
 }
 
+// if a flavor has two barcodes AND they are of the same length, we make then a dict alias
 DictIdAlias qname_get_alias (QType q)
 {
-    int bc2;
-    Did first_did_i = did_by_q (q) + 1; // eg Q0NAME 
-
-    if (!segconf.qname_flavor[q] || (bc2 = segconf.qname_flavor[q]->barcode_item2) == -1)
+    if (!segconf.qname_barcode2_is_alias[q])
         return (DictIdAlias){};
 
-    else 
+    else {
+        Did first_did_i = did_by_q (q) + 1; // eg Q0NAME 
+        int bc2 = segconf.qname_flavor[q]->barcode_item2;
+        
         return (DictIdAlias){ .alias_type = ALIAS_DICT,
                               .alias      = dt_fields[DT_FASTQ].predefined[first_did_i + bc2].dict_id,
                               .dst        = dt_fields[DT_FASTQ].predefined[first_did_i + bc2 - 1].dict_id }; 
+    }
 }
 
-bool qf_is_mated (QType q)
-{
-    return segconf.qname_flavor[q]->is_mated;
+bool qf_is_mated (QType q) 
+{ 
+    return segconf.qname_flavor[q]->is_mated; 
 }
 
 QnameFlavorId segconf_qf_id (QType q)
@@ -855,4 +874,102 @@ rom qtype_name (QType q)
     return (q >= 0 && q < ARRAY_LEN (qtype_names))     ? qtype_names[q] 
           :(q < 0 && -q < ARRAY_LEN (qtype_neg_names)) ? qtype_neg_names[-q]
           :                                              "Invalid_qtype";
+}
+
+Did qf_get_barcode_did (int bc_i/*1 or 2*/) 
+{ 
+    ASSERT (bc_i==1 || bc_i==2, "invalid bc_i=%d", bc_i);
+
+    QnameFlavor qfs = segconf.qname_flavor[QNAME1];
+    if (!qfs) return DID_NONE;
+
+    int item = (bc_i == 1) ? qfs->barcode_item : qfs->barcode_item2;
+
+    return (item >= 0) ? (FASTQ_Q0NAME + item) : DID_NONE; 
+}
+
+void qname_get_barcode (STRp(qname), int bc_i, pSTRp(bc_seq))
+{
+    ASSERT (bc_i==1 || bc_i==2, "invalid bc_i=%d", bc_i);
+
+    QnameFlavor qfs = segconf.qname_flavor[QNAME1];
+    int item = (bc_i == 1) ? qfs->barcode_item : qfs->barcode_item2;
+    
+    if (item == -1) {
+        *bc_seq     = 0; 
+        *bc_seq_len = 0;
+        return;
+    }
+
+    str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item, qfs->name);
+
+    *bc_seq = items[item];
+    *bc_seq_len = item_lens[item];
+}
+
+//-------------------------------------------------------
+// flavor-specific segs
+//-------------------------------------------------------
+
+static void seg_qname_ug100_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value))
+{
+    bool is_fq = VB_DT(FASTQ);
+    Multiplexer2P mux = (is_fq ? fastq_get_illum_v_mux : sam_get_illum_v_mux)(vb);
+    
+    if (!ctx->is_initialized) {
+        seg_mux_init_(VB, ctx->did_i, 2, (is_fq ? FASTQ_SPECIAL_ILLUM_V : SAM_SPECIAL_ILLUM_V), false, (MultiplexerP)mux);
+
+        seg_by_ctx (VB, STRa(mux->snip), ctx, 0);  // all-the-same (not ctx_create node bc we need the b250 to carry the flags)
+        
+        ctx->is_initialized = true;
+        
+        (ctx-1)->flags.store = STORE_INT;
+    }
+
+    int channel_i = ctx_has_value_in_line_(vb, ctx-1) && ((ctx-1)->last_value.i == 2);
+
+    ContextP channel_ctx = seg_mux_get_channel_ctx (vb, ctx->did_i, (MultiplexerP)mux, channel_i);
+
+    seg_integer_or_not (vb, channel_ctx, STRa(value), value_len);
+}
+
+SPECIAL_RECONSTRUCTOR (illum_v_piz_special_DEMUX_BY_Q4NAME)
+{
+    int channel_i = ctx_has_value_in_line_(vb, ctx-1) && ((ctx-1)->last_value.i == 2);
+
+    return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);    
+}
+
+// SAM + FASTQ: callback defined in qname_flavor for QF_PACBIO_rng 
+static void seg_qname_rng2seq_len_cb (VBlockP vb, ContextP ctx, STRp(value))
+{
+    seg_special0 (vb, VB_DT(FASTQ) ? FASTQ_SPECIAL_qname_rng2seq_len : SAM_SPECIAL_qname_rng2seq_len, ctx, 0);
+
+    ctx_set_last_value (vb, ctx, (ctx-1)->last_value.i - (ctx-2)->last_value.i);
+}
+
+// SAM + FASTQ: since item has CI0_INVISIBLE, this function is always called with reconstruct=false
+SPECIAL_RECONSTRUCTOR (special_qname_rng2seq_len)
+{
+    new_value->i = (ctx-1)->last_value.i - (ctx-2)->last_value.i;
+
+    return HAS_NEW_VALUE;
+}
+
+// SAM + FASTQ: callback defined in qname_flavor for QF_MGI_NEW 
+static void seg_qname_mgi_new_cb (VBlockP vb, ContextP ctx, STRp(copy))
+{
+    STRlast (src, ctx->did_i-2);
+
+    if (str_issame (src, copy)) {
+        if (ctx->did_i == SAM_Q7NAME)
+            seg_by_ctx (vb, STRa(copy_q5name), ctx, copy_len);
+        else if (ctx->did_i == SAM_Q8NAME)
+            seg_by_ctx (vb, STRa(copy_q6name), ctx, copy_len);
+        else
+            ABORT ("unexpected ctx=%s", ctx->tag_name);
+    }
+
+    else
+        seg_numeric_or_not (vb, ctx, STRa(copy), copy_len);
 }

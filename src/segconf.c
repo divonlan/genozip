@@ -17,7 +17,6 @@
 #include "codec.h"
 #include "arch.h"
 #include "mgzip.h"
-#include "tip.h"
 #include "zfile.h"
 #include "dyn_int.h"
 #include "sorter.h"
@@ -203,9 +202,10 @@ void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
                                      : SRC_CODEC(BAM)  ? 60  // bottleneck is disk I/O - but less that CODEC_NONE as less data is read
                                      : SRC_CODEC(CRAM) ? 40  // bottleneck is samtools
                                      : SRC_CODEC(ORA)  ? 40  // bottleneck is orad
-                                     : SRC_CODEC(GZ)   ? 20  // bottleneck is GZ-decompression in main thread
+                                     : SRC_CODEC(GZ)   ? (VB_DT(FASTQ) ? 60 : 20)  // for FASTQ we assume MGZIP (but we don't know yet, bc segconf runs before gz discovery). if not FASTQ - bottleneck is GZ-decompression in main thread
+                                     : SRC_CODEC(BZ2)  ? 20  // bottleneck is uncompression by main thread
                                      : SRC_CODEC(NONE) ? 30  // bottleneck is disk I/O
-                                     :                                        30; // arbitrary
+                                     :                   30; // arbitrary
 
             uint64_t new_vb_size = MAX_(VBLOCK_MEMORY_MIN_SMALL, est_seggable_size * 1.2 / MIN_(est_max_threads, global_max_threads));
 
@@ -304,17 +304,17 @@ static bool segconf_get_zip_txt_modified (bool provisional)
         || flag_has_biopsy_line;    
 }
 
-static bool segconf_skip_segconf (void)
+static bool segconf_is_nonfirst_FASTQ (void)
 {
     // no need to re-run segconf for 2nd+ FASTQ in the *same* z_file
     return (Z_DT(FASTQ) && flag.pair == PAIR_R2) || // FASTQ: no recalculating for 2nd pair 
            ((Z_DT(BAM) || Z_DT(SAM)) && flag.deep && flag.zip_comp_i >= SAM_COMP_FQ01); // --deep: no recalculating for second (or more) FASTQ file
 }
 
-// ZIP only: after opening z_file, before reading txt_header and opening txt_file
+// ZIP only: for each txt_file reading txt_header. z_file is already open
 void segconf_zip_initialize (void)
 {
-    if (segconf_skip_segconf()) return;
+    if (segconf_is_nonfirst_FASTQ()) return;
 
     SegConf old_segconf = segconf;
 
@@ -411,20 +411,55 @@ static void segconf_discover_fastq_gz (void)
     buf_free (txt_file->unconsumed_txt);
 }
 
+// mini-segconf for 2nd+ FASTQ file (paired or in deep)
+static void segconf_calculate_nonfirst_FASTQ (void)
+{
+    VBlockP vb = NULL;
+
+    // check for a non-biological file (i.e. sequences are only barcodes etc)
+    if (flag.deep_num_fastqs < 3/*0 if not deep*/ && !FAF && !segconf.is_long_reads) {
+            
+        uint64_t save_vb_size = segconf.vb_size;
+        int save_pair = flag.pair;
+
+        flag.pair = NOT_PAIRED;
+        segconf.vb_size = segconf.line_len * 1000; // ~1000 reads, based on "line" length of R1 
+        segconf.running = true;
+
+        vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, TASK_SEGCONF);
+        txtfile_read_vblock (vb);
+
+        if (!segconf.is_long_reads) {
+            fastq_segconf_index_R2_lines (vb); // mini-seg: only populated vb->lines
+            fastq_segconf_set_non_biological (vb);
+        }
+        
+        flag.pair       = save_pair;
+        segconf.vb_size = save_vb_size;
+        segconf.running = false;
+    }
+
+    if (txt_file->discover_during_segconf)
+        segconf_discover_fastq_gz();
+    else if (vb)
+        buf_insert (evb, txt_file->unconsumed_txt, char, 0, B1STtxt, Ltxt, "txt_file->unconsumed_txt");
+    
+    vb_destroy_vb (&vb);
+
+    if (segconf.deep_paired_qname) // Deep/bamass with exactly 2 FASTQs, and since skipped, this is the 2nd FASTQ
+        segconf.deep_is_last = !segconf.deep_is_last;
+
+    if (Z_DT(FASTQ) && IS_R1)
+        fastq_zip_after_segconf_alloc_r1_z_bufs();
+}
+
 // ZIP: Seg a small sample of data of the beginning of the data, to pre-calculate several Seg configuration parameters
 void segconf_calculate (void)
 {
-    // no need to re-calculate segconf if this is R2. We just re-calculate the codecs.
-    if (segconf_skip_segconf()) {
-        if (txt_file->discover_during_segconf)
-            segconf_discover_fastq_gz();
+    START_TIMER;
 
-        if (segconf.deep_paired_qname) // Deep/bamass with exactly 2 FASTQs, and since skipped, this is the 2nd FASTQ
-            segconf.deep_is_last = !segconf.deep_is_last;
-        
-        if (Z_DT(FASTQ) && IS_R1)
-            fastq_zip_after_segconf_alloc_r1_z_bufs();
-
+    if (segconf_is_nonfirst_FASTQ()) {
+        segconf_calculate_nonfirst_FASTQ();
         goto finalize;
     }
 
@@ -571,11 +606,7 @@ done:
     segconf.running = false;
 
 finalize: // code to execute even if segconf was skipped
-    flag.zip_uncompress_source_during_read = 
-        flag.make_reference   || // unconsumed callback for make-reference needs to inspect the whole data
-        flag.biopsy           ||
-        flag.zip_lines_counted_at_init_vb; // *_zip_init_vb needs to count lines
-
+    COPY_TIMER_EVB (segconf_calculate);
     #undef vb
 }
 

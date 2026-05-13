@@ -9,7 +9,7 @@
 #pragma once
 
 #define GENOZIP_URL "🌐 https://genozip.com"
-#define REPO        "/divonlan/genozip"
+#define REPO        "/divonlan/genozip" // also in release.py
 #define GITHUB_RAW  "https://raw.githubusercontent.com" REPO "/master"
 #define GITHUB_REPO "https://github.com" REPO
 
@@ -44,11 +44,11 @@
 #define WEBSITE_INDEXING        GENOZIP_URL "/indexing"
 #define WEBSITE_GZ              GENOZIP_URL "/losslessness#gz"
 #define WEBSITE_REFERENCE       GENOZIP_URL "/reference"
+#define WEBSITE_DIAGNOSTICS     GENOZIP_URL "/diagnostics"
 #define EMAIL_SUPPORT  "support@genozip.com"
 #define EMAIL_SALES    "sales@genozip.com"
 #define EMAIL_REGISTER "register@genozip.com"
 
-#define GITHUB_LATEST_RELEASE    GITHUB_REPO "/releases/latest"
 #define GITHUB_INSTALLERS        GITHUB_RAW  "/installers"  
 #define GITHUB_WINDOWS_INSTALLER GITHUB_INSTALLERS "/genozip-installer.exe"
 #ifdef __linux__

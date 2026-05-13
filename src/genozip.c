@@ -45,7 +45,7 @@
 #include "dispatcher.h"
 
 // globals - set in main() and immutable thereafter
-char global_cmd[256]; 
+char global_cmd[32]; 
 ExeType exe_type;
 
 unsigned file_i, n_files; // number of input files in the execution
@@ -120,11 +120,12 @@ rom command_name (void) // see CommandType
         case SHOW_HEADERS  : return "SHOW_HEADERS";
         case SHOW_BAI      : return "SHOW_BAI";
         case SHOW_GZ       : return "SHOW_GZ";
+        case GENERATE_IL1M : return "GENERATE_IL1M";
         case DUMP_GZ_BLOCK : return "DUMP_GZ_BLOCK";
         case SHOW_FLAVOR   : return "SHOW_FLAVOR";
         case RM_CACHE      : return "RM_CACHE";
         case NO_COMMAND    : return "NO_COMMAND";
-        default            : return "Invalid command";
+        default            : return "InvalidCommand";
     }
 }
 
@@ -347,6 +348,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.xthreads      ? "--xthreads"       : SKIP_ARG,
                                       flag.show_alleles  ? "--show-alleles"   : SKIP_ARG,
                                       flag.show_aligner  ? "--show-aligner"   : SKIP_ARG,
+                                      flag.debug_aligner ? "--debug-aligner"  : SKIP_ARG,
                                       flag.show_threads  ? "--show-threads"   : SKIP_ARG,
                                       flag.debug_threads ? "--debug-threads"  : SKIP_ARG,
                                       flag.debug_valgrind? "--debug-valgrind" : SKIP_ARG,
@@ -619,6 +621,8 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
         if (fn[fn_len-1] == '/') 
             fn[--fn_len] = 0; // change "mydir/" to "mydir"
 
+        if (*fn == '\1') fn++; // skip "MALLOCED" mark
+        
         if (!file_is_dir (fn)) continue;
 
         if (flag.subdirs || is_genols) {
@@ -628,11 +632,11 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
 
             struct dirent *ent;
             while ((ent = readdir(dir))) {
-                if (ent->d_name[0] =='.') continue; // skip . ..  and hidden files
-
+                if (ent->d_name[0] == '.') continue; // skip . ..  and hidden files
+                
                 int ent_fn_size = strlen(ent->d_name) + fn_len + 3;
                 char *ent_fn = MALLOC (ent_fn_size);
-                snprintf (ent_fn, ent_fn_size, "\1%.*s/%s", fn_len, fn, ent->d_name); // \1 to mark it as MALLOCed
+                snprintf (ent_fn, ent_fn_size, "\1%.*s/%s", fn_len, fn, ent->d_name); // and pointer to array of pointers: \1 to mark it as MALLOCed
                 buf_append (evb, input_files_buf, char *, &ent_fn, 1, NULL);
             }
             closedir(dir);    
@@ -809,11 +813,15 @@ int main (int argc, char *argv[])
 
     flags_store_command_line (argc, argv); // can only be called after --password is processed
 
-    // handle all commands except for ZIP, PIZ or LIST
-    if (command == VERSION)     { main_print_version();    return 0; }
-    if (command == LICENSE)     { license_display (false); return 0; }
-    if (command == HELP)        { main_print_help (true);  return 0; }
-    if (command == SHOW_FLAVOR) { qname_show_flavor();     return 0; }
+    // handle all commands that do NOT operate on files
+    switch (command) {
+        case VERSION       : main_print_version();    return 0; 
+        case LICENSE       : license_display (false); return 0;
+        case HELP          : main_print_help (true);  return 0; 
+        case SHOW_FLAVOR   : qname_show_flavor();     return 0;
+        case GENERATE_IL1M : generate_il1m();         return 0;
+        default            : break;
+    }
 
     // genozip with no input filename, no output filename, and no input redirection 
     // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
@@ -825,7 +833,7 @@ int main (int argc, char *argv[])
 
     unsigned num_z_files=0;
     
-    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST || IS_SHOW_BAI || IS_SHOW_GZ || IS_DUMP_GZ_BLOCK) 
+    if (IS_ZIP || IS_PIZ || IS_SHOW_HEADERS || IS_LIST || IS_SHOW_BAI || IS_SHOW_GZ || IS_DUMP_GZ_BLOCK || IS_BIOPSY_BYTES) 
         main_get_filename_list (argc - optind, &argv[optind], &num_z_files);
 
     MAIN0 ("Starting main"); // after explicit_quiet is set main_get_filename_list->flags_update
@@ -847,16 +855,13 @@ int main (int argc, char *argv[])
 
     primary_command = command; 
 
-    // we test for a newer version if its a single file compression (if --test is used, we test after PIZ - check_for_newer is set)
-    if (!flag.is_sanitize_thread && // sanitize_thread will complain about a leaked thread
-        !flag.quiet && !flag.no_upgrade && isatty(0) && isatty(1) && 
-        ((IS_ZIP && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress of last file*/)))
-        version_background_test_for_newer();
-
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
     // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
     // section of the license. Rather, please contact sales@genozip.com to discuss which license would be appropriate for your case.
     if (IS_ZIP) license_load(); 
+
+    // we test for a newer genozip version if conditions are met
+    version_background_test_for_newer(); // must be after license is loaded
 
     // if we're genozipping with tar, initialize tar file
     if (IS_ZIP && tar_zip_is_tar()) 
@@ -900,7 +905,9 @@ int main (int argc, char *argv[])
                                      break;           
 
                 case SHOW_HEADERS  : genocat_show_headers (next_input_file); break;
-                            
+
+                case BIOPSY_BYTES  : biopsy_bytes (next_input_file); break;
+                
                 case SHOW_BAI      : bai_show (next_input_file); break;
                 
                 case SHOW_GZ       : show_gz (next_input_file); break;

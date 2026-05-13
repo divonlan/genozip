@@ -65,7 +65,7 @@ typedef struct {
 #define CODEC_ARGS { /* aligned with Codec defined in genozip.h */ \
 /*               simp mgzip name   ext       compress                  uncompress                reconstruct                est_size                 */ \
 [CODEC_UNKNOWN] = { 1, 0, "N/A",  "+",      NA1,                      NA2,                      NA3,                       NA4                      }, \
-/* src codecs - mgzip */ \
+/* src GZ codecs - mgzip */ \
 [CODEC_BGZF   ] = { 0, 1, "BGZF", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
 [CODEC_IL1M   ] = { 0, 1, "IL1M", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
 [CODEC_IL4M   ] = { 0, 1, "IL4M", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
@@ -73,6 +73,7 @@ typedef struct {
 [CODEC_MGSP   ] = { 0, 1, "MGSP", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
 [CODEC_EMFL   ] = { 0, 1, "EMFL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
 [CODEC_EMVL   ] = { 0, 1, "EMVL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
+[CODEC_GZBL   ] = { 0, 1, "GZBL", "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, /* 15.0.83 */ \
 /* src codecs - other */ \
 [CODEC_GZ     ] = { 1, 0, "GZ",   "+.gz",   NA1,                      NA2,                      NA3,                       NA4                      }, \
 [CODEC_BAM    ] = { 0, 0, "BAM",  "-.bam",  NA1,                      NA2,                      NA3,                       NA4                      }, \
@@ -192,7 +193,6 @@ extern void codec_qual_show_stats (void);
 extern bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB callback, bool force);
 
 // SMUX stuff
-extern bool codec_smux_maybe_used (Did did_i);
 extern bool codec_smux_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb, bool force);
 extern void codec_smux_calc_stats (VBlockP vb);
 

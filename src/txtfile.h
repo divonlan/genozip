@@ -23,11 +23,13 @@ extern void txtfile_zip_finalize_codecs (void);
 extern void txtfile_read_header (bool is_first_txt);
 extern uint32_t txt_data_alloc_size (uint32_t vb_size) ;
 extern void txtfile_read_vblock (VBlockP vb);
+extern void txtfile_skip (uint64_t txt_bytes_to_skip);
 typedef enum { RESTART_IF_NOT, RESIZE_IF_NOT } EnforceVbSizeAction;
 extern void txtfile_enforce_vb_large_enough_for_mgzip (uint32_t vb_size, EnforceVbSizeAction action);
 extern bool txtfile_is_gzip (FileP file);
 extern void txtfile_discover_specific_gz (FileP file);
 extern void txtfile_update_gz_digests (VBlockP vb);
+extern bool txtfile_uncompress_mgzip_at_read (void);
 
 // callbacks
 extern int32_t def_unconsumed (VBlockP vb, uint32_t first_i);

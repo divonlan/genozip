@@ -20,7 +20,7 @@ typedef packed_enum {
     QF_ILLUM_X_0bc, QF_ILLUM_X_1bc, QF_ILLUM_X_2bc, QF_ILLUM_S_0bc, QF_ILLUM_S_1bc, QF_ILLUM_S_2bc, QF_ILLUM_7gsFQ, QF_ILLUM_7_2bc,
     QF_ILLUM_7_rbc,
     // Illumina-style FASTQ QNAME2 flavors (also appears in Ultima, Singular...)
-    QF_ILLUM_2bc, QF_ILLUM_1bc, QF_ILLUM_0bc, 
+    QF2_ILLUM_2bc, QF2_ILLUM_1bc, QF2_ILLUM_0bc, QF2_ILLUM, 
     // MGI flavors
     QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_SAP8, QF_MGI_MFT, QF_MGI_varlen, QF_MGI_R6, QF_MGI_die6, QF_MGI_R7, QF_MGI_R8, QF_MGI_R8_1bc, QF_MGI_R8_2bc, QF_MGI__varlen, QF_MGI_Rgs8, QF_MGI_Rgs8FQ,
     // PacBio flavors 
@@ -28,10 +28,14 @@ typedef packed_enum {
     // Nanopore flavors
     QF_NANOPORE, QF_NANOPORE_rng, QF_NANOPORE_ext,
     // Ultima flavors
-    QF_ULTIMA_a, QF_ULTIMA_b6_bc, QF_ULTIMA_a_bc, QF_ULTIMA_c, QF_ULTIMA_c_bc, QF_ULTIMA_b6, QF_ULTIMA_d, QF_ULTIMA_d_bc, 
+    QF_ULTIMA_a, QF_ULTIMA_b6_bc, QF_ULTIMA_a_bc, QF_UG100, QF_UG100_bc, QF_UG100_2bc, QF_ULTIMA_b6, QF_ULTIMA_d, QF_ULTIMA_d_bc, 
     QF_ULTIMA_b9, QF_ULTIMA_b9_bc, QF_ULTIMA_n, QF_ULTIMA_Z9,
+    // Sikun flavors
+    QF_SIKUN, QF2_SIKUN_2bc,
     // Other sequencer flavors
     QF_ION_TORR_3, QF_ROCHE_454, QF_HELICOS, QF_SINGULAR, QF_ELEMENT, QF_ELEMENT_AV, QF_ELEMENT_bc, 
+    // Parse biosciences BAM flavors
+    QF_PARSE_ILLUM,
     // NCBI flavors
     QF_SRA_L, QF_SRA2, QF_SRA, QF_SRA_sra, QF_SRA_label,
     // Consensus alignments flavors
@@ -59,8 +63,8 @@ extern void qname_segconf_finalize (VBlockP vb);
 
 extern void qname_show_flavor (void);
 
-typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, QTR_NOT_BARCODE2, QTR_NO_MATE, QTR_BAD_MATE, QTR_FAILED_VALIDATE_FUNC, NUM_QTRs } QnameTestResult;
-#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE",   "BAD_MATE",  "FAILED_VALIDATE_FUNC"}
+typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, QTR_NOT_BARCODE2, QTR_NO_MATE, QTR_BAD_MATE, QTR_FAILED_VALIDATE_FUNC, QTR_BARCODE_NOT_ACGTN, NUM_QTRs } QnameTestResult;
+#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE",   "BAD_MATE",   "FAILED_VALIDATE_FUNC",   "BARCODE_NOT_ACGTN" }
 extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet);
 
 typedef enum { CRC32, CRC64 } CrcType;
@@ -74,10 +78,5 @@ extern QnameFlavorId segconf_qf_id (QType q);
 extern rom qtype_name (QType q);
 extern DictIdAlias qname_get_alias (QType q);
 extern bool qf_is_mated (QType q);
-
-typedef void (*QnameSegCallback) (VBlockP vb, ContextP ctx, STRp(value));
-
-// flavor-specific callbacks
-extern void ultima_c_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value));
-extern void seg_qname_rng2seq_len_cb (VBlockP vb, ContextP ctx, STRp(value));
-
+extern Did qf_get_barcode_did (int bc_i);
+extern void qname_get_barcode (STRp(qname), int bc_i, pSTRp(bc_seq));

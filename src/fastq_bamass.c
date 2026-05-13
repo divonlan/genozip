@@ -751,7 +751,7 @@ static inline StrText16K display_bamass_cigar (VBlockP vb, thool is_fwd)
 void fastq_bamass_retrieve_ent (VBlockP vb, // note: doesn't require FASTQ VB, can ran on evb
                                 const BamAssEnt *e, 
                                 bool get_cigar, // if true, cigar is written to vb_bamass_cigar
-                                bool *is_fwd, PosType64 *gpos, uint32_t *seq_len, uint32_t *ref_consumed, uint32_t *ref_and_seq_consumed, uint32_t *insertions) // optional out 
+                                bool *is_fwd, PosType64𐤐 gpos, uint32_t *seq_len, uint32_t *ref_consumed, uint32_t *ref_and_seq_consumed, uint32_t *insertions) // optional out 
 {
     START_TIMER;
     
@@ -911,7 +911,7 @@ void fastq_bamass_zip_finalize (bool is_last_fastq)
     }
 }
 
-DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQ *dl, DeepHash *deep_hash, STRp(seq),  
+DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQP dl, DeepHash *deep_hash, STRp(seq),  
                                     BamAssEnt **matching_ent) // out
 {
     START_TIMER;
@@ -990,7 +990,7 @@ static inline bool next_op_is_I (BamCigarOpP cigar, BamCigarOpP after_cigar)
     return false; // there are no further seq-consuming ops
 }
 
-MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool is_pair_2, PosType64 pair_gpos, bool pair_is_forward)
+MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool am_i_R2, PosType64 gpos_R1, bool is_forward_R1)
 {
     declare_seq_contexts;   
     START_TIMER;
@@ -1027,7 +1027,8 @@ MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(se
     if (IS_REF_EXT_STORE) 
         bits_set_region (ref_get_genome_is_set(), vb->gpos, vb->ref_consumed); // we will need this ref to reconstruct
 
-    aligner_seg_gpos_and_fwd (VB, vb->gpos, vb->is_forward, is_pair_2, pair_gpos, pair_is_forward);
+    int64_t G1;
+    aligner_seg_gpos_and_fwd (VB, seq_len, vb->gpos, NO_GPOS, vb->is_forward, 0, am_i_R2, gpos_R1, is_forward_R1, &G1);
 
     bool perfect=true;
     
@@ -1225,7 +1226,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
         fastq_piz_R1_test_aligned (vb); // set r1_is_aligned
 
     // get gpos and is_forward
-    aligner_recon_get_gpos_and_fwd (VB, vb->R1_vb_i > 0, &vb->gpos, &vb->is_forward);
+    aligner_recon_get_gpos_and_fwd (VB, vb->R1_vb_i > 0, false, &vb->gpos, &vb->is_forward);
 
     // get reference - the needed ref_consumed bases - revcomped if needed
     ASSERTNOTINUSE (vb->scratch);

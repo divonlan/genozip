@@ -30,7 +30,7 @@
 // reference gpos
 //
 
-#define BASES_PER_HASH 18 // Up to 30 (not 32 bc of NO_KMER). was 14 up to 15.0.80 (see internal-docs/internal-docs/2026-03-14-refhash-stats)
+#define BASES_PER_HASH 18 // Can be up to 30 (not 32 bc of NO_KMER). was 14 up to 15.0.80 (see internal-docs/internal-docs/2026-03-14-refhash-stats)
 
 #define VBLOCK_MEMORY_REFHASH (10 MB) // amount of refhash data each each vb compresses.
 

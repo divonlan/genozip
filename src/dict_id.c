@@ -100,7 +100,7 @@ bool dict_id_is_in (DictId dict_id, ...)
 // print the dict_id - NOT thread safe, for use in execution-termination messages
 DisplayPrintId dis_dict_id (DictId dict_id)
 {
-    if (!dict_id.num) return (DisplayPrintId){ .s = "(none)" };
+    if (!dict_id.num) return (DisplayPrintId){ .s = "(DICT_ID_NONE)" };
 
     DisplayPrintId s = { .s[0] = (dict_id.id[0] & 0x7f) | 0x40 }; // set 2 Msb to 01
 

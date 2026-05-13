@@ -328,21 +328,21 @@ uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits)
 // Endianity stuff
 //---------------------
 
-void interlace_d8_buf       (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int8_t,  num, *buf) *num =        (INTERLACE(int8_t,  *num)); }
-void BGEN_interlace_d16_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int16_t, num, *buf) *num = BGEN16 (INTERLACE(int16_t, *num)); }
-void BGEN_interlace_d32_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int32_t, num, *buf) *num = BGEN32 (INTERLACE(int32_t, *num)); }
-void BGEN_interlace_d64_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int64_t, num, *buf) *num = BGEN64 (INTERLACE(int64_t, *num)); }
-void LTEN_interlace_d16_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int16_t, num, *buf) *num = LTEN16 (INTERLACE(int16_t, *num)); }
-void LTEN_interlace_d32_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int32_t, num, *buf) *num = LTEN32 (INTERLACE(int32_t, *num)); }
-void LTEN_interlace_d64_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { for_bufរ (int64_t, num, *buf) *num = LTEN64 (INTERLACE(int64_t, *num)); }
+void interlace_d8_buf       (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐 (int8_t,  num, *buf) *num =        (INTERLACE(int8_t,  *num)); }
+void BGEN_interlace_d16_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐 (int16_t, num, *buf) *num = BGEN16 (INTERLACE(int16_t, *num)); }
+void BGEN_interlace_d32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐 (int32_t, num, *buf) *num = BGEN32 (INTERLACE(int32_t, *num)); }
+void BGEN_interlace_d64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐 (int64_t, num, *buf) *num = BGEN64 (INTERLACE(int64_t, *num)); }
+void LTEN_interlace_d16_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐 (int16_t, num, *buf) *num = LTEN16 (INTERLACE(int16_t, *num)); }
+void LTEN_interlace_d32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐 (int32_t, num, *buf) *num = LTEN32 (INTERLACE(int32_t, *num)); }
+void LTEN_interlace_d64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐 (int64_t, num, *buf) *num = LTEN64 (INTERLACE(int64_t, *num)); }
 
-void BGEN_u8_buf  (Bufferរ buf, __attribute__((unused)) LocalType *lt) {}
-void BGEN_u16_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if ( flag.is_lten) for_bufរ (uint16_t, num, *buf) *num = BGEN16 (*num); }
-void BGEN_u32_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if ( flag.is_lten) for_bufរ (uint32_t, num, *buf) *num = BGEN32 (*num); }
-void BGEN_u64_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if ( flag.is_lten) for_bufរ (uint64_t, num, *buf) *num = BGEN64 (*num); }
-void LTEN_u16_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if (!flag.is_lten) for_bufរ (uint16_t, num, *buf) *num = LTEN16 (*num); }
-void LTEN_u32_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if (!flag.is_lten) for_bufរ (uint32_t, num, *buf) *num = LTEN32 (*num); }
-void LTEN_u64_buf (Bufferរ buf, __attribute__((unused)) LocalType *lt) { if (!flag.is_lten) for_bufរ (uint64_t, num, *buf) *num = LTEN64 (*num); }
+void BGEN_u8_buf  (Buffer𐤐 buf, UNUSED LocalType *lt) {}
+void BGEN_u16_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if ( flag.is_lten) for_buf𐤐 (uint16_t, num, *buf) *num = BGEN16 (*num); }
+void BGEN_u32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if ( flag.is_lten) for_buf𐤐 (uint32_t, num, *buf) *num = BGEN32 (*num); }
+void BGEN_u64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if ( flag.is_lten) for_buf𐤐 (uint64_t, num, *buf) *num = BGEN64 (*num); }
+void LTEN_u16_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if (!flag.is_lten) for_buf𐤐 (uint16_t, num, *buf) *num = LTEN16 (*num); }
+void LTEN_u32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if (!flag.is_lten) for_buf𐤐 (uint32_t, num, *buf) *num = LTEN32 (*num); }
+void LTEN_u64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if (!flag.is_lten) for_buf𐤐 (uint64_t, num, *buf) *num = LTEN64 (*num); }
 
 // number of columns is trasmitted in the count, except if this is a matrix of VCF samples, in which case param=0 and we take 
 // the number of columns to be the number of samples in the VCF header

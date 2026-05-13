@@ -19,11 +19,10 @@
 #include "file.h"
 #include "threads.h"
 
-static rom latest_version = NULL;
+static Version latest_version = NO_VERSION;
 static bool thread_running = false;
 static pthread_t thread_id;
-static char redirect_url[128];
-static StreamP github_stream = NULL;
+static StreamP version_check_stream = NULL;
 
 // we are running in development - consider version to be next minor version
 bool version_is_devel (void)
@@ -88,49 +87,35 @@ rom genozip_update_msg (void)
 }
 
 // thread entry
+extern Version version_fetch_latest (StreamP *url_stream);
 static void *version_background_test_for_newer_do (void *unused)
 {
     store_release (thread_running, (bool)true); // stamp our merge_num as the ones that set the word_index
 
     pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL); // thread can be canceled at any time
 
-    if (url_get_redirect (GITHUB_LATEST_RELEASE, redirect_url, sizeof redirect_url, &github_stream)) {
-        latest_version = strrchr (redirect_url, '-'); // url looks something like: "https://github.com/divonlan/genozip/releases/tag/genozip-13.0.18"
+    latest_version = version_fetch_latest (&version_check_stream);
 
-        if (latest_version) {
-            latest_version++;
-
-            if (flag.debug_upgrade)
-                iprintf ("\ndebug-upgrade: latest_version=%s\n", latest_version);
-
-            Version code_ver = code_version();
-            Version lastest_ver = str_to_version (latest_version);
-
-            if (!flag.debug_latest && lastest_ver.major == code_ver.major && lastest_ver.minor <= code_ver.minor)
-                latest_version = NULL; // same or newer than current version
-        } 
-        else {
-            if (flag.debug_upgrade)
-                iprint0 ("debug-upgrade: no latest_version\n");
-        }
-    }
-
-    else {
-        if (flag.debug_upgrade)
-            iprintf ("debug-upgrade: failed to get redirect url=\"%s\"\n", redirect_url);
-    }
+    if (VER_GE (code_version(), latest_version))
+        latest_version = NO_VERSION; // no newer version (including if fetching failed)
 
     store_release (thread_running, (bool)false); 
     return NULL;
 }
 
-// tests for a newer version on github in a background threads, and sets the url_has_newer_version global variable
+// tests for a newer version on github in a background threads, and sets "latest_version" global variable
 void version_background_test_for_newer (void)
 {
-    // case: current version ends with "-1\0" - its the next major release dev version - already the newest
-    if (!flag.debug_latest && GENOZIP_CODE_VERSION[sizeof GENOZIP_CODE_VERSION-3] == '-') return; 
+    if (flag.debug_upgrade
+        ||
+        (((IS_ZIP && !flag.test) || (IS_PIZ && flag.check_latest/*PIZ - test after compress of last file*/)) && // note: if genozip --test is used, flag.check_latest will be set in PIZ
+         !flag.is_sanitize_thread &&        // sanitize_thread will complain about a leaked thread
+         GENOZIP_CODE_VERSION[sizeof GENOZIP_CODE_VERSION-3] != '-' && // if current version ends with "-1" - its the next major release dev version - already the newest
+         !flag.quiet && !flag.no_upgrade && // user didn't block the upgrade message (or all messages)
+         isatty(0) && isatty(1) &&          // uprade message is useful only if genozip is run from the terminal
+         !getenv (GENOZIP_TEST)))           // avoid useless traffic to server during dev 
 
-    pthread_create (&thread_id, NULL, version_background_test_for_newer_do, NULL); // ignore errors
+        pthread_create (&thread_id, NULL, version_background_test_for_newer_do, NULL); // ignore errors
 }
 
 #ifndef _WIN32
@@ -271,23 +256,23 @@ void version_print_notice_if_has_newer (void)
         if (flag.debug_upgrade)
             iprint0 ("debug-upgrade: upgrade thread canceled\n");
 
-        __atomic_thread_fence (__ATOMIC_ACQUIRE); // make sure github_stream is updated      
+        __atomic_thread_fence (__ATOMIC_ACQUIRE); // make sure version_check_stream is updated      
         
-        if (github_stream) {
+        if (version_check_stream) {
             // leak the pipe - it's state might be corrupted as we abruptly terminated the thread using it (which might cause fclose to fail on Linux, and hang on Windows)  
-            stream_leak_pipe (github_stream);
+            stream_leak_pipe (version_check_stream);
 
-            stream_close (&github_stream, STREAM_KILL_PROCESS);
+            stream_close (&version_check_stream, STREAM_KILL_PROCESS);
         }
     }
     
     // case: thread completed, and there is a new version
-    else if (latest_version) {
+    else if (latest_version.major) {
         if (flag.debug_upgrade)
             iprint0 ("debug-upgrade: upgrade thread completed\n");
 
         iprintf ("\nA newer & better version of Genozip is available - version %s. You are currently running version %s\n", 
-                 latest_version, STRver(code_version()).s);
+                 STRver (latest_version).s, STRver(code_version()).s);
 
         if (is_info_stream_terminal) {
 #ifdef _WIN32

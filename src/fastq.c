@@ -139,7 +139,7 @@ thool fastq_verify_and_sort_pairs (int n_fns, rom *fns, FailType soft_fail)
             if (fastq_is_pair_strings (fqs[i].fn, strlen(fqs[i].fn), fqs[i+1].fn, strlen(fqs[i+1].fn)) == PAIR_R2)
                 SWAP (fqs[i], fqs[i+1]); // if filename indicates reverse order - swap
             
-            // try to distguish R1 vs R2 based on QNAME2 (e.g. "1:N:0:41" vs "2:N:0:41" in QF_ILLUM_0bc)
+            // try to distguish R1 vs R2 based on QNAME2 (e.g. "1:N:0:41" vs "2:N:0:41" in QF2_ILLUM_0bc)
             else if (fastq_is_pair_strings (STRa(fqs[i].qname2), STRa(fqs[i+1].qname2)) == PAIR_R2)
                 SWAP (fqs[i], fqs[i+1]); // if QNAME2 indicates reverse order - swap
         }
@@ -316,7 +316,7 @@ int32_t fastq_unconsumed (VBlockP vb_,
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
     ASSERTNOTZERO (Ltxt);
 
-    // if entire R2 vb->txt_data doesn't have a counterpart in R2, truncate it if we are allowed
+    // if entire R2 vb->txt_data doesn't have a counterpart in R1, truncate it if we are allowed
     if (IS_R2 && !vb->R1_vb_i && flag.truncate)
         return -2;
 
@@ -426,17 +426,28 @@ void fastq_zip_init_vb (VBlockP vb)
     }
 }
 
+void fastq_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
+{
+    vb_header->flags.vb_header.fastq.is_nonbio = (segconf.nonbio_type != NONBIO_NONE); // 15.0.83. Note: may be different for R1 and R2, so not in genozip_header
+}
+
 // called by main thread, as VBs complete (might be out-of-order)
 void fastq_zip_after_compute (VBlockP vb)
 {
     if (flag.deep || flag.bam_assist)
         fastq_deep_zip_after_compute (VB_FASTQ);
 
-    z_file->fq_num_perfect_matches += vb->num_perfect_matches; // for stats
+    // accumulators for stats
     z_file->fq_num_aligned         += vb->num_aligned;
+    z_file->fq_num_aligned_perfect += vb->num_aligned_perfect;
+    z_file->fq_num_perfect_r2      += vb->num_perfect_r2;
+    z_file->fq_num_aligned_spliced += vb->num_aligned_spliced;
+    z_file->fq_num_perfect_spliced += vb->num_perfect_spliced;
     z_file->fq_num_verbatim        += vb->num_verbatim;
     z_file->fq_num_monochar        += VB_FASTQ->num_monochar;
     z_file->fq_num_empty_read      += VB_FASTQ->num_empty_read;
+    z_file->fq_num_r2_gpos_Δ       += VB_FASTQ->num_r2_gpos_Δ;
+    z_file->fq_num_nonbio          += VB_FASTQ->num_nonbio;
     global_num_consumed            += VB_FASTQ->num_consumed;
 
     if (!flag.deep && IS_REF_LOADED_ZIP) {
@@ -605,7 +616,7 @@ void fastq_seg_initialize (VBlockP vb_)
         if (segconf.is_interleaved) {            
             buf_alloc (vb, &gpos_ctx->local,    1, vb->lines.len / 2, uint32_t, CTX_GROWTH, C_LOCAL); 
             buf_alloc (vb, &gpos_r2_ctx->local, 1, vb->lines.len / 2, uint32_t, CTX_GROWTH, C_LOCAL); 
-            buf_alloc (vb, &gpos_d_ctx->local,  1, vb->lines.len / 2, int16_t,  CTX_GROWTH, C_LOCAL); 
+            buf_alloc (vb, &gpos_Δ_ctx->local,  1, vb->lines.len / 2, int16_t,  CTX_GROWTH, C_LOCAL); 
 
             buf_alloc (vb, &strand_ctx->local,    0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, C_LOCAL); 
             buf_alloc (vb, &strand_r2_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, C_LOCAL); 
@@ -615,9 +626,12 @@ void fastq_seg_initialize (VBlockP vb_)
             buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, C_LOCAL); 
 
             if (vb->R1_vb_i)
-                buf_alloc (vb, &gpos_d_ctx->local,  1, vb->lines.len, int16_t, CTX_GROWTH, C_LOCAL); 
+                buf_alloc (vb, &gpos_Δ_ctx->local,  1, vb->lines.len, int16_t, CTX_GROWTH, C_LOCAL); 
         }
     }
+
+    if (segconf.nonbio_type == NONBIO_SPLiT_seq)
+        fastq_SPLiT_seg_initialize (vb);
 
     if (flag.bam_assist) 
         fastq_bamass_seg_initialize (vb);
@@ -677,8 +691,8 @@ void fastq_seg_initialize (VBlockP vb_)
 
     // consolidate stats for --stats
     ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONREF, FASTQ_NONREF_X, 
-                           FASTQ_GPOS, FASTQ_GPOS_R2, FASTQ_GPOS_DELTA, 
-                           FASTQ_STRAND, FASTQ_STRAND_R2, 
+                           FASTQ_GPOS, FASTQ_GPOS_R2, FASTQ_GPOS_DELTA, FASTQ_GPOS_GAP,
+                           FASTQ_STRAND, FASTQ_STRAND_R2, FASTQ_JUNCTION,
                            FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T, 
                            FASTQ_SEQINS_A, FASTQ_SEQINS_C, FASTQ_SEQINS_G, FASTQ_SEQINS_T, 
                            T(flag.bam_assist, FASTQ_CIGAR), DID_EOL);
@@ -700,11 +714,18 @@ void fastq_segconf_finalize (VBlockP vb)
 
     if (flag.deep || flag.bam_assist) fastq_deep_seg_finalize_segconf (vb->lines.len32);
 
-    // if no reference, if fastq is multiseq
-    if (!flag.reference && !flag.fast) 
+    // test if file is non-biological (i.e. barcodes only)
+    if (!segconf.is_long_reads && !segconf.is_interleaved &&
+        !flag.pair) // note: if paired, we test R2 in segconf_calculate_nonfirst_FASTQ
+        fastq_segconf_set_non_biological (vb);
+
+    // if no reference, test if fastq is multiseq
+    if (!flag.reference && !flag.fast && !segconf.nonbio_type) 
         segconf_test_multiseq (VB, FASTQ_NONREF);
 
-    if (!segconf.multiseq && !flag.reference && !txt_file->redirected && !flag.seg_only && !flag.restarted) {
+    if (!segconf.multiseq && !segconf.nonbio_type && 
+        !flag.reference && !txt_file->redirected && !flag.seg_only && !flag.restarted) {
+
         if (!flag.force && license_is_eval() && isatty(0) && isatty(1)) 
             ref_download_eval_ref (DT_NAME);
         else
@@ -1077,7 +1098,7 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
     ASSSEG (*qual_len == *seq_len, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
             *seq_len, *qual_len, STRf(*seq), STRf(*qual));
 
-    if (!str_is_in_range (STRa(*qual), 33, 126)) {
+    if (!str_is_qual_scores (STRa(*qual))) {
         bad_qual_str (VB, STRa(*qual));
         ABOSEG ("Invalid QUAL in QNAME=\"%.*s\"\nQUAL=\"%.*s\" ('■' marks an invalid score)", STRf(*qname), STRfb(vb->scratch));
     }
@@ -1171,6 +1192,29 @@ rom fastq_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     return after;
 }
 
+// a mini seg for FASTQ segconf VB of R2 - only build DataLines indices
+void fastq_segconf_index_R2_lines (VBlockP vb_)
+{
+    VBlockFASTQP vb = (VBlockFASTQP)vb_;
+
+    vb->lines.len = str_count_char (STRb(vb->txt_data), '\n') / 4;
+    buf_alloc_exact_zero (vb, vb->lines, vb->lines.len, ZipDataLineFASTQ, "lines");
+
+    rom next = B1STtxt;
+    for_line {
+        STR0(qname); STR0(qname2); STR0(desc); STR0(seq); STR0(line3); STR0(qual);
+        bool line_has_13[4] = {};
+        uint32_t line1_len;
+        next = fastq_seg_get_lines (vb, next, BAFTtxt - next, pSTRa(qname), pSTRa(qname2), pSTRa(desc), pSTRa(seq), pSTRa(line3), pSTRa(qual), 
+                                    &line1_len, line_has_13);
+
+        ZipDataLineFASTQP dl = DATA_LINE (line_i);
+        dl->qname = TXTWORD(qname);
+        dl->seq   = TXTWORD(seq); 
+        dl->qual  = TXTWORD(qual);
+    }
+}
+
 // concept: we treat every 4 lines as a "line". the Description/ID is stored in DESC dictionary and segmented to subfields D?ESC.
 // The sequence is stored in SEQ data. In addition, we utilize the TEMPLATE dictionary for metadata on the line, namely
 // the length of the sequence and whether each line has a \r.
@@ -1186,9 +1230,10 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
                                      &line1_len, line_has_13);
     
     // set dl fields, consumed by fastq_zip_qual/seq
-    ZipDataLineFASTQ *dl = DATA_LINE (vb->line_i);
-    dl->seq  = TXTWORD(seq); 
-    
+    ZipDataLineFASTQP dl = DATA_LINE (vb->line_i);
+    dl->seq   = TXTWORD(seq); 
+    dl->qname = TXTWORD(qname);
+
     if (!FAF) 
         dl->qual = TXTWORD(qual);
 
@@ -1290,10 +1335,13 @@ IS_SKIP (fastq_piz_is_skip_section)
 
     #define GPOS_dicts _FASTQ_GPOS, _FASTQ_GPOS_DELTA, _FASTQ_GPOS_R2
 
-    #define SEQ_dicts_skip_if_cov _FASTQ_NONREF, _FASTQ_NONREF_X, \
-                       _FASTQ_STRAND, _FASTQ_STRAND_R2,\
-                       _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T, \
-                       _FASTQ_SEQINS_A, _FASTQ_SEQINS_C, _FASTQ_SEQINS_G, _FASTQ_SEQINS_T
+    #define SEQ_dicts_skip_if_cov                                               \
+        _FASTQ_NONREF, _FASTQ_NONREF_X, _FASTQ_STRAND, _FASTQ_STRAND_R2,        \
+        _FASTQ_GPOS_GAP, _FASTQ_JUNCTION,                                       \
+        _FASTQ_SEQMIS_A, _FASTQ_SEQMIS_C, _FASTQ_SEQMIS_G, _FASTQ_SEQMIS_T,     \
+        _FASTQ_SEQINS_A, _FASTQ_SEQINS_C, _FASTQ_SEQINS_G, _FASTQ_SEQINS_T,     \
+        _FASTQ_NONBIO, _FASTQ_NONBIO_BC0, _FASTQ_NONBIO_BC1, _FASTQ_NONBIO_BC2, \
+        _FASTQ_NONBIO_UMI, _FASTQ_NONBIO_LINK0, _FASTQ_NONBIO_LINK1, _FASTQ_NONBIO_EXCESS
 
     #define SEQ_dicts SEQ_dicts_skip_if_cov, _FASTQ_SQBITMAP, GPOS_dicts, _FASTQ_CIGAR
     
@@ -1440,22 +1488,6 @@ CONTAINER_CALLBACK (fastq_piz_container_cb)
         
         dropped: {}
     }
-}
-
-// Used in R2: used for pair-assisted b250 reconstruction. copy parallel b250 snip from R1. 
-// Since v14, used for SQBITMAP. For files up to v14, also used for all QNAME subfield contexts
-SPECIAL_RECONSTRUCTOR (fastq_special_mate_lookup)
-{
-    ASSPIZ (ctx->b250R1.len32, "no pair_1 b250 data for ctx=%s, while reconstructing pair_2.", ctx->tag_name);
-            
-    ctx_get_next_snip (vb, ctx, true, pSTRa(snip));
-
-    if (ctx->did_i == FASTQ_SQBITMAP && VER(14))
-        ctx->r1_is_aligned = (snip_len && *snip == SNIP_LOOKUP) ? PAIR1_ALIGNED : PAIR1_NOT_ALIGNED;
-
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE /* we can't cache pair items */, STRa(snip), reconstruct, __FUNCLINE); // might include delta etc - works because in --pair, ALL the snips in a context are FASTQ_SPECIAL_mate_lookup
-
-    return NO_NEW_VALUE; // last_value already set (if needed) in reconstruct_one_snip
 }
 
 // used for interleaved files - demux by R (since 15.0.58)

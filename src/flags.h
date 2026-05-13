@@ -112,7 +112,6 @@ typedef struct {
         ext_indexing,// create an index file using an external indexer (samtools index etc)
         subdirs,     // recursively traversing subdirectories
         list,        // a genols option
-        no_bgzf,     // if this is a GZIP file, treat as normal GZIP, not BGZF
         no_cache,    // don't load cache, or delete cache
         no_upgrade,  // disable upgrade checks
         no_eval,     // don't allow features on eval basis (used for testing permissions)
@@ -137,28 +136,30 @@ typedef struct {
     int show_contigs, idxstats;
     enum { CNT_NONE, CNT_TOTAL, CNT_VBs } count; 
     enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage;
-    
+    enum { TELEMETRY_OFF, TELEMETRY_SEND, TELEMETRY_FILE } telemetry;
+
     // stats / debug useful mostly for developers
     int debug, debug_or_test, show_sag, show_depn, show_dict, show_b250, show_aliases, show_digest, log_digest, show_recon_plan,
         show_index, show_gheader, show_reading_list, show_ref_contigs, show_ref_seq,
         show_reference, show_ref_hash, show_ref_index, show_chrom2ref, show_ref_iupacs, show_ranges,
         show_codec, show_cache, show_memory, show_snips, show_regions, show_seg_summary,
-        show_alleles, show_bgzf, show_gz, show_isizes, show_is_exactable, show_txt_contigs, show_lines, show_gz_uncomp,
+        show_alleles, show_bgzf, show_isizes, show_is_exactable, show_txt_contigs, show_lines, show_gz_uncomp,
         show_threads, show_uncompress, biopsy, skip_segconf, show_data_type, debug_dyn_int,
         show_tasks, show_hash, debug_memory, debug_threads, debug_stats, debug_generate, debug_recon_size, debug_seg,
         debug_LONG, show_qual, debug_qname, debug_read_ctxs, debug_sag, debug_gencomp, debug_lines, debug_latest,
-        debug_peek, telemetry, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
+        debug_peek, show_segconf_has, debug_split, debug_upgrade, debug_expiration,
         debug_debug,  // a flag with no functionality - used for ad-hoc debugging  
         debug_valgrind, debug_tar, debug_bai, // ad-hoc debug printing in prod
         show_compress, show_sec_gencomp, show_scan,
-        no_gencomp, force_gencomp, force_reread, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, no_smux, no_faf, no_interleaved,
+        no_gencomp, force_gencomp, force_reread, force_deep, force_PLy, no_domqual, no_pacb, no_longr, no_homp, no_smux, no_lzma, 
+        no_bgzf, no_faf, no_interleaved, no_splicing,
         force_qual_codec, verify_codec, 
         seg_only, show_bam, no_index, skip_index, xthreads,
         #define SHOW_CONTAINERS_ALL_VBs (-1)
-        show_containers, show_stack, show_aligner, show_buddy,
+        show_containers, show_stack, show_aligner, debug_aligner, show_buddy,
         echo,         // show the command line in case of an error (including echo and its optional argument)
         recover,      // PIZ: attempted recovery from data corruption
-        show_headers; 
+        show_headers, show_txt_offsets; 
     bool show_sec_headers[NUM_SEC_TYPES];
     rom help, dump_section, show_is_set, show_time, show_mutex, show_header_dict_name, show_flavor;
     int32_t dump_section_i, show_header_section_i, dump_gz_block;
@@ -167,17 +168,17 @@ typedef struct {
     enum { SHOW_BAI_NONE, SHOW_BAI_UNSORTED, SHOW_BAI_SORT, SHOW_BAI_CHUNKS, SHOW_BAI_RAW, SHOW_BAI_LINEAR } show_bai;
     
     // use __builtin_expect for show/debug flags that are tested throughout execution (i.e. not just during initialization or finalization)
-    #define flag_show_deep       __builtin_expect (flag.show_deep > 0,   false)
-    #define flag_show_threads    __builtin_expect (flag.show_threads,    false)
-    #define flag_show_bgzf       __builtin_expect (flag.show_bgzf,       false)
-    #define flag_show_snips      __builtin_expect (flag.show_snips,      false)
-    #define flag_show_stack      __builtin_expect (flag.show_stack,      false)
-    #define flag_show_containers __builtin_expect (flag.show_containers, false)
-    #define flag_show_memory     __builtin_expect (flag.show_memory,     false)
-    #define flag_debug_peek      __builtin_expect (flag.debug_peek,      false)
-    #define flag_debug_gencomp   __builtin_expect (flag.debug_gencomp,   false)
-    #define flag_has_biopsy_line __builtin_expect (flag.biopsy_line.line_i != NO_LINE, false) // ZIP: --biopsy-line is used
-    #define flag_no_biopsy_line  __builtin_expect (flag.biopsy_line.line_i == NO_LINE, true)  // ZIP: --biopsy-line is not used
+    #define flag_show_deep          __builtin_expect (flag.show_deep > 0,   false)
+    #define flag_show_threads       __builtin_expect (flag.show_threads,    false)
+    #define flag_show_bgzf          __builtin_expect (flag.show_bgzf,       false)
+    #define flag_show_snips         __builtin_expect (flag.show_snips,      false)
+    #define flag_show_stack         __builtin_expect (flag.show_stack,      false)
+    #define flag_show_containers    __builtin_expect (flag.show_containers, false)
+    #define flag_show_memory        __builtin_expect (flag.show_memory,     false)
+    #define flag_debug_peek         __builtin_expect (flag.debug_peek,      false)
+    #define flag_debug_gencomp      __builtin_expect (flag.debug_gencomp,   false)
+    #define flag_has_biopsy_line    __builtin_expect (flag.biopsy_line.line_i != NO_LINE, false) // ZIP: --biopsy-line is used
+    #define flag_no_biopsy_line     __builtin_expect (flag.biopsy_line.line_i == NO_LINE, true)  // ZIP: --biopsy-line is not used
 
     CompIType show_time_comp_i;   // comp_i for which to show time (possibly COMP_NONE or COMP_ALL)
     
@@ -188,6 +189,8 @@ typedef struct {
     #define deep_or_bamass (flag.deep ? "deep" : "bamass")
 
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
+    struct biopsy_bytes { uint64_t start, len; } biopsy_bytes;
+
     DeepHash debug_deep_hash;// qname, seq, qual hashes
     int deep_num_fastqs;
     
@@ -230,7 +233,6 @@ typedef struct {
          missing_contexts_allowed, // PIZ: its not an error if contexts are missing - just reconstruct as an empty string
          piz_txt_modified,   // PIZ: output is NOT precisely identical to the compressed source, and hence we cannot use its BZGF blocks or verify digest
          zip_lines_counted_at_init_vb, // ZIP: VB lines need to be counted at zip_init_vb instead of zip_update_txt_counters, requiring BGZF-uncompression of a VB by the main thread
-         zip_uncompress_source_during_read, // ZIP: uncompress source compression in main thread during read, rather than compute thread
          explicit_ref,       // ref->filename was set by --reference or --REFERENCE (as opposed to being read from the genozip header)
          collect_coverage,   // PIZ: collect coverage data for show_coverage/idxstats
          deep_fq_only,       // PIZ: SAM data is reconstructed by not written, only FASTQ data is written
@@ -271,7 +273,7 @@ extern void flags_restore (Flags *save_flag);
         flag.show_threads = flag.debug_memory = false;                                                                          \
         flag.show_vblocks = TASK_NONE;                                                                                               \
     }                                                                                                                           \
-    flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf = flag.show_gz =                               \
+    flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf =                               \
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =                                      \
     flag.show_b250 = flag.show_ref_contigs = flag.show_contigs = flag.count =                                                   \
     flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads =                                           \

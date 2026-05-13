@@ -217,7 +217,11 @@ FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt/*data ty
                 case DT_GFF:
                     if (VER(15)) snprintf (str.s, sizeof (str.s), "embedded_fasta=%u", f.vb_header.gff.embedded_fasta);
                     break;
-                
+
+                case DT_FASTQ:
+                    if (VER2(15,83)) snprintf (str.s, sizeof (str.s), "is_nonbio=%u", f.vb_header.fastq.is_nonbio);
+                    break;
+                    
                 default:
                     str.s[0] = 0;
             }
@@ -585,7 +589,7 @@ void noreturn genocat_show_headers (rom z_filename)
     if (!flag.force) {
         for_buf2 (SectionEnt, sec, sec_i, z_file->section_list)
             if (flag.show_headers && is_show_header (sec->st, sec_i, DICT_ID_NONE)) {                
-                header = zfile_read_section_header (evb, sec, SEC_NONE).genozip_header; // we assign the largest of the SectionHeader* types
+                header = zfile_read_section_header (evb, sec, SEC_NONE).genozip_header;
                 header.section_i = sec_i; // note: replaces magic, 32 bit only. nonsense if sec is not in z_file->section_list.
 
                 sections_show_header ((SectionHeaderP)&header, NULL, sec->comp_i, sec->offset, 'R');
@@ -603,7 +607,7 @@ void noreturn genocat_show_headers (rom z_filename)
             if (gap || accumulated_gap) 
                 iprintf ("ERROR: unexpected of %"PRIu64" bytes before next section\n", gap + accumulated_gap);
             
-            header = zfile_read_section_header (evb, &sec, SEC_NONE).genozip_header; // we assign the largest of the SectionHeader* types
+            header = zfile_read_section_header (evb, &sec, SEC_NONE).genozip_header; 
             if (header.section_type < 0 || header.section_type >= NUM_SEC_TYPES) { // not true section - magic matches by chance
                 sec.offset += 4;
                 accumulated_gap += 4;
@@ -648,6 +652,9 @@ void sections_show_section_list (DataType dt, BufferP section_list, SectionType 
 {    
     for_buf (SectionEnt, s, *section_list)
         if (only_this_st != SEC_NONE && s->st != only_this_st)
+            continue;
+
+        else if (flag.one_vb && (!IS_VB_SEC(s->st) || s->vblock_i != flag.one_vb))
             continue;
 
         else if (IS_B250(s) || IS_LOCAL(s) || s->st == SEC_DICT) {
@@ -698,7 +705,7 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
     DataType dt = BGEN16 (header->data_type);
     ASSERT (dt < NUM_DATATYPES, "Invalid data_type=%u", dt);
     
-    if (header) {
+    if (header && !flag.one_vb) {
         iprintf ("Contents of the SEC_GENOZIP_HEADER section (output of --show-gheader) of %s:\n", z_name);
         iprintf ("  genozip_version: %s\n",         STRver_(header->genozip_version, header->genozip_minor_ver).s); // note: minor version always 0 before 15.0.28
         iprintf ("  data_type: %s\n",               dt_name (dt));
@@ -723,4 +730,34 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
     iprint0 ("  sections:\n");
 
     sections_show_section_list (dt, &z_file->section_list, SEC_NONE);
+}
+
+void noreturn genocat_show_txt_offsets (void)
+{
+    // TODO: support gencomp files - this would require parsing the recon_plan
+    ASSINP0 (!z_file->z_flags.has_gencomp, "Genozip limitation: --show-vb-offsets doesn't yet support files with gencomp");
+
+    for (CompIType comp_i=0; comp_i < z_file->num_components; comp_i++) {
+        uint64_t offset = 0;
+
+        Section txt_header_sec = sections_get_comp_txt_header_sec (comp_i);
+
+        SectionHeaderTxtHeader txt_header_h = zfile_read_section_header (evb, txt_header_sec, SEC_TXT_HEADER).txt_header;
+        printf ("\n%s txt_len=%"PRIu64" lines=%"PRIu64"\n", 
+                comp_name(comp_i), BGEN64(txt_header_h.txt_data_size), BGEN64(txt_header_h.txt_num_lines));
+
+        VBIType num_vbs = sections_get_num_vbs (comp_i);
+        VBIType first_vb_i = sections_get_first_vb_i (comp_i); 
+        
+        for (VBIType vb_i=first_vb_i; vb_i < first_vb_i + num_vbs; vb_i++) {
+            Section vb_header_sec = sections_vb_header (vb_i);
+            SectionHeaderVbHeader vb_header_h = zfile_read_section_header (evb, vb_header_sec, SEC_VB_HEADER).vb_header;
+
+            printf ("%s/%u txt_offset=%"PRIu64" txt_len=%u lines=%u\n", 
+                    comp_name(comp_i), vb_i, offset, BGEN32(vb_header_h.recon_size), vb_header_sec->num_lines);
+            offset += BGEN32 (vb_header_h.recon_size);
+        }
+    }
+
+    exit_ok;
 }

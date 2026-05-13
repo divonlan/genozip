@@ -301,7 +301,7 @@ static rom fastq_deep_set_N_qual (VBlockFASTQP vb, STRp(seq), STRp(qual))
     return new_qual;
 }
 
-static void fastq_deep_seg_segconf (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual))
+static void fastq_deep_seg_segconf (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual))
 {
     struct { bool cond; QType q; STR(qname); thool is_last; } inst[NUM_INSTS] = 
           // QNAME1                                                       QNAME2
@@ -496,7 +496,7 @@ static bool fastq_seg_deep_is_dup (VBlockFASTQP vb,
     return e->dup;
 }
 
-static DeepStatsZip fastq_seg_find_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, DeepHash *deep_hash, STRp(seq), STRp(qual), 
+static DeepStatsZip fastq_seg_find_deep (VBlockFASTQP vb, ZipDataLineFASTQP dl, DeepHash *deep_hash, STRp(seq), STRp(qual), 
                                          ZipZDeep **matching_ent) // out
 {
     #define RETURN(x) ({ COPY_TIMER (fastq_seg_find_deep); return (x); })
@@ -567,7 +567,7 @@ static void fastq_seg_deep_do (VBlockFASTQP vb, uint64_t deep_value)
 }
 
 // deep and bamass
-bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), 
+bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), 
                      uint32_t *uncanonical_suffix_len) // out - suffix of deeped QNAME beyond canonical, i.e. not copied from Deep
 {
     START_TIMER;
@@ -672,7 +672,7 @@ done:
     return matching_ent != NULL;
 }
 
-void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx)
+void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx)
 {
     uint32_t trim_len = seq_len - dl->sam_seq_len; // left trim + right trim;
 
@@ -694,7 +694,7 @@ void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), Conte
 }
 
 // called for lines in which QUAL is deeped 
-void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, ContextP qual_ctx, uint32_t qual_len)
+void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQP dl, ContextP qual_ctx, uint32_t qual_len)
 {
     uint32_t trim_len = qual_len - dl->sam_seq_len;
 

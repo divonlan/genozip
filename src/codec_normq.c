@@ -39,12 +39,13 @@ COMPRESS(codec_normq_compress)
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (!soft_fail) goto do_compress;
 
-    add_relaxed (z_file->normq_lines, vb->lines.len);
+    if (ctx->did_i == SAM_QUAL/*==FASTQ_QUAL*/) 
+        add_relaxed (z_file->normq_lines, vb->lines.len);
 
     buf_alloc_exact (vb, *qual_buf, qual_buf->len, char, C_LOCAL); 
     
     uint32_t next = 0;
-    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) {
+    for_line {
         STRw(qual);
         bool is_rev;
         get_line_cb (vb, ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, &is_rev);

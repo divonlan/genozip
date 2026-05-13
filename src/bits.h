@@ -284,22 +284,17 @@ static inline void bits_set_wordn (BitsP bits, uint64_t start, uint64_t word, in
     _set_word (bits, start, bitmask_merge (word,w,m));
 }
 
-//
-// Number of bits set
-//
-
 // Get the number of bits set (hamming weight)
 extern bool bits_is_fully_set (ConstBitsP bits);
 extern bool bits_is_fully_clear (ConstBitsP bits);
 extern uint64_t bits_num_set_bits (ConstBitsP bits);
 extern uint64_t bits_num_set_bits_region (ConstBitsP bits, uint64_t start, uint64_t length); // added by divon
 
+extern void bits_xor_with (BitsP dst, ConstBitsP xor_with, uint64_t xor_with_bit);
+
 // Get the number of bits not set (length - hamming weight)
 extern uint64_t bits_num_clear_bits (ConstBitsP bits);
 
-//
-// Find indices of set/clear bits
-//
 
 // Find the index of the next bit that is set, at or after `offset`
 // Returns 1 if a bit is set, otherwise 0
@@ -392,14 +387,14 @@ static inline uint64_t _bits_combined_word (uint64_t word_a, uint64_t word_b, in
 // calculate the number of bits that are different between a bit array (in its entirety)
 // and a forward or reverse-complemented region of another bit array
 // note: static inline because in the tight loop of aligner
-static inline uint32_t bits_hamming_distance (ConstBitsP bits_1, // the entire bit array  
-                                              ConstBitsP bits_2, 
+static inline uint32_t bits_hamming_distance (ConstBits𐤐 bits_1, // the entire bit array (restrict-ed!)
+                                              ConstBits𐤐 bits_2, 
                                               uint64_t index_2,  // index first bit in bits_2 
                                               bool is_forward)
 {
     if (!is_forward) index_2 += bits_1->nbits; // after
-    const uint64_t *words_1 = bits_1->words;
-    const uint64_t *words_2 = &bits_2->words[index_2 >> 6];
+    const uint64_t *restrict words_1 = bits_1->words;
+    const uint64_t *restrict words_2 = &bits_2->words[index_2 >> 6];
     const uint64_t *after_1 = words_1 + bits_1->nwords;
     uint64_t diff=0;
     int shift_2 = index_2 & 0b111111;

@@ -26,6 +26,8 @@
 #define FASTQ_GPOS          SAM_GPOS
 #define FASTQ_GPOS_DELTA    SAM_GPOS_DELTA
 #define FASTQ_GPOS_R2       SAM_GPOS_R2    // 15.0.58: used for interleaved files
+#define FASTQ_GPOS_GAP      SAM_GPOS_GAP // 15.0.83
+#define FASTQ_JUNCTION      SAM_JUNCTION
 #define FASTQ_STRAND        SAM_STRAND
 #define FASTQ_STRAND_R2     SAM_STRAND_R2  // 15.0.58: used for interleaved files
 #define FASTQ_SEQMIS_A      SAM_SEQMIS_A
@@ -36,6 +38,14 @@
 #define FASTQ_SEQINS_C      SAM_SEQINS_C
 #define FASTQ_SEQINS_G      SAM_SEQINS_G
 #define FASTQ_SEQINS_T      SAM_SEQINS_T
+#define FASTQ_NONBIO        SAM_NONBIO
+#define FASTQ_NONBIO_UMI    SAM_NONBIO_UMI
+#define FASTQ_NONBIO_BC0    SAM_NONBIO_BC0
+#define FASTQ_NONBIO_LINK0  SAM_NONBIO_LINK0
+#define FASTQ_NONBIO_BC1    SAM_NONBIO_BC1
+#define FASTQ_NONBIO_LINK1  SAM_NONBIO_LINK1
+#define FASTQ_NONBIO_BC2    SAM_NONBIO_BC2
+#define FASTQ_NONBIO_EXCESS SAM_NONBIO_EXCESS
 #define FASTQ_QUAL          SAM_QUAL
 #define FASTQ_DOMQRUNS      SAM_DOMQRUNS
 #define FASTQ_QUALMPLX      SAM_QUALMPLX
@@ -62,6 +72,8 @@
 #define _FASTQ_GPOS         _SAM_GPOS
 #define _FASTQ_GPOS_DELTA   _SAM_GPOS_DELTA
 #define _FASTQ_GPOS_R2      _SAM_GPOS_R2    
+#define _FASTQ_GPOS_GAP     _SAM_GPOS_GAP
+#define _FASTQ_JUNCTION     _SAM_JUNCTION
 #define _FASTQ_STRAND       _SAM_STRAND
 #define _FASTQ_STRAND_R2    _SAM_STRAND_R2  
 #define _FASTQ_SEQMIS_A     _SAM_SEQMIS_A
@@ -72,6 +84,14 @@
 #define _FASTQ_SEQINS_C     _SAM_SEQINS_C
 #define _FASTQ_SEQINS_G     _SAM_SEQINS_G
 #define _FASTQ_SEQINS_T     _SAM_SEQINS_T
+#define _FASTQ_NONBIO       _SAM_NONBIO
+#define _FASTQ_NONBIO_UMI   _SAM_NONBIO_UMI
+#define _FASTQ_NONBIO_BC0   _SAM_NONBIO_BC0
+#define _FASTQ_NONBIO_LINK0 _SAM_NONBIO_LINK0
+#define _FASTQ_NONBIO_BC1   _SAM_NONBIO_BC1
+#define _FASTQ_NONBIO_LINK1 _SAM_NONBIO_LINK1
+#define _FASTQ_NONBIO_BC2   _SAM_NONBIO_BC2
+#define _FASTQ_NONBIO_EXCESS _SAM_NONBIO_EXCESS
 #define _FASTQ_QUAL         _SAM_QUAL
 #define _FASTQ_DOMQRUNS     _SAM_DOMQRUNS
 #define _FASTQ_QUALMPLX     _SAM_QUALMPLX
@@ -106,6 +126,7 @@ extern void fastq_zip_set_txt_header_flags (struct FlagsTxtHeader *f);
 extern void fastq_zip_initialize (void);
 extern rom fastq_zip_modify (VBlockP vb, rom line_start, uint32_t remaining);
 extern void fastq_segconf_set_r1_or_r2 (void);
+extern void fastq_segconf_index_R2_lines (VBlockP vb);
 extern void fastq_zip_after_segconf (VBlockP vb);
 extern void fastq_zip_after_segconf_alloc_r1_z_bufs (void);
 extern void fastq_zip_finalize (bool is_last_user_txt_file);
@@ -128,10 +149,10 @@ extern void fastq_seg_finalize (VBlockP vb);
 extern bool fastq_seg_is_small (ConstVBlockP vb, DictId dict_id);
 extern rom fastq_seg_txt_line (VBlockP vb, rom line_start, uint32_t remaining, bool *has_13);
 extern rom fastq_assseg_line (VBlockP vb);
-extern void fastq_seg_r2_gpos (VBlockP vb, PosType64 r1_pos, PosType64 r2_gpos);
-extern void fastq_seg_interleaved_gpos (VBlockP vb, PosType64 pair_gpos/*only if we are R2*/, PosType64 gpos);
+extern void fastq_seg_gpos_R2 (VBlockP vb, PosType64 gpos_R1, PosType64 gpos_R2, bool is_forward_R2);
+extern void fastq_seg_interleaved_gpos (VBlockP vb, PosType64 gpos_R1/*only if we are R2*/, PosType64 gpos);
 extern void fastq_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
-extern Multiplexer2P fastq_get_ultima_c_mux (VBlockP vb);
+extern Multiplexer2P fastq_get_illum_v_mux (VBlockP vb);
 
 // PIZ Stuff
 extern bool fastq_piz_initialize (CompIType comp_i);
@@ -152,9 +173,16 @@ extern void fastq_reset_line (VBlockP vb);
 // file pairing (--pair) stuff
 extern void fastq_read_R1_data (VBlockP vb, VBIType R1_vb_i);
 
-// FASTQ-specific fields in genozip header
+// FASTQ-specific fields in genozip and VB headers
 extern void fastq_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
+extern void fastq_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
+
+// nonbio stuff
+extern void fastq_segconf_set_non_biological (VBlockP vb);
+extern rom fastq_nonbio_type_name (void);
+extern int fastq_nonbio_get_n_linkers (void);
+extern StrText fastq_nonbio_get_linker_for_stats (unsigned linker_i);
 
 #define FASTQ_LOCAL_GET_LINE_CALLBACKS           \
     { DT_FASTQ, _FASTQ_QUAL,   fastq_zip_qual }, 
@@ -178,7 +206,7 @@ SPECIAL (FASTQ, 6,  deep_copy_QUAL,    fastq_special_deep_copy_QUAL);         //
 SPECIAL (FASTQ, 7,  backspace,         fastq_special_backspace);              // v15
 SPECIAL (FASTQ, 8,  copy_line1,        fastq_special_copy_line1);             // v15
 SPECIAL (FASTQ, 9,  monochar_QUAL,     fastq_special_monochar_QUAL);          // v15
-SPECIAL (FASTQ, 10, ULTIMA_C,          ultima_c_piz_special_DEMUX_BY_Q4NAME); // 15.0.15
+SPECIAL (FASTQ, 10, ILLUM_V,           illum_v_piz_special_DEMUX_BY_Q4NAME);  // 15.0.15 as ULTIMA_C, 15.0.83 renamed to ILLUM_V
 SPECIAL (FASTQ, 11, AGENT_RX,          agilent_special_AGENT_RX);             // 15.0.23
 SPECIAL (FASTQ, 12, AGENT_QX,          agilent_special_AGENT_QX);             // 15.0.23
 SPECIAL (FASTQ, 13, qname_rng2seq_len, special_qname_rng2seq_len);            // 15.0.26

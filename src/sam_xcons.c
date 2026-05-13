@@ -168,7 +168,7 @@ ARRAY_ITEM_CALLBACK (sam_seg_xcons_XD_callback)
 SPECIAL_RECONSTRUCTOR (sam_piz_special_xcons_XD)
 {
     bool is_predicted = (*snip == '1');
-    bool first_item   = !ctx_encountered_in_line (vb, ctx->did_i);
+    bool first_item   = !ctx_encountered_in_line_(vb, ctx);
 
     if (first_item) 
         new_value->i = is_predicted ? 0: reconstruct_from_local_int (VB, ctx, 0, RECON_OFF);

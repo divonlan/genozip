@@ -11,6 +11,8 @@
 #include "file.h"
 #include "biopsy.h"
 #include "arch.h"
+#include "website.h"
+#include "strings.h"
 
 static Buffer biopsy_vb_i = { .name = "biopsy_vb_i" };
 static StrText4K biopsy_fn;
@@ -150,4 +152,69 @@ void biopsy_finalize (void)
     biopsy_compress();
 
     ASSINP0 (biopsy_is_done(), "FYI: One or more of biopsy VBs was not encountered");
+}
+
+void biopsy_bytes_init (rom optarg)
+{
+    str_split_ints (optarg, strlen(optarg), 2, ',', item, true);
+
+    ASSINP (n_items == 2, "Invalid biopsy-bytes argument: \"%s\", expecting offset,length within uncompressed file: offset is 0-based. %s", 
+            optarg, WEBSITE_DIAGNOSTICS);
+
+    flag.biopsy_bytes.start = items[0];
+    flag.biopsy_bytes.len   = items[1];
+}
+
+void noreturn biopsy_bytes (rom filename)
+{
+    ASSERTISNULL (txt_file);
+    txt_file = file_open_txt_read (filename);
+
+    FILE *fp = flag.out_filename ? fopen (flag.out_filename, "wb") : stdout;
+    ASSERT (fp, "Failed to open %s for writing: %s", flag.out_filename, arch_str_error());
+
+    // skip to start of biopsy
+    uint64_t txt_bytes_to_skip = flag.biopsy_bytes.start,
+             uncompressed = 0,
+             one_percent = (flag.biopsy_bytes.start + flag.biopsy_bytes.len) / 100,
+             next_progress = one_percent;
+
+    while (txt_bytes_to_skip) {
+        // TO DO: 1. currently we uncompress on the main thread, but we could fan out threads to do uncompression,
+        // collecting back the data upon join 2. show progress
+        segconf.vb_size = MIN_(8 MB, txt_bytes_to_skip);
+        txtfile_read_vblock (evb);
+
+        txt_bytes_to_skip -= evb->txt_data.len;
+        uncompressed      += evb->txt_data.len;
+    
+        ASSERT (evb->txt_data.len >= segconf.vb_size, "File too short: not enough data read: only %"PRIu64" bytes",
+                flag.biopsy_bytes.start - txt_bytes_to_skip);
+
+        ASSERT (evb->txt_data.len == segconf.vb_size, "Unexptededly read too much data to VB: requested=%"PRIu64" read=%"PRIu64,
+                segconf.vb_size, evb->txt_data.len);
+
+        buf_free (evb->txt_data);
+
+        if (uncompressed >= next_progress && flag.out_filename) {
+            printf ("%1.1f%%\n", percent (uncompressed, flag.biopsy_bytes.start + flag.biopsy_bytes.len));
+            next_progress += one_percent;
+        }
+    }
+
+    // read biopsy data
+    segconf.vb_size = flag.biopsy_bytes.len; // minimum bytes to be read
+    txtfile_read_vblock (evb); // reads at least the number of types requested
+
+    ASSERT (evb->txt_data.len >= flag.biopsy_bytes.len, "Too few bytes read: only %"PRIu64, evb->txt_data.len);
+    
+    ASSERT (1 == fwrite (B1STc(evb->txt_data), flag.biopsy_bytes.len, 1, fp), // to file or stdout
+            "Failed to write %"PRIu64" bytes: %s", flag.biopsy_bytes.len, arch_str_error());
+
+    fprintf (flag.out_filename ? stdout : stderr, "Biopsy done.\n");
+    
+    if (uncompressed >= next_progress && flag.out_filename) 
+        printf ("%1.1f%%\n", percent (uncompressed, flag.biopsy_bytes.start + flag.biopsy_bytes.len));
+
+    exit_ok;
 }

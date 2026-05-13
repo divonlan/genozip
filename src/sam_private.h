@@ -209,7 +209,7 @@ typedef struct VBlockSAM {
     int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_IH_i,
             idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, idx_XS_i, idx_XM_i,
             idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
-            idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_CR_Z, idx_CY_Z,
+            idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_GN_Z, idx_CR_Z, idx_CY_Z,
             idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
             idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z,
             idx_pr_i, idx_qs_i, idx_ws_i, idx_ZM_B, idx_xq_i, idx_XQ_i,
@@ -284,8 +284,8 @@ typedef struct VBlockSAM {
     Multiplexer3 mux_POS;          // ZIP: DEMUX_BY_MATE_PRIM multiplexers
     Multiplexer3 mux_GP, mux_MP;   // ZIP: channels: is_first, is_last, is_mated
     Multiplexer2 mux_FLAG, mux_MQ, mux_MC, mux_ms, mux_AS, mux_YS, mux_nM, // ZIP: DEMUX_BY_MATE or DEMUX_BY_BUDDY multiplexers
-                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_ultima_c, mux_dragen_sd, mux_YY, mux_PQ,
-                 mux_sn, mux_rb, mux_mb;
+                 mux_mated_z_fields[NUM_MATED_Z_TAGS], mux_illum_v, mux_dragen_sd, mux_YY, mux_PQ,
+                 mux_sn, mux_rb, mux_mb, mux_RE;
     Multiplexer2 mux_xf;           // ZIP: mux by FLAG_DUPLICATE 
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: ULTIMA_tp (number of channels matches TP_NUM_BINS)
@@ -348,7 +348,7 @@ bam_seg_get_aux_B_template (s, int16_t); // defines BamArray_s
 bam_seg_get_aux_B_template (f, float);   // defines BamArray_f
 
 // rname,pos,strand,CIGAR,mapQ,NM
-typedef enum { SA_RNAME, SA_POS, SA_STRAND, SA_CIGAR, SA_MAPQ, SA_NM, NUM_SA_ITEMS } SAFields __attribute__((unused)); // quick way to define constants
+typedef enum { SA_RNAME, SA_POS, SA_STRAND, SA_CIGAR, SA_MAPQ, SA_NM, NUM_SA_ITEMS } SAFields UNUSED; // quick way to define constants
 
 // SA Group stuff
 
@@ -763,7 +763,15 @@ extern void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsi
 extern void sam_seg_xf_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes);
 
 extern bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTags solo, uint8_t n_seps, STRp(qual), qSTRp (con_snip), MiniContainerP con, unsigned add_bytes);
-extern void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes);
+extern void sam_seg_GX_GN (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes);
+
+// Parse Biosciences stuff
+extern void sam_parse_seg_initialize (VBlockSAMP vb);
+extern void sam_seg_pN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pn), unsigned add_bytes);
+extern void sam_seg_pB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pb), unsigned add_bytes);
+extern void sam_seg_RE_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(re), unsigned add_bytes);
+extern void sam_seg_CR_Z_Parse (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_bytes);
+extern void sam_seg_CB_Z_Parse (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_bytes);
 
 // biobambam2 stuff
 extern uint32_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual));

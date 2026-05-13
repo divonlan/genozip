@@ -410,6 +410,20 @@ WordIndex ctx_create_node_is_new (VBlockP vb, Did did_i, STRp (snip), bool *is_n
     return node_index;
 }
 
+// true if two segconf contexts have any identical snip
+bool ctx_segconf_do_ctxs_share_snips (VBlockP vb, Did did_1, Did did_2)
+{
+    ContextP ctx1 = CTX(did_1);
+    ContextP ctx2 = CTX(did_2);
+    if (!ctx1->nodes.len || !ctx2->nodes.len) return false;
+
+    for_buf (CtxNode, node, ctx1->nodes)
+        if (hash_segconf_does_entry_exist (vb, ctx2, Bc(ctx1->dict, node->char_index), node->snip_len))
+            return true;
+
+    return false;
+}
+
 uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 {
     ASSERT (node_index >= 0 && node_index < (WordIndex)ctx->counts.len, "node_index=%d out of range counts[%s].len=%"PRIu64, node_index, ctx->tag_name, ctx->counts.len);

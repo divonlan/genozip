@@ -731,7 +731,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq), unsigned
             case MAPPING_NO_MAPPING : force_verbatim = true; goto add_seq_verbatim; 
             case MAPPING_PERFECT    : perfect        = true; // fallthrough
             case MAPPING_ALIGNED    : aligner_used   = true; break;
-            default                 : ABORT0 ("bad value");
+            default                 : ABORT0 ("bad mapping_type");
         }
 
         buf_alloc (vb, &nonref_ctx->local, 3, 0, uint8_t, CTX_GROWTH, C_LOCAL); 
@@ -1082,7 +1082,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     
     // case: unmapped, segged against reference using our aligner
     if (aligner_used) {
-        aligner_reconstruct_seq (VB, vb->seq_len, false, is_perfect, reconstruct,
+        aligner_reconstruct_seq (VB, vb->seq_len, false, false, is_perfect, reconstruct,
                                  MAX_DEEP_SEQ_MISMATCHES, 
                                  deep_seq_by_ref ? vb->deep_mismatch_base   : NULL, 
                                  deep_seq_by_ref ? vb->deep_mismatch_offset : NULL, 
@@ -1114,7 +1114,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
     // case: missing sequence - sequence is '*' - just reconstruct the '*' (but only if it is the primary SEQ field,
     // which we can tell by not being encountered earlier on the line - bc in v8 (at least) E2 was also stored in the same SAM_SQBITMAP)
-    if (vb->seq_missing && !ctx_encountered_in_line (VB, bitmap_ctx->did_i)) {
+    if (vb->seq_missing && !ctx_encountered_in_line_(VB, bitmap_ctx)) {
         if (reconstruct) RECONSTRUCT1 ('*');
         goto done;
     }
@@ -1502,13 +1502,9 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     BAMAlignmentFixedP alignment = (BAMAlignmentFixedP)Btxt (vb->line_start);
     uint32_t l_seq = alignment->l_seq;
 
-    // backward compatability note: prior to v14 the condition was:
-    // if (CTX(SAM_QUAL)->lcodec == CODEC_LONGR) ...
-    // Since v14, it is determined by a flag. Since this flag is 0 in V<=13, earlier files will always
-
     // case downstream contexts need access to the textual_seq: copy it.
     // Examples: LONGR, HOMP, t0 codecs; sam_piz_special_BSSEEKER2_XM ; sam_piz_special_ULTIMA_tp
-    if (!bitmap_ctx->flags.no_textual_seq) {
+    if (!bitmap_ctx->flags.no_textual_seq) { // note: condition is always true for files up to v13
         buf_alloc (vb, &VB_SAM->textual_seq, 0, recon_len, char, 0, "textual_seq");
         memcpy (B1STc(VB_SAM->textual_seq), recon, recon_len);
         VB_SAM->textual_seq.len = recon_len;

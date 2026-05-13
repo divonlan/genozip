@@ -14,7 +14,6 @@
 #include "zfile.h"
 #include "zip.h"
 #include "lookback.h"
-#include "tip.h"
 #include "dyn_int.h"
 
 static SmallContainer con_AD={}, con_ADALL={}, con_ADF={}, con_ADR={}, con_SAC={}, con_F1R2={}, con_F2R1={}, 

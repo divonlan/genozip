@@ -1324,7 +1324,9 @@ batch_mgzip_fastq()
                   gz.mgzf.mgi.igzip⁀2.R1.fq.gz          \
                   gz.mgsp.mgi.R1.fq.gz                   \
                   gz.emfl.element.fq.gz                  \
-                  gz.emvl.element.libdeflate19⁀5.R1.fq.gz )
+                  gz.emvl.element.libdeflate19⁀5.R1.fq.gz  \
+                  gz.gzbl.illumina.isize-64K.fq.gz          \
+                  gz.gzbl.illumina.isize-9MB.fq.gz)
     local recon=$OUTDIR/recon.fq
     local truncated=$OUTDIR/truncated.fq
     local discovered_codec=$OUTDIR/discovered_codec.txt
@@ -1578,7 +1580,7 @@ batch_test_bai()
     special.large.bam a file that bai-generate-test-data.sh compresses with -B35: beyond the 32MB threashold at which writer_flush starts to fragment
     local files=( deep.left-right-trimming.bam \
                   special.large.bam \
-                  `cd $TESTDIR; ls -1 test.*bam | egrep -v "test.Bismark_SE.bam|test.Bismark_pe.bam|test.NovaSeq.bam|test.bgi-CL.bam|test.header-only-no-SQ.bam|test.human3-collated.bam|test.longranger-wgs.bam|test.nanoseq.pre.bam|test.pacbio-minimap2-rna.bam|test.pacbio.ccs.10k.bam|test.pacbio.ccs.giab.bam|test.pacbio.ccs.kinetic.bam|test.pacbio.ccs.normal-tumor.normal.bam|test.pacbio.ccs.oak.bam|test.pacbio.ccs.sq-dq-iq.bam|test.pacbio.ccs.virus.bam|test.pacbio.subreads.bam|test.pacbio.subreads2.bam|test.pacbio.subreads3.bam|test.transcriptome.bam|test.ubam.bam"` ) # samtools index fails (no SQ, not sorted, or not BGZF)
+                  `cd $TESTDIR; ls -1 test.*bam | egrep -v "test.Bismark_SE.bam|test.Bismark_pe.bam|test.NovaSeq.bam|test.bgi-CL.bam|test.header-only-no-SQ.bam|test.human3-collated.bam|test.longranger-wgs.bam|test.nanoseq.pre.bam|test.pacbio-minimap2-rna.bam|test.pacbio.ccs.10k.bam|test.pacbio.ccs.giab.bam|test.pacbio.ccs.kinetic.bam|test.pacbio.ccs.normal-tumor.normal.bam|test.pacbio.ccs.oak.bam|test.pacbio.ccs.sq-dq-iq.bam|test.pacbio.ccs.virus.bam|test.pacbio.subreads.bam|test.pacbio.subreads2.bam|test.pacbio.subreads3.bam|test.transcriptome.bam|test.ubam.bam|test.parse-illumina.bam|test.parse-ultima.sam"` ) # samtools index fails (no SQ, not sorted, or not BGZF)
 
     export GENOZIP_REFERENCE=public
     for bam in ${files[@]}; do
@@ -2127,6 +2129,18 @@ batch_reference_fastq()
     test_header "paired where R2 is larger and needs an additional block read"
     test_standard "-e$GRCh38 --pair -B2000B" "" special.R2-vblock-larger-than-R1.R1.fq special.R2-vblock-larger-than-R1.R2.fq
 
+    cleanup_cache
+
+    # Parse Biosciences - R2 is a non-biological file.
+    test_header "R2 is non-biological (=split)"
+    test_standard "-e$mouse_human --pair" "" test.parse.split.R1.fq.gz test.parse.split.R2.fq.gz
+
+    test_header "R2 is non-biological (split & error-corrected) ; combined human-mouse"
+    test_standard "-e$mouse_human --pair" "" test.parse.split-errorfree.R1.fq.gz test.parse.split-errorfree.R2.fq.gz
+   
+    test_header "R2 is non-biological and biological (raw) ; combined human-mouse"
+    test_standard "-e$mouse_human --pair" "" test.parse.raw.R1.fq.gz test.parse.raw.R2.fq.gz
+
     cleanup
 }
 
@@ -2341,8 +2355,10 @@ update_latest()
     fi
 
     pushd ../genozip-latest
-    git reset --hard
-    git pull | tee pull.out
+    if [[ "$PWD" == *"genozip-latest"* ]]; then # double check before git reset --hard
+        git reset --hard
+        git pull | tee pull.out
+    fi
 
     if [ -n "$is_mac" ]; then 
         chmod +x src/*.sh # reverted by git pull
@@ -2974,6 +2990,11 @@ is_linux=`uname|grep -i Linux`
 
 unset GENOZIP_REFERENCE
 
+if [[ -z "$GENOZIP_HOME" ]]; then # Windows note: definition in /home/divon/.bashrc overrides definition in Windows Settings->Environment Variables
+    echo "GENOZIP_HOME is not set"
+    exit 1
+fi
+
 if [ -n "$is_windows" ] || [ -n "$is_exe" ]; then
 BASEDIR=../genozip
 else
@@ -3019,7 +3040,7 @@ T2T1_1=$REFDIR/chm13_1.1.v15.ref.genozip
 mm10=$REFDIR/mm10.v15.ref.genozip
 chinese_spring=$REFDIR/Chinese_Spring.tiny.ref.genozip
 koala=$REFDIR/koala.v12.ref.genozip # also tests backcomp with v12 license
-
+mouse_human=$REFDIR/mouse-human.small.ref.genozip
 zmd5=$SCRIPTSDIR/zmd5
 
 if (( $# < 1 )); then

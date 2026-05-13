@@ -161,7 +161,7 @@ SPECIAL_RECONSTRUCTOR (bed_piz_special_BCOUNT)
 
 rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
-    typedef enum { BED_CHROM, START, END, NAME, SCORE, STRAND, TSTART, TEND, RGB, BCOUNT, BSIZES, BSTARTS } Columns __attribute__((unused));
+    typedef enum { BED_CHROM, START, END, NAME, SCORE, STRAND, TSTART, TEND, RGB, BCOUNT, BSIZES, BSTARTS } Columns UNUSED;
     #define MAYBE_END_HERE(f) if (segconf.bed_num_flds == (f)+1) goto eol;
 
     str_split_by_tab (line, remaining_txt_len, segconf.bed_num_flds ? segconf.bed_num_flds : 12, 

@@ -78,6 +78,13 @@ void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
         segconf.has[ctx->did_i] = true;
     }
 
+    // exception: QNAME2 e.g. "1:N" is not an AUX
+    if (n_auxes >= 1 && n_auxes == n_items && item_lens[0] == 3 && 
+        (items[0][0] == '1' || items[0][0] == '2') && 
+        (items[0][2] == 'N' || items[0][2] == 'Y') &&
+         items[0][1] == ':')
+        n_auxes--;
+        
     if (n_items - n_auxes > 0)
         qname_segconf_discover_flavor (VB, QNAME2, STRi(item,0));   // note: also discovers the original TECH, if file has NCBI qnames or when optimize_DESC
 
@@ -153,9 +160,9 @@ void fastq_seg_DESC (VBlockFASTQP vb, STRp(desc), bool deep_qname2, uint32_t unc
     COPY_TIMER (fastq_seg_DESC);
 }
 
-Multiplexer2P fastq_get_ultima_c_mux (VBlockP vb)
+Multiplexer2P fastq_get_illum_v_mux (VBlockP vb)
 {
-    return &VB_FASTQ->mux_ultima_c;
+    return &VB_FASTQ->mux_illum_v;
 }
 
 //-----------

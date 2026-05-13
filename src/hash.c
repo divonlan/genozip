@@ -405,7 +405,7 @@ static inline WordIndex hash_global_add_node (ContextP zctx, uint32_t hash, uint
 // finds or creates a node in the hash_ents or ston_ents
 // returns the word_index if node and WORD_INDEX_NONE if singleton.
 // (if NULL this is a re-commissioned singleton and snip already copied)
-WordIndex hash_global_get_entry (ContextP zctx, STRpរ(snip), 
+WordIndex hash_global_get_entry (ContextP zctx, STR𐤐(snip), 
                                  bool allow_singleton,
                                  bool snip_is_definitely_new,
                                  CtxNodeP *please_update_index)  // out: in not NULL, caller should update char_index of new dict snip 
@@ -537,4 +537,29 @@ WordIndex hash_get_entry_for_seg (VBlockP vb, ContextP vctx, STRp(snip),
 
     *snip_in_dict_out = NULL;
     return WORD_INDEX_NONE; // new node
+}
+
+bool hash_segconf_does_entry_exist (VBlockP vb, ContextP vctx, STRp(snip)) 
+{
+    if (!buf_is_alloc (&vctx->local_hash)) return false; 
+
+    // check if snip is vctx->nodes
+    uint32_t hash = hash_do (vctx->local_hash.len32, STRa(snip));
+    CtxNode l_head = { .next = *B32(vctx->local_hash, hash) }, *node = &l_head;
+
+    while (node->next != NO_NEXT) {
+        ASSERT (node->next < vctx->nodes.len32, "%s.node->next=%d out of range, nodes.len=%u", 
+                vctx->tag_name, node->next, vctx->nodes.len32);
+
+        uint32_t this = node->next;
+        node = B(CtxNode, vctx->nodes, this);    
+
+        rom snip_in_dict = Bc(vctx->dict, node->char_index);
+
+        // case: snip is in the local hash table - we're done
+        if (!node->canceled && str_issame_(STRa(snip), snip_in_dict, node->snip_len)) 
+            return true;
+    }
+
+    return false;
 }

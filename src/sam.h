@@ -10,6 +10,7 @@
 
 #include "genozip.h"
 #include "sections.h"
+#include "multiplexer.h"
 
 #pragma GENDICT_PREFIX SAM
 
@@ -33,7 +34,9 @@
 #pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME 
 #pragma GENDICT SAM_QCNAME=DTYPE_1=QCNAME 
 #pragma GENDICT SAM_QDNAME=DTYPE_1=QDNAME 
-#pragma GENDICT SAM_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add to fastq.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT SAM_QENAME=DTYPE_1=QENAME 
+#pragma GENDICT SAM_QFNAME=DTYPE_1=QFNAME 
+#pragma GENDICT SAM_QGNAME=DTYPE_1=QGNAME // if adding more Q*NAMEs - add sam.h, fasta.h, gff.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT SAM_QNAME2=DTYPE_FIELD=QNAME2
@@ -65,6 +68,8 @@
 #pragma GENDICT SAM_GPOS=DTYPE_FIELD=GPOS
 #pragma GENDICT SAM_GPOS_DELTA=DTYPE_FIELD=G0POS  // v15
 #pragma GENDICT SAM_GPOS_R2=DTYPE_FIELD=Gr2POS    // 15.0.58
+#pragma GENDICT SAM_GPOS_GAP=DTYPE_FIELD=GsplcPOS // 15.0.83
+#pragma GENDICT SAM_JUNCTION=DTYPE_FIELD=JUNCTION // 15.0.83
 #pragma GENDICT SAM_STRAND=DTYPE_FIELD=STRAND
 #pragma GENDICT SAM_STRAND_R2=DTYPE_FIELD=Sr2TRAND// 15.0.58
 #pragma GENDICT SAM_SEQMIS_A=DTYPE_FIELD=SEQMIS_A // v14: mismatch bases vs the reference, when ref=A
@@ -75,6 +80,14 @@
 #pragma GENDICT SAM_SEQINS_C=DTYPE_FIELD=SEQINS_C
 #pragma GENDICT SAM_SEQINS_G=DTYPE_FIELD=SEQINS_G
 #pragma GENDICT SAM_SEQINS_T=DTYPE_FIELD=SEQINS_T
+#pragma GENDICT SAM_NONBIO=DTYPE_FIELD=NONBIO     // 15.0.83: used only by FASTQ for non-biological sequences
+#pragma GENDICT SAM_NONBIO_UMI=DTYPE_FIELD=UMI
+#pragma GENDICT SAM_NONBIO_BC0=DTYPE_FIELD=B0ARCODE
+#pragma GENDICT SAM_NONBIO_BC1=DTYPE_FIELD=B1ARCODE
+#pragma GENDICT SAM_NONBIO_BC2=DTYPE_FIELD=B2ARCODE
+#pragma GENDICT SAM_NONBIO_LINK0=DTYPE_FIELD=L0INKER
+#pragma GENDICT SAM_NONBIO_LINK1=DTYPE_FIELD=L1INKER
+#pragma GENDICT SAM_NONBIO_EXCESS=DTYPE_FIELD=EXCESSNB
 
 #pragma GENDICT SAM_QUAL=DTYPE_FIELD=QUAL 
 #pragma GENDICT SAM_DOMQRUNS=DTYPE_FIELD=DOMQRUNS // these 3 must be right after SAM_QUAL. DOMQRUNS is also used by LONGR. For backwards compatability, we can never change its name.
@@ -353,6 +366,7 @@
 // STARsolo: https://github.com/alexdobin/STAR/blob/master/docs/STARsolo.md
 // 10xgenomics cellranger: https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/output/bam
 // 10xgenomics cellranger-arc: https://www.10xgenomics.com/support/software/cell-ranger-arc/latest/analysis/outputs/atac-barcoded-bam
+// Parse Biosciences: https://drive.google.com/file/d/16VPP5yBLxIJsSenD3oU7vW1Virg_YKsQ/view?usp=drive_link
 // also outputs: CB:Z, CR:Z, CY:Z standard fields
 #pragma GENDICT OPTION_UR_Z=DTYPE_2=UR:Z     // (alias of RX:Z) Chromium molecular barcode sequence as reported by the sequencer.
 #pragma GENDICT OPTION_UB_Z=DTYPE_2=UB:Z     // (alias of BX:Z) Chromium molecular barcode sequence that is error-corrected among other molecular barcodes with the same cellular barcode and gene alignment.
@@ -365,6 +379,8 @@
 #pragma GENDICT OPTION_GX_Z=DTYPE_2=GX:Z     // STARsolo: Gene ID for for unique-gene reads. CellRanger: (;-seperated list)
 #pragma GENDICT OPTION_gn_Z=DTYPE_2=gn:Z     // Gene names for unique- and multi-gene reads (;-seperated list)
 #pragma GENDICT OPTION_gx_Z=DTYPE_2=gx:Z     // Gene IDs for unique- and multi-gene reads (;-seperated list)
+#pragma GENDICT OPTION_GX_GN=DTYPE_2=GX_GN   // Used for segging GX and GN (or gx and gn) together
+#pragma GENDICT OPTION_GX_GN_ARR=DTYPE_2=G0X_GN  // Array items of GX_GN
 #pragma GENDICT OPTION_TX_Z=DTYPE_2=TX:Z     // Transcript list
 #pragma GENDICT OPTION_TX_LOOKBACK=DTYPE_2=T^X_LOOKBACK
 #pragma GENDICT OPTION_TX_NEGATIVE=DTYPE_2=T1X_NEG 
@@ -405,6 +421,11 @@
 #pragma GENDICT OPTION_MM_i=DTYPE_2=MM:i     // same as mm:i
 #pragma GENDICT OPTION_pa_i=DTYPE_2=pa:i     // The number of poly-A nucleotides trimmed from the 3' end of read 2.
 #pragma GENDICT OPTION_ts_i=DTYPE_2=ts:i     // The number of template switch oligo (TSO) nucleotides trimmed from the 5' end of read 2.
+
+// Parse Biosciences fields
+#pragma GENDICT OPTION_pN_Z=DTYPE_2=pN:Z     // polyN (=UMI)
+#pragma GENDICT OPTION_pB_Z=DTYPE_2=pB:Z     // barcode indices
+#pragma GENDICT OPTION_RE_Z=DTYPE_2=RE:Z     // REgion (I=Intron, E=Exon, N=Inter-gene) (note: same field in cellranger is RE:A)
 
 // cellragner-DNA fields: https://support.10xgenomics.com/single-cell-dna/software/pipelines/latest/output/bam
 #pragma GENDICT OPTION_GP_i=DTYPE_2=GP:i     // Genome position
@@ -750,6 +771,8 @@ extern int32_t sam_zip_get_np (VBlockP vb, LineIType line_i);
 extern void sam_zip_compress_sec_gencomp (void);
 extern void sam_compress_solo_huffman_sections (void);
 extern void sam_xcons_split_qual_line (VBlockP vb_, BufferP ql_buf);
+extern Multiplexer2P sam_get_illum_v_mux (VBlockP vb);
+extern void seg_qname_parse_QNAME0_cb (VBlockP vb, ContextP item_ctx, STRp(q0name));
 
 // PIZ Stuff
 extern void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
@@ -815,80 +838,83 @@ SPECIAL (SAM, 3,  delta_seq_len,         sam_piz_special_delta_seq_len);        
 SPECIAL (SAM, 4,  MD_old,                sam_piz_special_MD_old);                // used in files compressed with Genozip up to 12.0.36
 SPECIAL (SAM, 5,  FLOAT,                 bam_piz_special_FLOAT);                 // used in BAM to represent float optional values
 SPECIAL (SAM, 6,  BIN,                   bam_piz_special_BIN);   
-SPECIAL (SAM, 7,  NM,                    sam_piz_special_NM);                    // introduced 12.0.37
-SPECIAL (SAM, 8,  MD,                    sam_piz_special_MD);                    // introduced 12.0.37
-SPECIAL (SAM, 9,  REF_CONSUMED,          sam_piz_special_REF_CONSUMED);          // introduced 12.0.41: Reconstructs based on ref_consumed
-SPECIAL (SAM, 10, PNEXT_IS_PREV_POS_old, sam_piz_special_PNEXT_IS_PREV_POS_old); // introduced 12.0.41 up to v13
-SPECIAL (SAM, 11, COPY_MATE_FLAG,        sam_piz_special_COPY_MATE_FLAG);        // introduced 12.0.41
+SPECIAL (SAM, 7,  NM,                    sam_piz_special_NM);                    // 12.0.37
+SPECIAL (SAM, 8,  MD,                    sam_piz_special_MD);                    // 12.0.37
+SPECIAL (SAM, 9,  REF_CONSUMED,          sam_piz_special_REF_CONSUMED);          // 12.0.41: Reconstructs based on ref_consumed
+SPECIAL (SAM, 10, PNEXT_IS_PREV_POS_old, sam_piz_special_PNEXT_IS_PREV_POS_old); // 12.0.41 up to v13
+SPECIAL (SAM, 11, COPY_MATE_FLAG,        sam_piz_special_COPY_MATE_FLAG);        // 12.0.41
 SPECIAL (SAM, 12, COPY_MATE_TLEN_old,    sam_piz_special_COPY_MATE_TLEN_old);    // Used in 12.0.41 and 12.0.42
-SPECIAL (SAM, 13, COPY_BUDDY_CIGAR,      sam_piz_special_COPY_BUDDY_CIGAR);      // introduced 12.0.41
-SPECIAL (SAM, 14, FASTQ_CONSUME_AUX,     sam_piz_special_FASTQ_CONSUME_AUX);     // introduced 12.0.41 (up to 14.0.25 called CONSUME_MC_Z)
-SPECIAL (SAM, 15, TLEN,                  sam_piz_special_TLEN);                  // introduced 13.0.1
-SPECIAL (SAM, 16, QUAL,                  sam_piz_special_QUAL);                  // introduced 13.0.1
-SPECIAL (SAM, 17, pull_from_sag,         sam_piz_special_pull_from_sag);         // introduced 14.0.0
-SPECIAL (SAM, 18, SEQ,                   sam_piz_special_SEQ);                   // introduced 14.0.0
-SPECIAL (SAM, 19, PRIM_QNAME,            sam_piz_special_PRIM_QNAME);            // introduced 14.0.0
-SPECIAL (SAM, 20, SQUANK,                cigar_special_SQUANK);                  // introduced 14.0.0
-SPECIAL (SAM, 21, BSSEEKER2_XO,          sam_piz_special_BSSEEKER2_XO);          // introduced 14.0.0
-SPECIAL (SAM, 22, BSSEEKER2_XG,          sam_piz_special_BSSEEKER2_XG);          // introduced 14.0.0
-SPECIAL (SAM, 23, BSSEEKER2_XM,          sam_piz_special_BSSEEKER2_XM);          // introduced 14.0.0
-SPECIAL (SAM, 24, SA_main,               sam_piz_special_SA_main);               // introduced 14.0.0
-SPECIAL (SAM, 25, COPY_PRIM,             sam_piz_special_COPY_PRIM);             // introduced 14.0.0
-SPECIAL (SAM, 26, BWA_XC,                sam_piz_special_BWA_XC);                // introduced 14.0.0
-SPECIAL (SAM, 27, BWA_XT,                sam_piz_special_BWA_XT);                // introduced 14.0.0
-SPECIAL (SAM, 28, BWA_X1,                sam_piz_special_BWA_X1);                // introduced 14.0.0
-SPECIAL (SAM, 29, BWA_XS,                sam_piz_special_BWA_XS);                // introduced 14.0.0
-SPECIAL (SAM, 30, SM,                    sam_piz_special_SM);                    // introduced 14.0.0
-SPECIAL (SAM, 31, AM,                    sam_piz_special_AM);                    // introduced 14.0.0
-SPECIAL (SAM, 32, PNEXT,                 sam_piz_special_PNEXT);                 // introduced 14.0.0
-SPECIAL (SAM, 33, DEMUX_BY_MATE,         sam_piz_special_DEMUX_BY_MATE);         // introduced 14.0.0
-SPECIAL (SAM, 34, DEMUX_BY_MATE_PRIM,    sam_piz_special_DEMUX_BY_MATE_PRIM);    // introduced 14.0.0
-SPECIAL (SAM, 35, DEMUX_BY_BUDDY,        sam_piz_special_DEMUX_BY_BUDDY);        // introduced 14.0.0
-SPECIAL (SAM, 36, GEM3_XB,               sam_piz_special_GEM3_XB);               // introduced 14.0.0
-SPECIAL (SAM, 37, BSBOLT_YS,             sam_piz_special_BSBOLT_YS);             // introduced 14.0.0
-SPECIAL (SAM, 38, COPY_RNAME,            sam_piz_special_COPY_RNAME);            // introduced 14.0.0
-SPECIAL (SAM, 39, BISMARK_XG,            sam_piz_special_BISMARK_XG);            // introduced 14.0.0
-SPECIAL (SAM, 40, HI,                    sam_piz_special_HI);                    // introduced 14.0.0
-SPECIAL (SAM, 41, DEMUX_BY_BUDDY_MAP,    sam_piz_special_DEMUX_BY_BUDDY_MAP);    // introduced 14.0.0
-SPECIAL (SAM, 42, SEQ_LEN,               sam_piz_special_SEQ_LEN);               // introduced 14.0.0
-SPECIAL (SAM, 43, FI,                    sam_piz_special_FI);                    // introduced 14.0.0
-SPECIAL (SAM, 44, cm,                    sam_piz_special_cm);                    // introduced 14.0.0
-SPECIAL (SAM, 45, COPY_BUDDY,            sam_piz_special_COPY_BUDDY);            // introduced 14.0.0
-SPECIAL (SAM, 46, SET_BUDDY,             sam_piz_special_SET_BUDDY);             // introduced 14.0.0
-SPECIAL (SAM, 47, TX_AN_POS,             sam_piz_special_TX_AN_POS);             // introduced 14.0.0
-SPECIAL (SAM, 48, COPY_TEXTUAL_CIGAR,    sam_piz_special_COPY_TEXTUAL_CIGAR);    // introduced 14.0.0
-SPECIAL (SAM, 49, BISMARK_XM,            sam_piz_special_BISMARK_XM);            // introduced 14.0.0
-SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);             // introduced 14.0.0
-SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                    // introduced 14.0.10
-SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);              // introduced 15.0.0
+SPECIAL (SAM, 13, COPY_BUDDY_CIGAR,      sam_piz_special_COPY_BUDDY_CIGAR);      // 12.0.41
+SPECIAL (SAM, 14, FASTQ_CONSUME_AUX,     sam_piz_special_FASTQ_CONSUME_AUX);     // 12.0.41 (up to 14.0.25 called CONSUME_MC_Z)
+SPECIAL (SAM, 15, TLEN,                  sam_piz_special_TLEN);                  // 13.0.1
+SPECIAL (SAM, 16, QUAL,                  sam_piz_special_QUAL);                  // 13.0.1
+SPECIAL (SAM, 17, pull_from_sag,         sam_piz_special_pull_from_sag);         // 14.0.0
+SPECIAL (SAM, 18, SEQ,                   sam_piz_special_SEQ);                   // 14.0.0
+SPECIAL (SAM, 19, PRIM_QNAME,            sam_piz_special_PRIM_QNAME);            // 14.0.0
+SPECIAL (SAM, 20, SQUANK,                cigar_special_SQUANK);                  // 14.0.0
+SPECIAL (SAM, 21, BSSEEKER2_XO,          sam_piz_special_BSSEEKER2_XO);          // 14.0.0
+SPECIAL (SAM, 22, BSSEEKER2_XG,          sam_piz_special_BSSEEKER2_XG);          // 14.0.0
+SPECIAL (SAM, 23, BSSEEKER2_XM,          sam_piz_special_BSSEEKER2_XM);          // 14.0.0
+SPECIAL (SAM, 24, SA_main,               sam_piz_special_SA_main);               // 14.0.0
+SPECIAL (SAM, 25, COPY_PRIM,             sam_piz_special_COPY_PRIM);             // 14.0.0
+SPECIAL (SAM, 26, BWA_XC,                sam_piz_special_BWA_XC);                // 14.0.0
+SPECIAL (SAM, 27, BWA_XT,                sam_piz_special_BWA_XT);                // 14.0.0
+SPECIAL (SAM, 28, BWA_X1,                sam_piz_special_BWA_X1);                // 14.0.0
+SPECIAL (SAM, 29, BWA_XS,                sam_piz_special_BWA_XS);                // 14.0.0
+SPECIAL (SAM, 30, SM,                    sam_piz_special_SM);                    // 14.0.0
+SPECIAL (SAM, 31, AM,                    sam_piz_special_AM);                    // 14.0.0
+SPECIAL (SAM, 32, PNEXT,                 sam_piz_special_PNEXT);                 // 14.0.0
+SPECIAL (SAM, 33, DEMUX_BY_MATE,         sam_piz_special_DEMUX_BY_MATE);         // 14.0.0
+SPECIAL (SAM, 34, DEMUX_BY_MATE_PRIM,    sam_piz_special_DEMUX_BY_MATE_PRIM);    // 14.0.0
+SPECIAL (SAM, 35, DEMUX_BY_BUDDY,        sam_piz_special_DEMUX_BY_BUDDY);        // 14.0.0
+SPECIAL (SAM, 36, GEM3_XB,               sam_piz_special_GEM3_XB);               // 14.0.0
+SPECIAL (SAM, 37, BSBOLT_YS,             sam_piz_special_BSBOLT_YS);             // 14.0.0
+SPECIAL (SAM, 38, COPY_RNAME,            sam_piz_special_COPY_RNAME);            // 14.0.0
+SPECIAL (SAM, 39, BISMARK_XG,            sam_piz_special_BISMARK_XG);            // 14.0.0
+SPECIAL (SAM, 40, HI,                    sam_piz_special_HI);                    // 14.0.0
+SPECIAL (SAM, 41, DEMUX_BY_BUDDY_MAP,    sam_piz_special_DEMUX_BY_BUDDY_MAP);    // 14.0.0
+SPECIAL (SAM, 42, SEQ_LEN,               sam_piz_special_SEQ_LEN);               // 14.0.0
+SPECIAL (SAM, 43, FI,                    sam_piz_special_FI);                    // 14.0.0
+SPECIAL (SAM, 44, cm,                    sam_piz_special_cm);                    // 14.0.0
+SPECIAL (SAM, 45, COPY_BUDDY,            sam_piz_special_COPY_BUDDY);            // 14.0.0
+SPECIAL (SAM, 46, SET_BUDDY,             sam_piz_special_SET_BUDDY);             // 14.0.0
+SPECIAL (SAM, 47, TX_AN_POS,             sam_piz_special_TX_AN_POS);             // 14.0.0
+SPECIAL (SAM, 48, COPY_TEXTUAL_CIGAR,    sam_piz_special_COPY_TEXTUAL_CIGAR);    // 14.0.0
+SPECIAL (SAM, 49, BISMARK_XM,            sam_piz_special_BISMARK_XM);            // 14.0.0
+SPECIAL (SAM, 50, BSBOLT_XB,             sam_piz_special_BSBOLT_XB);             // 14.0.0
+SPECIAL (SAM, 51, UQ,                    sam_piz_special_UQ);                    // 14.0.10
+SPECIAL (SAM, 52, iqsqdq,                sam_piz_special_iq_sq_dq);              // 15.0.0
 SPECIAL (SAM, 53, ULTIMA_tp_old,         sam_piz_special_ULTIMA_tp_old);         // 15.0.10 to 15.0.27, called DEMUX_BY_QUAL
-SPECIAL (SAM, 54, ULTIMA_C,              ultima_c_piz_special_DEMUX_BY_Q4NAME);  // introduced 15.0.15
-SPECIAL (SAM, 55, bi,                    sam_piz_special_bi);                    // introduced 15.0.16
-SPECIAL (SAM, 56, sd,                    sam_piz_special_sd);                    // introduced 15.0.17
-SPECIAL (SAM, 57, AGENT_RX,              agilent_special_AGENT_RX);              // introduced 15.0.23
-SPECIAL (SAM, 58, AGENT_QX,              agilent_special_AGENT_QX);              // introduced 15.0.23
-SPECIAL (SAM, 59, qname_rng2seq_len,     special_qname_rng2seq_len);             // introduced 15.0.26
-SPECIAL (SAM, 60, DEMUX_BY_XX_0,         sam_piz_special_DEMUX_BY_XX_0);         // introduced 15.0.27
+SPECIAL (SAM, 54, ILLUM_V,               illum_v_piz_special_DEMUX_BY_Q4NAME);   // 15.0.15 as ULTIMA_C, 15.0.83 renamed to ILLUM_V
+SPECIAL (SAM, 55, bi,                    sam_piz_special_bi);                    // 15.0.16
+SPECIAL (SAM, 56, sd,                    sam_piz_special_sd);                    // 15.0.17
+SPECIAL (SAM, 57, AGENT_RX,              agilent_special_AGENT_RX);              // 15.0.23
+SPECIAL (SAM, 58, AGENT_QX,              agilent_special_AGENT_QX);              // 15.0.23
+SPECIAL (SAM, 59, qname_rng2seq_len,     special_qname_rng2seq_len);             // 15.0.26
+SPECIAL (SAM, 60, DEMUX_BY_XX_0,         sam_piz_special_DEMUX_BY_XX_0);         // 15.0.27
 SPECIAL (SAM, 61, xcons_XO,              sam_piz_special_xcons_XO);              // note: 15.0.27 to 15.0.75 it was called DEMUX_BY_AS
-SPECIAL (SAM, 62, PLUS,                  piz_special_PLUS);                      // introduced 15.0.27
-SPECIAL (SAM, 63, ULTIMA_tp,             sam_piz_special_ULTIMA_tp);             // introduced 15.0.28
-SPECIAL (SAM, 64, ULTIMA_mi,             sam_piz_special_ULTIMA_MI);             // introduced 15.0.28
-SPECIAL (SAM, 65, PACBIO_qe,             sam_piz_special_PACBIO_qe);             // introduced 15.0.35
-SPECIAL (SAM, 66, DEMUX_sn,              sam_piz_special_DEMUX_sn);              // introduced 15.0.35
-SPECIAL (SAM, 67, jI,                    sam_piz_special_jI);                    // introduced 15.0.42
-SPECIAL (SAM, 68, jM_length,             sam_piz_special_jM_length);             // introduced 15.0.42
-SPECIAL (SAM, 69, RG_by_QNAME,           sam_piz_special_RG_by_QNAME);           // introduced 15.0.51
-SPECIAL (SAM, 70, PACBIO_we,             sam_piz_special_PACBIO_we);             // introduced 15.0.58
-SPECIAL (SAM, 71, DEMUX_by_REVCOMP_MATE, sam_piz_special_DEMUX_by_REVCOMP_MATE); // introduced 15.0.60
-SPECIAL (SAM, 72, crdna_GP,              sam_piz_special_crdna_GP);              // introduced 15.0.60
-SPECIAL (SAM, 73, DEMUX_MAPQ,            sam_piz_special_DEMUX_MAPQ);            // introduced 15.0.61
-SPECIAL (SAM, 74, CPU_XL,                sam_piz_special_CPU_XL);                // introduced 15.0.65
-SPECIAL (SAM, 75, ML_REPEATS,            sam_piz_special_ML_REPEATS);            // introduced 15.0.67
-SPECIAL (SAM, 76, TMAP_XT,               sam_piz_special_TMAP_XT);               // introduced 15.0.68
-SPECIAL (SAM, 77, DEMUX_by_DUPLICATE,    sam_piz_special_DEMUX_by_DUPLICATE);    // introduced 15.0.69
-SPECIAL (SAM, 78, BX,                    sam_piz_special_BX);                    // introduced 15.0.74
-SPECIAL (SAM, 79, s1,                    sam_piz_special_s1);                    // introduced 15.0.76
-SPECIAL (SAM, 80, xcons_XD,              sam_piz_special_xcons_XD);              // introduced 15.0.76
+SPECIAL (SAM, 62, PLUS,                  piz_special_PLUS);                      // 15.0.27
+SPECIAL (SAM, 63, ULTIMA_tp,             sam_piz_special_ULTIMA_tp);             // 15.0.28
+SPECIAL (SAM, 64, ULTIMA_mi,             sam_piz_special_ULTIMA_MI);             // 15.0.28
+SPECIAL (SAM, 65, PACBIO_qe,             sam_piz_special_PACBIO_qe);             // 15.0.35
+SPECIAL (SAM, 66, DEMUX_sn,              sam_piz_special_DEMUX_sn);              // 15.0.35
+SPECIAL (SAM, 67, jI,                    sam_piz_special_jI);                    // 15.0.42
+SPECIAL (SAM, 68, jM_length,             sam_piz_special_jM_length);             // 15.0.42
+SPECIAL (SAM, 69, RG_by_QNAME,           sam_piz_special_RG_by_QNAME);           // 15.0.51
+SPECIAL (SAM, 70, PACBIO_we,             sam_piz_special_PACBIO_we);             // 15.0.58
+SPECIAL (SAM, 71, DEMUX_by_REVCOMP_MATE, sam_piz_special_DEMUX_by_REVCOMP_MATE); // 15.0.60
+SPECIAL (SAM, 72, crdna_GP,              sam_piz_special_crdna_GP);              // 15.0.60
+SPECIAL (SAM, 73, DEMUX_MAPQ,            sam_piz_special_DEMUX_MAPQ);            // 15.0.61
+SPECIAL (SAM, 74, CPU_XL,                sam_piz_special_CPU_XL);                // 15.0.65
+SPECIAL (SAM, 75, ML_REPEATS,            sam_piz_special_ML_REPEATS);            // 15.0.67
+SPECIAL (SAM, 76, TMAP_XT,               sam_piz_special_TMAP_XT);               // 15.0.68
+SPECIAL (SAM, 77, DEMUX_by_DUPLICATE,    sam_piz_special_DEMUX_by_DUPLICATE);    // 15.0.69
+SPECIAL (SAM, 78, BX,                    sam_piz_special_BX);                    // 15.0.74
+SPECIAL (SAM, 79, s1,                    sam_piz_special_s1);                    // 15.0.76
+SPECIAL (SAM, 80, xcons_XD,              sam_piz_special_xcons_XD);              // 15.0.76
+SPECIAL (SAM, 81, Parse_copy_QNAME,      sam_piz_special_Parse_copy_QNAME);      // 15.0.83
+SPECIAL (SAM, 82, GX_GN,                 sam_piz_special_GX_GN);                 // 15.0.83
+SPECIAL (SAM, 83, DEMUX_by_empty_field,  sam_piz_special_DEMUX_by_empty_field);  // 15.0.83
 
 #define SAM_LOCAL_GET_LINE_CALLBACKS(dt)        \
     { dt, _OPTION_BD_BI,    sam_zip_BD_BI    }, \

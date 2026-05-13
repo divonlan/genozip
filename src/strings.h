@@ -175,6 +175,17 @@ static inline uint32_t str_count_char (rom str, uint32_t len, char c)
     return count;
 }
 
+static inline uint32_t str_count_mismatches (rom str1, rom str2, uint32_t len)
+{
+    if (!len) return 0;
+
+    uint32_t count=0;
+    for (int i=0; i < len; i++)
+        if (str1[i] != str2[i]) count++;
+
+    return count;
+}
+
 // true if entire string is a single character
 static inline bool str_is_monochar (STRp(str))
 {
@@ -280,14 +291,15 @@ extern bool str_get_int_range_allow_hex64 (STRp(str), uint64_t min_val, uint64_t
 
 static bool inline str_is_int(STRp(str))       { return str_get_int (STRa(str), NULL); } // integer - leading zeros not allowed
 extern bool str_is_simple_float (STRp(str), uint32_t *decimals);
-static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i]))       return false; return true; } 
-static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i]))       return false; return true; } 
-static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))        return false; return true; } 
-static bool inline str_is_fastq_seq(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_FASTQ_SEQ(str[i]))        return false; return true; } 
+static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i])) return false; return true; } 
+static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i])) return false; return true; } 
+static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))  return false; return true; } 
+static bool inline str_is_fastq_seq(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_FASTQ_SEQ(str[i]))  return false; return true; } 
 extern bool str_is_utf8 (STRp(str));
-static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS(str[i])) return false; return true; } 
+static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS(str[i]))     return false; return true; } 
 static bool inline str_is_ACGT(STRp(str), uint32_t *bad_i) { for (int i=0; i<str_len; i++) if (!IS_ACGT(str[i])) { if(bad_i) *bad_i = i; return false; } return true; } 
-static bool inline str_is_ACGTN(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))            return false; return true; } 
+static bool inline str_is_ACGTN(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))      return false; return true; } 
+static bool inline str_is_qual_scores(STRp(str)){for (int i=0; i<str_len; i++) if (!IS_QUAL_SCORE(str[i])) return false; return true; } 
 
 extern bool str_is_in_range (STRp(str), char first_c, char last_c);
 static bool inline str_is_upper (STRp(str))    { return str_is_in_range (STRa(str), 'A', 'Z'); }

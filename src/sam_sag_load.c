@@ -483,7 +483,7 @@ static inline void sam_load_groups_add_solo_data (VBlockSAMP vb, PlsgVbInfo *pls
             // case: write to vb buffer, to be copied to z_file later
             else { 
                 uint32_t comp_len = huffman_get_theoretical_max_comp_len (solo_props[solo].did_i, recon_len);
-                buf_alloc (vb, &vb_solo_data_buf, comp_len, 0, uint8_t, 1, NULL); // likely already allocated in sam_load_groups_add_grps
+                buf_alloc (vb, &vb_solo_data_buf, comp_len, 0, uint8_t, 1, "vb_solo_data_buf"); // likely already allocated in sam_load_groups_add_grps
 
                 vb_solo_data_buf.len += huffman_compress (VB, solo_props[solo].did_i, STRa(recon), BAFT8(vb_solo_data_buf), &comp_len);
                 solo_aln->field_comp_len[solo] = comp_len;

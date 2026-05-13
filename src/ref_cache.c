@@ -26,7 +26,6 @@
 #include "refhash_friend.h"
 #include "arch.h"
 #include "filename.h"
-#include "tip.h"
 
 bool ref_cache_is_cached     (void) { return gref.cache_state == CACHE_READY;      }
 bool ref_cache_is_populating (void) { return gref.cache_state == CACHE_POPULATING; }
@@ -470,7 +469,7 @@ static CACHE_ITERATOR_CB (do_list)
 {
 #ifdef _WIN32
     if (ref_i == 0) // first reference
-        iprint0 ("pid    size        loaded               name\n");
+        iprint0 ("pid    size         loaded               name\n");
 
     StrText1K response;
     if (!ref_cache_msg_holder_process (pid, MSG_LIST, &response))
@@ -481,7 +480,7 @@ static CACHE_ITERATOR_CB (do_list)
     
 #else
     if (ref_i == 0) // first reference
-        iprint0 ("shmid  owner     perm size        loaded               name\n");
+        iprint0 ("shmid  owner     perm size         loaded               name\n");
 
     struct shmid_ds ds = {};
     ASSERT (shmctl (shmid, IPC_STAT, &ds) != -1, "shmctl failed: %s", strerror (errno));
@@ -489,7 +488,7 @@ static CACHE_ITERATOR_CB (do_list)
     StrText time_str = {};
     struct tm *time_info = localtime ((time_t *)&cache->creation_ts); // assumes time_t is 64 bit
     strftime (time_str.s, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", time_info);
-    iprintf ("%-5u  %-8s  %03o  %-10"PRIu64"  %19s  %s  %s\n", 
+    iprintf ("%-5u  %-8s  %03o  %-11"PRIu64"  %19s  %s  %s\n", 
              shmid, getpwuid (ds.shm_perm.uid)->pw_name, ds.shm_perm.mode & 0777, cache->shm_size,
              time_str.s, cache->ref_basename, (cache->is_populated ? "" : " NOT READY"));
     return true;
@@ -566,7 +565,7 @@ void noreturn ref_cache_hold (rom handle_str)
                     struct tm *time_info = localtime ((time_t *)&cache->creation_ts); // assumes time_t is 64 bit
                     strftime (time_str.s, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", time_info);
 
-                    snprintf (response.s, sizeof(response)-1, "%-5u  %-10"PRIu64"  %19s  %s  %s\n", 
+                    snprintf (response.s, sizeof(response)-1, "%-5u  %-11"PRIu64"  %19s  %s  %s\n", 
                               cache->holder_pid, cache->shm_size, time_str.s, cache->ref_basename, (cache->is_populated ? "" : " NOT READY"));
                 }
 

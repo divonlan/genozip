@@ -14,11 +14,11 @@
 
 #define ARRAY(element_type, name, buf) \
     element_type *name = ((element_type *)((buf).data)); \
-    const uint64_t name##_len __attribute__((unused)) = (buf).len   // read-only copy of len 
+    const uint64_t name##_len UNUSED = (buf).len   // read-only copy of len 
 
 #define ARRAY32(element_type, name, buf) \
     element_type *name = ((element_type *)((buf).data)); \
-    const uint32_t name##_len __attribute__((unused)) = (buf).len32 // read-only copy of len 
+    const uint32_t name##_len UNUSED = (buf).len32 // read-only copy of len 
 
 #pragma GCC diagnostic ignored "-Wnonnull"  // avoid warning when using B macros in memcpy, memmove and atoi - warning bc they are sometimes NULL
 
@@ -66,7 +66,7 @@
 #define for_buf(element_type, iterator, buf)  \
     for (element_type *iterator=B1ST(element_type, (buf)), *after_##iterator=BAFT(element_type, (buf)); iterator && iterator < after_##iterator; iterator++)
 
-#define for_bufរ(element_type, iterator, buf)  \
+#define for_buf𐤐(element_type, iterator, buf)  \
     for (element_type *restrict iterator=B1ST(element_type, (buf)), *after_##iterator=BAFT(element_type, (buf)); iterator && iterator < after_##iterator; iterator++)
 
 #define for_buf_back(element_type, iterator, buf)  \
@@ -77,7 +77,7 @@
     for (uint32_t iter_i=0, after_##iter_i=(buf).len32; iter_i < after_##iter_i;)  \
         for (element_type *iter_p=B1ST(element_type, (buf)), *after_##iter_p=BAFT(element_type, (buf)); iter_p && iter_p < after_##iter_p; iter_p++, iter_i++)
 
-#define for_buf2រ(element_type, iter_p, iter_i, buf) \
+#define for_buf2𐤐(element_type, iter_p, iter_i, buf) \
     for (uint32_t iter_i=0, after_##iter_i=(buf).len32; iter_i < after_##iter_i;)  \
         for (element_type *restrict iter_p=B1ST(element_type, (buf)), *after_##iter_p=BAFT(element_type, (buf)); iter_p && iter_p < after_##iter_p; iter_p++, iter_i++)
 

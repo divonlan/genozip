@@ -145,6 +145,7 @@ extern uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index);
+extern bool ctx_segconf_do_ctxs_share_snips (VBlockP vb, Did did_1, Did did_2);
 
 extern WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip));
 extern uint32_t ctx_get_next_snip_from_local (VBlockP vb, ContextP ctx, pSTRp (snip));
@@ -306,11 +307,15 @@ static inline void ctx_unset_encountered (VBlockP vb, ContextP ctx)
     ctx->last_line_i = LAST_LINE_I_INIT;
 }
 
+static inline bool ctx_encountered_in_line_(VBlockP vb, ContextP ctx) 
+{ 
+    return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == ENCOUNTERED (vb->line_i))); 
+}
+
 // returns true if dict_id was *previously* segged on this line (last_value may be valid or not)
 static inline bool ctx_encountered_in_line (VBlockP vb, Did did_i) 
 { 
-    decl_ctx (did_i); 
-    return ((ctx->last_line_i == vb->line_i) || (ctx->last_line_i == ENCOUNTERED (vb->line_i))); 
+    return ctx_encountered_in_line_(vb, CTX(did_i));
 }
 
 static inline bool ctx_encountered_in_prev_line (VBlockP vb, Did did_i) 

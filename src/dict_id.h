@@ -78,7 +78,7 @@ extern DisplayPrintId dis_dict_id (DictId dict_id);
 static inline DictId sub_dict_id (DictId dict_id, char ordinal)
 {
 #ifdef DEBUG    
-    ASSERT0 (ordinal >= 33 && ordinal <= 126, "expecting ordinal to be a printable character"); // just so stats etc looks nicer
+    ASSERT0 (ordinal >= 33 && ordinal <= 126/*not #including strings.h*/, "expecting ordinal to be a printable character"); // just so stats etc looks nicer
 #endif
 
     bytes id = dict_id.id;

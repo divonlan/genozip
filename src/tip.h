@@ -11,7 +11,8 @@
 #include "genozip.h"
 
 extern void tip_dt_encountered (DataType dt);
-extern void tip_print (void);
+extern void tip_print_genozip (void);
+extern void tip_print_genounzip (void);
 
 // protect from spamming the user with more than one tip
 // Note: use this for learning-curve tips, not for failure cases which should always display
@@ -19,6 +20,5 @@ extern void tip_print (void);
 #define TIP0(str)  ( { if (!flag.no_tip) iprint0 ("\n\n" _TIP str "\n\n"); flag.no_tip = true; } ) 
 
 // strings for tips to ensure consistency (italics from https://en.wikipedia.org/wiki/Mathematical_Alphanumeric_Symbols)
-#define _TIP "💡 " 
 #define _REFFILE "𝑟𝑒𝑓-𝑓𝑖𝑙𝑒" // better than sans-serif: "𝘳𝘦𝘧-𝘧𝘪𝘭𝘦"
 #define _BAMFILE "𝑏𝑎𝑚-𝑓𝑖𝑙𝑒"

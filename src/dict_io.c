@@ -564,7 +564,7 @@ static DataType dict_io_print_deep_dt_by_special (char special, DictId dict_id)
     // SAM specials that don't appear in v15 (when deep was introduced), so these specials are definitely FASTQ
     if (SP(TLEN_old,              PAIR2_GPOS)      || // 1
         SP(MD_old,                deep_copy_QNAME) || // 4
-        SP(PNEXT_IS_PREV_POS_old, ULTIMA_C)        || // 10
+        SP(PNEXT_IS_PREV_POS_old, ILLUM_V)         || // 10
         SP(COPY_MATE_TLEN_old,    AGENT_QX))          // 12
         return DT_FASTQ;
 

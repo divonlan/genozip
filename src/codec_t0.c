@@ -67,7 +67,7 @@ COMPRESS (codec_t0_compress)
     if (!soft_fail) goto do_compress;
 
     // first pass - condese t0 of homopolymers by removing redundant scores
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         STRw(t0);
         get_line_cb (vb, ctx, line_i, pSTRa (t0), CALLBACK_NO_SIZE_LIMIT, NULL);
 

@@ -21,7 +21,7 @@ static void fastq_seg_QUAL_segconf (VBlockFASTQP vb, STRp(qual))
             segconf.qual_histo[QHT_QUAL][qual[i]-33].count++;
 }
 
-void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))
+void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(qual))
 {
     START_TIMER;
 
@@ -51,7 +51,7 @@ void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(qual))
 // callback function for compress to get data of one line
 COMPRESSOR_CALLBACK (fastq_zip_qual) 
 {
-    ZipDataLineFASTQ *dl = DATA_LINE (vb_line_i);
+    ZipDataLineFASTQP dl = DATA_LINE (vb_line_i);
     char *qual = Btxt (dl->qual.index);
 
     // Deep: modify QUAL to contain only trim data (i.e. without the middle part copied from SAM)

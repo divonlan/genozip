@@ -561,7 +561,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_HI)
     int64_t last_nh = nh_ctx->last_value.i;
     int64_t last_hi = ctx->last_value.i;
 
-    new_value->i = (ctx_encountered_in_line (VB, OPTION_NH_i) && last_nh == 0)            ? 0 // NH=0 -> HI=0
+    new_value->i = (ctx_encountered_in_line_(VB, nh_ctx) && last_nh == 0)             ? 0 // NH=0 -> HI=0
                  : (!vb->line_i || last_hi == piz_get_history (nh_ctx, vb->line_i-1)) ? 1 // first in new SA Group
                  :                                                                          last_hi + 1; // next HI in current SA Group
 
@@ -1094,7 +1094,7 @@ static void sam_seg_RG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rg), unsigned 
     
     // this pattern was observed in CellRanger files, but we don't limit it to only CellRanger 
     if (segconf.RG_method == RG_BY_ILLUM_QNAME ||
-        (segconf_running && TECH(ILLUM) && segconf.sam_multi_RG)) {
+        (segconf_running && TECH(ILLUMINA) && segconf.sam_multi_RG)) {
         STRlast (qname, SAM_QNAME);
         int64_t wi_plus_1;
         if (!str_item_i_int (qname, qname_len, ':', 3, &wi_plus_1)) // note: we use str_item_i and not Q3NAME.last_value because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
@@ -1568,8 +1568,12 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_CY_Z: dl->dont_compress_CY = sam_seg_barcode_qual (vb, dl, OPTION_CY_Z, SOLO_CY, segconf.n_CR_CB_CY_seps, STRa(value), qSTRa(segconf.CY_con_snip), &segconf.CY_con, add_bytes); break;
         case _OPTION_QT_Z: dl->dont_compress_QT = sam_seg_barcode_qual (vb, dl, OPTION_QT_Z, SOLO_QT, segconf.n_BC_QT_seps,    STRa(value), qSTRa(segconf.QT_con_snip), &segconf.QT_con, add_bytes); break;
 
-        case _OPTION_CR_Z: sam_seg_CR_Z (vb, dl, STRa(value), add_bytes); break;
-        case _OPTION_CB_Z: sam_seg_CB_Z (vb, dl, STRa(value), add_bytes); break;
+        case _OPTION_CR_Z: COND0 (segconf.has_Parse, sam_seg_CR_Z_Parse (vb, dl, STRa(value), add_bytes))
+                           COND  (true, sam_seg_CR_Z (vb, dl, STRa(value), add_bytes)); 
+
+        case _OPTION_CB_Z: COND0 (segconf.has_Parse, sam_seg_CB_Z_Parse (vb, dl, STRa(value), add_bytes))
+                           COND  (true, sam_seg_CB_Z (vb, dl, STRa(value), add_bytes));
+
         case _OPTION_UR_Z: // aliases of RX (cellranger)
         case _OPTION_RX_Z: sam_seg_RX_Z (vb, dl, STRa(value), add_bytes); break;
         case _OPTION_UB_Z: // aliases of BX (cellranger)
@@ -1598,12 +1602,11 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_AN_Z: COND (segconf.has_10xGen, sam_seg_TX_AN_Z (vb, dl, OPTION_AN_Z, STRa(value), add_bytes));
         case _OPTION_CQ_Z: COND (segconf.has_10xGen, sam_seg_other_qual (vb, dl, NULL, &dl->CQ, OPTION_CQ_Z, STRa(value), add_bytes));
 
-        case _OPTION_GN_Z: sam_seg_gene_name_id (vb, dl, OPTION_GN_Z, STRa(value), add_bytes); break;
-        case _OPTION_GX_Z: sam_seg_gene_name_id (vb, dl, OPTION_GX_Z, STRa(value), add_bytes); break;
-        case _OPTION_gn_Z: sam_seg_gene_name_id (vb, dl, OPTION_gn_Z, STRa(value), add_bytes); break;
-        case _OPTION_gx_Z: sam_seg_gene_name_id (vb, dl, OPTION_gx_Z, STRa(value), add_bytes); break;
+        case _OPTION_GN_Z: sam_seg_GX_GN (vb, dl, OPTION_GN_Z, STRa(value), add_bytes); break;
+        case _OPTION_gn_Z: sam_seg_GX_GN (vb, dl, OPTION_gn_Z, STRa(value), add_bytes); break;
+        case _OPTION_GX_Z: sam_seg_GX_GN (vb, dl, OPTION_GX_Z, STRa(value), add_bytes); break;
+        case _OPTION_gx_Z: sam_seg_GX_GN (vb, dl, OPTION_gx_Z, STRa(value), add_bytes); break;
 
-        
         //case _OPTION_E2: sam_seg_E2_field (vb, dl, STRa(value), add_bytes); // BROKEN. To do: fix.
 
         case _OPTION_U2_Z: sam_seg_U2_Z (vb, dl, STRa(value), add_bytes); break;
@@ -1750,6 +1753,11 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         case _OPTION_YA_Z: COND (segconf.sam_has_abra2, sam_seg_ABRA2_YA_Z (vb, STRa(value), add_bytes));
         case _OPTION_YO_Z: COND (segconf.sam_has_abra2, sam_seg_ABRA2_YO_Z (vb, STRa(value), add_bytes));
 
+        // Parse Biosciences
+        case _OPTION_pN_Z: COND (segconf.has_Parse, sam_seg_pN_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_pB_Z: COND (segconf.has_Parse, sam_seg_pB_Z (vb, dl, STRa(value), add_bytes));
+        case _OPTION_RE_Z: COND (segconf.has_Parse, sam_seg_RE_Z (vb, dl, STRa(value), add_bytes));
+        
         default: fallback:
             sam_seg_aux_field_fallback (VB, dl, dict_id, sam_type, array_subtype, STRa(value), numeric, add_bytes);
     }

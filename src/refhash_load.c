@@ -118,6 +118,8 @@ void refhash_load (void)
 
     Version ref_ver = ref_get_genozip_ver();
     
+    refhash_buf.can_be_big = true; // avoid warning
+    
     if (refhash_buf.type != BUF_SHM) { // if cached refhash_buf is initialized in ref_cache_initialize_genome()
         if (!refhash_is_flat)     buf_alloc_exact (evb, refhash_buf, 256 MB + 128 MB + 64 MB + 32 MB, uint32_t, "refhash_buf"); // layered refhash - up to 15.0.80
         else if (gpos_bytes == 4) buf_alloc_exact (evb, refhash_buf, ref_hash_len, uint32_t, "refhash_buf"); 

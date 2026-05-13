@@ -15,9 +15,9 @@
 #include "txtheader.h"
 #include "contigs.h"
 #include "stats.h"
-#include "tip.h"
 #include "arch.h"
 #include "bai.h"
+#include "tip.h"
 
 // VCF standard keys
 #define HK_GENOZIP_CMD   "##genozip_command="

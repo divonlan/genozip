@@ -96,7 +96,7 @@ bool codec_pacb_comp_init (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb, bo
     uint32_t (*get_seq_len)(VBlockP, uint32_t) = (VB_DT(FASTQ) ? fastq_zip_get_seq_len : sam_zip_get_seq_len);
 
     // make sure score is same length as SEQ, or 0 (i.e. compressed with another method), for all lines
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         uint32_t score_len, seq_len;
         get_line_cb (vb, ctx, line_i, NULL, &score_len, 0, NULL);
         seq_len = get_seq_len (vb, line_i);
@@ -115,8 +115,14 @@ bool codec_pacb_comp_init (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb, bo
 // ZIP: called for QUAL-like dids
 bool codec_pacb_maybe_used (Did did_i)
 {
-    return (flag.force_qual_codec == CODEC_PACB || (TECH(PACBIO) && !flag.no_pacb && segconf.nontrivial_qual && !segconf.use_pacbio_iqsqdq)) &&
-           (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == OPTION_OQ_Z);
+    if (flag.force_qual_codec == CODEC_PACB) return true;
+    
+    return (TECH(PACBIO) || TECH(UNKNOWN)) // any "UNKNOWN" long-reads file will be assigned PACB by this (if rest of conditions in this statement are met)
+         && segconf.is_long_reads  
+         && !flag.no_pacb 
+         && segconf.nontrivial_qual 
+         && !segconf.use_pacbio_iqsqdq 
+         && (did_i == SAM_QUAL/*==FASTQ_QUAL*/ || did_i == OPTION_OQ_Z);
 }
 
 // ZIP: calculate the channel_i for each score on the line based on its environment (SEQ)
@@ -159,7 +165,8 @@ COMPRESS (codec_pacb_compress)
 {
     START_TIMER;
 
-    add_relaxed (z_file->pacb_lines, vb->lines.len);
+    if (ctx->did_i == SAM_QUAL/*==FASTQ_QUAL*/) 
+        add_relaxed (z_file->pacb_lines, vb->lines.len);
 
     uint8_t max_np = get_max_np();
     uint8_t n_channels = max_np * NUM_Ks;
@@ -174,7 +181,7 @@ COMPRESS (codec_pacb_compress)
     uint8_t *channel_i_p = B1ST8 (vb->codec_bufs[0]);
 
     // first pass - get the channel_i of each score into channels, and calculate lengths
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         STRw(score);
         get_line_cb (vb, ctx, line_i, pSTRa (score), CALLBACK_NO_SIZE_LIMIT, NULL); // QUAL or OQ:Z
 
@@ -204,7 +211,7 @@ COMPRESS (codec_pacb_compress)
     // second pass: multiplex: copy each score to its designated channel
     channel_i_p = B1ST8 (vb->codec_bufs[0]);
 
-    for (LineIType line_i=0; line_i < vb->lines.len32; line_i++) {   
+    for_line {   
         STRw(score);
         get_line_cb (vb, ctx, line_i, pSTRa (score), CALLBACK_NO_SIZE_LIMIT, NULL);
 

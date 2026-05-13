@@ -147,12 +147,12 @@ void asspiz_text (VBlockP vb, FUNCLINE)
     int s_len = 0;
 
     for (int i=0; i < vb->con_stack_len; i++)
-        SNPRINTF (s, "%s[%u]->", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
+        SNPRINTF (s, "%s[%u]➔ ", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
 
     SNPRINTF (s, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
 
     progress_newline(); 
-    fprintf (stderr, "%s %s: ❌ %s:%u vb_position_in_file: %"PRIu64" vb_recon_size(expected)=%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
+    fprintf (stderr, "%s %s: ❌ %s:%u biopsy-bytes=%"PRIu64",%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
              str_time().s, LN_NAME, func, code_line,
              vb->vb_position_txt_file, vb->recon_size, 
              writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 

@@ -29,7 +29,7 @@ void sam_produce_solo_huffmans (VBlockSAMP vb)
         huffman_start_chewing (solo_props[tag_i].did_i, 0, 0, 0, 1);
 
     // note: outer-loop on lines and inner of tags for better cpu caching of txt_data and vb->lines
-    for (uint32_t line_i=0; line_i < vb->lines.len32; line_i++) 
+    for_line 
         for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) {
             ZipDataLineSAMP dl = DATA_LINE(line_i);
             if (dl->solo_z_fields[tag_i].len)
@@ -162,7 +162,7 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_byt
     if (segconf_running && !segconf.CB_con.repeats) 
         sam_seg_CB_Z_segconf (vb, STRa(cb));
 
-    if (sam_can_seg_depn_solo_against_sag (vb, OPTION_CB_Z, SOLO_CB, STRa(cb)))
+    else if (sam_can_seg_depn_solo_against_sag (vb, OPTION_CB_Z, SOLO_CB, STRa(cb)))
         sam_seg_against_sa_group (vb, cb_ctx, add_bytes);
 
     else
@@ -207,14 +207,15 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
 void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_bytes)
 {
     START_TIMER;
+    decl_ctx (OPTION_CR_Z);
 
     set_LineWord_str (dl, solo_z_fields[SOLO_CR], cr);
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_CR_Z, SOLO_CR, STRa(cr)))
-        sam_seg_against_sa_group (vb, CTX(OPTION_CR_Z), add_bytes);
+        sam_seg_against_sa_group (vb, ctx, add_bytes);
 
     // copy CB, and if different than CB - xor against it
-    else
+    else 
         sam_seg_buddied_Z_fields (vb, dl, MATED_CR, STRa(cr), sam_seg_CR_do_seg, add_bytes);                                
 
     COPY_TIMER(sam_seg_CR_Z);
@@ -490,16 +491,105 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_byt
 // gx:z - STARsolo: Gene IDs for unique- and multi-gene reads (;-seperated list)
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_gene_name_id (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes)
+static void sam_seg_GX_GN_do (VBlockSAMP vb, ZipDataLineSAMP dl, bool isupper)
+{
+    Did gx_did = isupper ? OPTION_GX_Z : OPTION_gx_Z;
+    Did gn_did = isupper ? OPTION_GN_Z : OPTION_gn_Z;
+    STRlast (gx, gx_did);
+    STRlast (gn, gn_did);
+
+    // GN and GX are ;-separated arrays - create combined array where each item is GX\tGN
+    int gn_n_items = 1 + str_count_char (STRa(gn), ';');
+    int gx_n_items = 1 + str_count_char (STRa(gx), ';');
+    
+    // fallback in the unexpected situation of a different number of genes in GX vs GN
+    if (gn_n_items != gx_n_items) {
+        seg_by_did (VB, STRa(gx), gx_did, 0);
+        seg_by_did (VB, STRa(gn), gn_did, 0);
+        return;
+    }
+
+    str_split (gx, gx_len, gx_n_items, ';', gx_item, true);
+    str_split (gn, gn_len, gn_n_items, ';', gn_item, true);
+    ASSERTNOTZERO (gx_n_items); ASSERTNOTZERO (gn_n_items);
+
+    STRli(combined, gx_len + gn_len + 1); // in resulting array each gx has a \t (+1 from original - last gx didn't have a ';'), and gn's keeps their ';' as in the original
+    char *next = combined;
+    for (int item_i=0; item_i < gn_n_items; item_i++) {
+        next = mempcpy (next, gx_items[item_i], gx_item_lens[item_i]);
+        *next++ = '\t';
+
+        next = mempcpy (next, gn_items[item_i], gn_item_lens[item_i]);
+        if (item_i != gn_n_items - 1) *next++ = ';';
+    }
+
+    seg_array (VB, CTX(OPTION_GX_GN), OPTION_GX_GN, STRa(combined), ';', 0, false, STORE_NONE, _OPTION_GX_GN_ARR, 0);
+    
+    seg_special0 (VB, SAM_SPECIAL_GX_GN, CTX(gx_did), 0); // note: add_bytes already added in sam_seg_GX_GN
+    seg_special0 (VB, SAM_SPECIAL_GX_GN, CTX(gn_did), 0);
+}
+
+void sam_seg_GX_GN (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes)
 {
     START_TIMER;
+    decl_ctx (did_i);
 
-    ctx_set_encountered (VB, CTX(did_i));
-    seg_set_last_txt (VB, CTX(did_i), STRa(value));
+    ctx_set_encountered (VB, ctx);
+    seg_set_last_txt (VB, ctx, STRa(value));
+    
+    // the normal case is that we have both GX:Z and GN:Z and GX is first.
+    // since GX and GN have 1:1 mapping we seg them together (since 15.0.83)
+    if (has(GX_Z) && has(GN_Z) && vb->idx_GX_Z < vb->idx_GN_Z) {    
+        ctx->txt_len += add_bytes; // add bytes now so sam_seg_GX_GN_do doesn't need to worry about it
 
-    seg_array (VB, CTX(did_i), did_i, STRa(value), ';', 0, false, STORE_NONE, DICT_ID_NONE, add_bytes);
+        // case: we already encountered GX and GN - time for the seg
+        if      (did_i == OPTION_GN_Z) sam_seg_GX_GN_do (vb, dl, true);
+        else if (did_i == OPTION_gn_Z) sam_seg_GX_GN_do (vb, dl, false);
+    }
 
-    COPY_TIMER (sam_seg_gene_name_id);
+    // case: not "normal" setup - seg GX separately 
+    else 
+        seg_array (VB, CTX(did_i), did_i, STRa(value), ';', 0, false, STORE_NONE, DICT_ID_NONE, add_bytes);
+
+    COPY_TIMER (sam_seg_GX_GN);
+}
+
+// note: GX is always reconstructed before GN
+SPECIAL_RECONSTRUCTOR (sam_piz_special_GX_GN)
+{
+    bool is_gx = (ctx->did_i == OPTION_GX_Z || ctx->did_i == OPTION_gx_Z);
+    STR(combined);
+
+    // note: GX is always reconstructed before GN, so we peek OPTION_GX_GN in GX and consume in GN
+    if (is_gx) {
+        if (reconstruct) reconstruct_peek (vb, CTX(OPTION_GX_GN), pSTRa(combined));
+    }
+
+    else { // gn
+        combined = BAFTtxt;
+        reconstruct_from_ctx (vb, OPTION_GX_GN, 0, reconstruct); // consume even if not reconstruct
+        combined_len = BAFTtxt - combined;
+        Ltxt -= combined_len;
+    }
+
+    // at this point, "combined" is in BAFTtxt. We carefully pull either GX or GN
+    if (reconstruct) {
+        // split to genes - each item containing GX\tGN
+        str_split (combined, combined_len, 0, ';', item, false);
+
+        char *next = BAFTtxt; // careful! pointer aliasing combined
+        for (int i=0; i < n_items; i++) {
+            str_split (items[i], item_lens[i], 2, '\t', gxgn, true);
+
+            memmove (next, gxgns[!is_gx], gxgn_lens[!is_gx]); // not memcpy because aliasing 
+            next += gxgn_lens[!is_gx];
+            if (i != n_items-1) *next++ = ';';
+        }
+
+        Ltxt += next - BAFTtxt;
+    }
+
+    return NO_NEW_VALUE;
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -945,3 +1035,4 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_by_DUPLICATE)
     int channel_i = last_flags.duplicate; // 0 or 1
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
+

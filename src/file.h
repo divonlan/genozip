@@ -227,16 +227,21 @@ typedef struct File {
     Ploidy max_ploidy_for_mux;         // Z_FILE: PIZ: VCF: copied from SectionHeaderGenozipHeader.max_ploidy_for_mux
     };
     uint64_t sam_num_seq_by_aln;       // Z_FILE: ZIP: SAM/BAM: number of alignments segged vs reference by rname/pos/cigar (i.e. not aligner, not copy from prim/saggy, not verbatim)
-    uint64_t sam_num_perfect_matches;  // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
+    uint64_t sam_num_aligned_perfect;  // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
     uint64_t sam_num_aligned;          // Z_FILE: ZIP: SAM/BAM: number of alignments successfully found by aligner. for stats 
     uint64_t sam_num_verbatim;         // Z_FILE: ZIP: SAM/BAM: number of alignments segged verbatim
     uint64_t sam_num_by_prim;          // Z_FILE: ZIP: SAM/BAM: number of alignments segged against prim / saggy
     uint64_t sam_num_tlen_pred;        // Z_FILE: ZIP: SAM/BAM: number of alignments with TLEN successfully predicteds
-    uint64_t fq_num_aligned;           // Z_FILE: ZIP: FASTQ: number of alignments successfully found by aligner. for stats 
-    uint64_t fq_num_perfect_matches;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
-    uint64_t fq_num_verbatim;          // Z_FILE: ZIP: FASTQ: number of lines segged verbatim
+    uint64_t fq_num_aligned;           // Z_FILE: ZIP: SAM/BAM/FASTQ: number of alignments successfully found by aligner. for stats 
+    uint64_t fq_num_aligned_perfect;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
+    uint64_t fq_num_perfect_r2;        // Z_FILE: ZIP: SAM/BAM/FASTQ: subset of fq_num_aligned_perfect that originate from R2
+    uint64_t fq_num_aligned_spliced;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of spliced alignments
+    uint64_t fq_num_perfect_spliced;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of spliced alignments
+    uint64_t fq_num_verbatim;          // Z_FILE: ZIP: SAM/BAM/FASTQ: number of lines segged verbatim
     uint64_t fq_num_monochar;          // Z_FILE: ZIP: FASTQ: number of lines segged monochar
+    uint64_t fq_num_r2_gpos_Δ;         // Z_FILE: ZIP: FASTQ: number of R2 (R2 file or interleaved) reads with GPOS segged as delta R1's GPOS
     uint64_t fq_num_empty_read;        // Z_FILE: ZIP: FASTQ: number of lines with seq_len=0
+    uint64_t fq_num_nonbio;            // Z_FILE: ZIP: FASTQ: number of lines with non-biological reads
     uint64_t vcf_num_samples_copied;   // Z_FILE: ZIP: VCF: number of samples copied
     uint64_t domq_lines, divr_lines, homp_lines, pacb_lines, longr_lines, normq_lines;// Z_FILE: ZIP: number of lines QUAL codecs (show in codec_qual_show_stats)
 
@@ -254,10 +259,10 @@ typedef struct File {
     uint64_t gz_isize[MAX_NUM_COMPS][2];                // Z_FILE ZIP GZ: isize(=uncomp_size) of the first two MGZIP blocks (excluding known MGZIP codecs). 
     uint32_t comp_num_EOF_blocks[MAX_NUM_COMPS];        // Z_FILE ZIP MGZIP: number of EOF blocks encountered in the component
     
-    #define GZ_HEADER_LEN 100
+    #define MAX_GZ_HEADER_LEN 100
     union {
-    uint8_t comp_gz_header[MAX_NUM_COMPS][GZ_HEADER_LEN]; // Z_FILE ZIP gzip codecs: first (usually all) bytes of the gz header 
-    uint8_t gz_header[GZ_HEADER_LEN];                   // TXT_FILE ZIP: first gz_header of file (copied later to comp_gz_header)
+    uint8_t comp_gz_header[MAX_NUM_COMPS][MAX_GZ_HEADER_LEN]; // Z_FILE ZIP gzip codecs: first (usually all) bytes of the gz header 
+    uint8_t gz_header[MAX_GZ_HEADER_LEN];               // TXT_FILE ZIP: first gz_header of file (copied later to comp_gz_header)
     };
     uint32_t gz_header_len;                             // TXT_FILE ZIP: gz_header length of first gz block
 } File;
