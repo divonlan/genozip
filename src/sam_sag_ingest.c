@@ -195,7 +195,7 @@ static void sam_zip_prim_ingest_vb_compress_qnames (VBlockSAMP vb, Sag *vb_grps,
 
     for (uint32_t vb_grp_i=0; vb_grp_i < vb_grps_len; vb_grp_i++) {
         Sag *g = &vb_grps[vb_grp_i];
-        ZipDataLineSAMP dl = DATA_LINE(vb_grp_i);
+        ZipDataLineSAM𐤐 dl = DATA_LINE(vb_grp_i);
 
         rom qname = Btxt (g->qname);
         uint32_t qname_len = g->qname_len;

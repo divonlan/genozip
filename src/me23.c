@@ -63,7 +63,7 @@ void me23_seg_initialize (VBlockP vb)
 void me23_seg_finalize (VBlockP vb)
 {
     // top level snip
-    SmallContainer top_level = { 
+    Container(5) top_level = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 5,
@@ -76,10 +76,10 @@ void me23_seg_finalize (VBlockP vb)
 
     container_seg (vb, CTX(ME23_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 
-    SmallContainer top_level_to_vcf = { 
+    Container(4) top_level_to_vcf = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
-        .nitems_lo = 5,
+        .nitems_lo = 4,
         .items     = { { .dict_id = { _ME23_CHROM },    .separator = "\t" },
                        { .dict_id = { _ME23_POS },      .separator = "\t" },
                        { .dict_id = { _ME23_ID },       .separator = "\t" },

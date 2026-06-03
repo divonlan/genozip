@@ -108,7 +108,7 @@ COMPRESS (codec_bz2_compress)
 
     *compressed_len -= strm.avail_out;
 
-    COPY_TIMER_COMPRESS (compressor_bz2); // higher level codecs are accounted for in their codec code
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_bz2); // higher level codecs are accounted for in their codec code
 
     return success;
 }

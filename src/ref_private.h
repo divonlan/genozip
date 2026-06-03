@@ -93,7 +93,7 @@ typedef struct RefStruct {
     #define CACHE_SHM_NONE NULL
     void *cache_shm; // Windows HANDLE is defined as void *
 #endif
-    RefCache *cache; // cache consists of a block memory containing a RefCache struct, followed by the genome, follewed by the refhash
+    RefCache *cache; // cache consists of a block memory containing a RefCache struct, followed by the genome, follewed by the refhash (unless minimal reference)
 
 } RefStruct;
 

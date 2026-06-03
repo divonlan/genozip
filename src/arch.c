@@ -95,9 +95,9 @@ void arch_set_locale (void)
     ASSERTWD (SetThreadLocale (LOCALE_INVARIANT), // same as En_US
               "Warning: failed SetThreadLocale: %s", str_win_error());
 #else 
-    ASSERTWD0 (setlocale (LC_CTYPE,   flag.is_windows ? ".UTF-8" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_CTYPE");   // accept and print UTF-8 text (to do: doesn't work for Windows)
+    ASSERTWD (setlocale (LC_CTYPE,   flag.is_windows ? ".UTF-8" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_CTYPE", NULL);   // accept and print UTF-8 text (to do: doesn't work for Windows)
 #endif
-    ASSERTWD0 (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_NUMERIC"); // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
+    ASSERTWD (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_NUMERIC", NULL); // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
 }
 
 static bool arch_is_wsl (void)
@@ -432,7 +432,7 @@ StrText4K arch_get_executable (void)
     _NSGetExecutablePath (NULL, &path_len); // get path len - possibly more than MAXPATHLEN if has symlinks
     path_len = MIN_(path_len, sizeof(path.s) - 1);
 
-    ASSGOTO0 (!_NSGetExecutablePath (path.s, &path_len), "_NSGetExecutablePath() failed"); 
+    ASSGOTO (!_NSGetExecutablePath (path.s, &path_len), "_NSGetExecutablePath() failed", NULL); 
 
 #else // another OS
     goto error;

@@ -11,13 +11,13 @@
 
 static Did tw_dids[NUM_SVABA_TWs] = SVABA_TW_DIDS;
 
-static SmallContainer id_con = {
+static Container(2) id_con = {
     .nitems_lo = 2,
     .repeats   = 1,
     .items = { { .dict_id.num = DICT_ID_MAKEF_3("I0D"), .separator[0] = ':' },
                { .dict_id.num = DICT_ID_MAKEF_3("I1D"),                     } } };
 
-sSTRl(con_id_snip, 64);
+sSTRl(con_id_snip, con_snip_sizeof(2));
 
 void vcf_svaba_zip_initialize (void)
 {
@@ -86,8 +86,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SVABA_MATEID)
 
 void vcf_seg_svaba_MAPQ (VBlockVCFP vb, ContextP ctx, STRp(mapq))
 {
-    ContextP channel_ctx = segconf.has[INFO_MATEMAPQ] ? vcf_seg_sv_copy_mate (vb, CTX(INFO_MAPQ), STRa(mapq), TW_MAPQ, TW_MATEMAPQ, true, mapq_len)
-                         :                              ctx;
+    ContextP channel_ctx = segconf_has(INFO_MATEMAPQ) ? vcf_seg_sv_copy_mate (vb, CTX(INFO_MAPQ), STRa(mapq), TW_MAPQ, TW_MATEMAPQ, true, mapq_len)
+                         :                               ctx;
 
     // case: NOT segged as copy-mate  
     if (channel_ctx) { 

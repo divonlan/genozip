@@ -102,7 +102,7 @@ StrText1K sam_dis_FLAG (SamFlags f)
     return result;
 }
 
-void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
+void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes)
 {    
     // note: for simplicity, we only mux in MAIN.
     // note: we can only mux FLAG by buddy, not mate, bc sam_piz_special_DEMUX_BY_MATE needs FLAG to determine mate
@@ -141,7 +141,7 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
     #define SAME_AS_MATE (SAM_FLAG_MULTI_SEG | SAM_FLAG_IS_ALIGNED | SAM_FLAG_SECONDARY | SAM_FLAG_FILTERED | \
                           SAM_FLAG_DUPLICATE | SAM_FLAG_SUPPLEMENTARY)
     else if (sam_has_mate && !IS_PRIM(vb) && // TO DO: improve sam_load_groups_add_flags to allow FLAG mating in prim VB (bug 620)
-        ({ ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); 
+        ({ ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); 
            (dl->FLAG.value & SAME_AS_MATE) == (mate_dl->FLAG.value & SAME_AS_MATE) &&
             dl->FLAG.unmapped              == mate_dl->FLAG.next_unmapped          &&
             dl->FLAG.next_unmapped         == mate_dl->FLAG.unmapped               &&
@@ -192,7 +192,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_FLAG)
 // BD and BI
 // ---------
 
-static void sam_seg_BD_BI_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(field), DictId dict_id, unsigned add_bytes)
+static void sam_seg_BD_BI_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(field), DictId dict_id, unsigned add_bytes)
 {
     bool is_bi = (dict_id.num == _OPTION_BI_Z);
     ContextP ctx  = CTX (is_bi ? OPTION_BI_Z : OPTION_BD_Z);
@@ -213,7 +213,7 @@ static void sam_seg_BD_BI_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(field), Dic
 // interlaced line containing a character from BD followed by a character from BI - since these two fields are correlated
 COMPRESSOR_CALLBACK (sam_zip_BD_BI)
 {
-    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAM𐤐 dl = DATA_LINE (vb_line_i);
 
     uint32_t bd_len = dl->BD_BI[0] ? dl->SEQ.len : 0;
     uint32_t bi_len = dl->BD_BI[1] ? dl->SEQ.len : 0;
@@ -281,7 +281,7 @@ done:
 // BQ:Z "Offset to base alignment quality (BAQ)"
 // ---------------------------------------------
 
-static void sam_seg_BQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bq), unsigned add_bytes)
+static void sam_seg_BQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(bq), unsigned add_bytes)
 {
     ContextP ctx = CTX(OPTION_BQ_Z);
 
@@ -294,7 +294,7 @@ static void sam_seg_BQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bq), unsigned ad
 
 COMPRESSOR_CALLBACK (sam_zip_BQ)
 {
-    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAM𐤐 dl = DATA_LINE (vb_line_i);
     
     *line_data_len = MIN_(maximum_size, dl->BQ.len);
     *line_data = Btxt (dl->BQ.index);
@@ -307,12 +307,9 @@ COMPRESSOR_CALLBACK (sam_zip_BQ)
 
 void sam_MM_zip_initialize (void)
 {
-    segconf.MM_con = (SmallContainer){ 
-        .nitems_lo = 2, 
-        .repeats   = 1,
-        .items[0]  = { .dict_id = sub_dict_id (_OPTION_MM_Z, 'T'), .separator = "," }, // not '0' as it is used by seg_array_by_callback
-        .items[1]  = { .dict_id = sub_dict_id (_OPTION_MM_Z, 'N')                   } 
-    };
+    con_initialize (&segconf.MM_con, 2);
+    segconf.MM_con.items[0]  = (ContainerItem){ .dict_id = sub_dict_id (_OPTION_MM_Z, 'T'), .separator = "," }; // not '0' as it is used by seg_array_by_callback
+    segconf.MM_con.items[1]  = (ContainerItem){ .dict_id = sub_dict_id (_OPTION_MM_Z, 'N')                   };
 
     segconf.MM_con_snip_len = sizeof (segconf.MM_con_snip);
     container_prepare_snip ((ContainerP)&segconf.MM_con, 0, 0, qSTRa(segconf.MM_con_snip));
@@ -368,7 +365,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_ML_REPEATS)
 // ----------------------------------------------------------------------------------------------------------
 // SM:i: Template-independent mapping quality
 // ----------------------------------------------------------------------------------------------------------
-static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t SM, unsigned add_bytes)
+static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t SM, unsigned add_bytes)
 {
     decl_ctx (OPTION_SM_i);
 
@@ -411,7 +408,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_SM)
 // ----------------------------------------------------------------------------------------------------------
 // AM:i The smallest template-independent mapping quality in the template
 // ----------------------------------------------------------------------------------------------------------
-static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t AM, unsigned add_bytes)
+static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t AM, unsigned add_bytes)
 {
     decl_ctx (OPTION_AM_i);
 
@@ -465,7 +462,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_AM)
 // ----------------------------------------------------------------------------------------------------------
 // UQ:i Phred likelihood of the segment, conditional on the mapping being correct
 // ----------------------------------------------------------------------------------------------------------
-static void sam_seg_UQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t UQ, unsigned add_bytes)
+static void sam_seg_UQ_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t UQ, unsigned add_bytes)
 {
     decl_ctx (OPTION_UQ_i);
     int32_t other; // either AS or NM
@@ -501,7 +498,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_UQ)
 // NH:i Number of reported alignments that contain the query in the current record
 // ----------------------------------------------------------------------------------------------------------
 
-static inline void sam_seg_NH_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh, unsigned add_bytes)
+static inline void sam_seg_NH_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t nh, unsigned add_bytes)
 {
     decl_ctx (OPTION_NH_i);
         
@@ -530,7 +527,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_BUDDY_MAP)
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
 
-static inline void sam_seg_HI_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t hi, unsigned add_bytes)
+static inline void sam_seg_HI_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t hi, unsigned add_bytes)
 {
     decl_ctx (OPTION_HI_i);
 
@@ -575,7 +572,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_HI)
 // CP:i Leftmost coordinate of the next hit
 // ----------------------------------------
 
-static inline void sam_seg_CP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t cp, unsigned add_bytes)
+static inline void sam_seg_CP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t cp, unsigned add_bytes)
 {
     if (IS_DEPN(vb) && vb->sag && IS_SAG_CC && vb->cc_aln->pos == cp) 
         sam_seg_against_sa_group (vb, CTX(OPTION_CP_i), add_bytes);
@@ -633,18 +630,21 @@ bool sam_seg_0A_pos_cb (VBlockP vb, ContextP ctx, STRp(oa_pos), uint32_t repeat)
 // See: https://samtools.github.io/hts-specs/SAMtags.pdf
 static void sam_seg_OA_Z (VBlockSAMP vb, STRp(field), unsigned add_bytes)
 {
-    static const MediumContainer container_OA = { .nitems_lo = 6,          
-                                                  .repsep    = { ';' }, // including on last repeat    
-                                                  .items     = { { .dict_id = { _OPTION_OA_RNAME  }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_POS    }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_STRAND }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_CIGAR  }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_MAPQ   }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_OA_NM     },                    } } };
+    static const Container(6) container_OA = { 
+        .nitems_lo = 6,          
+        .repeats   = 1,  // faster seg if this happens to be correct 
+        .repsep    = { ';' }, // including on last repeat    
+        .items     = { { .dict_id = { _OPTION_OA_RNAME  }, .separator = {','} },  
+                       { .dict_id = { _OPTION_OA_POS    }, .separator = {','} },  
+                       { .dict_id = { _OPTION_OA_STRAND }, .separator = {','} },  
+                       { .dict_id = { _OPTION_OA_CIGAR  }, .separator = {','} },  
+                       { .dict_id = { _OPTION_OA_MAPQ   }, .separator = {','} },  
+                       { .dict_id = { _OPTION_OA_NM     },                    } } 
+    };
 
     SegCallback callbacks[6] = { [SA_RNAME]=sam_seg_0A_rname_cb, [SA_POS]=sam_seg_0A_pos_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };
      
-    seg_array_of_struct (VB, CTX(OPTION_OA_Z), container_OA, STRa(field), callbacks, 
+    seg_array_of_struct (VB, CTX(OPTION_OA_Z), (ContainerP)&container_OA, STRa(field), callbacks, 
                          segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                          add_bytes);
 }
@@ -655,13 +655,11 @@ static void sam_seg_OA_Z (VBlockSAMP vb, STRp(field), unsigned add_bytes)
 
 // AS has a value set (at least as set by BWA and IonTorrent TMAP) of at most vb->ref_consumed, and often equal to it. we modify
 // it to be new_value=(value-ref_consumed) 
-static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, unsigned add_bytes)
+static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t as, unsigned add_bytes)
 {
-    START_TIMER;
-
     if (segconf_running) {
-        if (ABS((int32_t)vb->ref_consumed     - as) < 20) segconf.AS_is_ref_consumed++;
-        if (ABS((int32_t)vb->ref_consumed * 2 - as) < 10) segconf.AS_is_2ref_consumed++;
+        if (ABS((int32_t)vb->ref_consumed     - as) < 20) segconf.AS_is_ref_consumed_evidence++;
+        if (ABS((int32_t)vb->ref_consumed * 2 - as) < 10) segconf.AS_is_2ref_consumed_evidence++;
     }
 
     // note: dl->AS was already set in sam_seg_txt_line/bam_seg_txt_line
@@ -675,11 +673,11 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, 
     else if (segconf.is_bowtie2) {
         ASSERT (IN_RANGX (as, MIN_AS_i, MAX_AS_i), "%s: AS=%"PRId64" is ∉ [%d,%d]", LN_NAME, as, MIN_AS_i, MAX_AS_i);    
         
-        ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+        ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_AS_i, (MultiplexerP)&vb->mux_AS, sam_has_mate);
 
-        if (sam_has_mate && segconf.has[OPTION_YS_i] && mate_dl->YS == as) 
+        if (sam_has_mate && segconf_has(OPTION_YS_i) && mate_dl->YS == as) 
             seg_by_ctx (VB, STRa(copy_mate_YS_snip), channel_ctx, add_bytes);
         
         // case: AS:i tends to be close to 2 X ref_consumed
@@ -712,15 +710,13 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t as, 
 
     else
         seg_integer (VB, CTX (OPTION_AS_i), as, true, add_bytes);
-
-    COPY_TIMER(sam_seg_AS_i);
 }
 
 // ----------------------------------------------------------------------------------------------
 // delta vs seq_len. Used for Ultima a3:i, minimap2 ms:i and until 12.0.37 also AS:i 
 // ----------------------------------------------------------------------------------------------
 
-static void sam_seg_delta_seq_len (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int64_t value, bool in_local, unsigned add_bytes)    
+static void sam_seg_delta_seq_len (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int64_t value, bool in_local, unsigned add_bytes)    
 {
     decl_ctx (did_i);
 
@@ -794,7 +790,7 @@ static inline int32_t sam_SEQ_END_prediction (rom op, int32_t seq_len, int32_t s
          - (op[3]=='-'             ? soft1   : 0);
 } 
 
-static inline void sam_seg_SEQ_END (VBlockSAMP vb, ZipDataLineSAMP dl, ContextP ctx, int64_t value, rom op, unsigned add_bytes)
+static inline void sam_seg_SEQ_END (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, ContextP ctx, int64_t value, rom op, unsigned add_bytes)
 {
     int32_t prediction = sam_SEQ_END_prediction (op, dl->SEQ.len, vb->soft_clip[0], vb->soft_clip[1], dl->FLAG.rev_comp);
 
@@ -821,7 +817,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_SEQ_LEN)
 // ----------------------------------------------------------------------------------------------
 
 // We seg against a previous mate line's MQ if one exists, but not if this is a single-MAPQ-value file
-void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
+void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes)
 {
     if (segconf_running && dl->MAPQ) {
         if (!segconf.MAPQ_value) 
@@ -835,14 +831,14 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
     bool do_mux = IS_MAIN(vb) && !segconf.sam_is_unmapped; // MAIN-only for simplicity. To do: also for prim/depn components
     int channel_i = (segconf.MAPQ_use_xq && has(xq_i))         ? 3  // DRAGEN: if xq:i exists in the alignment, MAPQ is expected to be all-the-same
                   : (segconf.MAPQ_use_xq && has(XQ_i))         ? 3  // DRAGEN: if XQ:i exists in the alignment, MAPQ is expected to be all-the-same
-                  : (segconf.has[OPTION_MQ_i] && sam_has_mate) ? 1  // MAPQ is expected to be == mate's MQ 
+                  : (segconf_has(OPTION_MQ_i) && sam_has_mate) ? 1  // MAPQ is expected to be == mate's MQ 
                   : sam_has_prim                               ? 2  // seg saggy depn to separate channel as expected to be lower MAPQ
                   :                                              0;
 
     ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_MAPQ, (MultiplexerP)&vb->mux_MAPQ, channel_i) 
                                   : CTX(SAM_MAPQ);
 
-    ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+    ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
     if (segconf.sam_is_unmapped) 
         seg_integer_as_snip_do (VB, channel_ctx, dl->MAPQ, add_bytes); // expecting all-the-same
@@ -864,7 +860,7 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes)
         seg_integer_as_snip_do (VB, channel_ctx, dl->MAPQ, add_bytes); // expecting all-the-same
 
     // case: seg against mate
-    else if (!segconf.MAPQ_has_single_value && segconf.has[OPTION_MQ_i] &&
+    else if (!segconf.MAPQ_has_single_value && segconf_has(OPTION_MQ_i) &&
              sam_has_mate && dl->MAPQ == mate_dl->MQ)
         seg_by_ctx (VB, STRa(copy_mate_MQ_snip), channel_ctx, add_bytes); // copy MQ from earlier-line mate 
 
@@ -897,7 +893,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_MAPQ)
         if (!ctx_has_value_in_line_(vb, CTX(SAM_FLAG)))
             ctx_set_last_value (vb, CTX(SAM_FLAG), reconstruct_peek (vb, CTX(SAM_FLAG), 0, 0));
 
-        channel_i = (segconf.has[OPTION_MQ_i] && sam_has_mate)?1 : sam_has_prim?2 : 0;
+        channel_i = (segconf_has(OPTION_MQ_i) && sam_has_mate)?1 : sam_has_prim?2 : 0;
     }
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
@@ -905,7 +901,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_MAPQ)
 
 // MQ:i Mapping quality of the mate/next segment
 // Seg against mate if we have one, or else against MAPQ as it is often very similar
-static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t mq, unsigned add_bytes)
+static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t mq, unsigned add_bytes)
 {
     ASSERT (IN_RANGX (mq, 0, 255), "%s: Invalid MQ:i=%"PRId64": expecting an integer [0,255]", LN_NAME, mq);
     dl->MQ = mq; 
@@ -923,7 +919,7 @@ static inline void sam_seg_MQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t mq, 
 }
 
 // PQ:i Phred likelihood of the template, conditional on the mapping locations of both/all segments being correct.
-static inline void sam_seg_PQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t pq, unsigned add_bytes)
+static inline void sam_seg_PQ_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t pq, unsigned add_bytes)
 {
     if (IN_RANGX (pq, 0, 65534)) // dl->PQ is uint16_t
         dl->PQ = pq + 1; // +1, so that if pq is out of this range, leave dl as 0, which will mean "no valid PQ"
@@ -946,13 +942,13 @@ static inline void sam_seg_PQ_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t pq, 
 }
 
 // RG:Z, PG:Z, PU:Z, LB:Z, RX:Z and others: we predict that the value will be the same as the buddy
-void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAMP dl, MatedZFields f, STRp(value), 
+void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, MatedZFields f, STRp(value), 
                                SegBuddiedCallback seg_cb, // optional
                                unsigned add_bytes)
 {
     ContextP ctx = CTX(buddied_Z_dids[f]);
 
-    ZipDataLineSAMP buddy_dl = sam_has_mate  ? DATA_LINE (vb->mate_line_i)  // mate before saggy, consistent with sam_piz_special_COPY_BUDDY
+    ZipDataLineSAM𐤐 buddy_dl = sam_has_mate  ? DATA_LINE (vb->mate_line_i)  // mate before saggy, consistent with sam_piz_special_COPY_BUDDY
                              : sam_has_saggy ? DATA_LINE (vb->saggy_line_i) // if collated, it will likely be the same as prev line, so better not use special 
                              : NULL;
 
@@ -976,7 +972,7 @@ void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAMP dl, MatedZFields f
     set_LineWord_str (dl, mated_z_fields[f], value);
 }
 
-void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, 
+void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, 
                                int64_t my_value, 
                                int32_t *dl_value, // pointer to my dl value (value will be set)
                                MultiplexerP mux,
@@ -1035,7 +1031,7 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i,
 }
 
 // seg Z field which is expected to be equal to a different field on mate (eg rb:Z <> mb:Z)
-static void sam_seg_cross_mated_Z_fields (VBlockSAMP vb, Did did_i, ZipDataLineSAMP dl, STRp(value), 
+static void sam_seg_cross_mated_Z_fields (VBlockSAMP vb, Did did_i, ZipDataLineSAM𐤐 dl, STRp(value), 
                                           LineWordL *my_lw, // to be set
                                           const LineWordL *mate_lw, // pointer to CURRENT LINE value of other field in dl
                                           const Multiplexer2 *mux,
@@ -1044,7 +1040,7 @@ static void sam_seg_cross_mated_Z_fields (VBlockSAMP vb, Did did_i, ZipDataLineS
 {
     *my_lw = LINEWORDL (dl, value);
 
-    ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+    ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, did_i, (MultiplexerP)mux, sam_has_mate);
     if (!sam_has_mate) goto no_mate;
@@ -1062,7 +1058,7 @@ static void sam_seg_cross_mated_Z_fields (VBlockSAMP vb, Did did_i, ZipDataLineS
 }
 
 // E2 - SEQ data. Currently broken. To do: fix (bug 403)
-/*static void sam_seg_E2_field (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(field), unsigned add_bytes)
+/*static void sam_seg_E2_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(field), unsigned add_bytes)
 {
     ASSSEG0 (dl->SEQ.len, "E2 tag without a SEQ"); 
     ASSINP (field_len == dl->SEQ.len, 
@@ -1076,7 +1072,7 @@ static void sam_seg_cross_mated_Z_fields (VBlockSAMP vb, Did did_i, ZipDataLineS
 }*/
 
 // U2 - QUAL data
-static void sam_seg_U2_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(field), unsigned add_bytes)
+static void sam_seg_U2_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(field), unsigned add_bytes)
 {
     ASSSEG0 (dl->SEQ.len, "U2 tag without a SEQ"); 
     ASSINP (field_len == dl->SEQ.len, 
@@ -1088,7 +1084,7 @@ static void sam_seg_U2_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(field), unsign
     CTX(OPTION_U2_Z)->local.len += field_len;
 }
 
-static void sam_seg_RG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rg), unsigned add_bytes)
+static void sam_seg_RG_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(rg), unsigned add_bytes)
 {
     decl_ctx (OPTION_RG_Z);
     
@@ -1097,7 +1093,7 @@ static void sam_seg_RG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rg), unsigned 
         (segconf_running && TECH(ILLUMINA) && segconf.sam_multi_RG)) {
         STRlast (qname, SAM_QNAME);
         int64_t wi_plus_1;
-        if (!str_item_i_int (qname, qname_len, ':', 3, &wi_plus_1)) // note: we use str_item_i and not Q3NAME.last_value because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
+        if (!str_item_i_int (qname, qname_len, ':', 3, &wi_plus_1)) // note: we use str_item_i_int and not Q3NAME.last_value because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
             goto fallback;
 
         if (wi_plus_1 < 1 || wi_plus_1 > ctx->ol_nodes.len)
@@ -1108,7 +1104,20 @@ static void sam_seg_RG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rg), unsigned 
 
         if (!str_issame (snip, rg)) goto fallback;
 
-        seg_special1 (VB, SAM_SPECIAL_RG_by_QNAME, '0' + segconf.RG_method, ctx, add_bytes);
+        seg_special1 (VB, SAM_SPECIAL_RG_by_QNAME, '0' + RG_BY_ILLUM_QNAME, ctx, add_bytes);
+    }
+    
+    else if (segconf.RG_method == RG_BY_NCBI_QNAME ||
+        (segconf_running && TECH(NCBI) && segconf.sam_multi_RG)) {
+        STRlast (qname, SAM_QNAME);
+        STR(srr_id);
+        if (!str_item_i (qname, qname_len, '.', 0, pSTRa(srr_id))) // note: we use str_item_i and not Q0NAME.last_txt because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
+            goto fallback;
+        
+        if (!str_issame (srr_id, rg))
+            goto fallback;
+            
+        seg_special1 (VB, SAM_SPECIAL_RG_by_QNAME, '0' + RG_BY_NCBI_QNAME, ctx, add_bytes);
     }
     
     else fallback: {
@@ -1124,23 +1133,29 @@ static void sam_seg_RG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rg), unsigned 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_RG_by_QNAME)
 {
     if (reconstruct) {
-        switch (snip[0] - '0') { // RG_method
-            case RG_BY_ILLUM_QNAME: {
-                STRlast (qname, SAM_QNAME);
+        STRlast (qname, SAM_QNAME);
 
+        // replace snip with the RG string
+        switch (snip[0] - '0') { // RG_method
+           
+            case RG_BY_ILLUM_QNAME: {
                 int64_t wi_plus_1;
                 str_item_i_int (STRa(qname), ':', 3, &wi_plus_1); // note: we use str_item_i and not Q3NAME.last_value because QNAME might be segged by copy buddy, and different Illumina flavors have the RG in different items
 
-                STR0(snip);
-
                 ctx_get_snip_by_word_index (ctx, wi_plus_1-1, snip);
-                RECONSTRUCT_snip;
+                break;
+            }
+
+            case RG_BY_NCBI_QNAME: {
+                str_item_i (qname, qname_len, '.', 0, pSTRa(snip));
                 break;
             }
 
             default: ABORT_PIZ ("Invalid RG_method=%u", snip[0] - '0');
         }
     }
+
+    RECONSTRUCT_snip;
 
     return NO_NEW_VALUE; 
 }
@@ -1169,32 +1184,29 @@ static void sam_seg_initialize_for_float (VBlockSAMP vb, ContextP ctx)
     buf_alloc (VB, &ctx->local, 0, 16384, float, 0, C_LOCAL); // initial allocation, so we can use buf_append_one
 } 
 
-static inline SmallContainerP sam_seg_array_one_ctx_get_con (VBlockSAMP vb, ContextP con_ctx, uint8_t type, bool is_bam,
-                                                             ContextP *elem_ctx) // out
+static inline ContainerP sam_seg_array_one_ctx_get_con (VBlockSAMP vb, ContextP con_ctx, uint8_t type, bool is_bam,
+                                                        ContextP *elem_ctx) // out
 {
     // case: cached with correct type
     if (con_ctx->con_cache.param == type) { // already initialized
-        SmallContainerP con = B1ST (SmallContainer, con_ctx->con_cache);
+        ContainerP con = B1ST(ContainerTemplate, con_ctx->con_cache);
         *elem_ctx = ctx_get_ctx (vb, con->items[1].dict_id);
         return con; // note: we return a pointer into con_cache- sam_seg_array_one_ctx may modify the number of repeats. that's ok.
     }
 
-    buf_alloc (vb, &con_ctx->con_cache, 0, 1, SmallContainer, 0, "con_cache");
+    buf_alloc (vb, &con_ctx->con_cache, 0, 1, Container(2), 0, "con_cache");
 
-    SmallContainerP con = B1ST (SmallContainer, con_ctx->con_cache);
-    *con = (SmallContainer){ .nitems_lo = 2, 
-                             .drop_final_item_sep_of_final_repeat = true, // TODO - get rid of this flag and move to making the seperators to be repeat seperators as they should have been, using drop_final_repsep and obsoleting this flag 
-                             .repsep    = {0,0}, 
-                             .items     = { { .translator = SAM2BAM_ARRAY_SELF_1  },  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
-                                            { .separator  = {0, ','}            } } // item[1] is actual array item
-                           };            
+    ContainerP con = B1ST(ContainerTemplate, con_ctx->con_cache); // point to Max, but we modify only two items
+    con_initialize (con, 2);
+    con->drop_final_item_sep_of_final_repeat = true; // TODO - get rid of this flag and move to making the seperators to be repeat seperators as they should have been, using drop_final_repsep and obsoleting this flag 
+    con->items[0]  = (ContainerItem){ .translator = SAM2BAM_ARRAY_SELF_1 };  // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
     
-    // prepare context where array elements will go in
-    con->items[1].dict_id      = DICT_ID_ARRAY (con_ctx->dict_id);
-    
-    con->items[1].translator   = aux_field_translator (type); // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
-    con->items[1].separator[0] = aux_sep_by_type[IS_BAM_ZIP][type];
-    
+    con->items[1] = (ContainerItem){ 
+        .dict_id    = DICT_ID_ARRAY (con_ctx->dict_id),
+        .separator  = { aux_sep_by_type[IS_BAM_ZIP][type], ','},  // item[1] is actual array item
+        .translator = aux_field_translator (type) // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
+    };
+
     *elem_ctx = ctx_get_ctx (vb, con->items[1].dict_id);
     
     StoreType store_type = aux_field_store_flag[type];
@@ -1202,7 +1214,7 @@ static inline SmallContainerP sam_seg_array_one_ctx_get_con (VBlockSAMP vb, Cont
 
     (*elem_ctx)->flags.store = store_type;
 
-    ctx_consolidate_stats_(VB, con_ctx, (ContainerP)con);
+    ctx_consolidate_stats_(VB, con_ctx, con);
 
     if (store_type == STORE_INT || is_bam) {
         (*elem_ctx)->ltype = aux_field_to_ltype[type];
@@ -1218,10 +1230,10 @@ static inline SmallContainerP sam_seg_array_one_ctx_get_con (VBlockSAMP vb, Cont
 }
 
 // an array - all elements go into a single item context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
-void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, uint8_t type, 
+void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, DictId dict_id, uint8_t type, 
                             rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
-                            ArrayItemCallback callback, void *cb_param, // optional - call back with array
-                            PizSpecialReconstructor length_predictor)   // optional - SPECIAL function for predicting repeats
+                            ArrayItemCallback callback,               // optional - call back with array (with dl as param)
+                            PizSpecialReconstructor length_predictor) // optional - SPECIAL function for predicting repeats
 {   
     bool is_bam = IS_BAM_ZIP;
 
@@ -1229,7 +1241,7 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
 
     // prepare array container - a single item, with number of repeats of array element. array type is stored as a prefix
     ContextP con_ctx = ctx_get_ctx (vb, dict_id), elem_ctx;
-    SmallContainerP con = sam_seg_array_one_ctx_get_con (vb, con_ctx, type, is_bam, &elem_ctx);
+    ContainerP con = sam_seg_array_one_ctx_get_con (vb, con_ctx, type, is_bam, &elem_ctx);
     ASSERTNOTNULL (elem_ctx);
 
     int width = aux_width[type];
@@ -1310,48 +1322,48 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, u
         ctx_set_last_value (VB, con_ctx, (int64_t)repeats);
 
     if (callback)
-        callback (vb, elem_ctx, cb_param, local_start, repeats, width);
+        callback (vb, elem_ctx, dl, local_start, repeats, width);
 
     if (is_int || is_bam)
        elem_ctx->local.len /= width; // return len back to counting in units of ltype
  
     if (repeats) {
         unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (2/*type - eg "i,"*/ + 1/*\t or \n*/);
-        container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
+        container_seg (vb, con_ctx, con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
     }
     else {
         unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (1/*type - eg "i"*/ + 1/*\t or \n*/);
-        container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, CON_PX_SEP }), 3, container_add_bytes);
+        container_seg (vb, con_ctx, con, ((char[]){ CON_PX_SEP, type, CON_PX_SEP }), 3, container_add_bytes);
     }
 }
 
-
-static inline SmallContainerP sam_seg_array_multi_ctx_get_con (VBlockSAMP vb, ContextP con_ctx, uint32_t n_items, uint8_t type, bool is_bam)
+static inline ContainerP sam_seg_array_multi_ctx_get_con (VBlockSAMP vb, ContextP con_ctx, uint32_t n_items, uint8_t type, bool is_bam)
 {
     // case: cached with correct type
     if (con_ctx->con_cache.param == -(int8_t)type) { // already initialized
-        SmallContainerP con = B1ST (SmallContainer, con_ctx->con_cache);
+        ContainerP con = B1ST(ContainerTemplate, con_ctx->con_cache);
 
-        if (con->nitems_lo == 1 + n_items) return con; // this is the container we need
+        if (con_nitems(*con) == 1 + n_items) return con; // this is the container we need
     }
 
-    ASSERT (n_items+1 <= SMALL_CON_NITEMS, "n_times=%u is too manyt", n_items);
+    ASSERT (n_items+1 <= MAX_FIELDS, "n_times=%u is too many", n_items);
 
-    buf_alloc (vb, &con_ctx->con_cache, 0, 1, SmallContainer, 0, "con_cache");
+    buf_alloc (vb, &con_ctx->con_cache, 0, 1, con_sizeof_(1 + n_items), 0, "con_cache");
 
-    SmallContainerP con = B1ST (SmallContainer, con_ctx->con_cache);
-    *con = (SmallContainer){ .nitems_lo           = 1 + n_items, 
-                             .repeats             = 1,
-                             .drop_final_item_sep = true,
-                             .items[0]            = { .translator = SAM2BAM_ARRAY_SELF_M  } }; // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
+    ContainerP con = (ContainerP)B1STc(con_ctx->con_cache);
+    con_initialize (con, 1 + n_items);
+    con->drop_final_item_sep = true;
+    con->items[0]            = (ContainerItem){ .translator = SAM2BAM_ARRAY_SELF_M  }; // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
 
     StoreType store_type = aux_field_store_flag[type];
     ASSERT (store_type, "%s: Invalid type \"%c\" in array of %s", LN_NAME, type, con_ctx->tag_name);
 
     for (uint32_t i=0; i < n_items; i++) {
-        con->items[i+1] = (ContainerItem){ .dict_id    = sub_dict_id (con_ctx->dict_id, '0'+i),
-                                           .separator  = { [0]=aux_sep_by_type[IS_BAM_ZIP][type], [1]=',' },
-                                           .translator = aux_field_translator (type) }; // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
+        con->items[i+1] = (ContainerItem){ 
+            .dict_id    = sub_dict_id (con_ctx->dict_id, '0'+i),
+            .separator  = { [0]=aux_sep_by_type[IS_BAM_ZIP][type], [1]=',' },
+            .translator = aux_field_translator (type) // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
+        }; 
         
         ContextP item_ctx = ctx_get_ctx (vb, con->items[i+1].dict_id);
         item_ctx->flags.store = store_type;
@@ -1369,11 +1381,11 @@ static inline SmallContainerP sam_seg_array_multi_ctx_get_con (VBlockSAMP vb, Co
 
     con_ctx->con_cache.param = -(int8_t)type; // this also used as "is_initialized". negative to indicate multi-context (positive is single-context)
 
-    return con;
+    return (ContainerP)con;
 }
 
 // an array - each element go into a its own context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
-void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, ContextP con_ctx, uint8_t type, uint32_t expected_n_subctxs,
+void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, ContextP con_ctx, uint8_t type, uint32_t expected_n_subctxs,
                               rom array, int/*signed*/ array_len) // SAM: comma separated array ; BAM : arrays original width and machine endianity
 {   
     ASSERT (expected_n_subctxs >= 2, "expecting n_subctxs=%u >= 2", expected_n_subctxs);
@@ -1384,12 +1396,12 @@ void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, ContextP con_ct
     
     // if array does not have the expected length, seg as single-context array 
     if (expected_n_subctxs != n_subctxs) {
-        sam_seg_array_one_ctx (vb, dl, con_ctx->dict_id, type, STRa(array), NULL, 0, NULL);
+        sam_seg_array_one_ctx (vb, dl, con_ctx->dict_id, type, STRa(array), NULL, NULL);
         return;
     }
     
     // prepare array container - a one context per element. array type is stored as a prefix
-    SmallContainerP con = sam_seg_array_multi_ctx_get_con (vb, con_ctx, n_subctxs, type, is_bam);
+    ContainerP con = sam_seg_array_multi_ctx_get_con (vb, con_ctx, n_subctxs, type, is_bam);
 
     int width = aux_width[type];
 
@@ -1427,7 +1439,7 @@ void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, ContextP con_ct
     }
 
     unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (2/*type - eg "i,"*/ + 1/*\t or \n*/);
-    container_seg (vb, con_ctx, (ContainerP)con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
+    container_seg (vb, con_ctx, con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
 }
 
 static void sam_seg_set_last_value_f_from_aux (VBlockSAMP vb, Did did_i, bool is_bam,
@@ -1440,12 +1452,8 @@ static void sam_seg_set_last_value_f_from_aux (VBlockSAMP vb, Did did_i, bool is
         ctx_set_last_value (VB, ctx, (ValueType){ .f = numeric.f32.f }); // note: just casting f32.f to double works in gcc but not clang
 
     else {
-        SAFE_NULT(value);
-        char *after;
-        numeric.f = strtod (value, &after); // same as in reconstruct_one_snip
-        SAFE_RESTORE;
-
-        ASSSEG (after == value + value_len, "%s: Expecting float value for auxiliary field %s but found \"%.*s\"",
+        ASSSEG (str_get_float (STRa(value), &numeric.f, NULL, NULL), // strtod until 15.0.83
+                "%s: Expecting float value for auxiliary field %s but found \"%.*s\"",
                 LN_NAME, ctx->tag_name, STRf (value));
 
         ctx_set_last_value (VB, ctx, numeric);
@@ -1494,7 +1502,7 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
 
     // Numeric array
     else if (sam_type == 'B') 
-        sam_seg_array_one_ctx (VB_SAM, (ZipDataLineSAMP )dl, dict_id, array_subtype, STRa(value), NULL, NULL, NULL);
+        sam_seg_array_one_ctx (VB_SAM, (ZipDataLineSAM𐤐 )dl, dict_id, array_subtype, STRa(value), NULL, NULL);
 
     // Z,H,A - normal snips in their own dictionary
     else 
@@ -1505,11 +1513,13 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
 
 // process an optional subfield, that looks something like MX:Z:abcdefg. We use "MX" for the field name, and
 // the data is abcdefg. The full name "MX:Z:" is stored as part of the AUX dictionary entry
-DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam, 
+DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_bam, 
                           rom tag, char bam_type, char array_subtype, 
                           STRp(value), ValueType numeric, // two options 
                           int16_t idx) // 0-based index of this field within AUX
 {
+    START_TIMER;
+
     char sam_type = sam_seg_bam_type_to_sam_type (bam_type);
     char dict_name[6] = { tag[0], tag[1], ':', sam_type, ':', array_subtype }; // last 2 are ignored if not array
     DictId dict_id = dict_id_make (dict_name, (sam_type=='B' ? 6 : 4), DTYPE_SAM_AUX); // match dict_id as declared in #pragma GENDICT
@@ -1520,7 +1530,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
     #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback
 
     if (segconf_running)
-        segconf.has[ctx_get_ctx (VB, dict_id)->did_i]++;
+        segconf_set_has (ctx_get_ctx (VB, dict_id)->did_i);
 
     switch (dict_id.num) {
 
@@ -1561,12 +1571,12 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_YB_Z: COND (segconf.sam_has_xcons, sam_seg_buddied_Z_fields (vb, dl, MATED_YB, STRa(value), 0, add_bytes));
         
-        case _OPTION_XD_B_i : COND (segconf.sam_has_xcons, sam_seg_array_one_ctx (VB_SAM, dl, dict_id, array_subtype, STRa(value), sam_seg_xcons_XD_callback, NULL, NULL));
+        case _OPTION_XD_B_i : COND (segconf.sam_has_xcons, sam_seg_array_one_ctx (VB_SAM, dl, dict_id, array_subtype, STRa(value), sam_seg_xcons_XD_callback, NULL));
 
         case _OPTION_MI_Z: COND0 (!MP(ULTIMA), sam_seg_buddied_Z_fields (vb, dl, MATED_MI, STRa(value), 0, add_bytes))
                            COND (  MP(ULTIMA), sam_seg_ultima_MI (vb, dl, STRa(value), add_bytes));
-        case _OPTION_CY_Z: dl->dont_compress_CY = sam_seg_barcode_qual (vb, dl, OPTION_CY_Z, SOLO_CY, segconf.n_CR_CB_CY_seps, STRa(value), qSTRa(segconf.CY_con_snip), &segconf.CY_con, add_bytes); break;
-        case _OPTION_QT_Z: dl->dont_compress_QT = sam_seg_barcode_qual (vb, dl, OPTION_QT_Z, SOLO_QT, segconf.n_BC_QT_seps,    STRa(value), qSTRa(segconf.QT_con_snip), &segconf.QT_con, add_bytes); break;
+        case _OPTION_CY_Z: dl->dont_compress_CY = sam_seg_barcode_qual (vb, dl, OPTION_CY_Z, SOLO_CY, segconf.n_CR_CB_CY_seps, STRa(value), qSTRa(segconf.CY_con_snip), (ContainerP)&segconf.CY_con, add_bytes); break;
+        case _OPTION_QT_Z: dl->dont_compress_QT = sam_seg_barcode_qual (vb, dl, OPTION_QT_Z, SOLO_QT, segconf.n_BC_QT_seps,    STRa(value), qSTRa(segconf.QT_con_snip), (ContainerP)&segconf.QT_con, add_bytes); break;
 
         case _OPTION_CR_Z: COND0 (segconf.has_Parse, sam_seg_CR_Z_Parse (vb, dl, STRa(value), add_bytes))
                            COND  (true, sam_seg_CR_Z (vb, dl, STRa(value), add_bytes)); 
@@ -1642,7 +1652,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         
         case _OPTION_jI_B_i: COND (MP(STAR), sam_seg_STAR_jI (vb, dl, STRa(value), is_bam)); 
 
-        case _OPTION_jM_B_c: COND (MP(STAR), sam_seg_array_one_ctx (VB_SAM, dl, dict_id, array_subtype, STRa(value), NULL, NULL, sam_piz_special_jM_length));
+        case _OPTION_jM_B_c: COND (MP(STAR), sam_seg_array_one_ctx (VB_SAM, dl, dict_id, array_subtype, STRa(value), NULL, sam_piz_special_jM_length));
 
         case _OPTION_XM_i: COND0 (segconf.sam_has_XM_i_is_mismatches, sam_seg_XM_i (vb, dl, numeric.i, idx, add_bytes))
                            COND (MP(TMAP), sam_seg_tmap_XM_i (vb, numeric.i, add_bytes));
@@ -1673,7 +1683,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_mc_i: COND (segconf.is_biobambam2_sort, sam_seg_mc_i (vb, numeric.i, add_bytes));
 
-        case _OPTION_ms_i: COND0 (segconf.sam_ms_type == ms_BIOBAMBAM && !segconf.optimize[SAM_QUAL], sam_seg_ms_i (vb, dl, numeric.i, add_bytes)) // ms:i produced by biobambam or samtools
+        case _OPTION_ms_i: COND0 (segconf.sam_ms_type == ms_BIOBAMBAM && !segconf_optimize (SAM_QUAL), sam_seg_ms_i (vb, dl, numeric.i, add_bytes)) // ms:i produced by biobambam or samtools
                            COND  (segconf.sam_ms_type == ms_MINIMAP2, sam_seg_delta_seq_len (vb, dl, OPTION_ms_i, numeric.i, true, add_bytes));    // ms:i produced by minimap2
 
         case _OPTION_s1_i: COND (segconf.is_minimap2, sam_seg_s1_i (vb, dl, numeric.i, add_bytes));
@@ -1713,7 +1723,7 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         case _OPTION_sn_B_f : COND (TECH(PACBIO), sam_seg_pacbio_sn (vb, dl, STRa(value)));
 
-        case _OPTION_ec_f: COND (TECH(PACBIO) && segconf.has[OPTION_ec_f], ({ sam_seg_set_last_value_f_from_aux (vb, OPTION_ec_f, is_bam, STRa(value), numeric); goto fallback; })); // consumed by np:i
+        case _OPTION_ec_f: COND (TECH(PACBIO) && segconf_has(OPTION_ec_f), ({ sam_seg_set_last_value_f_from_aux (vb, OPTION_ec_f, is_bam, STRa(value), numeric); goto fallback; })); // consumed by np:i
 
         case _OPTION_dt_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_dt_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
@@ -1725,9 +1735,10 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
 
         // Illumina DRAGEN fields
         case _OPTION_sd_f: COND (MP(DRAGEN), sam_dragen_seg_sd_f (vb, dl, STRa(value), numeric, add_bytes));
-
+        case _OPTION_ga_Z: COND (MP(DRAGEN), sam_dragen_seg_ga_Z (vb, STRa(value), add_bytes));
+        
         // Ultima Genomics fields
-        case _OPTION_tp_B_c: COND (segconf.has[OPTION_tp_B_c] && !dl->no_qual && segconf.has[OPTION_tp_B_c], sam_seg_array_one_ctx (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ULTIMA_tp, dl, NULL));
+        case _OPTION_tp_B_c: COND (segconf_has(OPTION_tp_B_c) && !dl->no_qual && segconf_has(OPTION_tp_B_c), sam_seg_array_one_ctx (vb, dl, _OPTION_tp_B_c, array_subtype, STRa(value), sam_seg_ULTIMA_tp, NULL));
         case _OPTION_bi_Z: COND (MP(ULTIMA), sam_seg_ultima_bi (vb, STRa(value), add_bytes));
         case _OPTION_a3_i: COND (MP(ULTIMA), sam_seg_delta_seq_len (vb, dl, OPTION_a3_i, numeric.i, false, add_bytes));
         case _OPTION_XV_Z: COND (MP(ULTIMA), sam_seg_ultima_XV (vb, STRa(value), add_bytes));
@@ -1761,6 +1772,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam,
         default: fallback:
             sam_seg_aux_field_fallback (VB, dl, dict_id, sam_type, array_subtype, STRa(value), numeric, add_bytes);
     }
+    
+    COPY_TIMER_SEG_FIELD (ctx_get_ctx (vb, dict_id)->did_i);
     
     return dict_id;
 }

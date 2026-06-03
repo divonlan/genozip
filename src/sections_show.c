@@ -134,14 +134,14 @@ void sections_set_show_headers (rom arg)
     flag.show_headers = true;
 
     if (!arg) {
-        memset (flag.show_sec_headers, true, NUM_SEC_TYPES); // all section types
+        flag.show_sec_headers = SHOW_SEC_HEADER_ALL;
         return; 
     }
     
     uint32_t arg_len = strlen(arg); 
 
     if (str_get_uint32 (STRa(arg), (uint32_t*)&flag.show_header_section_i)) {
-        memset (flag.show_sec_headers, true, NUM_SEC_TYPES); // all section types
+        flag.show_sec_headers = SHOW_SEC_HEADER_ALL;
         return;
     }
 
@@ -168,7 +168,7 @@ void sections_set_show_headers (rom arg)
         
         // case: this is a section name
         if (candidate != SEC_NONE) 
-            flag.show_sec_headers[candidate] = true; 
+            flag.show_sec_headers |= (1 << candidate); // set bit 
 
         // case: if not a section name, we assume it is a dict name (only one is possible)
         else 
@@ -216,10 +216,6 @@ FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt/*data ty
                 
                 case DT_GFF:
                     if (VER(15)) snprintf (str.s, sizeof (str.s), "embedded_fasta=%u", f.vb_header.gff.embedded_fasta);
-                    break;
-
-                case DT_FASTQ:
-                    if (VER2(15,83)) snprintf (str.s, sizeof (str.s), "is_nonbio=%u", f.vb_header.fastq.is_nonbio);
                     break;
                     
                 default:
@@ -282,11 +278,11 @@ static bool is_show_header (SectionType st, uint32_t sec_i, DictId sec_dict_id/*
 
     // loading reference: show reference sections only if requested explicitly
     if (flag_loading_auxiliary)
-        return flag.show_sec_headers[st] && // requested this section
-               memchr (flag.show_sec_headers, 0, NUM_SEC_TYPES); // but not requested all
+        return flag_show_sec_headers(st) && // requested this section
+               flag.show_sec_headers != SHOW_SEC_HEADER_ALL; // but not requested all
 
     else 
-        return flag.show_sec_headers[st];
+        return flag_show_sec_headers(st);
 }
 
 void sections_show_header (ConstSectionHeaderP header, 
@@ -296,7 +292,7 @@ void sections_show_header (ConstSectionHeaderP header,
 {
     #define DT(x) ((dt) == DT_##x)
 
-    ASSERTW0 (!vb || IS_ZIP, "sections_show_header: expecting vb=NULL in PIZ"); // because we dump the show_headers_buf to the terminal only in ZIP
+    ASSERTW (!vb || IS_ZIP, "sections_show_header: expecting vb=NULL in PIZ", NULL); // because we dump the show_headers_buf to the terminal only in ZIP
 
     SectionType st = header->section_type;
     
@@ -374,9 +370,10 @@ void sections_show_header (ConstSectionHeaderP header,
         }
 
         else if (DT(FASTQ) && v14) 
-            snprintf (dt_specific, sizeof (dt_specific), "%sFASTQ_v13_digest_bound=%s segconf=(seq_len_dict_id=%s,fa_as_fq=%s,is_ileaved=%s,std_seq_len=%u,use_ins_ctxs=%u)\n", 
+            snprintf (dt_specific, sizeof (dt_specific), "%sFASTQ_v13_digest_bound=%s segconf=(seq_len_dict_id=%s,fa_as_fq=%s,is_ileaved=%s,std_seq_len=%u,std_seq_lR2=%u,use_ins_ctxs=%u)\n", 
                       SEC_TAB, digest_is_zero(h->FASTQ_v13_digest_bound) ? "N/A" : digest_display (h->FASTQ_v13_digest_bound).s, 
-                      dis_dict_id(h->fastq.segconf_seq_len_dict_id).s, TF(h->fastq.segconf_fa_as_fq), TF(h->fastq.segconf_is_ileaved), BGEN32(h->fastq.segconf_std_seq_len),
+                      dis_dict_id(h->fastq.segconf_seq_len_dict_id).s, TF(h->fastq.segconf_fa_as_fq), TF(h->fastq.segconf_is_ileaved), 
+                      BGEN32(h->fastq.segconf_std_seq_len), BGEN32(h->fastq.segconf_std_seq_lR2),
                       h->fastq.segconf_use_ins_ctxs);
 
         snprintf (str, sizeof (str), "\n%sver=%.10s%.10s modified=%u lic=%.20s private=%u enc=%.10s dt=%.10s usize=%"PRIu64" lines=%"PRIu64" secs=%u txts=%u %.10s%.20s%.6s\n" 
@@ -624,7 +621,7 @@ void noreturn genocat_show_headers (rom z_filename)
                 continue;
             }
 
-            if (flag.show_sec_headers[header.section_type])
+            if (flag_show_sec_headers (header.section_type))
                 iprintf ("%5u ", sec_i);
             
             header.section_i = sec_i;

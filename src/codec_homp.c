@@ -104,7 +104,7 @@ bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
 
     // All Ultimate generate homp qual
     else if (flag.no_homp                     
-         || (!is_ultima && !TECH(UNKNOWN))   // either the TECH or the mapper are an indication of potentially Ultima data 
+         || (!is_ultima && !tech_is_unknown())   // either the TECH or the mapper are an indication of potentially Ultima data 
          || qual_did_i != FASTQ_QUAL/*=SAM_QUAL*/ 
          || (!is_ultima && !(is_fit = codec_homp_qual_data_is_a_fit_for_homp (vb, qual_ctx, get_line_cb)))) // note: we don't test if knowt to be Ultima - HOMP is always better 
         return false;
@@ -113,7 +113,7 @@ bool codec_homp_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
     qual_ctx->lcodec    = CODEC_HOMP;
     qual_ctx->local_dep = DEP_L1; // yield to other codecs (eg CODEC_OQ) that need to query QUAL before we destroy it
     
-    if (TECH(UNKNOWN)) segconf.tech = TECH_ULTIMA; // a HOMP is definitive signature of Ultima
+    if (tech_is_unknown()) segconf.tech = TECH_ULTIMA; // a HOMP is definitive signature of Ultima
 
     // show_qual: if is_fit was not run (because is_ultima=true) - run it just to display stats
     if (flag.show_qual && !is_fit)
@@ -211,7 +211,7 @@ do_compress: ({});
                VB_NAME, ctx->tag_name, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
     }
 
-    COPY_TIMER_COMPRESS (compressor_homp); // don't account for sub-codec compressor, it accounts for itself
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_homp); // don't account for sub-codec compressor, it accounts for itself
 
     return compress (vb, ctx, header, 0, uncompressed_len, get_line_cb, STRa(compressed), false, name);
 }

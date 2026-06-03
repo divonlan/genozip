@@ -68,7 +68,7 @@ void vcf_copy_sample_seg_finalize (VBlockVCFP vb)
         ctx->local.len = 0;
 }
 
-unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *ctxs, ContainerP format, STRp(sample))
+unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP *ctxs, ConstFormatContainer𐤐 format, STRp(sample))
 {
     START_TIMER;
 
@@ -135,7 +135,7 @@ unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP *c
     return success;
 }
 
-void vcf_copy_sample_seg_set_copied (VBlockVCFP vb, ZipDataLineVCFP dl, bool is_copied)
+void vcf_copy_sample_seg_set_copied (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, bool is_copied)
 {
     SAMPLE_COPIED_SAME_FMT_ZIP = is_copied;
 }
@@ -217,7 +217,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_SAMPLE)
     return HAS_NEW_VALUE;
 }
 
-void seg_mux_by_is_prev_sample_copied (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, Multiplexer2P mux, STRp(value))
+void seg_mux_by_is_prev_sample_copied (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, Multiplexer2P mux, STRp(value))
 {
     ASSERTINRANGE (vb->sample_i, 0, vcf_num_samples);
     int channel_i = SAMPLE_COPIED_SAME_FMT_ZIP;

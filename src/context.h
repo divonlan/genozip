@@ -110,15 +110,9 @@ typedef struct {              // 8 bytes
         ? *B(WordIndex, (vctx)->nodes, (vb_node_index) - (vctx)->ol_nodes.len32)                \
         : (vb_node_index))
 
-#define CTX(did_i)   ({ Did my_did_i = (did_i); /* evaluate did_i only once */\
-                        ASSERT (my_did_i < MAX_DICTS, "CTX(): did_i=%u ∉ [0,%u]", my_did_i, MAX_DICTS-1); /* optimized out for constant did_i */ \
-                        (&vb->ca.contexts[my_did_i]); })
-
+#define ZCTX(did_i) (&z_file->ca.contexts[did_i])
+#define CTX(did_i)  (&vb    ->ca.contexts[did_i])
 #define LOADED_CTX(did_i) ({ ContextP ctx=CTX(did_i); ASSISLOADED(ctx); ctx; })
-
-#define ZCTX(did_i)  ({ Did my_did_i = (did_i);\
-                        ASSERT (my_did_i < MAX_DICTS, "ZCTX(): did_i=%u ∉ [0,%u]", my_did_i, MAX_DICTS-1); /* optimized out for constant did_i */ \
-                        &z_file->ca.contexts[my_did_i]; })
 
 #define last_int(did_i)     ca.contexts[did_i].last_value.i
 #define last_index(did_i)   ca.contexts[did_i].last_value.i
@@ -137,13 +131,13 @@ static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { retur
 
 static inline void ctx_init_iterator (ContextP ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
-extern WordIndex ctx_create_node_do (VBlockP segging_vb, ContextP vctx, STRp (snip), bool *is_new);
-extern WordIndex ctx_create_node_is_new (VBlockP vb, Did did_i, STRp (snip), bool *is_new);
-static inline WordIndex ctx_create_node (VBlockP vb, Did did_i, STRp (snip)) { return ctx_create_node_is_new (vb, did_i, STRa(snip), NULL); }
+extern WordIndex ctx_create_node_do (VBlock𐤐 vb, Context𐤐 vctx, STR𐤐(snip), bool *restrict is_new);
+extern WordIndex ctx_create_node_is_new (VBlock𐤐 vb, Did did_i, STR𐤐(snip), bool *is_new);
+static inline WordIndex ctx_create_node (VBlock𐤐 vb, Did did_i, STR𐤐(snip)) { return ctx_create_node_is_new (vb, did_i, STRa(snip), NULL); }
 
 extern uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index);
-extern void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
-extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
+extern void ctx_decrement_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index);
+extern void ctx_increment_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index);
 extern void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern bool ctx_segconf_do_ctxs_share_snips (VBlockP vb, Did did_1, Did did_2);
 
@@ -166,7 +160,7 @@ extern ContextP ctx_get_unmapped_ctx (ContextArrayP ca, DataType dt, DictId dict
 // returns did_i of dict_id if it is found in the map, or DID_NONE if not
 static inline Did get_matching_did_i_from_map (ConstContextArrayP ca, DictId dict_id)
 {
-    Did did_i = ca->d2d_map[dict_id.map_key[0]];
+    Did did_i = ca->d2d_map[MAP_KEY(dict_id)];
     if (did_i != DID_NONE && ca->contexts[did_i].dict_id.num == dict_id.num) 
         return did_i;
 
@@ -366,7 +360,7 @@ extern void ctx_set_ltype (VBlockP vb, int ltype, ...);
 extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
 extern void ctx_consolidate_statsA(VBlockP vb, Did parent, ContextP ctxs[], unsigned num_deps);
-extern void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con);
+extern void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ConstContainerP con);
 extern void ctx_show_zctx_big_consumers (FILE *out);
 extern void ca_init_d2d_map (ContextArrayP ca);
 extern rom dyn_type_name (DynType dyn_type);

@@ -875,14 +875,13 @@ void txtfile_read_header (bool is_first_txt)
     ASSERT_DT_FUNC (txt_file, is_header_done);
 
     int32_t header_len;
-    uint32_t bytes_read=1 /* non-zero */;
     bool is_data_read = true;
 
     evb->vb_mgzip_i = 0; // header always starts with the first gz_block
 
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
     #define HEADER_BLOCK (256 KB) // we have no idea how big the header will be... read this much at a time
-    while ((header_len = (DT_FUNC (txt_file, is_header_done)(bytes_read==0))) < 0) { // we might have data here from txtfile_test_data
+    while ((header_len = (DT_FUNC (txt_file, is_header_done)(txt_file->no_more_blocks))) < 0) { // we might have data here from txtfile_test_data
         
         if (!is_data_read) {
             if (flags_pipe_in_process_died()) // only works for Linux
@@ -899,7 +898,7 @@ void txtfile_read_header (bool is_first_txt)
         buf_alloc (evb, &evb->txt_data, HEADER_BLOCK, 0, char, 2, "txt_data");    
         
         if (header_len != HEADER_DATA_TYPE_CHANGED) // note: if HEADER_DATA_TYPE_CHANGED - no need to read more data - we just process the same data again, with a different data type
-           bytes_read = txtfile_read_block (evb, HEADER_BLOCK, true, &is_data_read);
+           txtfile_read_block (evb, HEADER_BLOCK, true, &is_data_read);
     }
 
     // the excess data is for the next vb to read 
@@ -939,10 +938,10 @@ static void txt_file_truncate_final_bytes (VBlockP vb, int32_t *n_bytes)
     if (*n_bytes < 0) *n_bytes = Ltxt; // entire VB 
 
     if (!is_R2_missing_R1)
-        WARN ("FYI: file is truncated - its final %s in incomplete. Dropping this partial final %s of %u bytes.", 
+        WARN (_FYI "File is truncated - its final %s in incomplete. Dropping this partial final %s of %u bytes.", 
               DTPT(line_name), DTPT(line_name), *n_bytes);
     else
-        WARN ("FYI: this is an R2 file that is longer than its R1 counterpart: dropping %u bytes. (vb=%s)", *n_bytes, VB_NAME);
+        WARN (_FYI "This is an R2 file that is longer than its R1 counterpart: dropping %u bytes. (vb=%s)", *n_bytes, VB_NAME);
 
     txt_file->last_truncated_line_len = *n_bytes; 
     Ltxt -= *n_bytes; 
@@ -977,7 +976,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
                 
                 ASSERT0 ((TXT_IS(IL1M) || TXT_IS(IL4M)) && flag.truncate, "not expecting to be here");
 
-                WARN ("FYI: %s is truncated - its final %s block in incomplete. Dropping final %u bytes of the GZ data.", 
+                WARN (_FYI "%s is truncated - its final %s block in incomplete. Dropping final %u bytes of the GZ data.", 
                       txt_name, codec_name (txt_file->effective_codec), bb->gz_size);
             }
 

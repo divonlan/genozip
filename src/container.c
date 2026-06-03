@@ -17,14 +17,15 @@
 #include "writer.h"
 #include "lookback.h"
 #include "tip.h"
+#include "endianness.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 //----------------------
 // Segmentation
 //----------------------
 
-void container_prepare_snip (ConstContainerP con, STRp(prefixes), 
-                             qSTRp(snip)) // in / out
+void container_prepare_snip (ConstContainer𐤐 con, STR𐤐(prefixes), 
+                             qSTR𐤐(snip)) // in / out
 {
     ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is beyond maximum of %u",
             prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
@@ -34,22 +35,28 @@ void container_prepare_snip (ConstContainerP con, STRp(prefixes),
     unsigned snip_len_needed = 1 + base64_size(con_size) + prefixes_len;
     ASSERT (*snip_len >= snip_len_needed, "snip_len=%u too short, need at least %u", *snip_len, snip_len_needed);
 
-    ((Container*)con)->repeats = BGEN24 (con->repeats); 
     snip[0] = SNIP_CONTAINER;
+
+#ifdef __BIG_ENDIAN__
+    Container(MAX_FIELDS) modified_con; // note: allocate maximum because clang doesn't allow a variable here (gcc does) - no harm, we only touch the memory actually needed
+    memcpy (&modified_con, con, con_size);
+    modified_con.repeats = LTEN24 (con->repeats); // note: up to 15.0.83 repeats was encoded as big endian
     
+    unsigned b64_len = base64_encode ((uint8_t*)&modified_con, con_size, &snip[1]);
+#else
     unsigned b64_len = base64_encode ((uint8_t*)con, con_size, &snip[1]);
+#endif
+
     ASSERT (b64_len <= base64_size(con_size), "b64_len=%u larger than base64_size(%u)=%u",
             b64_len, con_size, base64_size(con_size));
     
-    ((Container*)con)->repeats = BGEN24 (con->repeats); // restore - honoring our "const" contract
-
     if (prefixes_len) memcpy (&snip[1+b64_len], prefixes, prefixes_len);
 
     *snip_len = 1 + b64_len + prefixes_len;
 }
 
 // WARNING: don't pass in con an address of a static container, it is not thread safe! container_prepare_snip temporarily BGEN fields of the container.
-WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, 
+WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, 
                             // prefixes may be NULL or may be contain a container-wide prefix and per-item prefixes.
                             // The "container-wide prefix" is reconstructed once, at the beginning of the Container.
                             // The per-item prefixes are reconstructed once per repeat, before their respective items. 
@@ -57,9 +64,9 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
                             // - then the container-wide prefix terminated by CON_PX_SEP 
                             // - then one prefix per item terminated by CON_PX_SEP
                             // all prefixes may be empty; empty prefixes at the end of the prefix string maybe omitted.
-                            STRp(prefixes), 
+                            STR𐤐(prefixes), 
                             unsigned add_bytes,
-                            bool *is_new) // optional out
+                            bool *restrict is_new) // optional out
 {
 #ifdef DEBUG
     if (con) con_verify_items (con, ctx, "container_seg_do");
@@ -70,17 +77,12 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con,
     // con=NULL means MISSING Container (see container_reconstruct)
     if (!con) return seg_by_ctx (VB, NULL, 0, ctx, 0); 
     
-    unsigned con_b64_size  = base64_size(con_sizeof (*con));
-    unsigned snip_len = 1 + con_b64_size + prefixes_len;
-
-    char snip[snip_len];
+    STRli(snip, con_snip_sizeof (con_nitems(*con)) + prefixes_len);
 
     container_prepare_snip (con, STRa(prefixes), qSTRa(snip));
 
-    if (flag_show_containers) { 
-        iprintf ("%s%s%s Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
-                 vb->preprocessing    ? "preproc " : "",
-                 vb->peek_stack_level ? "peeking " : "",
+    if (vb->show_containers) { 
+        iprintf ("%s Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
                  LN_NAME, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
         for_con (con) 
             if (item->dict_id.num) 
@@ -246,7 +248,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
    }
 }
 
-static inline uint32_t container_reconstruct_prefix (VBlockP vb, ConstContainerP con, pSTRp(prefixes),
+static inline uint32_t container_reconstruct_prefix (VBlock𐤐 vb, ConstContainer𐤐 con, 𐤐STR𐤐(prefixes),
                                                      bool skip, DictId con_dict_id, DictId item_dict_id, bool show)
 {
     ASSPIZ (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is too big", *prefixes_len);
@@ -332,12 +334,11 @@ CONTAINER_FILTER_FUNC (default_piz_filter)
 #define IS_CI0_SET(flag) (CI0_ITEM_HAS_FLAG (item) && ((uint8_t)item->separator[0] & ~(uint8_t)0x80 & flag))
 
 // reconstructs the item separator, returning the number of characters reconstructed
-static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const ContainerItem *item, char *reconstruction_start, bool translating)
+static inline unsigned container_reconstruct_item_seperator (VBlock𐤐 vb, const ContainerItem *restrict item, char *restrict reconstruction_start, bool translating)
 {
-    #define IS_VALID_SEP1_FLAG (!item->separator[0] || IS_PRINTABLE(item->separator[0])) // sep[1] flags are valid only if sep[0] is 0 or printable
-
     // callback before separator reconstruction
-    if (item->separator[1] == CI1_ITEM_CB && IS_VALID_SEP1_FLAG) {
+    if (item->separator[1] == CI1_ITEM_CB && 
+        (!item->separator[0] || IS_PRINTABLE(item->separator[0]))) { // sep[1] flags are valid only if sep[0] is 0 or printable
 
         // note: in v13 we had a bug in qname.c that caused a seperator to change { CI0_SKIP, 1 } -> { 0, 1 }, thereby incorrectly triggering this function, so we refrain for erroring in that case
         ASSPIZ ((DT_FUNC(vb, con_item_cb)) || !VER(14), "data_type=%s doesn't have con_item_cb requested by dict_id=%s. %s",
@@ -347,56 +348,63 @@ static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const C
             DT_FUNC(vb, con_item_cb)(vb, item, reconstruction_start, BAFTtxt - reconstruction_start);
     }
     
-    if (!item->separator[0] || item->separator[0] == CI0_DIGIT || item->separator[0] == CI0_ACGTN)
-        return 0;
+    switch (item->separator[0]) {
+        case 32 ... 126: case '\t': case '\n': case '\r': // printable
+            RECONSTRUCT1 ((char)item->separator[0]);
+            
+            if (!item->separator[1]/*shortcut, big majority of cases*/ || !IS_PRINTABLE(item->separator[1]))
+                return 1;
 
-    else if (translating && IS_CI0_SET (CI0_TRANS_NUL)) {
-        RECONSTRUCT1 (0);
-        return 1;
-    }
+            else {
+                RECONSTRUCT1 ((char)item->separator[1]);
+                return 2;
+            }
 
-    else if (!translating && IS_CI0_SET (CI0_NATIVE_NEXT)) {
-        RECONSTRUCT1 (item->separator[1]);
-        return 1;
-    }
+        case 0: case CI0_DIGIT: case CI0_ACGTN:
+            return 0;
 
-    else if (IS_CI0_SET (CI0_TRANS_ALWAYS) && item->separator[1]) {
-        RECONSTRUCT1 (item->separator[1]);
-        return 1;
-    }
+        case CI0_LAST_MATCH:
+            RECONSTRUCT1 (item->separator[1]);
+            return 1;
+        
+        case CI0_COLONn:
+            RECONSTRUCT1 (':');
+            return 1;
 
-    else if (item->separator[0] == CI0_LAST_MATCH) {
-        RECONSTRUCT1 (item->separator[1]);
-        return 1;
-    }
-
-    else if (item->separator[0] == CI0_FIXED_0_PAD || item->separator[0] == CI0_VAR_0_PAD) {
-        int recon_len = BAFTtxt - reconstruction_start;
-        int pad = (int)item->separator[1] - recon_len; // may be negative if CI0_VAR_0_PAD 
-        if (pad > 0) {
-            memmove (reconstruction_start + pad, reconstruction_start, recon_len);
-            memset (reconstruction_start, '0', pad);
-            Ltxt += pad;
+        case CI0_FIXED_0_PAD:
+        case CI0_VAR_0_PAD: {
+            int recon_len = BAFTtxt - reconstruction_start;
+            int pad = (int)item->separator[1] - recon_len; // may be negative if CI0_VAR_0_PAD 
+            if (pad > 0) {
+                memmove (reconstruction_start + pad, reconstruction_start, recon_len);
+                memset (reconstruction_start, '0', pad);
+                Ltxt += pad;
+            }
+            return 0; // no seperators to delete if needed
         }
-        return 0; // no seperators to delete if needed
-    }
 
-    else if (item->separator[0] < '\t') {
-        ABORT_PIZ ("Unrecognized special seperator %u. %s", item->separator[0], genozip_update_msg()); // a seperator from the future
-        return 0;
-    }
+        case 0x80 ... 0xff: // flag
+            if (translating && IS_CI0_SET (CI0_TRANS_NUL)) {
+                RECONSTRUCT1 (0);
+                return 1;
+            }
 
-    else if (!CI0_ITEM_HAS_FLAG(item)) { // separator, not flag        
-        unsigned sep_1_valid = IS_PRINTABLE(item->separator[1]);
-        
-        RECONSTRUCT1 ((char)item->separator[0]);
-        if (sep_1_valid) RECONSTRUCT1 ((char)item->separator[1]);
-        
-        return 1 + sep_1_valid;
-    }
+            else if (!translating && IS_CI0_SET (CI0_NATIVE_NEXT)) {
+                RECONSTRUCT1 (item->separator[1]);
+                return 1;
+            }
 
-    else
-        return 0;
+            else if (IS_CI0_SET (CI0_TRANS_ALWAYS) && item->separator[1]) {
+                RECONSTRUCT1 (item->separator[1]);
+                return 1;
+            }
+            
+            else
+                return 0;
+
+        default:
+            ABORT_PIZ ("Unrecognized seperator[0]=%u. %s", item->separator[0], genozip_update_msg()); // a seperator from the future
+    }
 }
 
 static void container_set_lines (VBlockP vb, uint32_t line_i)
@@ -413,7 +421,7 @@ static inline bool container_is_of_fields (VBlockP vb, ContextP ctx, bool is_top
 {
     return is_toplevel || 
            (VB_DT(SAM) && ctx->did_i == SAM_AUX) || 
-           (VB_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->did_i == VCF_FORMAT)) ||
+           (VB_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->did_i == VCF_INFO_0 || ctx->did_i == VCF_INFO_1 || ctx->did_i == VCF_SAMPLES)) ||
            (VB_DT(GFF) && ctx->did_i == GFF_ATTRS);
 }
 
@@ -426,14 +434,14 @@ static inline ContextP container_get_debug_lines_ctx (VBlockP vb)
             return ctx; // use per-line verification
         
         else if (!flag.deep_fq_only)
-            WARN_ONCE ("FYI: this file is compressed with --debug-lines allowing line-level verification during genounzip/genocat. However, this is disabled because output is to %s, and not the original file type",
+            WARN_ONCE (_FYI "This file is compressed with --debug-lines allowing line-level verification during genounzip/genocat. However, this is disabled because output is to %s, and not the original file type",
                         dt_name(flag.out_dt));
     }
 
     return NULL; // no per-line verification
 }
 
-ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes))
+ValueType container_reconstruct (VBlock𐤐 vb, Context𐤐 ctx, ConstContainer𐤐 con, STR𐤐(prefixes))
 {
     TimeSpecType profiler_timer = {}; 
     bool is_toplevel = con->is_toplevel; // copy to automatic. note: it is possible that we are top of stack but not a toplevel container - eg when reconstructing for SAG loading
@@ -511,7 +519,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
         debug_lines_ctx = container_get_debug_lines_ctx (vb); 
     }
 
-    bool is_container_of_fields = container_is_of_fields (vb, ctx, is_toplevel); // TOPLEVEL, AUX, INFO, FORMAT etc
+    bool show_item_time = HAS_SHOW_TIME(vb) && container_is_of_fields (vb, ctx, is_toplevel); // TOPLEVEL, AUX, INFO, FORMAT etc
 
     for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
 
@@ -600,7 +608,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
                 START_TIMER;
 /*BRKPOINT*/    recon_len = reconstruct_from_ctx (vb, item_ctx->did_i, 0, reconstruct); // -1 if WORD_INDEX_MISSING
 
-                if (is_container_of_fields) COPY_TIMER (fields[item_ctx->did_i]);
+                if (show_item_time) COPY_TIMER (seg_recon_field[item_ctx->did_i]);
 
                 // sum up items' values if needed (STORE_INDEX is handled at the end of this function)
                 if (ctx->flags.store == STORE_INT && ctx_has_value (vb, item_ctx->did_i)) // ctx_has_value add to the test in 15.0.37, need to verify backcomp
@@ -715,49 +723,74 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, 
 ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip),
                                pSTRp(out_prefixes))
 {
-    Container con, *con_p=NULL;
-    STR0(prefixes);
-
     bool cache_exists = (ctx->con_cache.len32 > 0);
     uint16_t cache_item_len;
 
-    // if this container exists in the cache - use the cached one
+    // case: if this container exists in the cache - use the cached one
     if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *B16 (ctx->con_len, word_index)))) {
-        con_p = (ContainerP)Bc (ctx->con_cache, *B32 (ctx->con_index, word_index));
+        ContainerP con_p = (ContainerP)Bc(ctx->con_cache, *B32 (ctx->con_index, word_index));
         
-        unsigned con_size = con_sizeof (*con_p);
-        prefixes = (char *)con_p + con_size; // prefixes are stored after the Container
-        prefixes_len = cache_item_len - con_size;
+        if (out_prefixes) {
+            size_t con_size = con_sizeof (*con_p);
+            *out_prefixes = (rom)con_p + con_size; // prefixes are stored after the Container
+            *out_prefixes_len = cache_item_len - con_size;
+        }
+
+        ctx->last_con_wi = word_index;
+        return con_p;
     }
 
-    // case: not cached - decode and cache it
-    if (!con_p) {
-        // decode
-        unsigned b64_len = snip_len; // maximum length of b64 - it will be shorter if snip includes prefixes too
-        base64_decode (snip, &b64_len, (uint8_t*)&con, -1);
-        con.repeats = BGEN24 (con.repeats);
 
-        ASSPIZ (con_nitems (con) <= MAX_FIELDS, "A container of %s has %u items which is beyond MAX_FIELDS=%u. %s",
-                ctx->tag_name, con_nitems (con), MAX_FIELDS, genozip_update_msg());
+    // place Container followed by prefix in the cache (even if its a singleton)
+    uint32_t n_items = base64_get_container_nitems (snip);
+    uint32_t con_size = con_sizeof_(n_items);
 
-        // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
-        for_con (&con)
-            if (item->dict_id.num) { // not a prefix-only item
-                Did did_i = ctx_get_existing_did_i (vb, item->dict_id);
-                
-                // note: we possibly won't have did_i if all instances of this container had repeats=0 (and hence items were not segged)
-                ASSPIZ (did_i != DID_NONE || !con.repeats, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
-                        ctx->tag_name, VB_NAME, dtype_name_z(item->dict_id), dis_dict_id (item->dict_id).s);
+    #define INITIAL_ALLOC_FOR_PREFIXES 200
+    buf_alloc (vb, &ctx->con_cache, con_size + INITIAL_ALLOC_FOR_PREFIXES + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, C_CON_CACHE);
 
-                item->did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
-            }
-            else 
-                item->did_i_small = 255;
- 
-        // get prefixes
-        unsigned con_size = con_sizeof (con);
-        prefixes     = (b64_len < snip_len) ? &snip[b64_len+1]       : NULL; // remove initial CON_PX_SEP
-        prefixes_len = (b64_len < snip_len) ? snip_len - (b64_len+1) : 0;
+    // first encounter with Container for this context - allocate the cache index
+    if (!cache_exists) {
+        buf_alloc (vb, &ctx->con_index,    0, ctx->word_list.len, uint32_t, 1, C_CON_INDEX);
+        buf_alloc_zero (vb, &ctx->con_len, 0, ctx->word_list.len, uint16_t, 1, C_"con_len");
+    }
+
+    // case: add container to cache index - only if it is not a singleton (i.e. has word_index). 
+    // note: singleton containers only occur in old files compressed with v8 (since v9 no_stons is set in container_seg_do)
+    if (word_index != WORD_INDEX_NONE) 
+        *B32 (ctx->con_index, word_index) = ctx->con_cache.len32;
+
+    // IMPORTANT! we are returning a pointer into the cache buffer which might have just been realloced ^. 
+    // We don't handle reallocs, so we cannot have a recursive calls into the same container context, as earlier pointers might be invalidated by the realloc
+    ContainerP con_p = (ContainerP)BAFTc(ctx->con_cache);
+    ctx->con_cache.len32 += con_size;
+
+    // decode full container into cache
+    unsigned b64_len = base64_size (con_size);
+    base64_decode (snip, b64_len, (uint8_t *)con_p, -1);
+    
+    if (!VER2(15,84)) // up to 15.0.83 repeats was big endian
+        con_p->repeats = BGEN24 (con_p->repeats);
+
+    // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
+    for_con (con_p)
+        if (item->dict_id.num) { // not a prefix-only item
+            Did did_i = ctx_get_existing_did_i (vb, item->dict_id);
+            
+            // note: we possibly won't have did_i if all instances of this container had repeats=0 (and hence items were not segged)
+            ASSPIZ (did_i != DID_NONE || !con_p->repeats, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
+                    ctx->tag_name, VB_NAME, dtype_name_z(item->dict_id), dis_dict_id (item->dict_id).s);
+
+            item->did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
+        }
+        else 
+            item->did_i_small = 255;
+
+    // get prefixes (if there are any)
+    STR0(prefixes);
+
+    if (b64_len < snip_len) {
+        prefixes     = &snip[b64_len+1]; // remove initial CON_PX_SEP
+        prefixes_len = snip_len - (b64_len+1);
 
         ASSPIZ (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "ctx=%s: prefixes_len=%u longer than CONTAINER_MAX_PREFIXES_LEN=%u", 
                 ctx->tag_name, prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
@@ -768,49 +801,34 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         ASSPIZ (con_size + prefixes_len <= 65535, "ctx=%s: con_size=%u + prefixes_len=%u too large", 
                 ctx->tag_name, con_size, prefixes_len);
 
-        // first encounter with Container for this context - allocate the cache index
-        if (!cache_exists) {
-            buf_alloc (vb, &ctx->con_index,    0, ctx->word_list.len, uint32_t, 1, C_CON_INDEX);
-            buf_alloc_zero (vb, &ctx->con_len, 0, ctx->word_list.len, uint16_t, 1, C_"con_len");
+        if (prefixes_len > INITIAL_ALLOC_FOR_PREFIXES) { // need more space
+            uint32_t con_p_index = BNUM(ctx->con_cache, (rom)con_p);
+            buf_alloc (vb, &ctx->con_cache, prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, NULL);
+            con_p = (ContainerP)Bc(ctx->con_cache, con_p_index); // update con_p after realloc
         }
-
-        // case: add container to cache index - only if it is not a singleton (i.e. has word_index). 
-        // note: singleton containers only occur in old files compressed with v8 (since v9 no_stons is set in container_seg_do)
-        if (word_index != WORD_INDEX_NONE) 
-            *B32 (ctx->con_index, word_index) = ctx->con_cache.len32;
-
-        // place Container followed by prefix in the cache (even if its a singleton)
-        buf_alloc (vb, &ctx->con_cache, con_size + prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, C_CON_CACHE);
         
-        char *cached_con = BAFTc (ctx->con_cache);
-        buf_add (&ctx->con_cache, (rom)&con, con_size);
-        if (prefixes_len) buf_add (&ctx->con_cache, prefixes, prefixes_len);
-
-        // IMPORTANT! we are returning a pointer into the cache buffer which might have just been realloced ^. 
-        // We don't handle reallocs, so we cannot have a recursive calls into the same container context, as earlier pointers might be invalidated by the realloc
-        con_p    = (ContainerP)cached_con; // update so we reconstruct from translated cached item
-        prefixes = cached_con + con_size;
-
-        // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_AUX)
-        ContainerItemP item0 = &con.items[0];
-        
-        if (vb->translation.trans_containers && !item0->dict_id.num && item0->translator) {
-            int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, cached_con, con_size + prefixes_len, 0, false));  
-            ASSPIZ (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
-                    "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", 
-                    ctx->tag_name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
-            
-            prefixes_len       += prefixes_len_change;
-            ctx->con_cache.len += prefixes_len_change;
-        }
-
-        // finally, record the length (possibly updated by the translator) - but not for singletons
-        if (word_index != WORD_INDEX_NONE) 
-            *B16 (ctx->con_len, word_index) = (uint16_t)(con_size + prefixes_len);
+        if (out_prefixes) *out_prefixes = BAFTc(ctx->con_cache);
+        buf_add (&ctx->con_cache, STRa(prefixes)); // doesn't realloc
     }
 
+    // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_AUX)
+    ContainerItemP item0 = &con_p->items[0];
+    
+    if (vb->translation.trans_containers && !item0->dict_id.num && item0->translator) {
+        int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, (char *)con_p, con_size + prefixes_len, 0, false));  
+        ASSPIZ (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
+                "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", ctx->tag_name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
+        
+        prefixes_len         += prefixes_len_change;
+        ctx->con_cache.len32 += prefixes_len_change;
+    }
+
+    // finally, record the length (possibly updated by the translator) - but not for singletons
+    if (word_index != WORD_INDEX_NONE) 
+        *B16 (ctx->con_len, word_index) = (uint16_t)(con_size + prefixes_len);
+
     if (out_prefixes) 
-        STRset (*out_prefixes, prefixes);
+        *out_prefixes_len = prefixes_len;
 
     ctx->last_con_wi = word_index;
     return con_p;
@@ -838,8 +856,9 @@ static StrText item_sep_name0 (uint8_t sep)
         case CI0_VAR_0_PAD    : strcpy (s.s, "VAR_0_PAD");    break;
         case CI0_SKIP         : strcpy (s.s, "SKIP");         break;
         case CI0_DIGIT        : strcpy (s.s, "DIGIT");        break;
-        case CI0_ACGTN        : strcpy (s.s, "SEQ");          break;
+        case CI0_ACGTN        : strcpy (s.s, "ACGTN");        break;
         case CI0_LAST_MATCH   : strcpy (s.s, "LAST_MATCH");   break;
+        case CI0_COLONn       : strcpy (s.s, "COLONn");       break;
         default               : snprintf (s.s, sizeof (s.s), "'%.5s'", char_to_printable (sep).s); 
     }
 
@@ -883,6 +902,8 @@ static StrText1K container_flags (ConstContainerP con)
 
 StrText16K container_to_json (ConstContainerP con, STRp (prefixes))
 {
+    if (!con) return (StrText16K){ "NULL" };
+
     StrText16K s;
     int s_len = 0;
     
@@ -934,7 +955,7 @@ void con_verify_items (ConstContainerP con, ContextP ctx, rom con_name)
             ABORT ("container %s item_i=%u has dict_id=0. Perhaps n_items is too large?", con_name, (int)(item - con->items));
 
         if ((sep0 == CI0_LAST_MATCH && !IS_PRINTABLE(sep1)) ||
-            ((sep0 == CI0_FIXED_0_PAD || sep0 == CI0_VAR_0_PAD ) && !sep1))
+            ((sep0 == CI0_FIXED_0_PAD || sep0 == CI0_VAR_0_PAD || sep0 == CI0_COLONn) && !sep1))
             ABORT ("container %s item_i=%u has sep0=%s, expecting sep1≠0", con_name, (int)(item - con->items), item_sep_name0(sep0).s);
 
         if ((sep0 == CI0_DIGIT || sep0 == CI0_SKIP || sep0 == CI0_NONE || sep0 == CI0_INVISIBLE) && sep1 > CI1_LAST_SPECIAL)

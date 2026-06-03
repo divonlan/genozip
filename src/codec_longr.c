@@ -152,10 +152,10 @@ static void codec_longr_calc_channels (LongrState *state, STRp(seq), bytes qual,
 
     if (!is_rev)
         for (uint32_t i=0; i < qual_len; i++) 
-            CALC_ONE (acgt_encode[(uint8_t)codec_longr_next_base (STRa(seq), i)]);
+            CALC_ONE (acgt_encode (codec_longr_next_base (STRa(seq), i)));
     else
         for (int32_t i=qual_len-1; i >= 0; i--) 
-            CALC_ONE (acgt_encode_comp[(uint8_t)codec_longr_next_base_rev (STRa(seq), i)]);
+            CALC_ONE (acgt_encode_comp (codec_longr_next_base_rev (STRa(seq), i)));
 }
 
 COMPRESS (codec_longr_compress)
@@ -257,7 +257,7 @@ COMPRESS (codec_longr_compress)
         ABORT ("%s: \"%s\": Compressing %s with %s need %u bytes, but allocated only %u", VB_NAME, name, lens_ctx->tag_name, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
 
     // length is a numeric context, and as such it must be written first, as piz_uncompress_all_ctxs needs to complete piz_adjust_one_local
-    COPY_TIMER_COMPRESS (compressor_longr);
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_longr);
 
     // actually compress the lens array
     return compress (vb, ctx, header, lens_ctx->local.data, uncompressed_len, NULL, compressed, compressed_len, false, name);
@@ -281,13 +281,13 @@ static bool codec_longr_recon_one_read (LongrState *state, STRp(seq), bool is_re
 
     if (!is_rev) // separate loops to save one "if" in the tight loop
         for (uint32_t i=0; i < seq_len; i++) {        
-            uint8_t b = acgt_encode[(uint8_t)codec_longr_next_base (STRa(seq), i)];
+            uint8_t b = acgt_encode(codec_longr_next_base (STRa(seq), i));
             uint8_t q = sorted_qual[next_of_chan[state->chan.channel.n]++];
             RECON_ONE_QUAL;
         }
     else
         for (int32_t i=seq_len-1; i >= 0; i--) {        
-            uint8_t b = acgt_encode_comp[(uint8_t)codec_longr_next_base_rev (STRa(seq), i)];
+            uint8_t b = acgt_encode_comp (codec_longr_next_base_rev (STRa(seq), i));
             uint8_t q = sorted_qual[next_of_chan[state->chan.channel.n]++];
             RECON_ONE_QUAL;
         }

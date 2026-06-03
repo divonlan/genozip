@@ -659,8 +659,9 @@ uint32_t st_header_size (SectionType sec_type)
                 break;
 
             case SEC_TXT_HEADER:
-                if      (!VER(12)) return sizeof (SectionHeaderTxtHeader) - 3*sizeof(uint16_t) - sizeof(uint64_t); // in v8-11, SectionHeaderTxtHeader was shorter
-                else if (!VER(15)) return sizeof (SectionHeaderTxtHeader) - 3*sizeof(uint16_t); // in v12-14, SectionHeaderTxtHeader was shorter by 3XQnameFlavorProp
+                if      (!VER(12))     return sizeof (SectionHeaderTxtHeader) - 46 - 3*sizeof(uint16_t) - sizeof(uint64_t); // in v8-11, SectionHeaderTxtHeader was shorter
+                else if (!VER(15))     return sizeof (SectionHeaderTxtHeader) - 46 - 3*sizeof(uint16_t); // in v12-14, SectionHeaderTxtHeader was shorter by 3XQnameFlavorProp
+                else if (!VER2(15,84)) return sizeof (SectionHeaderTxtHeader) - 46; // in 15.0.0-83, header had one QnameFlavorProp less, as well as no unused[44]
                 break;
 
             case SEC_GENOZIP_HEADER:

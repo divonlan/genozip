@@ -537,7 +537,7 @@ ContextP vcf_seg_sv_SAMPLES (VBlockVCFP vb, rom samples, uint32_t remaining_txt_
 {
     // case INFO fields depend on sample fields: we can't copy mate
     if (segconf.INFO_DP_method == BY_FORMAT_DP || // INFO/DP depends on FORMAT/DP
-        segconf.has[INFO_QD]                   || // INFO/QD sometimes depends on FORMAT/DP
+        segconf_has(INFO_QD)                  || // INFO/QD sometimes depends on FORMAT/DP
         segconf.AS_SB_TABLE_by_SB              || // INFO/AS_SB_TABLE depends on FORMAT/SB
         CTX(INFO_SF)->sf.SF_by_GT == yes)         // INFO/SF depends on FORMAT/GT
         return CTX(VCF_SAMPLES);

@@ -169,12 +169,12 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
     rom after = BAFTtxt;
 
     #define SET_HAS_SA \
-        ({ segconf.has[OPTION_SA_Z] = true; /* likely, bot not 100% sure, that an SAZ string indicates an SA:Z optional field */ \
+        ({ segconf_set_has (OPTION_SA_Z); /* likely, bot not 100% sure, that an SAZ string indicates an SA:Z optional field */ \
            DO_ONCE if (flag.show_scan) \
                iprintf ("Scan: SA:Z found in vb=%u", vb->vblock_i); })
 
     // in case of force-gencomp, we also try to detect SA_Z in the first 16 VBs
-    if (flag.force_gencomp && !segconf.has[OPTION_SA_Z]) {
+    if (flag.force_gencomp && !segconf_has(OPTION_SA_Z)) {
         if (IS_BAM_ZIP) {
             for (rom c=next; c < after-4 ; c++) 
                 if (c[0] == 'S' && c[1]== 'A' && c[2] == 'Z' && IS_ALPHANUMERIC(c[3])
@@ -255,7 +255,7 @@ void sam_sag_by_flag_scan_for_depn (void)
     ASSERTNOTNULL (txt_file);
     
     TEMP_FLAG(biopsy, false);
-    SAVE_FLAG(biopsy_line); flag.biopsy_line.line_i = NO_LINE;
+    SAVE_FLAG_(biopsy_line); flag.biopsy_line.line_i = NO_LINE;
     txtfile_read_header (true); // reads into evb->txt_data and evb->lines.len
     buf_free (evb->txt_data);   // discard the header
     
@@ -346,7 +346,7 @@ static BINARY_SEARCHER_INTEGRAL (sam_sag_is_multi_vb_SAG_BY_FLAG, uint32_t, true
 static BINARY_SEARCHER (sam_sag_get_qname_counts_this_vb, QnameCount, uint32_t, hash, true, IfNotExact_ReturnNULL)
 
 // ZIP: true if this prim or depn sag line *might* have saggies in other VBs
-bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAMP dl, int32_t n_alns)
+bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int32_t n_alns)
 {
     if (!vb->qname_count.len32) return true; // we didn't count qnames, so we don't have proof that there aren't any saggies in other VBs
 

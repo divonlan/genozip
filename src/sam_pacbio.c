@@ -18,10 +18,10 @@ void sam_pacbio_seg_initialize (VBlockSAMP vb)
     ctx_set_store (VB, STORE_FLOAT, OPTION_ec_f, DID_EOL);
 
     ctx_set_store (VB, STORE_INT, OPTION_ws_i,
-                   T(flag.best && segconf.has[OPTION_we_i], OPTION_pw_B_C), // store sum of array elements
-                   T(flag.best && segconf.has[OPTION_we_i], OPTION_ip_B_C), DID_EOL);
+                   T(flag.best && segconf_has(OPTION_we_i), OPTION_pw_B_C), // store sum of array elements
+                   T(flag.best && segconf_has(OPTION_we_i), OPTION_ip_B_C), DID_EOL);
 
-    ctx_set_same_line (VB, T(segconf.has[OPTION_ec_f], OPTION_np_i), DID_EOL);  // np segged as delta vs ec, and np needs to be peeked for QUAL, before reconstructing ec
+    ctx_set_same_line (VB, T(segconf_has(OPTION_ec_f), OPTION_np_i), DID_EOL);  // np segged as delta vs ec, and np needs to be peeked for QUAL, before reconstructing ec
 
     if (segconf.use_pacbio_iqsqdq) {
         ctx_set_ltype (VB, LT_BLOB, OPTION_dq_Z, OPTION_iq_Z, OPTION_sq_Z, DID_EOL);        
@@ -50,14 +50,14 @@ void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes)
 // np:i
 // -------------
 
-void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t np, unsigned add_bytes)    
+void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t np, unsigned add_bytes)    
 {                     
     dl->np = np;
 
     if (segconf.pacbio_subreads && np == 1)
         seg_by_did (VB, "1", 1, OPTION_np_i, add_bytes); // in subreads, we expect np=1 all-the-same
 
-    else if (segconf.has[OPTION_ec_f] && ctx_has_value_in_line_(vb, CTX(OPTION_ec_f))) 
+    else if (segconf_has(OPTION_ec_f) && ctx_has_value_in_line_(vb, CTX(OPTION_ec_f))) 
         seg_delta_vs_other_localN (VB, CTX(OPTION_np_i), CTX(OPTION_ec_f), np, -1, add_bytes);
 
     else 
@@ -74,7 +74,7 @@ int32_t sam_zip_get_np (VBlockP vb, LineIType line_i)
 // qe:i - 0-based end   of query in the ZMW read
 // ----------------------------------------------
 
-void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qs, unsigned add_bytes)    
+void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qs, unsigned add_bytes)    
 {
     decl_ctx (OPTION_qs_i);
 
@@ -89,11 +89,12 @@ void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qs, unsigned 
 
     // in ccs: qs has a small number of possible low values, often mono-value
     else {
-        if (segconf_running) {
+        if (segconf_running) { // only runs in main thread
+            static int64_t sam_first_qs = 0; 
             if (!vb->line_i) 
-                segconf.sam_first_qs = qs;
+                sam_first_qs = qs;
             else             
-                segconf.sam_diverse_qs |= (qs != segconf.sam_first_qs);
+                segconf.sam_diverse_qs |= (qs != sam_first_qs);
         }
 
         if (segconf.sam_diverse_qs)
@@ -104,7 +105,7 @@ void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qs, unsigned 
     }
 }
 
-void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qe, unsigned add_bytes)    
+void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qe, unsigned add_bytes)    
 {
     decl_ctx (OPTION_qe_i);
 
@@ -143,7 +144,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_PACBIO_qe)
 // we:i - Start of last base of the query (‘qe - 1’) in approximate raw frame count since start of movie. For a CCS read, the start of the last base of the last incorporated subread.
 // ----------------------------------------------
 
-void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t we, unsigned add_bytes)    
+void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t we, unsigned add_bytes)    
 {
     decl_ctx (OPTION_we_i);
 
@@ -151,7 +152,7 @@ void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t we, unsigned 
 
     // prediction (subreads data): we ~= ws + (sum(ip) + sum (pw) + seq_len)
     if (flag.best && // summing ip/pw add time - not worth the tiny benefit of this method unless --best
-        segconf.has[OPTION_we_i] && // condition for ip and pw sum to be calculated
+        segconf_has(OPTION_we_i) && // condition for ip and pw sum to be calculated
         sam_seg_peek_int_field (vb, OPTION_ws_i, vb->idx_ws_i, 0, 0x7ffffff, true, &ws)  &&
         ctx_has_value_in_line_(vb, CTX(OPTION_ip_B_C)) && 
         ctx_has_value_in_line_(vb, CTX(OPTION_pw_B_C))) {
@@ -231,7 +232,7 @@ bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual)/*textual*/, unsigned add_byt
 #define PACBIO_QV(f)                                    \
 COMPRESSOR_CALLBACK (sam_zip_##f)                       \
 {                                                       \
-    ZipDataLineSAMP dl = DATA_LINE(vb_line_i);          \
+    ZipDataLineSAM𐤐 dl = DATA_LINE(vb_line_i);          \
                                                         \
     *line_data_len = MIN_(maximum_size, dl->SEQ.len);   \
                                                         \
@@ -289,7 +290,7 @@ void sam_recon_skip_pacbio_qual (VBlockSAMP vb)
 // iq, sq and dq
 // -------------
 
-void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes)    
+void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(value), unsigned add_bytes)    
 {                                                          
     decl_ctx (did_i);
 
@@ -315,7 +316,7 @@ void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value
 // interlaced line containing a character from iq followed by a character from sq followed by dq 
 COMPRESSOR_CALLBACK (sam_zip_iq_sq_dq)
 {
-    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAM𐤐 dl = DATA_LINE (vb_line_i);
     
     rom iq = dl->iq ? Btxt (dl->iq + dl->line_start) : NULL;
     rom sq = dl->sq ? Btxt (dl->sq + dl->line_start) : NULL;
@@ -388,7 +389,7 @@ static int get_sn_channel_i (VBlockSAMP vb)
     return ctx_encountered_in_prev_line (VB, OPTION_sn_B_f) && CTX(SAM_Q1NAME)->last_delta == 0;
 }
 
-void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAMP dl, rom sn, int/*signed*/ sn_len)
+void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom sn, int/*signed*/ sn_len)
 {
     decl_ctx (OPTION_sn_B_f);
     ContextP channel_ctx = ctx; // fallback
@@ -406,13 +407,13 @@ void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAMP dl, rom sn, int/*signed*/
         }
 
         else 
-            sam_seg_array_one_ctx (vb, dl, channel_ctx->dict_id, 'f', STRa(sn), 0, 0, NULL);
+            sam_seg_array_one_ctx (vb, dl, channel_ctx->dict_id, 'f', STRa(sn), 0, NULL);
 
         seg_by_did (VB, STRa(vb->mux_sn.snip), OPTION_sn_B_f, 0); // de-multiplexer
     }
 
     else 
-        sam_seg_array_one_ctx (vb, dl, _OPTION_sn_B_f, 'f', STRa(sn), 0, 0, NULL);
+        sam_seg_array_one_ctx (vb, dl, _OPTION_sn_B_f, 'f', STRa(sn), 0, NULL);
 
     seg_set_last_txt (VB, ctx, STRa(sn));
 }

@@ -26,7 +26,21 @@
 #define PAIR_MAX_DISTANCE  500 // if pair2 is more distant from pair1 than this, it will get a penalty
 #define NON_PAIR_PENALTY   17  // penalty reduction in matching bits, for a pair2 gpos that is too distant from pair1 gpos
 
+// low level
+#define CPU_CACHE_LINE_BYTES 64
+#define CPU_CACHE_LINE(addr) (~bitmask64_(6) & (uintptr_t)(addr)) // integer value of pointer to first byte in cache line
+
 typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
+
+typedef struct {
+    PosType64 gpos;
+    int32_t match_n_bits; // matching bits per hamming
+    int32_t score;        // matching_bits after applying penalty if needed (might be negative)
+    bool is_forward; 
+    bool is_perfect;
+} BestAlignment;
+
+#include "aligner_layered.c" // backward compatabilities with reference files up to 15.0.80
 
 static inline uint32_t nuke_encode_dir (char c, bool is_forward) 
 { 
@@ -38,6 +52,9 @@ static inline int percent_match (uint32_t match_n_bits, uint32_t seq_len)
     return match_n_bits * 50 / seq_len; 
 }
 
+// Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
+// Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same
+// calculates a refhash word from 14 nucleotides following a 'G' (only last G in a sequenece of GGGG...)
 static inline uint64_t aligner_get_kmer (Bits𐤐 seq, uint64_t bit_i, bool is_forward)
 {
     // note on 'N' in sequence: aligner_seq_to_bitmap() encoded non-ACGT as 00 ('A').
@@ -66,44 +83,34 @@ static inline uint64_t aligner_get_kmer (Bits𐤐 seq, uint64_t bit_i, bool is_f
     return kmer;
 }
 
-// Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
-// Reverse       : If seq is: CGCCCT-C  (C is the hook)  -- also matches reference AGGGCT  - function returns 110110101000 - the same
-// calculates a refhash word from 14 nucleotides following a 'G' (only last G in a sequenece of GGGG...)
-static inline PosType64 aligner_get_gpos_FLAT (VBlock𐤐 vb, Bits𐤐 seq, uint64_t base_i, bool is_forward)                                              
+static __attribute__((always_inline)) inline 
+uint64_t aligner_prefetch_gpos (VBlock𐤐 vb, Bits𐤐 seq, uint64_t base_i, bool is_forward)                                              
 {   
     uint64_t kmer = aligner_get_kmer (seq, base_i*2, is_forward); 
     uint64_t hash = fibonacci_hash (kmer);
 
-    if (gpos_bytes == 4) {
-        PosType64 gpos = LTEN32 (*B32(refhash_buf, hash));
-        return (gpos == NO_HASH_ENT32) ? NO_GPOS : gpos;
+    // Locality=1 (only L3 caching) is best (tested). Reason: after reading the GPOS
+    // from refhash, we probably will never access that location again, so caching just causes cache pollution.
+    // Howver, we cache just in L3, in case the Line Fill Buffer (LFB) was already evicted by the time the code was ready to pick it up. 
+    if (gpos_bytes == 4)
+        __builtin_prefetch (B32(refhash_buf, hash), 0/*read-only*/, 1/*locality: cache just in L3*/);
+
+    if (gpos_bytes == 5) {
+        char *addr = (char *)B40(refhash_buf, hash);
+        __builtin_prefetch (addr, 0, 1);
+ 
+        // case: refhash entry spans two cache lines - prefetch the second one too (applicable to 1/16 of 5-byte words)
+        if (CPU_CACHE_LINE (addr) != CPU_CACHE_LINE (addr + 4)) 
+            __builtin_prefetch (addr + 4, 0, 1);
     }
 
-    else { // gpos_bytes == 5
-        PosType64 gpos = U40to64_LTEN (*B40(refhash_buf, hash));
-        return (gpos == NO_HASH_ENT40) ? NO_GPOS : gpos;
-    }
-}
-
-// used with reference files up to 15.0.80
-#define layer_bitmask ((uint64_t[NUM_LAYERS]){ 0x0fffffffULL, 0x07ffffffULL, 0x03ffffffULL, 0x01ffffffULL })  // LSb set for 28,27,26,25 bits
-static inline PosType64 aligner_get_gpos_LAYERED (VBlockP vb, BitsP seq, uint64_t base_i, uint64_t *kmer, bool is_forward)                                              
-{   
-    *kmer = aligner_get_kmer (seq, base_i*2, is_forward); // note: LAYERED is 28 bits per kmer, so uses 32bit variables
-
-    // prefetch cache for all layers of refhash (this improves aligner performance by ~12% and genozip performance on a simple FASTQ compression by ~8%)
-    for (unsigned layer_i=0; layer_i < NUM_LAYERS; layer_i++) 
-        __builtin_prefetch (B32(refhash_buf, LAYER_START[layer_i] + (*kmer & layer_bitmask[layer_i])), 0/*read-only*/, 1/*best option, empirically*/);
-        
-    // Performance note: 50% of the aligner time is taken by memory latency - looking up from refhash_buf - ~0.28 lookups every base in the sequence.
-    PosType64 gpos = (PosType64)BGEN32(*B32(refhash_buf, (*kmer & layer_bitmask[0])));
-    return (gpos == NO_HASH_ENT32) ? NO_GPOS : gpos;
+    return hash;
 }
 
 // converts a string sequence to a 2-bit bitmap
-static inline Bits aligner_seq_to_bitmap (VBlock𐤐 vb, rom𐤐 seq, uint64_t seq_len, 
-                                          uint64_t *restrict bitmap_words, // allocated by caller
-                                          bool𐤐 seq_is_all_acgt)  
+static Bits aligner_seq_to_bitmap (VBlock𐤐 vb, rom𐤐 seq, uint64_t seq_len, 
+                                   uint64_t *restrict bitmap_words, // allocated by caller
+                                   bool𐤐 seq_is_all_acgt)  
 {
     START_TIMER;
 
@@ -118,7 +125,7 @@ static inline Bits aligner_seq_to_bitmap (VBlock𐤐 vb, rom𐤐 seq, uint64_t s
     for (uint64_t base_i=0; base_i < seq_len; base_i++) {
         uint8_t encoding = nuke_encode (seq[base_i]);
     
-        if (__builtin_expect (encoding == 4, false)) { // not A, C, G or T - usually N
+        if (encoding == 4) { // not A, C, G or T - usually N
             *seq_is_all_acgt = false;
             encoding = 0;    // arbitrarily convert 4 (any non-ACGT is 4) to 0 ('A')
         }
@@ -133,14 +140,6 @@ static inline Bits aligner_seq_to_bitmap (VBlock𐤐 vb, rom𐤐 seq, uint64_t s
     return seq_bits;
 }
 
-typedef struct {
-    PosType64 gpos;
-    int32_t match_n_bits; // matching bits per hamming
-    int32_t score;        // matching_bits after applying penalty if needed (might be negative)
-    bool is_forward; 
-    bool is_perfect;
-} BestAlignment;
-
 static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos, 
                                         PosType64 gpos_R1, // if this is for R2: gpos of R1
                                         PosType64 gpos1,   // if splicing: main gpos of sequence
@@ -149,13 +148,6 @@ static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos,
                                         BestAlignment *restrict best) // in/out
 {
     // START_TIMER; // this has a small performance impact as it is called in a tight loop - uncomment when needed
-
-    if (gpos == best->gpos) goto no_update; // a previous hook yielded the same gpos (which is not "near perfect") - no need to test this gpos again
-
-    // consider splicing, only if gpos is close enough to (but not the same as) the main gpos
-    if (gpos1 != NO_GPOS && 
-        (gpos == gpos1 || ABS(gpos - gpos1) > MAX_SPLICE_GAP))
-        goto no_update; 
 
     // note on 'N' in seq: since 'N' was encoded as 'A' in aligner_seq_to_bitmap(), we might be
     // slightly underestimating the distance in cases were the genome also happens to have an 'A' there. That's ok. 
@@ -187,12 +179,63 @@ static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos,
         }                                                                                                                       
     }        
 
-no_update:
     // COPY_TIMER (aligner_update_best); 
     return false; // not perfect (possibly because of penalty) - consider other GPOSs before deciding
 }                                                                                                                               
 
-static void aligner_best_match_FLAT_search (
+static __attribute__((always_inline)) inline 
+PosType64 aligner_collect_gpos (VBlock𐤐 vb, 
+                                uint64_t s1_hash, Direction s1_is_fwd, PosType64 s1_gpos_decrement,
+                                PosType64 gpos1, uint32_t seq_len, 
+                                ConstBits𐤐 genome, PosType64 genome_nbases,
+                                BestAlignment *restrict best)
+{
+    PosType64 gpos;
+
+    // pick up gpos we previously scheduled for pre-fetching
+    if (gpos_bytes == 4) {
+        gpos = LTEN32 (*B32(refhash_buf, s1_hash));
+        if (gpos == NO_HASH_ENT32) return NO_GPOS;
+    }
+
+    else { // gpos_bytes == 5
+        gpos = U40to64_LTEN (*B40(refhash_buf, s1_hash));
+        if (gpos == NO_HASH_ENT40) return NO_GPOS;
+    }
+
+    gpos -= s1_gpos_decrement;
+    
+    // ignore this gpos if the seq wouldn't fall completely within reference genome  
+    if (__builtin_expect (gpos < 0 || gpos + seq_len >= genome_nbases, false))  
+        return NO_GPOS;
+
+    // ignore it if it has already been evaluated via previous hook.
+    if (gpos == best->gpos) 
+        return NO_GPOS;
+
+    // consider splicing, only if gpos is close enough to (but not the same as) the main gpos
+    if (gpos1 != NO_GPOS && 
+        (gpos == gpos1 || ABS(gpos - gpos1) > MAX_SPLICE_GAP))
+        return NO_GPOS;
+
+    // prefetch max 2 cache lines (each cache line = 64 bytes = 256 bases)
+    char *first_word = (char *)&genome->words[gpos / 32/*32 bases per word*/];
+    char *last_word  = (char *)&genome->words[(gpos + seq_len - 1) / 32];
+    
+    // Locality=3 (fully cache) is best for seg_all_data_lines time (tested). Reason: if this genome 
+    // sequence is the best, we will access it again shortly after to calculate mismatches
+
+    // note: in case of REVERSE, bits_hamming_distance accesses the last word first, so we fetch its cache line first
+    __builtin_prefetch (s1_is_fwd ? first_word : last_word, 0/*read-only*/, 3/*fully cached*/);
+    
+    // case: beginning and end of genome sequence are on different cache lines prefetch one more 64B cache line
+    if (CPU_CACHE_LINE (first_word) != CPU_CACHE_LINE (last_word))
+        __builtin_prefetch (s1_is_fwd ? (first_word + CPU_CACHE_LINE_BYTES) : (last_word - CPU_CACHE_LINE_BYTES), 0 , 3);
+
+    return gpos;
+}
+
+static void aligner_evaluate_hooks (
     VBlock𐤐 vb, 
     Bits𐤐 seq_bits, rom𐤐 seq, PosType64 seq_len, // sequence to be aligned 
     ConstBits𐤐 genome, PosType64 genome_nbases,  // genome aligned against 
@@ -202,59 +245,96 @@ static void aligner_best_match_FLAT_search (
 {
     START_TIMER;
     
-    PosType64 gpos = NO_GPOS; // match not found yet
-
     // in case of --fast, we check only 1/3 of the bases, and we are content with a match (not searching any further) if it 
     // has at most 10 SNPs. On our test file, this reduced the number of calls to aligner_update_best by about 4X, 
     // at the cost of the compressed file being about 11% larger
     uint64_t density = (flag.fast ? 3 : 1);
     uint32_t max_snps_for_near_perfect = (flag.fast ? 10 : 2); // note: this is only approximately SNPs as we actually measure mismatched bits, not bases
+    
+    // pipeline stage 1: fetching gpos
+    #define NOT_FETCHING UINT64_MAX
+    uint64_t s1_hash = NOT_FETCHING; 
+    bool s1_is_fwd = 0;
+    PosType64 s1_gpos_decrement = 0;
 
-    // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
-    for (uint64_t i=0; i < seq_len; i += density) {          
-        Direction found = NOT_FOUND;
+    // pipeline stage 2: fetching genome words
+    PosType64 s2_gpos = NO_GPOS;
+    bool s2_is_fwd = 0;
 
-        if ((gpos1 == NO_GPOS || best->is_forward == true) 
-         && __builtin_expect (i < seq_len - bases_per_hash, true/*probability 93%*/) // room for the hash word
-         && __builtin_expect (seq[i] == HOOK,  false/*probability 75%*/) 
-         && __builtin_expect (seq[i+1] != HOOK, true/*probability 75%*/) // take the G - if there is a homopolymer GGGG... take the last one
-         && (gpos = aligner_get_gpos_FLAT (vb, seq_bits, i+1, FORWARD)) != NO_GPOS) { 
+    char seq_prev=0, seq_curr=0, seq_next=seq[0];
+    uint8_t flushing = 0;
+    uint64_t i; // declare before the loop to allow "goto" back into the loop for flushing
 
-            gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
-            found = FORWARD;
-        }
+    // We identify locations that might contain our sequence in the genome based on kmers appearing after a hook. 
+    // We do so in a 3-stage pipeline to parallelize random access RAM reads (from refhash and then genome) with processing:
+    // Pipeline stage 1: Initiate prefetch of gpos from refhash[hash]. hash is calculated from the kmer starting at the base after the hook.
+    // Pipeline stage 2: Initiate prefetch of the cache lines containing the genomic sequence from genome[gpos]
+    // Pipeline stage 3: Compare hamming distance of the genome[gpos] sequence (already fetched) and our sequence.
+    for (i=0; i < seq_len; i += density) {          
+        seq_prev = seq_curr;
+        seq_curr = seq_next;
+        seq_next = seq[i+1]; // note: no problem i+1 overflowing - this Buffer memory: in FASTQ/SAM this is vb->txt_data and BAM vb->textual_seq
+        
+        if ((seq_curr == HOOK   // 75% failure: first condition to fail fast 
+          && seq_next != HOOK // 25% failure 
+          && i < seq_len - bases_per_hash // room for the hash word: ~10% failure, but pure register test
+          && (gpos1 == NO_GPOS || best->is_forward == true)) // 100% success in the non-splice aligning
+     ||
+            (seq_curr == HOOK_REV
+          && seq_prev != HOOK_REV 
+          && i >= bases_per_hash
+          && (gpos1 == NO_GPOS || best->is_forward == false))) {
 
-        // note: if the previous condition is true, then seq[i]==HOOK and no need to check this condition. hence the "else"
-        else if ((gpos1 == NO_GPOS || best->is_forward == false)
-         && __builtin_expect (i >= bases_per_hash, true) 
-         && __builtin_expect (seq[i] == HOOK_REV,  false) 
-         && __builtin_expect (seq[i-1] != HOOK_REV, true)  
-         && (gpos = aligner_get_gpos_FLAT (vb, seq_bits, i-1, REVERSE)) != NO_GPOS) {
+        flush_pipeline:
+            // pipeline stage 3: calculate outcome: use genome sequence prefetched in stage 2 to calculate hamming distance and evaluate the result
+            if (s2_gpos != NO_GPOS &&
+                aligner_update_best (vb, s2_gpos, gpos_R1, gpos1, seq_bits, seq_len, s2_is_fwd, 
+                                     genome, genome_nbases, max_snps_for_near_perfect, best)) // true if near-perfect match
+                goto done; // near-perfect match, search no longer
 
-            gpos -= seq_len-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
-            found = REVERSE;
-        }
-
-        if (found != NOT_FOUND && 
-            __builtin_expect (gpos >= 0 && gpos + seq_len < genome_nbases, true)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
-            
-            if (aligner_update_best (vb, gpos, gpos_R1, gpos1, seq_bits, seq_len, found, 
-                                     genome, genome_nbases, max_snps_for_near_perfect, best)) {
-                return; // near-perfect match, search no longer
+            // pipeline stage 2: prefetch genome: use gpos fetched in stage 1, to prefetch the genomic sequence at genome[gpos]
+            if (s1_hash != NOT_FETCHING) {
+                s2_gpos = aligner_collect_gpos (vb, s1_hash, s1_is_fwd, s1_gpos_decrement, gpos1, seq_len, 
+                                                genome, genome_nbases, best);
+                s2_is_fwd = s1_is_fwd;
             }
+            else
+                s2_gpos = NO_GPOS;
+
+            // pipeline stage 1: prefetch gpos: calculate hash by kmer, and start prefetching gpos from refhash[hash]
+            if (!flushing) {
+                uint64_t base_i;
+                if (seq_curr == HOOK) {
+                    s1_is_fwd = FORWARD;
+                    s1_gpos_decrement = i; // after decrementing, gpos is the first base on the reference, that aligns to the first base of seq
+                    base_i = i+1; // this is faster than ?: another conditional in the function call
+                }
+                else { 
+                    s1_is_fwd = REVERSE;
+                    s1_gpos_decrement = seq_len-1 - i; // after decrementing, gpos is the first base of the reference, that aligns wit the LAST base of seq
+                    base_i = i-1;
+                }
+                s1_hash = aligner_prefetch_gpos (vb, seq_bits, base_i, s1_is_fwd);  
+            }
+            else
+                s1_hash = NOT_FETCHING;
         }
     }
 
+    // flush pipeline twice, to process what is currently in stage 1 and 2
+    if (++flushing < 3) goto flush_pipeline; // like this, to avoid expanding inline functions again
+
+done:
     if (gpos1 == NO_GPOS)
-        COPY_TIMER (aligner_best_match_FLAT_search);    
+        COPY_TIMER (aligner_evaluate_hooks);    
     else
-        COPY_TIMER (aligner_best_match_FLAT_search2);    
+        COPY_TIMER (aligner_evaluate_hooks2);    
 }
 
 // returns gpos aligned with seq with M (as in CIGAR) length, containing the longest match to the reference. 
 // returns false if no match found.
 // note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
-static inline PosType64 aligner_best_match_FLAT (
+static inline PosType64 aligner_best_match (
     VBlock𐤐 vb, STR𐤐(seq), PosType64 gpos_R1,
     ConstBits𐤐 genome, PosType64 genome_nbases,
     bool𐤐 is_forward, bool𐤐 is_perfect, PosType64𐤐 gpos2, bool𐤐 can_match_as_nonspliced) // out
@@ -270,8 +350,7 @@ static inline PosType64 aligner_best_match_FLAT (
     //ref_print_bases (&seq_bits, "seq_bits rev", false);
        
     BestAlignment best = { .gpos=NO_GPOS }, best2 = { .gpos=NO_GPOS }/*must be initialized even if not splicing*/;
-    aligner_best_match_FLAT_search (vb, &seq_bits, STRa(seq), genome, genome_nbases, gpos_R1, NO_GPOS,
-                                    &best);
+    aligner_evaluate_hooks (vb, &seq_bits, STRa(seq), genome, genome_nbases, gpos_R1, NO_GPOS, &best);
 
     int match_percent = percent_match (best.match_n_bits, seq_len); // note: this is matching bits, not matching bases
 
@@ -285,7 +364,7 @@ static inline PosType64 aligner_best_match_FLAT (
      && seq_len >= SPLICE_MIN_SEQ_LEN) {
         
         best2.is_forward = best.is_forward; // spliced segments must be in the same orientation
-        aligner_best_match_FLAT_search (vb, &seq_bits, STRa(seq), genome, genome_nbases, NO_GPOS, best.gpos, &best2);
+        aligner_evaluate_hooks (vb, &seq_bits, STRa(seq), genome, genome_nbases, NO_GPOS, best.gpos, &best2);
         *gpos2 = best2.gpos;
     }
 
@@ -299,104 +378,6 @@ static inline PosType64 aligner_best_match_FLAT (
         return best.gpos;
 }
 
-static inline PosType64 aligner_best_match_LAYERED (VBlockP vb, STRp(seq), PosType64 gpos_R1,
-                                                    ConstBitsP genome, PosType64 genome_nbases,
-                                                    bool *is_forward, bool *is_perfect) // out
-{
-    uint64_t kmer;
-    const PosType64 seq_len_64 = (PosType64)seq_len; // 64 bit version of seq_len
-    PosType64 gpos = NO_GPOS;
-    BestAlignment best = { .gpos = NO_GPOS };
-    
-    // convert seq to a bitmap
-    bool seq_is_all_acgt;
-    uint64_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
-    Bits seq_bits = aligner_seq_to_bitmap (vb, STRa(seq), seq_bits_words, &seq_is_all_acgt);
-    
-    *is_perfect = false;
-
-    typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
-
-    // each "find" corresponds to a place in seq that has the hook base (or if a homopolymer of the hook - the last base in the homopolymer)
-    struct Finds { 
-        uint64_t kmer;   // the sequence (in 2bit) directly before (if fwd) or after (if rev) the hook. Used as a key into refhash. 
-        uint32_t i;      // index of hook in seq
-        Direction found; // orientation of find
-    } finds[seq_len]; 
-    
-    uint32_t num_finds = 0;
-    
-    uint32_t density = (flag.fast ? 3 : 1);
-    uint32_t max_snps_for_near_perfect = (flag.fast ? 10 : 2); // note: this is only approximately SNPs as we actually measure mismatched bits, not bases
-
-    // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
-    for (int i=0; i < seq_len; i += density) {          
-        Direction found = NOT_FOUND;
-
-        if (__builtin_expect (i < seq_len - bases_per_hash, true/*probability 93%*/) && // room for the hash word
-            __builtin_expect (seq[i] == HOOK,  false/*probability 75%*/) && 
-            __builtin_expect (seq[i+1] != HOOK, true/*probability 75%*/) &&  // take the G - if there is a homopolymer GGGG... take the last one
-            (gpos = aligner_get_gpos_LAYERED (vb, &seq_bits, i+1, &kmer, FORWARD)) != NO_GPOS) { 
-
-            gpos -= i; // gpos is the first base on the reference, that aligns to the first base of seq
-            found = FORWARD;
-        }
-
-        // note: if the previous condition is true, then seq[i]==HOOK and no need to check this condition. hence the "else"
-        else if (__builtin_expect (i >= bases_per_hash, true/*probability 93%*/) && // room for the hash word
-            __builtin_expect (seq[i] == HOOK_REV,  false/*probability 75%*/) && 
-            __builtin_expect (seq[i-1] != HOOK_REV, true/*probability 75%*/) &&  // take the G - if there is a polymer GGGG... take the last one
-            (gpos = aligner_get_gpos_LAYERED (vb, &seq_bits, i-1, &kmer, REVERSE)) != NO_GPOS) { 
-
-            gpos -= seq_len_64-1 - i; // gpos is the first base of the reference, that aligns wit the LAST base of seq
-            found = REVERSE;
-        }
-
-        if (found != NOT_FOUND && 
-            __builtin_expect (gpos >= 0 && gpos + seq_len_64 < genome_nbases, true)) { // ignore this gpos if the seq wouldn't fall completely within reference genome
-
-            finds[num_finds++] = (struct Finds){ .kmer = kmer, .i = i, .found = found };
-            
-            if (aligner_update_best (vb, gpos, gpos_R1, NO_GPOS, &seq_bits, seq_len, found, 
-                                     genome, genome_nbases, max_snps_for_near_perfect, &best)) {
-                goto done; // near-perfect match, search no longer
-            }
-        }
-    }
-
-    // if still no near-perfect matches found, search the additional layers 
-    // (each kmer can have up to NUM_LAYERS corresponding GPOSes - we already tested one, now we test the rest)    
-    for (uint32_t find_i=0; find_i < num_finds; find_i++) {
-        // amount to adjust gpos, which was found for base #i of seq, to correspond to the beginning of seq
-        int64_t gpos_shift = (finds[find_i].found == FORWARD ? (int64_t)finds[find_i].i : (seq_len_64-1 - (int64_t)finds[find_i].i));
-
-        for (unsigned layer_i=1; layer_i < NUM_LAYERS; layer_i++) {
-            gpos = (PosType64)BGEN32 (*B32(refhash_buf, LAYER_START[layer_i] + (finds[find_i].kmer & layer_bitmask[layer_i]))); 
-
-            // case: no more GPOSes for this kmer - this layer and all subsequent are NO_GPOS
-            if (gpos == NO_GPOS) break;
-
-            gpos -= gpos_shift;
-
-            // check if this gpos results in a better match than the one we already have
-            if (__builtin_expect ((gpos >= 0) && (gpos + seq_len_64 < genome_nbases), true) &&
-                aligner_update_best (vb, gpos, gpos_R1, NO_GPOS, &seq_bits, seq_len, finds[find_i].found, 
-                                     genome, genome_nbases, max_snps_for_near_perfect, &best)) {
-                goto done; // near-perfect match, search no longer       
-            }
-        }
-    }
-    
-done:
-    *is_forward = best.is_forward;
-    *is_perfect = seq_is_all_acgt && best.is_perfect;
-
-    // check that the best match is above a threshold, where mapping against the reference actually improves compression
-    if (percent_match (best.match_n_bits, seq_len) >= MIN_MATCH_PC) 
-        return best.gpos;
-    else
-        return NO_GPOS;
-}
 
 void aligner_seg_gpos_and_fwd (VBlock𐤐 vb, 
                                uint32_t seq_len, // note: less that vb->seq_len when aligning the excess of a nonbio read
@@ -418,13 +399,13 @@ void aligner_seg_gpos_and_fwd (VBlock𐤐 vb,
     
     // note: this schema is copied also in aligner_recon_get_gpos_and_fwd                                                               
     //
-    // **FORWARD**    ------- SEG -------       ---------- PIZ ----------
+    // **FORWARD**    ————————SEG————————       ———————————PIZ———————————
     // seq:           0·····j···········L       0·····j    0···········L2   (g=gpos j=junction L=(seq_len-1) L2=L-j)
-    // 1st segment ⟶ g···············g+L       G1         G2               SEG: GPOS ⇐ g ; JUNCTION ⇐ j ; GAP ⇐ g2-g1
+    // 1st segment ⟶ g···············g+L       G1·····    G2············   SEG: GPOS ⇐ g ; JUNCTION ⇐ j ; GAP ⇐ g2-g1
     //                ‾‾‾‾‾‾_____________                                   PIZ: G1 ⇐ GPOS ; L2 ⇐ seq_len-JUNCTION   
     // 2st segment ⟶ g2·············g2+L                                        G2 ⇐ G1+GAP+JUNCTION
     //
-    // **REVERSE**    ------- SEG -------       ---------- PIZ ----------   SEG: GPOS ⇐ g+(seq_len-j)  
+    // **REVERSE**    ————————SEG————————       ———————————PIZ———————————   SEG: GPOS ⇐ g+(seq_len-j)  
     // seq:           0·····j···········L       0·····j    0···········L2        JUNCTION ⇐ j 
     // 1st segment ⟵ g+L···············g       ·····G1    ············G2        GAP ⇐ g2-g1
     //                ‾‾‾‾‾‾_____________                                   PIZ: G1 ⇐ GPOS ; L2 ⇐ seq_len-JUNCTION
@@ -584,7 +565,7 @@ static inline void aligner_get_textual_ref (VBlock𐤐 vb,
         PosType64 min_gpos = MIN_(gpos, gpos2);
 
         // note: if reverse, seq generated is still between [min_gpos, (min_gpos + ref_len - 1)], just revcomped 
-        ref_get_textual_seq (min_gpos, ref_data, ref_len, !is_forward);
+        ref_get_textual_seq (vb, min_gpos, ref_data, ref_len, !is_forward);
 
         *ref  = (gpos  == min_gpos) ? ref_data : (ref_data + abs_gpos_gap);
         *ref2 = (gpos2 == min_gpos) ? ref_data : (ref_data + abs_gpos_gap);
@@ -598,10 +579,10 @@ static inline void aligner_get_textual_ref (VBlock𐤐 vb,
         char *ref_data = alloc_ref (vb, STRa(ref_space), seq_len * 2);
 
         // note: if reverse, ref and ref2 are revcomped in-place independently
-        ref_get_textual_seq (gpos, ref_data, seq_len, !is_forward);
+        ref_get_textual_seq (vb, gpos, ref_data, seq_len, !is_forward);
         *ref = ref_data;
 
-        ref_get_textual_seq (gpos2, &ref_data[seq_len], seq_len, !is_forward);
+        ref_get_textual_seq (vb, gpos2, &ref_data[seq_len], seq_len, !is_forward);
         *ref2 = ref_data + seq_len;
     }
 }
@@ -746,7 +727,7 @@ MappingType aligner_seg_seq (VBlock𐤐 vb, STR𐤐(seq),
     PosType64 gpos2 = NO_GPOS; 
     PosType64 gpos =  
         (seq_len > MAX_SHORT_READ_LEN) ? NO_GPOS
-      : refhash_is_flat                ? aligner_best_match_FLAT    (VB, STRa(seq), gpos_R1, genome, genome_nbases, &is_forward, &is_perfect, &gpos2, &can_match_as_nonspliced) 
+      : refhash_is_flat                ? aligner_best_match    (VB, STRa(seq), gpos_R1, genome, genome_nbases, &is_forward, &is_perfect, &gpos2, &can_match_as_nonspliced) 
       :                                  aligner_best_match_LAYERED (VB, STRa(seq), gpos_R1, genome, genome_nbases, &is_forward, &is_perfect);
     uint32_t junction = 0;
 
@@ -820,13 +801,13 @@ void aligner_recon_get_gpos_and_fwd (VBlock𐤐 vb, bool am_i_R2,
 
     // spliced alignment: (this schema is copied also in aligner_seg_gpos_and_fwd)
     //
-    // **FORWARD**    ------- SEG -------       ---------- PIZ ----------
+    // **FORWARD**    ————————SEG————————       ———————————PIZ———————————
     // seq:           0·····j···········L       0·····j    0···········L2   (g=gpos j=junction L=(seq_len-1) L2=L-j)
-    // 1st segment ⟶ g···············g+L       G1         G2               SEG: GPOS ⇐ g ; JUNCTION ⇐ j ; GAP ⇐ g2-g1
+    // 1st segment ⟶ g···············g+L       G1·····    G2············   SEG: GPOS ⇐ g ; JUNCTION ⇐ j ; GAP ⇐ g2-g1
     //                ‾‾‾‾‾‾_____________                                   PIZ: G1 ⇐ GPOS ; L2 ⇐ seq_len-JUNCTION   
     // 2st segment ⟶ g2·············g2+L                                        G2 ⇐ G1+GAP+JUNCTION
     //
-    // **REVERSE**    ------- SEG -------       ---------- PIZ ----------   SEG: GPOS ⇐ g+(seq_len-j)  
+    // **REVERSE**    ————————SEG————————       ———————————PIZ———————————   SEG: GPOS ⇐ g+(seq_len-j)  
     // seq:           0·····j···········L       0·····j    0···········L2        JUNCTION ⇐ j 
     // 1st segment ⟵ g+L···············g       ·····G1    ············G2        GAP ⇐ g2-g1
     //                ‾‾‾‾‾‾_____________                                   PIZ: G1 ⇐ GPOS ; L2 ⇐ seq_len-JUNCTION
@@ -835,7 +816,6 @@ void aligner_recon_get_gpos_and_fwd (VBlock𐤐 vb, bool am_i_R2,
     // second segment in a spliced alignment: gpos is delta vs first segment's gpos, and is_forward is the same
     if (spliced_2nd_segment) {
         *is_forward  = strand_ctx->last_value.i;   // from first segment (this function)
-
         int64_t G1   = gpos_ctx->last_value.i;     // from first segment (this function)
         int64_t jnct = junction_ctx->last_value.i; // from fastq_recon_aligned_SEQ 
         int64_t gap  = reconstruct_from_local_int (VB, gpos_gap_ctx, 0, false); 
@@ -908,7 +888,7 @@ void aligner_reconstruct_seq (VBlockP vb,
         }
 
         // reconstruct reference sequence
-        ref_get_textual_seq (gpos, BAFTtxt, seq_len, !is_forward);
+        ref_get_textual_seq (vb, gpos, BAFTtxt, seq_len, !is_forward);
 
         // non-perfect alignment: update the mismatches
         if (!is_perfect_alignment) {

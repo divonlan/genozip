@@ -37,8 +37,8 @@ typedef struct VBlockGFF {
 unsigned gff_vb_size (DataType dt) { return sizeof (VBlockGFF);  }
 
 sSTRl(copy_gene_name_snip,32);
-sSTRl(dbx_container_snip,100);
-sSTRl(transcript_name_container_snip,100);
+sSTRl(dbx_container_snip, con_snip_sizeof(2));
+sSTRl(transcript_name_container_snip, con_snip_sizeof(2));
 sSTRl(copy_END_snip, 16);
 sSTRl(START_minus_1_snip, 32);
 sSTRl(Stop_minus_Start_snip, 32);
@@ -47,22 +47,22 @@ void gff_zip_initialize (void)
 {
     DO_ONCE {
         // transcript_name staff
-        SmallContainer con = { 
+        static const Container(2) transcript_name_con = { 
             .repeats      = 1,
             .nitems_lo    = 2,
             .items        = { { .dict_id = { _ATTR_transcript_name_gene }, .separator = {'-'} },  // 0
                               { .dict_id = { _ATTR_transcript_name_num  }                     } } // 1
         };
-        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (transcript_name_container_snip));
+        container_prepare_snip ((ContainerP)&transcript_name_con, 0, 0, qSTRa (transcript_name_container_snip));
         seg_prepare_snip_other (SNIP_COPY, _ATTR_gene_name, false, 0, copy_gene_name_snip);
 
-        con = (SmallContainer){
+        static const Container(2) dbx_con = {
             .repeats      = 1,
             .nitems_lo    = 2,
             .items        = { { .dict_id = { _ATTR_DBXdb }, .separator = {':'} },  // 0
                               { .dict_id = { _ATTR_DBXid }                     } } // 1
         };
-        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (dbx_container_snip));
+        container_prepare_snip ((ContainerP)&dbx_con, 0, 0, qSTRa (dbx_container_snip));
 
         seg_prepare_snip_other (SNIP_COPY, _GFF_END, false, 0, copy_END_snip);
 
@@ -124,7 +124,7 @@ int32_t gff_unconsumed (VBlockP vb, uint32_t first_i)
                     // note: we don't run segconf on an embedded FASTA - we set the values here instead
                     segconf.has_embedded_fasta = true;
                     segconf.fasta_has_contigs  = false; // GFF3-embedded FASTA doesn't have contigs, because did=0 is reserved for GFF's SEQID
-                    segconf.seq_type           = SQT_NUKE;
+                    segconf.fasta_seq_type     = SQT_NUKE;
                 }
 
                 break; // terminate VB (and component) at this newline - next line is FASTA
@@ -158,15 +158,15 @@ void gff_seg_initialize (VBlockP vb)
     ctx_consolidate_stats (vb, ATTR_transcript_name, ATTR_transcript_name_gene, ATTR_transcript_name_num, DID_EOL);
     ctx_consolidate_stats (vb, ATTR_Target, ATTR_Target_ID, ATTR_Target_POS, ATTR_Target_STRAND, DID_EOL);
 
-    if (segconf.has[ATTR_Dbxref])
+    if (segconf_has(ATTR_Dbxref))
         ctx_consolidate_stats (vb, ATTR_Dbxref, ATTR_DBXid, ATTR_DBXdb, DID_EOL);
-    else if (segconf.has[ATTR_db_xref])
+    else if (segconf_has(ATTR_db_xref))
         ctx_consolidate_stats (vb, ATTR_db_xref, ATTR_DBXid, ATTR_DBXdb, DID_EOL);
 }
 
 void gff_segconf_finalize (VBlockP vb)
 {
-    if (segconf.has[ATTR_score] && segconf.has[ATTR_cscore] && segconf.has[ATTR_sscore])
+    if (segconf_has(ATTR_score) && segconf_has(ATTR_cscore) && segconf_has(ATTR_sscore))
         stats_add_one_program (_S("Prodigal"));
 }
 
@@ -175,7 +175,7 @@ void gff_seg_finalize (VBlockP vb)
     CTX(ENSTid)->st_did_i = DID_NONE; // cancel consolidatation as it goes into multiple attributes
 
     // top level snip
-    SmallContainer top_level = { 
+    Container(11) top_level = { 
         .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .filter_items = true,
@@ -193,7 +193,7 @@ void gff_seg_finalize (VBlockP vb)
                           { .dict_id = { _GFF_EOL     },                   } }
     };
 
-    container_seg (vb, CTX(GFF_TOPLEVEL), (Container *)&top_level, 0, 0, 0);
+    container_seg (vb, CTX(GFF_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
 }
 
 // initialization of the line
@@ -233,7 +233,7 @@ bool gff_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
 static bool gff_seg_dbxref_one (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat)
 {
     // if this file has no "Parent", we're better off segging as a simple ID
-    if (!segconf.has[ATTR_Parent] || segconf_running)
+    if (!segconf_has(ATTR_Parent) || segconf_running)
         seg_id_field (vb, ctx, STRa(value), false, value_len);  
 
     else {
@@ -280,9 +280,9 @@ static bool gff_seg_target (VBlockGFFP vb, ContextP ctx, STRp(value))
     str_split (value, value_len, 4, ' ', item, false);
     if (n_items != 3 && n_items != 4) return false; // not standard Target format
 
-    SmallContainer con = {
+    Container(4) con = {
         .repeats   = 1,
-        .nitems_lo = n_items,
+        .nitems_lo = n_items, // 3 or 4
         .drop_final_item_sep = true,
         .items     = { { .dict_id = { _ATTR_Target_ID     }, .separator = " " },
                        { .dict_id = { _ATTR_Target_POS    }, .separator = " " }, // START
@@ -394,7 +394,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
     ContextP ctx = ctx_get_ctx_tag (vb, dict_id, tag, tag_len);
     
     if (segconf_running)
-        segconf.has[ctx_get_ctx (VB, dict_id)->did_i]++;
+        segconf_set_has (ctx_get_ctx (VB, dict_id)->did_i);
 
     switch (dict_id.num) {
 
@@ -424,8 +424,9 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
     // subfields that are arrays of structs, for example:
     // "non_coding_transcript_variant 0 ncRNA ENST00000431238,intron_variant 0 primary_transcript ENST00000431238"
     case _ATTR_Variant_effect: {
-        static const MediumContainer Variant_effect = {
+        static const Container(4) Variant_effect = {
             .nitems_lo   = 4, 
+            .repeats     = 1, // most common number of repeats (faster seg if correct)
             .drop_final_repsep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="V0arEff" }, .separator = {' '} },
@@ -433,12 +434,13 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="V2arEff" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        CALL (seg_array_of_struct (VB, CTX(ATTR_Variant_effect), Variant_effect, STRa(value), NULL, NULL, value_len));
+        CALL (seg_array_of_struct (VB, CTX(ATTR_Variant_effect), (ContainerP)&Variant_effect, STRa(value), NULL, NULL, value_len));
     }
 
     case _ATTR_sift_prediction: {
-        static const MediumContainer sift_prediction = {
+        static const Container(4) sift_prediction = {
             .nitems_lo   = 4, 
+            .repeats     = 1, // most common number of repeats (faster seg if correct)
             .drop_final_repsep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="S0iftPr" }, .separator = {' '} },
@@ -446,12 +448,13 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="S2iftPr" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid  },                    } }
         };
-        CALL (seg_array_of_struct (VB, CTX(ATTR_sift_prediction), sift_prediction, STRa(value), NULL, NULL, value_len));
+        CALL (seg_array_of_struct (VB, CTX(ATTR_sift_prediction), (ContainerP)&sift_prediction, STRa(value), NULL, NULL, value_len));
     }
 
     case _ATTR_polyphen_prediction: {
-        static const MediumContainer polyphen_prediction = {
+        static const Container(4) polyphen_prediction = {
             .nitems_lo   = 4, 
+            .repeats     = 1, // most common number of repeats (faster seg if correct)
             .drop_final_repsep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="P0olyPhP" }, .separator = {' '} },
@@ -459,19 +462,20 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
                              { .dict_id={.id="P2olyPhP" }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        CALL (seg_array_of_struct (VB, CTX(ATTR_polyphen_prediction), polyphen_prediction, STRa(value), NULL, NULL, value_len));
+        CALL (seg_array_of_struct (VB, CTX(ATTR_polyphen_prediction), (ContainerP)&polyphen_prediction, STRa(value), NULL, NULL, value_len));
     }
 
     case _ATTR_variant_peptide: {
-        static const MediumContainer variant_peptide = {
+        static const Container(3) variant_peptide = {
             .nitems_lo   = 3, 
+            .repeats     = 1, // most common number of repeats (faster seg if correct)
             .drop_final_repsep = true,
             .repsep      = {','},
             .items       = { { .dict_id={.id="v0arPep"  }, .separator = {' '} }, // small v to differentiate from Variant_effect, so that dict_id to did_i mapper can map both
                              { .dict_id={.id="v1arPep"  }, .separator = {' '} },
                              { .dict_id={.num=_ENSTid   },                    } }
         };
-        CALL (seg_array_of_struct (VB, CTX(ATTR_variant_peptide), variant_peptide, STRa(value), NULL, NULL, value_len));
+        CALL (seg_array_of_struct (VB, CTX(ATTR_variant_peptide), (ContainerP)&variant_peptide, STRa(value), NULL, NULL, value_len));
     }
 
     // we store these 3 in one dictionary, as they are correlated and will compress better together
@@ -563,15 +567,15 @@ static void gff_seg_gff2_attrs_field (VBlockGFFP vb, STRp(attribute))
     // replace back
     str_replace_letter ((char*)STRa(attribute), 1, ';');
 
-    Container con = { .repeats = 1 };
+    InitializedContainer(con, n_attrs);
 
-    if (!attr_lens[n_attrs-1]) // last item is ends with a ; - creating a fake final item
+    if (!attr_lens[n_attrs-1]) { // last item is ends with a ; - creating a fake final item
         n_attrs--;
+        con_set_nitems (con, n_attrs);
+    }
     else
         con.drop_final_item_sep = true; // last item doesn't not end with a semicolon
 
-    con_set_nitems (con, n_attrs);
-    
     // The prefix of the container includes the following stuff:
     // 1. tag
     // 2. (sometimes) leading space - space may appear before tag (but not in the first item)
@@ -636,7 +640,7 @@ static void gff_seg_gff2_attrs_field (VBlockGFFP vb, STRp(attribute))
         prefixes[prefixes_len++] = CON_PX_SEP;
     }
 
-    container_seg (vb, CTX(GFF_ATTRS), &con, prefixes, prefixes_len, attribute_len - total_values_len + 1/*\n*/ + extra_space); 
+    container_seg (vb, CTX(GFF_ATTRS), (ContainerP)&con, prefixes, prefixes_len, attribute_len - total_values_len + 1/*\n*/ + extra_space); 
 }
 
 static void gff_seg_gff3_attrs_field (VBlockGFFP vb, STRp(field))
@@ -654,10 +658,12 @@ static void gff_seg_gff3_attrs_field (VBlockGFFP vb, STRp(field))
     str_split (field, field_len, MAX_DICTS, ';', attr, false);
     ASSSEG (n_attrs, "Invalid attributes field: %.*s", STRf(field));
 
-    Container con = { .repeats = 1 };
+    InitializedContainer (con, n_attrs);
 
-    if (!attr_lens[n_attrs-1]) // last item is ends with a ; - creating a fake final item
+    if (!attr_lens[n_attrs-1]) { // last item is ends with a ; - creating a fake final item
         n_attrs--;
+        con_set_nitems (con, n_attrs);
+    }
     else
         con.drop_final_item_sep = true; // last item doesn't not end with a semicolon
 
@@ -668,10 +674,7 @@ static void gff_seg_gff3_attrs_field (VBlockGFFP vb, STRp(field))
             break;
         }
 
-    con_set_nitems (con, n_attrs);
-
     for (unsigned i=0; i < n_attrs; i++) {
-
         str_split (attrs[i], attr_lens[i], 2, '=', tag_val, false);
 
         ASSSEG (n_tag_vals && tag_val_lens[0] > 0 && (n_tag_vals == 1 || tag_val_lens[1] > 0), 
@@ -688,7 +691,7 @@ static void gff_seg_gff3_attrs_field (VBlockGFFP vb, STRp(field))
         con.items[i].separator[0] = ';'; 
     }
 
-    container_seg (vb, CTX(GFF_ATTRS), &con, prefixes, prefixes_len, 
+    container_seg (vb, CTX(GFF_ATTRS), (ContainerP)&con, prefixes, prefixes_len, 
                    prefixes_len - 1 - con.drop_final_item_sep); // tags inc. = and (; or \n) separator 
 }
 

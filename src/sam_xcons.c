@@ -12,7 +12,7 @@
 #include "codec.h"
 
 // calculate the xcons histogram just in case we need it (we don't yet know if this file is really xcons, just that it has XC:i)
-void sam_segconf_xcons_one_line (VBlockSAMP vb, ZipDataLineSAMP dl)
+void sam_segconf_xcons_one_line (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
 {
     // xcons: to find standard length, we build a histogram of all lines with XC:i but without XO:i. we do this anyway, bc we don't yet know if it is indeed xcons.
     if (ctx_encountered_in_line (VB, OPTION_XC_i) && !ctx_encountered_in_line (VB, OPTION_XO_i) && 
@@ -24,7 +24,7 @@ void sam_segconf_xcons_one_line (VBlockSAMP vb, ZipDataLineSAMP dl)
 void sam_segconf_finalize_xcons (void)
 {
     if (segconf_qf_id(QNAME1) == QF_Sint && segconf_qf_id(QNAME2) == QF_XCON && 
-        segconf.has[OPTION_XX_i] && segconf.has[OPTION_YY_i] && segconf.has[OPTION_XC_i] && segconf.has[OPTION_XO_i]) {
+        segconf_has(OPTION_XX_i) && segconf_has(OPTION_YY_i) && segconf_has(OPTION_XC_i) && segconf_has(OPTION_XO_i)) {
         segconf.sam_has_xcons = true;
         segconf.sam_has_BWA_XC_i = false;
     
@@ -55,7 +55,7 @@ static int64_t XO_prediction (uint32_t seq_len)
                                                   : (2 * segconf.xcons_std_seq_len - seq_len);
 }
 
-void sam_seg_xcons_XO (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xo, unsigned add_bytes)
+void sam_seg_xcons_XO (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xo, unsigned add_bytes)
 {
     decl_ctx (OPTION_XO_i);
 
@@ -113,7 +113,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_XX_0)
 }
 
 // XC is predicted to be XX + YY + XY
-void sam_seg_xcons_XC (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xc, unsigned add_bytes)
+void sam_seg_xcons_XC (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xc, unsigned add_bytes)
 {
     int64_t prediction = 0;
     if (ctx_has_value_in_line_(VB, CTX(OPTION_XX_i))) prediction += CTX(OPTION_XX_i)->last_value.i;
@@ -253,7 +253,7 @@ void sam_xcons_split_qual_line (VBlockP vb_, BufferP ql_buf)
     int n_segments = 0;
 
     for_buf2 (DomqLine, ql, line_i, *ql_buf) {
-        ZipDataLineSAMP dl = DATA_LINE (line_i);
+        ZipDataLineSAM𐤐 dl = DATA_LINE (line_i);
         DomqLine *s0=&segments[line_i*3], *s1=s0+1, *s2=s1+1;
 
         if (!ql->qual_len) continue;

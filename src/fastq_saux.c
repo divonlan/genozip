@@ -49,14 +49,8 @@ bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux))
         
         if (!dict_id.num) 
             return false; // invalid format - not SAUX
-        
-        segconf.has[ctx_get_ctx (VB, dict_id)->did_i] = true;
-    }
 
-    // note: same logic as in sam_seg_finalize_segconf
-    if (segconf.has[OPTION_ZA_Z] && segconf.has[OPTION_ZB_Z] && segconf.has[OPTION_RX_Z] && segconf.has[OPTION_QX_Z] && segconf.has[OPTION_BC_Z]) {
-        segconf.has_agent_trimmer = true;
-        stats_add_one_program (_S("AGeNT_Trimmer"));
+        segconf_set_has (ctx_get_ctx (VB, dict_id)->did_i);
     }
 
     segconf.has_saux = true;
@@ -67,6 +61,8 @@ bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux))
 
 static void fastq_seg_one_saux (VBlockFASTQP vb, DictId dict_id, unsigned value_offset, STRp(field))
 {
+    START_TIMER;
+
     char sam_type = field[3];
     char array_subtype = (field[3] == 'B') ? field[5] : 0;
     
@@ -87,7 +83,7 @@ static void fastq_seg_one_saux (VBlockFASTQP vb, DictId dict_id, unsigned value_
     #define COND(condition,  seg) if (condition) { seg; break; } else goto fallback
 
     if (segconf_running)
-        segconf.has[ctx_get_ctx (VB, dict_id)->did_i]++;
+        segconf_set_has (ctx_get_ctx (VB, dict_id)->did_i);
 
     switch (dict_id.num) {
         case _OPTION_RX_Z : COND (segconf.has_agent_trimmer, agilent_seg_RX (VB, ctx, STRa(value), add_bytes)); // AGeNT Trimmer eg RX:Z:GGC-CCA
@@ -102,6 +98,8 @@ static void fastq_seg_one_saux (VBlockFASTQP vb, DictId dict_id, unsigned value_
 
     ctx_set_encountered (VB, ctx);
     set_last_txtC (ctx, value, value_len);
+
+    COPY_TIMER_SEG_FIELD (ctx->did_i);
 }
 
 void fastq_seg_saux (VBlockFASTQP vb, STRp(saux))
@@ -117,8 +115,8 @@ void fastq_seg_saux (VBlockFASTQP vb, STRp(saux))
     prefixes[0] = CON_PX_SEP;
     prefixes[1] = CON_PX_SEP;
 
-    Container con = { .repeats = 1, .drop_final_item_sep = true };
-    con_set_nitems (con, n_fields);
+    InitializedContainer(con, n_fields);
+    con.drop_final_item_sep = true;
 
     for (int f=0; f < n_fields; f++) {
         con.items[f] = (ContainerItem){ .dict_id   = fastq_get_SAM_AUX_dict_id (STRi(field, f)),
@@ -135,7 +133,7 @@ void fastq_seg_saux (VBlockFASTQP vb, STRp(saux))
         fastq_seg_one_saux (vb, con.items[f].dict_id, value_offset, STRi(field,f));
     }
 
-    container_seg (VB, CTX(FASTQ_AUX), &con, prefixes, prefixes_len, n_fields * 5); // account for tags eg 'ML:B:'
+    container_seg (VB, CTX(FASTQ_AUX), (ContainerP)&con, prefixes, prefixes_len, n_fields * 5); // account for tags eg 'ML:B:'
 
     COPY_TIMER (fastq_seg_saux);
 }

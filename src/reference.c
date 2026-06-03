@@ -6,8 +6,10 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#ifndef _WIN32
+#include <sys/mman.h>
+#endif
 #include <errno.h>
-#include <stdalign.h>
 #include "ref_private.h"
 #include "dispatcher.h"
 #include "zfile.h"
@@ -38,6 +40,39 @@ const PosType64 *p_genome_nbases = &gref.genome_nbases; // globally accessible f
 
 #define ref_is_range_used(r) ((r)->ref.nbits && ((r)->is_set.nbits || flag.make_reference))
 
+// table to convert ASCII to ACGT encoding. A,C,G,T (lower and upper case) are encoded as 0,1,2,3 respectively, 
+// and everything else (including N) is encoded as 0
+alignas(64) const uint8_t _acgt_encode[256] = {
+    ['A']=0, ['C']=1, ['G']=2, ['T']=3,  // all others are 0
+    ['a']=0, ['c']=1, ['g']=2, ['t']=3, 
+                                
+    // IUPAC codes are mapped to one of their bases: http://www.bioinformatics.org/sms/iupac.html
+    // the base to which a IUPAC is mapped, is the lowest alphanetically of its participating bases, see VCF specification §1.6.1-REF
+    ['U']=3, ['R']=0, ['Y']=1, ['S']=1,
+    ['W']=0, ['K']=2, ['M']=0, ['B']=1,
+    ['D']=0, ['H']=0, ['V']=0, ['N']=0,
+
+    ['u']=3, ['r']=0, ['y']=1, ['s']=1,
+    ['w']=0, ['k']=2, ['m']=0, ['b']=1,
+    ['d']=0, ['h']=0, ['v']=0, ['n']=0  
+}; 
+
+// same as actg_encode, but produces the complement base. 
+// Note for the IUPACs: eg B=C,G,T (the lowest of them)=> C=1 
+//                   comp(B)=G,C,A (the lowest of them)=> A=0
+alignas(64) const uint8_t _acgt_encode_comp[256] = { 
+    ['A']=3, ['C']=2, ['G']=1, ['T']=0,  // all others are 0
+    ['a']=3, ['c']=2, ['g']=1, ['t']=0, 
+    
+    ['U']=0, ['R']=1, ['Y']=0, ['S']=1,
+    ['W']=0, ['K']=0, ['M']=2, ['B']=0,
+    ['D']=0, ['H']=0, ['V']=1, ['N']=0,
+
+    ['u']=0, ['r']=1, ['y']=0, ['s']=1,
+    ['w']=0, ['k']=0, ['m']=2, ['b']=0,
+    ['d']=0, ['h']=0, ['v']=1, ['n']=0  
+}; 
+
 // get / set functions 
 rom ref_get_filename (void)               { return gref.filename;                    }
 rom ref_get_fasta_name (void)             { return gref.ref_fasta_name;              }
@@ -60,14 +95,37 @@ void ref_get_genome (const Bits **genome, PosType64 *genome_nbases)
     if (genome_nbases) *genome_nbases = gref.genome_nbases;
 }
 
+void ref_set_access_mode (ReferenceAccessMode genome_mode, ReferenceAccessMode refhash_mode)
+{
+#ifndef _WIN32
+    long page_size = sysconf (_SC_PAGESIZE);
+    uintptr_t page_mask = ~(page_size - 1);
+    
+    void *genome_start_page  = (void*)((uintptr_t)gref.genome_buf.data & page_mask);
+    void *refhash_start_page = (void*)((uintptr_t)refhash_buf.data & page_mask);
+
+    // genome access 
+    ASSERTW (madvise (genome_start_page, gref.genome_buf.size, genome_mode == REF_ACCESS_RANDOM ? MADV_RANDOM : MADV_SEQUENTIAL) == 0,
+             "madvise of genome (%p, %"PRIu64")s failed: %s", genome_start_page, gref.genome_buf.size, strerror (errno));
+
+    // refhash access        
+    if (refhash_exists()) 
+        ASSERTW (madvise (refhash_start_page, refhash_buf.size, refhash_mode == REF_ACCESS_RANDOM ? MADV_RANDOM : MADV_SEQUENTIAL) == 0,
+                 "madvise of refhash (%p, %"PRIu64") failed: %s", refhash_start_page, refhash_buf.size, strerror (errno)); 
+#else // Windows
+#endif
+}
+
 // caller allocates: requirement: 3 bytes before and 3 bytes after ref must be writtable
 // returns ref;
 // if revcomp: seq generated is still between [gpos, (gpos + seq_len - 1)], just revcomped 
-rom ref_get_textual_seq (PosType64 gpos, STRc(ref), bool revcomp)
+rom ref_get_textual_seq (VBlock𐤐 vb, PosType64 gpos, STRc𐤐(ref), bool revcomp)
 {
+    START_TIMER;
+
     alignas(64) static union { // fits into 16 L1 cache lines
         char b4[256][4];       // 256 possibilities of 4 bases in a 2bit-representation.
-        uint32_t b4_int[256];  // integer access to b4. also forces s to be 4B-aligned.
+        uint32_t b4_int[256];  // integer access to b4. 
     } s = { .b4 = { 
         // last base A
         "AAAA", "CAAA", "GAAA", "TAAA",   "ACAA", "CCAA", "GCAA", "TCAA", // last 2 bases: AA
@@ -154,9 +212,9 @@ rom ref_get_textual_seq (PosType64 gpos, STRc(ref), bool revcomp)
     ASSERTINRANGE (gpos, 0, gref.genome->nbits / 2);
 
     // save 3 flanking bytes on each side that might be temporarily over-written
-    char save_before[3] = { ref[-3], ref[-2], ref[-1] };
-    char save_after [3] = { ref[ref_len], ref[ref_len+1], ref[ref_len+2] };
-
+    uint32_t save_before = *(unaligned_uint32_t *)&ref[-4];
+    uint32_t save_after  = *(unaligned_uint32_t *)&ref[ref_len];
+    
     // calculate new_gpos and new_ref_len to be the minimal sequence that is divisible by 4
     // possibly expanding the request ref to the left and right    
     PosType64 after = ROUNDUP4 (gpos + ref_len);
@@ -169,19 +227,24 @@ rom ref_get_textual_seq (PosType64 gpos, STRc(ref), bool revcomp)
     uint32_t new_ref_len = ref_len + left_extra_bases + right_extra_bases; 
 
     // generate the expanded sequence - writing 4 bases at a time
-    bytes b = &((bytes)gref.genome->words)[new_gpos / 4];
-    if (!revcomp) 
+    if (!revcomp) {
+        bytes b = &((bytes)gref.genome->words)[new_gpos / 4];
+ 
         for (uint32_t i=0; i < new_ref_len; i += 4)
-            *(unaligned_uint32_t *)&new_ref[i] = s.b4_int[b[i/4]]; 
+            *(unaligned_uint32_t *)&new_ref[i] = s.b4_int[*b++]; 
+    }
+    else {
+        bytes b = &((bytes)gref.genome->words)[new_gpos / 4] + new_ref_len/4 - 1;
 
-    else 
-        for (uint32_t i=0; i < new_ref_len; i += 4)
-            *(unaligned_uint32_t *)&new_ref[new_ref_len - i - 4] = s_rev.b4_int[b[i/4]]; 
+        for (int32_t i=0; i < new_ref_len; i += 4) // writing memory forward is faster
+            *(unaligned_uint32_t *)&new_ref[i] = s_rev.b4_int[*b--]; 
+    }
 
     // restore possibly over-written flanking data
-    memcpy (&ref[-3], save_before, 3);
-    memcpy (&ref[ref_len], save_after, 3);
+    *(unaligned_uint32_t *)&ref[-4] = save_before;
+    *(unaligned_uint32_t *)&ref[ref_len] = save_after;
     
+    COPY_TIMER (ref_get_textual_seq);
     return ref;
 }
 
@@ -727,7 +790,7 @@ bool ref_load_stored_reference (void)
         // verify that digest of genome is memory is as calculated by make-reference (since v15). If not, its a bug.
         if (!digest_is_equal (digest, gref.genome_digest)) {
             if (!ref_cache_is_cached()) 
-                ABORT ("Bad reference file: In-memory digest of genome is %s, different than calculated by make-reference: %s",
+                ABORT ("Bad reference file: In-memory digest of genome is %s, different than calculated by make-reference: %s. "_TIP"Clear the reference files in-memory cache with: genozip --cache",
                        digest_display_(digest, gref.genome_digest_alg).s, digest_display_(gref.genome_digest, gref.genome_digest_alg).s);
 
             // case: bad existing cache. this should never happen as this condition ^ should prevent cache from being
@@ -858,7 +921,7 @@ RangeP ref_seg_get_range (VBlockP vb, WordIndex chrom, STRp(chrom_name),
     if (pos < range->first_pos || (pos + ref_consumed - 1) > range->last_pos) {
         if (pos > range->last_pos) // warn only if entire SEQ is outside of range - i.e. don't warn for a read at the end of a circular contig, but still return NULL
             // TO DO: don't print warning if @SQ field of contig has TP:circular 
-            WARN_ONCE ("FYI: %s: contig=\"%.*s\"(%u) pos=%"PRIu64" ref_consumed=%u exceeds contig.last_pos=%"PRIu64". This might be an indication that the wrong reference file is being used (this message will appear only once)",
+            WARN_ONCE (_FYI "%s: contig=\"%.*s\"(%u) pos=%"PRIu64" ref_consumed=%u exceeds contig.last_pos=%"PRIu64". This might be an indication that the wrong reference file is being used (this message will appear only once)",
                        LN_NAME, STRf(range->chrom_name), ref_index, pos, ref_consumed, range->last_pos);
         return NULL;
     }
@@ -1190,10 +1253,13 @@ static void ref_compress_write (VBlockP vb)
 // ZIP: compress and write reference sections. either compressed by us, or copied directly from the reference file.
 void ref_compress_ref (void)
 {
-    if (!buf_is_alloc (&gref.ranges)) return;
-
     START_TIMER;
 
+    if (!buf_is_alloc (&gref.ranges)) return;
+
+    if (IS_REF_LOADED_ZIP)
+        ref_set_access_mode (REF_ACCESS_SEQUENTIAL, REF_ACCESS_SEQUENTIAL);
+     
     // calculate ref2chrom_map, the inverse of chrom2ref_map
     if (IS_REF_CHROM2REF)
         chrom_calculate_ref2chrom (ref_num_contigs());
@@ -1457,7 +1523,7 @@ void ref_load_external_reference (ContextP chrom_ctx)
     ASSERTISNULL (txt_file);
     z_file = file_open_z_read (gref.filename);    
     
-    TEMP_VALUE (command, PIZ);
+    TEMP_FLAG (command, PIZ);
 
     // the reference file has no components or VBs - it consists of only a global area including reference sections
     ASSERT0 (piz_read_global_area() == DT_REF, "Failed to read reference file"); // if error, detailed error was already outputted
@@ -1477,7 +1543,7 @@ void ref_load_external_reference (ContextP chrom_ctx)
     bool save_no_tip   = flag.no_tip;
 
     // recover globals
-    RESTORE_VALUE (command);
+    RESTORE_FLAG (command);
     RESTORE_FLAGS;
 
     flag.no_cache = save_no_cache; // in case we could not cache - if ZIP with --test - this will be passed to PIZ

@@ -11,9 +11,9 @@
 #include "sam_private.h"
 #include "random_access.h"
 
-PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAMP dl, WordIndex prev_line_chrom, unsigned add_bytes)
+PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, WordIndex prev_line_chrom, unsigned add_bytes)
 {
-    ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+    ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
     PosType32 pos = dl->POS;
     PosType32 prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
 
@@ -73,16 +73,16 @@ static inline int sam_PNEXT_get_mux_channel (VBlockSAMP vb, bool rnext_is_equal)
     return sam_has_mate?0 : sam_has_prim?1 : rnext_is_equal?2 : 3;
 }
 
-void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes)
+void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes)
 {
     if (pnext_str) 
         ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext),
                 "PNEXT=\"%.*s\" ∉ [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
 
     if (pnext && segconf_running) 
-        segconf.has[SAM_PNEXT]++; // "has" means we found evidence of non-zero PNEXT
+        segconf_set_has (SAM_PNEXT);
 
-    if (segconf.has[SAM_PNEXT]) {
+    if (segconf_has(SAM_PNEXT)) {
         int channel_i = sam_PNEXT_get_mux_channel (vb, vb->RNEXT_is_equal);
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, SAM_PNEXT, (MultiplexerP)&vb->mux_PNEXT, channel_i);
 

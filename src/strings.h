@@ -20,14 +20,12 @@
 #define IS_SLETTER(c)      IN_RANGX((c),'a','z')
 #define IS_LETTER(c)       (IS_CLETTER(c) || IS_SLETTER(c))
 #define IS_ALPHANUMERIC(c) (IS_LETTER(c)  || IS_DIGIT(c))
-#define IS_ACGT(c)         ((c)=='A' || (c)=='T' || (c)=='C' || (c)=='G') // AT often have slightly higher frequency than CG, so testing first
-#define IS_ACGTN(c)        (IS_ACGT(c) || (c)=='N')
 #define IS_NON_WS(c)       IN_RANGX((c), 33, 126)
-#define IS_QUAL_SCORE(c)   IN_RANGX((c), 33, 126)
-extern const bool is_printable[256];
-#define IS_PRINTABLE(c)    is_printable[(uint8_t)(c)]
-extern const bool is_fastq_seq[256];
-#define IS_FASTQ_SEQ(c)    is_fastq_seq[(uint8_t)(c)]
+#define IS_QUAL_SCORE(c)   IN_RANGX((c), 33, 126) // this is faster than a lookup table, because it is used for testing QUAL data, therefore almost always true, so the CPU branch predictor will almost always correct
+#define IS_ACGT(c)         (({ extern const bool is_ACGT[256];      is_ACGT[(uint8_t)(c)];      })) // much faster than conditionals (branches), esp in a loop of e.g. 100+ bases
+#define IS_ACGTN(c)        (({ extern const bool is_ACGTN[256];     is_ACGTN[(uint8_t)(c)];     }))
+#define IS_FASTQ_SEQ(c)    (({ extern const bool is_fastq_seq[256]; is_fastq_seq[(uint8_t)(c)]; }))
+#define IS_PRINTABLE(c)    (({ extern const bool is_printable[256]; is_printable[(uint8_t)(c)]; }))
 
 #define IS_VALID_URL_CHAR(c) (IS_ALPHANUMERIC(c) || c=='-' || c=='_' || c=='.' || c=='~') // characters valid in a URL
 #define FLIP_CASE(c)  (IS_CLETTER(c) ? ((c)+32) : (IS_SLETTER(c) ? ((c)-32) : (c))) // flips lower <--> upper case
@@ -53,14 +51,14 @@ extern const bool is_fastq_seq[256];
 extern StrText char_to_printable (char c);
 extern StrText char_to_printable_json (char c);
 
-extern uint32_t str_to_printable (STRp(in), char *out, int out_len);
+extern uint32_t str_to_printable (STR𐤐(in), char *restrict out, int out_len);
 static inline StrText4K str_to_printable_(STRp(in)) { // for bound-length short texts
     StrText4K s;
     str_to_printable (STRa(in), s.s, sizeof (s.s));
     return s;
 }
 
-extern uint32_t str_to_printable_json (STRp(in), char *s, int s_len);
+extern uint32_t str_to_printable_json (STR𐤐(in), char *restrict s, int s_len);
 static inline StrText4K str_to_printable_json_(STRp(in)) { // for bound-length short texts
     StrText4K s;
     str_to_printable_json (STRa(in), s.s, sizeof (s.s));
@@ -122,7 +120,7 @@ static bool inline str_issame_revcomp_(STRp(str1), STRp(str2)) // true if the sa
         if (str1[i] != COMPLEM[(uint8_t)str2[str1_len-i-1]]) return false;
     return true;
 }
-#define str_issame_revcomp(str1,str2) str_issame_revcomp_ (str1, str1##_len, str2, str2##_len)
+#define str_issame_revcomp(str1,str2) str_issame_revcomp_(str1, str1##_len, str2, str2##_len)
 
 extern bool str_case_compare (rom str1, rom str2, bool *identical); // similar to stricmp that doesn't exist on all platforms
 
@@ -134,11 +132,11 @@ static inline char *str_tolower_(rom in, char *out, uint32_t len)
 
 static inline char *str_toupper_(rom in, char *out, uint32_t len)
 {
-    for (uint32_t i=0; i < len; i++) out[i] = UPPER_CASE (in[i]);
+    for (uint32_t i=0; i < len; i++) out[i] = UPPER_CASE(in[i]);
     return out;
 }
 
-static inline char *str_reverse (char *dst, rom src, uint32_t len)
+static inline char *str_reverse (char *restrict dst, rom𐤐 src, uint32_t len) // dst and src must be different!
 {
     for (uint32_t i=0; i < len; i++) dst[len-1-i] = src[i]; 
     return dst;
@@ -231,6 +229,17 @@ static inline rom str_a_an (rom s) {
             s[0]=='A' || s[0]=='E' || s[0]=='I' || s[0]=='O' || s[0]=='U') ? "an" : "a";  
 }
 
+// very fast integer parser - no negatives
+static inline int64_t fast_atoi (rom src, char **endptr) 
+{
+    int64_t out = 0;
+    while (IS_DIGIT(*src)) 
+        out = out * 10 + (*src++ - '0');
+
+    *endptr = (char *)src;
+    return out;
+}
+
 extern StrText str_size (uint64_t size);
 extern StrText str_bases (uint64_t num_bases);
 extern StrText str_int_commas (int64_t n);
@@ -243,7 +252,7 @@ extern StrText1K str_str_s_(rom label, STRp(str));
 #define cond_str(cond, label, str)  ((cond) ? ({ rom str_=(str); str_str_s_((label), str_, strlen (str_)).s; }) : "") /* note: str evaluates once, but only if cond is true */
 #define cond_stra(cond, label, str) ((cond) ? str_str_s_((label), str, str_len).s : "") 
 
-extern rom str_to_hex_(bytes data, uint32_t data_lepn, char *hex_str, bool with_dot);
+extern rom str_to_hex_(bytes𐤐 data, uint32_t data_lepn, char *restrict hex_str, bool with_dot);
 static inline StrText str_to_hex (bytes data, uint32_t data_len) // note: for data_len up to 39 (truncated if longer)
 {
     StrText s;
@@ -274,20 +283,20 @@ static inline uint32_t str_int_fast (int64_t n, char *str /* out */) // faster i
 extern uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool add_nul_terminator);
 static inline uint32_t str_hex (int64_t n, char *str /* out */, bool uppercase) { return str_hex_ex (n, str, uppercase, true); }
 
-extern bool str_get_int (STRp(str), int64_t *value); 
-extern bool str_get_uint16 (STRp(str), uint16_t *value);
-extern bool str_get_uint32 (STRp(str), uint32_t *value); 
-extern bool str_get_int_range8  (STRp(str), int64_t min_val, int64_t max_val, uint8_t  *value); // unsigned
-extern bool str_get_int_range16 (STRp(str), int64_t min_val, int64_t max_val, uint16_t *value); // unsigned
-extern bool str_get_int_range64 (STRp(str), int64_t min_val, int64_t max_val, int64_t  *value); // signed
-extern bool str_get_int_range32 (STRp(str), int64_t min_val, int64_t max_val, int32_t  *value); // signed
+extern bool str_get_int (STR𐤐(str), int64_t *restrict value); 
+extern bool str_get_uint16 (STR𐤐(str), uint16_t *restrict value);
+extern bool str_get_uint32 (STR𐤐(str), uint32_t *restrict value); 
+extern bool str_get_int_range8  (STR𐤐(str), int64_t min_val, int64_t max_val, uint8_t  *restrict value); // unsigned
+extern bool str_get_int_range16 (STR𐤐(str), int64_t min_val, int64_t max_val, uint16_t *restrict value); // unsigned
+extern bool str_get_int_range64 (STR𐤐(str), int64_t min_val, int64_t max_val, int64_t  *restrict value); // signed
+extern bool str_get_int_range32 (STR𐤐(str), int64_t min_val, int64_t max_val, int32_t  *restrict value); // signed
 
-extern bool str_get_int_dec (STRp(str), uint64_t *value); 
-extern bool str_get_int_hex (STRp(str), bool allow_hex, bool allow_HEX, uint64_t *value); 
-extern bool str_get_int_range_allow_hex8  (STRp(str), uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
-extern bool str_get_int_range_allow_hex16 (STRp(str), uint16_t min_val, uint16_t max_val, uint16_t *value);
-extern bool str_get_int_range_allow_hex32 (STRp(str), uint32_t min_val, uint32_t max_val, uint32_t *value);
-extern bool str_get_int_range_allow_hex64 (STRp(str), uint64_t min_val, uint64_t max_val, uint64_t *value);
+extern bool str_get_int_dec (STR𐤐(str), uint64_t *restrict value); 
+extern bool str_get_int_hex (STR𐤐(str), bool allow_hex, bool allow_HEX, uint64_t *restrict value); 
+extern bool str_get_int_range_allow_hex8  (STR𐤐(str), uint8_t  min_val, uint8_t  max_val, uint8_t  *value);
+extern bool str_get_int_range_allow_hex16 (STR𐤐(str), uint16_t min_val, uint16_t max_val, uint16_t *value);
+extern bool str_get_int_range_allow_hex32 (STR𐤐(str), uint32_t min_val, uint32_t max_val, uint32_t *value);
+extern bool str_get_int_range_allow_hex64 (STR𐤐(str), uint64_t min_val, uint64_t max_val, uint64_t *value);
 
 static bool inline str_is_int(STRp(str))       { return str_get_int (STRa(str), NULL); } // integer - leading zeros not allowed
 extern bool str_is_simple_float (STRp(str), uint32_t *decimals);
@@ -306,8 +315,8 @@ static bool inline str_is_upper (STRp(str))    { return str_is_in_range (STRa(st
 static bool inline str_is_lower (STRp(str))    { return str_is_in_range (STRa(str), 'a', 'z'); }
 static bool inline str_is_numeric(STRp(str))   { return str_is_in_range (STRa(str), '0', '9'); } // numeric - leading zeros ok
 
-extern uint32_t str_pack_bases (uint8_t *packed, STRp(bases), bool revcomp);
-extern uint32_t str_unpack_bases (char *bases, bytes packed, uint32_t num_bases);
+extern uint32_t str_pack_bases (uint8_t *restrict packed, STR𐤐(bases), bool revcomp);
+extern uint32_t str_unpack_bases (char *restrict bases, bytes𐤐 packed, uint32_t num_bases);
 
 // textual length of a non-negative integer
 extern uint32_t str_get_uint_textual_len (uint64_t n);
@@ -316,11 +325,9 @@ extern StrText1K str_time (void);
 extern StrText str_human_time (unsigned secs, bool compact);
 
 #define FLOAT_FORMAT_LEN 12
-extern bool str_get_float (STRp(float_str), double *value, char format[FLOAT_FORMAT_LEN], uint32_t *format_len);
+extern bool str_get_float (STR𐤐(float_str), double *restrict value, char format[FLOAT_FORMAT_LEN], uint32_t *restrict format_len);
 
-extern bool str_scientific_to_decimal (STRp(float_str), qSTRp(modified), double *value);
-
-extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, rom *items, uint32_t *item_lens, bool exactly, rom enforce_msg);
+extern uint32_t str_split_do (STR𐤐(str), uint32_t max_items, char sep, rom𐤐 *restrict items, uint32_t *restrict item_lens, bool exactly, rom𐤐 enforce_msg);
 
 #define str_split_enforce(str,str_len,max_items,sep,name,exactly,enforce) \
     uint32_t n_##name##s = (max_items) ? (max_items) : (sep)==0 ? 1 : str_count_char ((str), (str_len), (sep)) + 1; /* 0 if str is NULL */ \
@@ -331,22 +338,22 @@ extern uint32_t str_split_do (STRp(str), uint32_t max_items, char sep, rom *item
 // max_items : maximum allowed items, or 0 if not known
 #define str_split(str,str_len,max_items,sep,name,exactly) str_split_enforce((str),(str_len),(max_items),(sep),name,(exactly),NULL)
 
-extern uint32_t str_split_by_container_do (STRp(str), ConstContainerP con, STRp(con_prefixes), rom *items, uint32_t *item_lens, rom enforce_msg);
+extern uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR𐤐(con_prefixes), rom𐤐 *restrict items, uint32_t *restrict item_lens, rom𐤐 enforce_msg);
 
 #define str_split_by_container(str,str_len,container,prefix,prefix_len,name,enforce_msg) \
     STR_ARRAY (name, MAX_(con_nitems(*container), 1)) = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, (enforce_msg))
 
-extern rom str_split_by_tab_do (STRp(str), uint32_t *n_flds, rom *flds, uint32_t *fld_lens, bool *has_13, bool exactly, bool ignore_excess, bool enforce);
+extern rom str_split_by_tab_do (STR𐤐(str), uint32_t *restrict n_flds, rom𐤐 *restrict flds, uint32_t *restrict fld_lens, bool *restrict has_13, bool exactly, bool ignore_excess, bool enforce);
 #define str_split_by_tab(str,max_len,max_flds,has_13,exactly,ignore_excess,enforce) \
     STR_ARRAY (fld, (max_flds)) = (max_flds);   \
     str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13), (exactly), (ignore_excess), (enforce))
 #define STRfld(i) STRi(fld,(i))
 
-extern uint32_t str_split_by_lines_do (STRp(str), uint32_t max_lines, rom *lines, uint32_t *line_lens);
+extern uint32_t str_split_by_lines_do (STR𐤐(str), uint32_t max_lines, rom𐤐 *restrict lines, uint32_t *restrict line_lens);
 #define str_split_by_lines(str,str_len,max_lines) \
     STR_ARRAY (line, (max_lines)) = str_split_by_lines_do ((str), (str_len), max_lines, lines, line_lens)
 
-extern uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool exactly, int base, int64_t *items);
+extern uint32_t str_split_ints_do (STR𐤐(str), uint32_t max_items, char sep, bool exactly, int base, int64_t *restrict items);
 
 #define str_split_ints(str,str_len,max_items,sep,name,exactly) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
@@ -358,27 +365,27 @@ extern uint32_t str_split_ints_do (STRp(str), uint32_t max_items, char sep, bool
     int64_t name##s[n_##name##s]; \
     n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), 16, name##s); 
 
-extern uint32_t str_split_floats_do (STRp(str), uint32_t max_items, char sep, bool exactly, char this_char_is_NAN, double *items);
+extern uint32_t str_split_floats_do (STR𐤐(str), uint32_t max_items, char sep, bool exactly, char this_char_is_NAN, double *restrict items);
 #define str_split_floats(str,str_len,max_items,sep,name,exactly,this_char_is_NAN) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     double name##s[n_##name##s]; \
     n_##name##s = str_split_floats_do ((str), (str_len), n_##name##s, (sep), (exactly), (this_char_is_NAN), name##s); 
 
-extern bool str_item_i (STRp(str), char sep, uint32_t requested_item_i, pSTRp(item));
-extern bool str_item_i_int (STRp(str), char sep, uint32_t requested_item_i, int64_t *item);
-extern bool str_item_i_float (STRp(str), char sep, uint32_t requested_item_i, double *item);
+extern bool str_item_i (STR𐤐(str), char sep, uint32_t requested_item_i, 𐤐STR𐤐(item));
+extern bool str_item_i_int (STRp(str), char sep, uint32_t requested_item_i, int64_t *restrict item);
+extern bool str_item_i_float (STRp(str), char sep, uint32_t requested_item_i, double *restrict item);
 
 extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));
 #define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)
 
-extern void str_nul_separate_do (STRps(item));
+extern void str_nul_separate_do (STR𐤐s(item));
 #define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
 
 extern uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out);
 extern void str_trim (qSTRp(str));
 
 extern rom type_name (uint32_t item, 
-                      rom  const *name, // the address in which a pointer to name is found, if item is in range
+                      rom const *name, // the address in which a pointer to name is found, if item is in range
                       uint32_t num_names);
 
 extern int str_print_text (rom *text, uint32_t num_lines, rom wrapped_line_prefix, rom newline_separator,

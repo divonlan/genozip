@@ -14,8 +14,8 @@
 bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, bool including_control_region, 
                        bool no_dirs, bool verbose, bool do_gzip)
 {
-    RETURNW (buf->type == BUF_REGULAR, false, 
-             "FYI: failed to dump buffer.type=%s name=%s while putting %s", 
+    ASSWRET (buf->type == BUF_REGULAR, false, 
+             _FYI "Failed to dump buffer.type=%s name=%s while putting %s", 
              buf_type_name (buf), buf->name ? buf->name : "(null)", filename);
 
     int fn_len = strlen(filename);

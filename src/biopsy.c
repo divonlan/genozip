@@ -151,7 +151,7 @@ void biopsy_finalize (void)
 {
     biopsy_compress();
 
-    ASSINP0 (biopsy_is_done(), "FYI: One or more of biopsy VBs was not encountered");
+    ASSINP0 (biopsy_is_done(), _FYI "One or more of biopsy VBs was not encountered");
 }
 
 void biopsy_bytes_init (rom optarg)

@@ -65,8 +65,8 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
 
     bool ret = !!func (vb, (uint8_t*)uncompressed, *uncompressed_len, (uint8_t*)compressed, compressed_len, order);
 
-    if (func == rans_compress_to_4x16) COPY_TIMER_COMPRESS (compressor_rans);
-    else                               COPY_TIMER_COMPRESS (compressor_arith); // higher level codecs are accounted for in their codec code
+    if (func == rans_compress_to_4x16) COPY_TIMER_COMPRESS_BY_CODEC (compressor_rans);
+    else                               COPY_TIMER_COMPRESS_BY_CODEC (compressor_arith); // higher level codecs are accounted for in their codec code
 
     if (get_line_cb) 
         buf_free (vb->codec_bufs[buf_i]); // don't rely on caller to free, because this function is called in many places outside of normal section compression

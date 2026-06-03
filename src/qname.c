@@ -17,10 +17,11 @@
 #include "dyn_int.h"
 #include "reconstruct.h"
 
-sSTRl(copy_qname,  16);
+mSTRl(copy_qname, NUM_QTYPES, 16);
 sSTRl(copy_q5name, 16);
 sSTRl(copy_q6name, 16);
 sSTRl(snip_redirect_to_QNAME2, 16);
+sSTRl(snip_redirect_to_QEMBED, 16);
 
 QnameFlavor qname_get_optimize_qf (void)
 {
@@ -32,8 +33,7 @@ QnameFlavor qname_get_optimize_qf (void)
 static inline Did did_by_q (QType q) 
 {
     ASSERTINRANGE (q, 0, NUM_QTYPES);
-
-    return (Did[]){ FASTQ_QNAME, FASTQ_QNAME2, FASTQ_LINE3 }[q]; // note: SAM and FASTQ have the same dids for QNAMEs
+    return (Did[])QTYPE_DID[q]; // note: SAM and FASTQ have the same dids for QNAMEs
 }
 
 static inline unsigned qname_get_px_str_len (QnameFlavorStruct *qfs)
@@ -44,8 +44,8 @@ static inline unsigned qname_get_px_str_len (QnameFlavorStruct *qfs)
 }
 
 // remove an unused mate item (i.e. one that still have a CI0_SKIP) from the container
-static void qname_remove_skipped_mate (SmallContainerP con_no_skip, uint32_t *prefix_no_skip_len, 
-                                       ConstSmallContainerP con, STRp (con_prefix)) // out
+static void qname_remove_skipped_mate (QnameContainer *con_no_skip, uint32_t *prefix_no_skip_len, 
+                                       const QnameContainer *con, STRp (con_prefix)) // out
 {
     // remove last item, if it is an unused QmNAME (i.e. with a CI0_SKIP) 
     *con_no_skip = *con;
@@ -75,20 +75,35 @@ static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
     
     // examples
     for (int i=0; i < QFS_MAX_EXAMPLES; i++) {
-        unsigned example_len = strlen(qfs->example[i]);
-        if (!example_len) break;
+        if (!qfs->example[i]) break;
 
-        strcpy (&qfs->example[i][example_len], "/1");
+        rom unmated_example = qfs->example[i];
+        unsigned unmated_example_len = strlen(unmated_example);
+
+        qfs->example[i] = MALLOC (unmated_example_len + 3);
+        snprintf (qfs->example[i], unmated_example_len + 3, "%s/1", unmated_example);
     }
 
-    // case 1: previous item is not fixed of invisible - move its separator (possibly 0) to the mate item and make it '/'
+    // case 1: previous item is not fixed or invisible - move its separator (possibly 0) to the mate item and make it '/'
     uint8_t *prev_sep = qfs->con.items[mate_item_i-1].separator; 
     uint8_t *mate_sep = qfs->con.items[mate_item_i  ].separator; 
     
+    mate_sep[0] = mate_sep[1] = 0; // initialize
+
     if (prev_sep[0] != CI0_FIXED_0_PAD && prev_sep[0] != CI0_VAR_0_PAD) {
-        mate_sep[0] = prev_sep[0]; // 0 or ' '
-        mate_sep[1] = 0;
-        prev_sep[0] = '/';
+        ASSERT (!prev_sep[1], "Flavor: %s: unsupported adding mate, when last item has two separators", qfs->name);
+
+        if (prev_sep[0] == ' ') {
+            prev_sep[0] = '/';
+            mate_sep[0] = ' ';
+        }
+        else if (IS_PRINTABLE(prev_sep[0])) 
+            prev_sep[1] = '/';
+
+        else {
+            ASSERT (!prev_sep[0], "Flavor: %s: unsupported adding mate, when last item has a separator that is not printable for *_0_PAD", qfs->name);
+            prev_sep[0] = '/';
+        }
     }
 
     // case 2: previous item is fixed - add / as a prefix. 
@@ -162,7 +177,7 @@ void qname_zip_initialize (void)
                         ASSERT (dnum == expected_zctx->dict_id.num, "Expecting item #%u of %s to be %s", item_i, qfs->name, expected_zctx->tag_name);
 
                         ASSERT (expected_zctx->did_i < SAM_Q0NAME + MAX_QNAME_ITEMS,
-                                "Unexpected dict_id=%s in container of flavor %s. Perhaps MAX_QNAME_ITEMS=%u needs updating?", 
+                                "Unexpected dict_id=%s in container of flavor %s. Perhaps MAX_QNAME_ITEMS=%u is wrong?", 
                                 dis_dict_id(qfs->con.items[item_i].dict_id).s, qfs->name, MAX_QNAME_ITEMS);
 
                         expected_zctx++;
@@ -190,7 +205,7 @@ void qname_zip_initialize (void)
             } 
 
             // remove QmNAME from the container if not mated 
-            SmallContainer con_no_skip = qfs->con; // copy
+            QnameContainer con_no_skip = qfs->con; // copy
             uint32_t prefix_no_skip_len=qfs->con_prefix_len;
             qname_remove_skipped_mate (&con_no_skip, &prefix_no_skip_len, &qfs->con, STRa (qfs->con_prefix));
             
@@ -206,7 +221,7 @@ void qname_zip_initialize (void)
 
                 // prepare container snip for this QF
                 qfs->con_snip_lens[q] = sizeof (qfs->con_snips[0]);            
-                container_prepare_snip ((Container*)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qSTRi(qfs->con_snip,q));
+                container_prepare_snip ((ContainerP)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qSTRi(qfs->con_snip,q));
             }
 
             static rom err_both_fmt = "Bad definition of QNAME flavor=%s: item=%u is invalidly defined as both %s";
@@ -306,11 +321,16 @@ void qname_zip_initialize (void)
             }
         }
 
-        seg_prepare_snip_other (SNIP_COPY, _SAM_QNAME,  false, 0, copy_qname); // QNAME dict_id is the same for SAM, FASTQ
+        for (QType q=0; q < NUM_QTYPES; q++) {
+            copy_qname_lens[q] = sizeof (copy_qnames[0]);
+            seg_prepare_snip_other_do (SNIP_COPY, (uint64_t[])QTYPE_DNUM[q], 0, 0, 0, copy_qnames[q], &copy_qname_lens[q]);
+        }
+        
         seg_prepare_snip_other (SNIP_COPY, _SAM_Q5NAME, false, 0, copy_q5name);
         seg_prepare_snip_other (SNIP_COPY, _SAM_Q6NAME, false, 0, copy_q6name);
 
         seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_QNAME2, false, 0, snip_redirect_to_QNAME2);
+        seg_prepare_snip_other (SNIP_REDIRECTION, _SAM_QEMBED, false, 0, snip_redirect_to_QEMBED);
 
         tokenizer_zip_initialize();
     }
@@ -407,24 +427,32 @@ void qname_segconf_finalize (VBlockP vb)
             }
         }
 
-    // if only consensus reads exist, or is unknown
-    if (segconf.tech == TECH_CONS || segconf.tech == TECH_UNKNOWN)
+    if (segconf.tech_by_RG && tech_is_unknown())
         segconf.tech = segconf.tech_by_RG; // usually tech by QNAME is more reliable, but if not available, go by the PL field of @RG in the SAM header (which might also be unavailable)
 }
 
 // note: we run this function only in discovery, not in segging, because it is quite expensive - checking all numerics.
 // returns 0 if qname is indeed the flavor, or error code if not
 
-QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool quiet) // out
+QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool quiet, OffendingItem *offending_item/*optional out*/) // out
 {
     ASSERTNOTNULL (qfs);
+    if (offending_item) *offending_item = (OffendingItem){ .item_i = -1 };
 
     // return embedded qname2, eg "82a6ce63-eb2d-4812-ad19-136092a95f3d" in "@ERR3278978.1 82a6ce63-eb2d-4812-ad19-136092a95f3d/1"
-    if (q != QANY && qfs->only_q != QANY && qfs->only_q != q
-        && !(qfs->only_q == Q1or3   && (q == QNAME1 || q == QLINE3))
-        && !(qfs->only_q == QSAM    && (Z_DT(BAM) || Z_DT(SAM)))
-        && !(qfs->only_q == Q2orSAM && (q == QNAME2 || Z_DT(BAM) || Z_DT(SAM)))) 
+    if (q != QANY 
+     && q != QEMBED // embedded qname can be anything (other restrictions apply)
+     && qfs->only_q != QANY 
+     && qfs->only_q != q
+     && !(qfs->only_q == Q1or3   && (q == QNAME1 || q == QLINE3))
+     && !(qfs->only_q == QSAM    && (Z_DT(BAM) || Z_DT(SAM))))
         return QTR_WRONG_Q; 
+
+    if (q == QEMBED && qf_callbacks[qfs->id] == seg_embedded_qname_cb)
+        return QTR_RECURSIVE_EMBEDDING;
+
+    if (q == QEMBED && qfs->is_mated)
+        return QTR_EMBED_NO_MATED;
 
     // in FASTQ, QNAME1 match fq_qname1_tech
     if (q==QNAME2 && (Z_DT(FASTQ) || Z_DT(FASTA)) && 
@@ -447,32 +475,71 @@ QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qfs, bool q
 
     // items cannot include whitespace or non-printable chars
     for (uint32_t item_i=0; item_i < n_items; item_i++)
-        if (!str_is_no_ws (STRi(item, item_i))) 
+        if (!str_is_no_ws (STRi(item, item_i))) {
+            if (offending_item) *offending_item = (OffendingItem){ item_i, STRi(item, item_i) };
             return QTR_BAD_CHARS;
+        }
 
     // check that all the items expected to be numeric (leading zeros ok) are indeed so
-    for (const int *item_i = qfs->numeric_items; *item_i != -1; item_i++)
-        if (!qfs->is_hex[*item_i] && !str_is_numeric (STRi(item, *item_i))) 
+    for (const int8_t *item_i = qfs->numeric_items; *item_i != -1; item_i++) {
+        ASSERT (IN_RANGE(*item_i, 0, n_items), "flavor=%s: Bad value in numeric items", qfs->name);
+
+        if (!qfs->is_hex[*item_i] && !str_is_numeric (STRi(item, *item_i))) {
+            if (offending_item) *offending_item = (OffendingItem){ *item_i, STRi(item, *item_i) };
             return QTR_BAD_NUMERIC;
+        }
+    }
+
+    for (const int8_t *item_i = qfs->in_local; *item_i != -1; item_i++) 
+        ASSERT (IN_RANGE(*item_i, 0, n_items), "flavor=%s: Bad value in local items", qfs->name);
 
     // check that all the items expected to be lower case hexadecimal are indeed so
-    for (const int *item_i = qfs->hex_items; *item_i != -1; item_i++)
-        if (!str_is_hexlo (STRi(item, *item_i))) 
+    for (const int8_t *item_i = qfs->hex_items; *item_i != -1; item_i++) {
+        ASSERT (IN_RANGE(*item_i, 0, n_items), "flavor=%s: Bad value in hex items", qfs->name);
+
+        if (!str_is_hexlo (STRi(item, *item_i))) {
+            if (offending_item) *offending_item = (OffendingItem){ *item_i, STRi(item, *item_i) };
             return QTR_BAD_HEX;
+        }
+    }
 
     // check that all the items expected to be integer (no leading zeros) are indeed so
-    for (const int *item_i = qfs->integer_items; *item_i != -1; item_i++)
-        if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) 
+    for (const int8_t *item_i = qfs->integer_items; *item_i != -1; item_i++) {
+        ASSERT (IN_RANGE(*item_i, 0, n_items), "flavor=%s: Bad value in integer items", qfs->name);
+
+        if (!qfs->is_hex[*item_i] && !str_is_int (STRi(item, *item_i))) {
+            if (offending_item) *offending_item = (OffendingItem){ *item_i, STRi(item, *item_i) };
             return QTR_BAD_INTEGER;
+        }
+    }
 
     if (qfs->is_mated && (item_lens[n_items-1] != 1 || (*items[n_items-1] != '1' && *items[n_items-1] != '2')))
         return QTR_BAD_MATE; // mate is expected to be "1" or "2" - better check than NO_MATE - after splitting
-    
-    if (qfs->barcode_item != -1 && !str_is_ACGTN (STRi(item, qfs->barcode_item)))
-        return QTR_BARCODE_NOT_ACGTN;
+
+    ASSERT (IN_RANGE(qfs->barcode_item, -1, (int)n_items) && IN_RANGE(qfs->barcode_item2, -1, (int)n_items),
+            "flavor=%s: Bad value in barcode items", qfs->name);
         
-    if (qfs->barcode_item2 != -1 && !str_is_ACGTN (STRi(item, qfs->barcode_item2)))
+    ASSERT (IN_RANGE(qfs->ordered_item1, -1, (int)n_items) && IN_RANGE(qfs->ordered_item2, -1, (int)n_items),
+            "flavor=%s: Bad value in ordered items", qfs->name);
+        
+    ASSERT (IN_RANGE(qfs->range_end_item1, -1, (int)n_items) && IN_RANGE(qfs->range_end_item2, -1, (int)n_items),
+            "flavor=%s: Bad value in range_end items", qfs->name);
+    
+    ASSERT (IN_RANGE(qfs->seq_len_item, -1, (int)n_items),
+            "flavor=%s: Bad value in seq_len_item item", qfs->name);
+    
+    ASSERT (IN_RANGE(qfs->callback_item, -1, (int)n_items) && IN_RANGE(qfs->callback_item2, -1, (int)n_items),
+            "flavor=%s: Bad value in callback items", qfs->name);
+        
+    if (qfs->barcode_item != -1 && !str_is_ACGTN (STRi(item, qfs->barcode_item))) {
+        if (offending_item) *offending_item = (OffendingItem){ qfs->barcode_item, STRi(item, qfs->barcode_item) };
         return QTR_BARCODE_NOT_ACGTN;
+    }
+        
+    if (qfs->barcode_item2 != -1 && !str_is_ACGTN (STRi(item, qfs->barcode_item2))) {
+        if (offending_item) *offending_item = (OffendingItem){ qfs->barcode_item2, STRi(item, qfs->barcode_item2) };
+        return QTR_BARCODE_NOT_ACGTN;
+    }
         
     if (!qfs->validate_flavor (STRas(item)))
         return QTR_FAILED_VALIDATE_FUNC;
@@ -489,16 +556,27 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
 
     for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
         QnameTestResult reason = QTR_SUCCESS;
-        if (!(reason = qname_test_flavor (STRa(qname), flag.show_flavor ? QANY : q, qfs, true))) {
+        if (QTR_SUCCESS == (reason = qname_test_flavor (STRa(qname), flag.show_flavor ? QANY : q, qfs, true, NULL))) {
 
             // case: first discovery: store discovered qname
             if (!segconf.qname_line0[q].s[0]) 
                 memcpy (segconf.qname_line0[q].s, qname, MIN_(qname_len, SAM_MAX_QNAME_LEN));
 
             // case: rediscovery: check that it is also an acceptable flavor for stored qname_line0
-            else {
-                if (QTR_SUCCESS != qname_test_flavor (segconf.qname_line0[q].s, strlen(segconf.qname_line0[q].s), QANY, qfs, true))
-                    continue;
+            else if (QTR_SUCCESS != qname_test_flavor (segconf.qname_line0[q].s, strlen(segconf.qname_line0[q].s), QANY, qfs, true, NULL))
+                continue;
+
+            // case: discovered flavor has an embedded qname - that embedded qname must have a recognized flavor
+            if (qf_callbacks[qfs->id] == seg_embedded_qname_cb) {
+                ASSERT (qfs->callback_item >= 0, "flavor %s: expecting callback_item to be defined, as callback is set to seg_embedded_qname_cb", qfs->name);
+
+                str_split_by_container (qname, qname_len, &qfs->con, qfs->con_prefix, qfs->con_prefix_len, item, NULL);
+                
+                qname_segconf_discover_flavor (vb, QEMBED, STRi(item, qfs->callback_item));
+                if (!segconf.qname_flavor[QEMBED]) {
+                    reason = QTR_EMBEDDED_UNIDENTIFIED_FLAVOR;
+                    goto failed;
+                };
             }
 
             segconf.qname_flavor[q] = qfs;
@@ -521,7 +599,7 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
                 qname_seg_initialize (vb, q, DID_NONE); // so the rest of segconf.running can seg fast using the discovered container
 
             if (flag.debug_qname) 
-                iprintf ("%.*s is DISCOVERED as %s - for %s\n", STRf(qname), qfs->name, qtype_name(q));
+                iprintf ("%.*s is DISCOVERED as %s - for %s 😊\n", STRf(qname), qfs->name, qtype_name(q));
             
             if (flag.show_flavor)
                 printf ("%s\n", qfs->name);
@@ -529,11 +607,13 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
             break;
         }
 
-        else if (flag.debug_qname && reason) 
-            iprintf ("%.*s is not %s flavor \"%s\". Reason: %s%s\n", 
-                     STRf(qname), qtype_name(q), qfs->name, reasons[reason],
-                     (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split && !flag.no_tip) 
-                     ? ({ flag.no_tip = true; ". " _TIP "Add --debug-split"; }) : "");
+        else if (reason) failed: {
+            if (flag.debug_qname) 
+                iprintf (_ERR "%.*s is not %s flavor \"%s\". Reason: %s%s\n", 
+                         STRf(qname), qtype_name(q), qfs->name, reasons[reason],
+                         (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split && !flag.no_tip) 
+                         ? ({ flag.no_tip = true; ". " _TIP "Add --debug-split"; }) : "");
+        }
     }
 
     if (!segconf.qname_flavor[q]) {
@@ -551,12 +631,18 @@ void qname_segconf_discover_flavor (VBlockP vb, QType q, STRp(qname))
         for (QnameFlavor qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) {
 
             for (int i=0; i < QFS_MAX_EXAMPLES; i++) {
-                if (!qfs->example[i][0]) break;
+                if (!qfs->example[i]) break;
 
                 if (flag.debug_qname) iprintf ("Unit-testing qname flavor=\"%s\" example=\"%s\"\n", qfs->name, qfs->example[i]);
-                QnameTestResult reason = qname_test_flavor (qfs->example[i], strlen(qfs->example[i]), QANY, qfs, !flag.debug_qname); 
-                ASSERT (reason == QTR_SUCCESS, "Failed to identify qname \"%s\" as %s: reason=%s. %s", 
-                        qfs->example[i], qfs->name, reasons[reason],
+
+                OffendingItem offending_item;
+                QnameTestResult reason = qname_test_flavor (qfs->example[i], strlen(qfs->example[i]), QANY, qfs, !flag.debug_qname, &offending_item); 
+                ASSERT (reason == QTR_SUCCESS, "Unit-testing qname flavor=\"%s\": Failed to identify qname \"%s\" as %s: reason=%s%s%s%.*s%s. %s", 
+                        qfs->name, qfs->example[i], qfs->name, reasons[reason],
+                        cond_int (offending_item.item_i >= 0, " offending_item_i=", offending_item.item_i),
+                        offending_item.item_i >= 0 ? " \"" : "",
+                        STRf(offending_item.item),
+                        offending_item.item_i >= 0 ? "\"" : "",
                         (reason == QTR_CONTAINER_MISMATCH && !flag.debug_split) ? _TIP "Use --debug-split for more details, but ignore all errors but the last one" : "");
             }
         }
@@ -615,6 +701,13 @@ QType qname_sam_get_qtype (STRp(qname))
     }
     else
         return QNAME1;
+}
+
+static void seg_embedded_qname_cb (VBlockP vb, ContextP item_ctx, STRp(embedded_qname))
+{
+    qname_seg (vb, QEMBED, STRa(embedded_qname), 0);
+
+    seg_by_ctx (vb, STRa(snip_redirect_to_QEMBED), item_ctx, 0);
 }
 
 // attempt to seg according to the qf - return true if successful
@@ -713,7 +806,7 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
 }
 
 // returns true is redirected to QNAME2
-void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes)  // account for characters in addition to the field
+void qname_seg (VBlockP vb, QType q, STRp(qname), unsigned add_additional_bytes)  // account for characters in addition to the field
 {
     START_TIMER;
 
@@ -721,9 +814,10 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
     ContextP qname_ctx = CTX(did_by_q(q)); 
 
     // copy if identical to previous (> 50% of lines in collated SAM/BAM) - small improvement in compression and compression time
-    // no need in is_sorted, as already handled in sam_seg_QNAME with buddy 
+    // no need in is_sorted, as already handled in sam_seg_QNAME with buddy
+    // no need for FASTQ QNAME2 - compression is worse
     if ((VB_DT(BAM) || VB_DT(SAM)) && !segconf.is_sorted && vb->line_i && is_same_last_txt (vb, qname_ctx, STRa(qname))) {
-        seg_by_ctx (vb, STRa(copy_qname), qname_ctx, qname_len + add_additional_bytes);
+        seg_by_ctx (vb, STRi(copy_qname,q), qname_ctx, qname_len + add_additional_bytes);
         goto done;
     }
 
@@ -755,11 +849,11 @@ void qname_seg (VBlockP vb, QType q, STRp (qname), unsigned add_additional_bytes
             if (VB_DT(BAM) || VB_DT(SAM)) q = QNAME1; 
 
             // collect the first 6 qnames / q2names, if flavor is unknown OR not successful in segging by flavor 
-            if (segconf.n_1st_flav_qnames[q] < NUM_COLLECTED_WORDS) { // unrecognized flavor
-                memcpy (segconf.unk_flav_qnames[q][segconf.n_1st_flav_qnames[q]], qname, MIN_(qname_len, UNK_QNANE_LEN));
+            if (z_file && z_file->n_1st_flav_qnames[q] < NUM_COLLECTED_WORDS) { // unrecognized flavor
+                memcpy (z_file->unk_flav_qnames[q][z_file->n_1st_flav_qnames[q]], qname, MIN_(qname_len, UNK_QNANE_LEN));
         
-                if (!segconf.n_1st_flav_qnames[q] || memcmp (segconf.unk_flav_qnames[q][segconf.n_1st_flav_qnames[q]], segconf.unk_flav_qnames[q][segconf.n_1st_flav_qnames[q]-1], UNK_QNANE_LEN))
-                    segconf.n_1st_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
+                if (!z_file->n_1st_flav_qnames[q] || memcmp (z_file->unk_flav_qnames[q][z_file->n_1st_flav_qnames[q]], z_file->unk_flav_qnames[q][z_file->n_1st_flav_qnames[q]-1], UNK_QNANE_LEN))
+                    z_file->n_1st_flav_qnames[q]++; // advance iff qname is different than previous line (not always the case if collated)
             }
         }
     }
@@ -869,11 +963,11 @@ QnameFlavorId segconf_qf_id (QType q)
 
 rom qtype_name (QType q)
 {
-    static rom qtype_names[] = QTYPE_NAME, qtype_neg_names[] = QTYPE_NEG_NAMES;
+    static rom qtype_names[] = QTYPE_NAME;
 
-    return (q >= 0 && q < ARRAY_LEN (qtype_names))     ? qtype_names[q] 
-          :(q < 0 && -q < ARRAY_LEN (qtype_neg_names)) ? qtype_neg_names[-q]
-          :                                              "Invalid_qtype";
+    q += -QTYPE_LOWEST_VALUE; // shift q to 0 -> NUM_QTYPES + |QTYPE_LOWEST_VALUE|
+
+    return (q >= 0 && q < ARRAY_LEN (qtype_names)) ? qtype_names[q] :"Invalid_qtype";
 }
 
 Did qf_get_barcode_did (int bc_i/*1 or 2*/) 

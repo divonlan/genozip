@@ -14,8 +14,8 @@
 #include "reconstruct.h"
 #include "htscodecs/arith_dynamic.h"
 
-sSTRl(con_decanonize1_snip,96);
-sSTRl(con_decanonize2_snip,96);
+sSTRl(con_decanonize1_snip, con_snip_sizeof(2));
+sSTRl(con_decanonize2_snip, con_snip_sizeof(2));
 
 #define DF vb->piz_deep_flags
 
@@ -38,10 +38,10 @@ uint32_t fastq_get_num_deeped (VBlockP vb)
 void fastq_deep_zip_initialize (void)
 {
     DO_ONCE {
-        SmallContainer con1 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME  }, { .dict_id.num = _FASTQ_QmNAME  } }};
+        static const Container(2) con1 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME  }, { .dict_id.num = _FASTQ_QmNAME  } }};
         container_prepare_snip ((ContainerP)&con1, NULL, 0, qSTRa(con_decanonize1_snip));
 
-        SmallContainer con2 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME2 }, { .dict_id.num = _FASTQ_QmNAME2 } }};
+        static const Container(2) con2 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME2 }, { .dict_id.num = _FASTQ_QmNAME2 } }};
         container_prepare_snip ((ContainerP)&con2, NULL, 0, qSTRa(con_decanonize2_snip));
     }
 }
@@ -301,7 +301,7 @@ static rom fastq_deep_set_N_qual (VBlockFASTQP vb, STRp(seq), STRp(qual))
     return new_qual;
 }
 
-static void fastq_deep_seg_segconf (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual))
+static void fastq_deep_seg_segconf (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual))
 {
     struct { bool cond; QType q; STR(qname); thool is_last; } inst[NUM_INSTS] = 
           // QNAME1                                                       QNAME2
@@ -496,7 +496,7 @@ static bool fastq_seg_deep_is_dup (VBlockFASTQP vb,
     return e->dup;
 }
 
-static DeepStatsZip fastq_seg_find_deep (VBlockFASTQP vb, ZipDataLineFASTQP dl, DeepHash *deep_hash, STRp(seq), STRp(qual), 
+static DeepStatsZip fastq_seg_find_deep (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, DeepHash *deep_hash, STRp(seq), STRp(qual), 
                                          ZipZDeep **matching_ent) // out
 {
     #define RETURN(x) ({ COPY_TIMER (fastq_seg_find_deep); return (x); })
@@ -567,7 +567,7 @@ static void fastq_seg_deep_do (VBlockFASTQP vb, uint64_t deep_value)
 }
 
 // deep and bamass
-bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), 
+bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), 
                      uint32_t *uncanonical_suffix_len) // out - suffix of deeped QNAME beyond canonical, i.e. not copied from Deep
 {
     START_TIMER;
@@ -672,7 +672,7 @@ done:
     return matching_ent != NULL;
 }
 
-void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx)
+void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx)
 {
     uint32_t trim_len = seq_len - dl->sam_seq_len; // left trim + right trim;
 
@@ -694,7 +694,7 @@ void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), Conte
 }
 
 // called for lines in which QUAL is deeped 
-void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQP dl, ContextP qual_ctx, uint32_t qual_len)
+void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, ContextP qual_ctx, uint32_t qual_len)
 {
     uint32_t trim_len = qual_len - dl->sam_seq_len;
 
@@ -859,7 +859,7 @@ static uint8_t *fastq_special_deep_copy_SEQ_by_ref (VBlockFASTQP vb, uint8_t *ne
     
     // case: no cigar - just reconstruct the reference
     if (!DF.has_cigar) {
-        ref_get_textual_seq (gpos, recon, deep_ref_consumed, !DF.is_forward);
+        ref_get_textual_seq (VB, gpos, recon, deep_ref_consumed, !DF.is_forward);
         recon += deep_ref_consumed;
     }
 
@@ -867,7 +867,7 @@ static uint8_t *fastq_special_deep_copy_SEQ_by_ref (VBlockFASTQP vb, uint8_t *ne
     else {
         // get the reference bases needed
         buf_alloc_exact (vb, vb->codec_bufs[0], deep_ref_consumed, char, "codec_bufs[0]");
-        rom ref = ref_get_textual_seq (gpos, B1STc(vb->codec_bufs[0]), deep_ref_consumed, !DF.is_forward);
+        rom ref = ref_get_textual_seq (VB, gpos, B1STc(vb->codec_bufs[0]), deep_ref_consumed, !DF.is_forward);
 
         next += nico_uncompress_cigar (VB, SAM_CIGAR, next, &CTX(SAM_CIGAR)->deep_cigar, "deep_cigar"); // note: next is advanced to point to nonref data
 

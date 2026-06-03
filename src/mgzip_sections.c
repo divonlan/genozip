@@ -292,10 +292,10 @@ FlagsMgzip mgzip_piz_calculate_mgzip_flags (CompIType comp_i, Codec src_codec)
         mgzip_flags = (IS_GZIP(src_codec) || C(BAM) || C(BZ2) || C(XZ) || C(ZIP)) ? bgzf_recompression_levels[BGZF_DEFAULT_LEVEL] : bgzf_no_recompression; // note: similar logic to txtheader_piz_get_filename
     
     // case: user wants to see this section header, despite not needing BGZF data
-    if (!mgzip_section_was_read && (flag.only_headers == SEC_GZ_ISIZES+1 || (flag.only_headers && flag.show_sec_headers[SEC_GZ_ISIZES])))
+    if (!mgzip_section_was_read && (flag.only_headers == SEC_GZ_ISIZES+1 || (flag.only_headers && flag_show_sec_headers(SEC_GZ_ISIZES))))
         bgzf_load_isizes (comp_i, C(NONE), true); 
 
-    if (!mgzip_section_was_read && (flag.only_headers == SEC_GZ_DIGESTS+1 || (flag.only_headers && flag.show_sec_headers[SEC_GZ_DIGESTS])))
+    if (!mgzip_section_was_read && (flag.only_headers == SEC_GZ_DIGESTS+1 || (flag.only_headers && flag_show_sec_headers(SEC_GZ_DIGESTS))))
         bgzf_load_digests (comp_i, true); 
         
     if (flag_show_bgzf)

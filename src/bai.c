@@ -146,10 +146,10 @@ static void bai_abort (rom reason, STRp(qname), bool debug_bai_only)
     if (!test_and_set_relaxed (bai_is_aborted)) {
         if (!debug_bai_only || flag.debug_bai) {
             if (qname) 
-                WARN ("FYI: Not creating a %s file. Reason: %s. Offending %s: %.*s ", 
+                WARN (_FYI "Not creating a %s file. Reason: %s. Offending %s: %.*s ", 
                       IS_BAI?".bai":".tbi", reason, DTPZ (line_name), STRf(qname));
             else
-                WARN ("FYI: Not creating a %s file. Reason: %s.", IS_BAI?".bai":".tbi", reason);
+                WARN (_FYI "Not creating a %s file. Reason: %s.", IS_BAI?".bai":".tbi", reason);
         }
     }
 

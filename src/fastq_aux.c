@@ -14,6 +14,8 @@
 
 static inline void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(value))
 {
+    START_TIMER;
+
     DictId dict_id = dict_id_make (STRa(tag_name), DTYPE_2);
     ContextP ctx = ctx_get_ctx_tag (vb, dict_id, tag_name, tag_name_len); // create if it doesn't already exist
     
@@ -28,7 +30,7 @@ static inline void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(valu
             goto fallback;
         
         case _FASTQ_AUX_parent_read_id : 
-            COND(TECH(NANOPORE), seg_maybe_copy (VB, ctx, FASTQ_QNAME, STRa(value), STRa(copy_qname_snip)));
+            COND(TECH(NANOPORE), seg_maybe_copy (VB, ctx, FASTQ_QNAME, STRa(value), STRi(copy_qname, QNAME1)));
         
         case _FASTQ_AUX_start_time     : 
             COND(TECH(NANOPORE), seg_diff (VB, ctx, ctx, STRa(value), false, value_len));
@@ -38,12 +40,14 @@ static inline void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(valu
     }
 
     seg_set_last_txt (VB, ctx, STRa(value));
+
+    COPY_TIMER_SEG_FIELD (ctx->did_i);
 }
 
-static inline void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_t total_tag_len) // tags including '='/':'
+static inline void fastq_seg_aux_container (VBlockFASTQP vb, STR𐤐s(tag), uint32_t total_tag_len) // tags including '='/':'
 {
-    Container con = { .repeats = 1, .drop_final_item_sep = true };
-    con_set_nitems (con, n_tags);
+    InitializedContainer(con, n_tags);
+    con.drop_final_item_sep = true;
 
     char prefixes[n_tags + total_tag_len + 3];        // each name is tag= followed CON_PX_SEP ; +3 for the initial CON_PX_SEP.
     prefixes[0] = prefixes[1] = CON_PX_SEP; // initial CON_PX_SEP follow by separator of empty Container-wide prefix followed by separator for empty prefix for translator-only item[0]
@@ -60,11 +64,11 @@ static inline void fastq_seg_aux_container (VBlockFASTQP vb, STRps(tag), uint32_
         prefixes[prefixes_len++] = CON_PX_SEP;
     }
 
-    container_seg (vb, CTX(FASTQ_AUX), &con, prefixes, prefixes_len, 
+    container_seg (vb, CTX(FASTQ_AUX), (ContainerP)&con, prefixes, prefixes_len, 
                    total_tag_len + n_tags/*leading and internal ' '*/); 
 }
 
-int fastq_seg_aux (VBlockFASTQP vb, STRps(item))
+int fastq_seg_aux (VBlockFASTQP vb, STR𐤐s(item))
 {
     int n_auxes=0, total_tag_len=0;
     int i; for (i=n_items-1; i >= 0; i--, n_auxes++) {

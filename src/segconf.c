@@ -21,7 +21,7 @@
 #include "dyn_int.h"
 #include "sorter.h"
 
-SegConf segconf = {}; // system-wide global
+alignas(64) SegConf segconf = {}; // system-wide global
 static VBlockP segconf_vb = NULL;
 
 // figure out if file is sorted or not
@@ -54,24 +54,12 @@ void segconf_test_multiseq (VBlockP vb, Did nonref)
         ctx_segconf_set_hard_coded_lcodec (nonref, CODEC_LZMA); 
 }
 
-// set width of a field to the most common width observed in segconf
-void segconf_set_width (FieldWidth *w, 
-                        int bits) // bits used for this field in SectionHeaderGenozipHeader
-{
-    int max_count = -1;
-    for (int i=0; i < (1 << bits); i++)
-        if ((int)w->count[i] > max_count) {
-            w->width = i;
-            max_count = w->count[i];
-        }
-}
-
 // finalize optimize - filter the optimizable fields detected in segconf by optimize_dict_ids
 static void segconf_finalize_optimize (void)
 {
     if (flag.optimize == OPTIMIZE_POS_LIST) {
         for_zctx 
-            if (segconf.optimize[zctx->did_i]) {
+            if (segconf_optimize (zctx->did_i)) {
                 bool found = false;
                 for (int d=0; d < flag.optimize_dict_ids_len; d++)
                     if (dict_id_typeless (zctx->dict_id).num == flag.optimize_dict_ids[d].num) {
@@ -79,15 +67,15 @@ static void segconf_finalize_optimize (void)
                         break;
                     }
                 if (!found)
-                    segconf.optimize[zctx->did_i] = false; // cancel optimization, because not on positive list
+                    segconf_set_optimize (zctx->did_i, false); // cancel optimization, because not on positive list
             }
     }
     else if (flag.optimize == OPTIMIZE_NEG_LIST)
         for_zctx
-            if (segconf.optimize[zctx->did_i]) 
+            if (segconf_optimize (zctx->did_i)) 
                 for (int d=0; d < flag.optimize_dict_ids_len; d++)
                     if (dict_id_typeless (zctx->dict_id).num == flag.optimize_dict_ids[d].num) {
-                        segconf.optimize[zctx->did_i] = false; // cancel optimization bc on negative list
+                        segconf_set_optimize (zctx->did_i, false); // cancel optimization bc on negative list
                         break;
                     }
 } 
@@ -290,7 +278,7 @@ static bool segconf_get_zip_txt_modified (bool provisional)
 
     else 
         for (Did did_i=0; did_i < z_file->ca.num_contexts; did_i++)
-            if (segconf.optimize[did_i]) {
+            if (segconf_optimize (did_i)) {
                 has_optimize = true;
                 break;
             }
@@ -320,7 +308,7 @@ void segconf_zip_initialize (void)
 
     // case: everything but first FASTQ in Deep
     if (!((Z_DT(BAM) || Z_DT(SAM)) && flag.deep && flag.zip_comp_i == SAM_COMP_FQ00))
-        segconf = (SegConf){
+        memcpy (&segconf, &(SegConf){ // overcome writing const fields 
             .vb_size               = z_file->num_txts_so_far ? segconf.vb_size : 0, // components after first inherit vb_size from first
             .is_sorted             = true,      // initialize optimistically
             .zip_txt_modified      = segconf_get_zip_txt_modified (true), // provisional - to be finalized after segconf
@@ -346,7 +334,7 @@ void segconf_zip_initialize (void)
 
             // FASTA stuff
             .fasta_has_contigs     = true,      // initialize optimistically
-        };
+        }, sizeof (segconf));
 
     // case: 1st FASTQ in Deep. Note: we re-segconf with this file, but don't remove the SAM segconf data    
     else {
@@ -373,7 +361,7 @@ void segconf_piz_initialize (void)
 {
     ASSERTISZERO (flag_loading_auxiliary);
 
-    segconf = (SegConf){};
+    memset (&segconf, 0, sizeof(segconf));
 }
 
 void segconf_free (void)
@@ -385,7 +373,7 @@ static void segconf_show_has (void)
     iprint0 ("Fields recorded in segconf.has:\n");
 
     bool found = false;
-    for_zctx_that (segconf.has[zctx->did_i]) {
+    for_zctx_that (segconf_has(zctx->did_i)) {
         if (TXT_DT(VCF) || TXT_DT(BCF))
             iprintf ("%s/%s ", dict_id_display_type (txt_file->data_type, zctx->dict_id), zctx->tag_name);
         else
@@ -429,9 +417,9 @@ static void segconf_calculate_nonfirst_FASTQ (void)
         vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, TASK_SEGCONF);
         txtfile_read_vblock (vb);
 
-        if (!segconf.is_long_reads) {
+        if (!segconf.is_long_reads && save_pair == PAIR_R2 && !segconf.nonbio_type) {
             fastq_segconf_index_R2_lines (vb); // mini-seg: only populated vb->lines
-            fastq_segconf_set_non_biological (vb);
+            fastq_segconf_check_if_Parse (vb);
         }
         
         flag.pair       = save_pair;
@@ -444,6 +432,18 @@ static void segconf_calculate_nonfirst_FASTQ (void)
     else if (vb)
         buf_insert (evb, txt_file->unconsumed_txt, char, 0, B1STtxt, Ltxt, "txt_file->unconsumed_txt");
     
+    segconf.running = true;
+
+    if (codec_tmpl_maybe_used (FASTQ_QUAL)) {
+        if (!vb->lines.len) fastq_segconf_index_R2_lines (vb); // mini-seg: only populated vb->lines if not already done
+    
+        ctx_clone (vb);
+        
+        ZCTX(FASTQ_QUAL)->qual_codec = CODEC_UNKNOWN;
+        codec_tmpl_segconf_finalize (vb, FASTQ_QUAL, fastq_zip_qual);
+    }
+
+    segconf.running = false;
     vb_destroy_vb (&vb);
 
     if (segconf.deep_paired_qname) // Deep/bamass with exactly 2 FASTQs, and since skipped, this is the 2nd FASTQ
@@ -508,7 +508,7 @@ void segconf_calculate (void)
         ASSERT (zctx, "failed to create zctx for \"%.*s\", perhaps because it exists. did_i=%u", 
                 MAX_TAG_LEN, CTX(did_i)->tag_name, did_i);
                 
-        ASSERT (did_i == zctx->did_i, "expecting did_i=%u == zctx->did_i=%u for %s", did_i, zctx->did_i, zctx->tag_name); // so we can rely on segconf.has[] and segconf.optimize[]
+        ASSERT (did_i == zctx->did_i, "expecting did_i=%u == zctx->did_i=%u for %s", did_i, zctx->did_i, zctx->tag_name); // so we can rely on segconf_has and segconf_optimize
     }
 
     // finalize setting data-type-specific segconf stuff
@@ -525,17 +525,15 @@ void segconf_calculate (void)
     
     // true if txt_file->num_lines need to be counted at zip_init_vb instead of zip_update_txt_counters, 
     // requiring BGZF-uncompression of the VBs by the main thread instead of compute thread
-    flag.zip_lines_counted_at_init_vb = (TXT_DT(FASTQ) && segconf.optimize[FASTQ_QNAME])
+    flag.zip_lines_counted_at_init_vb = (TXT_DT(FASTQ) && segconf_optimize (FASTQ_QNAME))
                                      || ((TXT_DT(VCF) || TXT_DT(BCF)) && flag.add_line_numbers);
 
     SAVE_FLAG (aligner_available); // might have been set in sam_seg_finalize_segconf
     SAVE_FLAG (no_tip);
-    SAVE_FLAG (multiseq);
     SAVE_FLAG (reference); // possibly set by ref_download_eval_ref
     RESTORE_FLAGS;
     RESTORE_FLAG (aligner_available);
     RESTORE_FLAG (no_tip);
-    RESTORE_FLAG (multiseq);
     RESTORE_FLAG (reference);
 
     if (flag.show_segconf_has) 
@@ -544,16 +542,16 @@ void segconf_calculate (void)
     segconf_set_vb_size (vb, save_vb_size);
 
     segconf.line_len = (vb->lines.len32 ? ((double)(Ltxt - remaining_txt_len) / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines)
-
+    
     // limitations: only pre-defined field
     for (Did did_i=0; did_i < DTF(num_fields); did_i++) {
         decl_ctx (did_i);
 
         if (ctx->b250.len32 && !ctx->flags.all_the_same) 
-            segconf.b250_per_line[did_i] = (float)ctx->b250.len32 / (float)vb->lines.len32;
+            segconf.per_line[did_i].b250 = MIN_(UINT16_MAX, ctx->b250.len32 / vb->lines.len32);
 
         if (ctx->local.len32) 
-            segconf.local_per_line[did_i] = ((float)ctx->local.len32 / (float)vb->lines.len32) * (float)lt_desc[dyn_int_get_ltype(ctx)].width;
+            segconf.per_line[did_i].local = MIN_(UINT16_MAX, (ctx->local.len32 / vb->lines.len32) * lt_desc[dyn_int_get_ltype(ctx)].width);
     }
 
     if (txt_file->discover_during_segconf) {
@@ -628,6 +626,7 @@ rom tech_name (SeqTech tech)
         case TECH_NONE         : return "None";
         case TECH_ANY          : return "Any";
         case TECH_CONS         : return "Consensus";
+        case TECH_NCBI         : return "NCBI";
         default                : return "Invalid";
     }
 }
@@ -719,6 +718,7 @@ rom RG_method_name (RGMethod method)
 {
     switch (method) {
         case RG_BY_ILLUM_QNAME : return "BY_ILLUM_QNAME";
+        case RG_BY_NCBI_QNAME  : return "BY_NCBI_QNAME";
         case RG_DEFAULT        : return "DEFAULT";
         default                : return "INVALID";
     }
@@ -778,7 +778,7 @@ StrText1K segconf_get_optimizations (void)
     uint32_t s_len=0;
 
     for_zctx
-        if (segconf.optimize[zctx->did_i])
+        if (segconf_optimize (zctx->did_i))
             SNPRINTF (s, "%s,", zctx->tag_name);
 
     if (s_len) 

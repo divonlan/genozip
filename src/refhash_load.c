@@ -21,7 +21,7 @@ int bases_per_hash=0;            // length of input to the hash function
 int bits_per_hash_in=0;          // bases_per_hash * 2
 int hash_shift=0;                // (64 - bits_per_hash_out)
 MakeRefSize make_ref_size;       // of reference currently loaded
-Buffer refhash_buf = {};         // One buffer that includes all layers
+Buffer refhash_buf = {};         // the actual refhash data
 Digest refhash_digest = DIGEST_NONE;
 
 // ---------------------------------------------------------------
@@ -176,7 +176,7 @@ void refhash_load_standalone (void)
 {
     flag.reading_reference = true; // tell file.c and fasta.c that this is a reference
 
-    TEMP_VALUE (command, PIZ);
+    TEMP_FLAG (command, PIZ);
     TEMP_VALUE (z_file, NULL);   // save z_file and txt_file in case we are called from sam_seg_finalize_segconf
     TEMP_VALUE (txt_file, NULL);
     CLEAR_FLAG (test);
@@ -191,7 +191,7 @@ void refhash_load_standalone (void)
     file_close (&txt_file); // close the txt_file object we created (even though we didn't open the physical file). it was created in file_open_z called from txtheader_piz_read_and_reconstruct.
     
     RESTORE_FLAG (test);
-    RESTORE_VALUE (command);
+    RESTORE_FLAG (command);
     RESTORE_VALUE (z_file);
     RESTORE_VALUE (txt_file);
     

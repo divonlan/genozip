@@ -75,7 +75,7 @@ COMPRESS (codec_bsc_compress)
 
     *compressed_len = ret;
 
-    COPY_TIMER_COMPRESS (compressor_bsc); // higher level codecs are accounted for in their codec code
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_bsc); // higher level codecs are accounted for in their codec code
 
     return true;
 }

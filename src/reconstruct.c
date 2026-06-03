@@ -314,8 +314,7 @@ ContextP reconstruct_get_other_ctx_from_snip (VBlockP vb, ContextP ctx, pSTRp(sn
     ASSPIZ (b64_len + 1 <= *snip_len, "ctx=%s snip=%s snip_len=%u but expecting it to be >= %u", 
             ctx->tag_name, str_snip_ex (DT_NONE, STRa(*snip), true).s, *snip_len, b64_len + 1);
 
-    DictId dict_id;
-    base64_decode ((*snip)+1, &b64_len, dict_id.id, sizeof (DictId));
+    DictId dict_id = base64_decode_dict_id ((*snip)+1);
 
     ContextP other_ctx = ECTX (dict_id);
     ASSPIZ (other_ctx, "Failed to get other context: ctx=%s snip=%.*s other_dict_id=%s", 
@@ -347,12 +346,11 @@ ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx, STRp(
     STR(dict_b64);
     str_item_i (STRa(snip), '\t', ctx_i, pSTRa(dict_b64));
 
-    DictId item_dict_id;
-    base64_decode (qSTRa(dict_b64), item_dict_id.id, sizeof (DictId));
+    DictId item_dict_id = base64_decode_dict_id (dict_b64);
 
     ASSPIZ (ctx_i < ctx->ctx_cache.len, "ctx=%s: ctx_i=%u is out of range: ctx_cache.len=%u", ctx->tag_name, ctx_i, ctx->ctx_cache.len32);
 
-    return (*B(ContextP, ctx->ctx_cache, ctx_i) = ECTX (item_dict_id)); // NULL if no data was segged to this channel    
+    return (*B(ContextP, ctx->ctx_cache, ctx_i) = ECTX(item_dict_id)); // NULL if no data was segged to this channel    
 }
 
 uint32_t recon_multi_dict_id_get_num_dicts (ContextP ctx, STRp(snip))
@@ -642,12 +640,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
                 break;
 
             case STORE_FLOAT: {
-                char *after;
-                new_value.f = strtod (snip, &after); // allows negative values (note: same as in sam_seg_set_last_value_f_from_aux and sam_seg_get_aux_float)
-
-                // if the snip in its entirety is not a valid number, don't store the value.
-                // this can happen for example when seg_pos_field stores a "nonsense" snip.
-                has_new_value = (after == snip + snip_len);
+                has_new_value = str_get_float (STRa(snip), &new_value.f, NULL, NULL); // until 15.0.83 this was strtod
                 break;
             }
             case STORE_INDEX:

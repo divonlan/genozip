@@ -442,8 +442,8 @@ static void sam_header_zip_inspect_RG_lines (BufferP txt_header)
                             break;
                         }
 
-                    if (!segconf.tech_by_RG)
-                        strncpy (segconf.tech_by_RG_unidentified, flds[i]+3, sizeof(segconf.tech_by_RG_unidentified)-1);
+                    if (!segconf.tech_by_RG && z_file)
+                        strncpy (z_file->tech_by_RG_unidentified, flds[i]+3, sizeof(z_file->tech_by_RG_unidentified)-1);
                     
                     SAFE_RESTORE;
                 }           
@@ -483,7 +483,7 @@ static void sam_header_alloc_contigs (BufferP txt_header)
 
     // warning if different number of contigs between textual and binary contig list, unless one of them is empty
     ASSERTW (!delta || !txt_ctg_count.n_contigs || !bin_ctg_count.n_contigs, 
-             "FYI: %s is not compliant with the SAM specification: Inconsistent number of contigs between the textual version of the SAM header (%u contigs) and the binary version (%u contigs). Genozip is using the larger of the two (i.e. the %s one).",
+             _FYI "%s is not compliant with the SAM specification: Inconsistent number of contigs between the textual version of the SAM header (%u contigs) and the binary version (%u contigs). Genozip is using the larger of the two (i.e. the %s one).",
              txt_file->basename, txt_ctg_count.n_contigs, bin_ctg_count.n_contigs, delta >= 0 ? "textual" : "binary");
 
     // sanity check - if we have the same number of contigs, dict_len should be the same too

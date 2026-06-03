@@ -84,10 +84,8 @@ typedef union SectionFlags {
             uint8_t embedded_fasta     : 1; // this VB consists embedded FASTA and has data_type=DT_FASTA (v15)
             uint8_t unused             : 7;
         } gff;
-
         struct FlagsVbHeaderFastq {
-            uint8_t is_nonbio          : 1; // 15.0.83 FASTQ VB (inc. in SAM deep): VB is non-biological (i.e. barcodes only)
-            uint8_t unused             : 7;
+            uint8_t unused             : 8; // note: in 15.0.83 (only) bit0 was "is_nonbio" set for Parse nonbio files
         } fastq;
     } vb_header;
 
@@ -253,7 +251,8 @@ typedef struct {
             uint8_t unused_bits          : 5;
             uint8_t unused8[3];
             uint32_t segconf_std_seq_len;     // FASTQ: 15.0.69
-            char unused[247];
+            uint32_t segconf_std_seq_lR2;     // FASTQ: 15.0.84
+            char unused[243];
         } fastq;
 
         struct {
@@ -267,7 +266,7 @@ typedef struct {
             uint32_t segconf_INF_DP_method: 3; // VCF: 15.0.52
             uint32_t unused13             : 10;
             
-            struct { // Note: number of bits must match argument of segconf_set_width()
+            struct { // Note: number of bits must match array vcf_widths
                 // when adding, also add to: 1.SegConf 2.vcf_seg_finalize_segconf 3.vcf_piz_genozip_header 4.vcf_zip_genozip_header 5.(maybe)vcf_piz_insert_field.dids
                 uint64_t AC:3, MLEAC:3, AN:3, AF:3, SF:3, QD:3, DP:3;  // VCF: 15.0.37
                 uint64_t AS_SB_TABLE : 4;      // VCF: 15.0.41
@@ -337,6 +336,7 @@ typedef struct {
     char     txt_filename[TXT_FILENAME_LEN];// filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;          // size of header in original txt file before any zip-side modifications. note: use Σdata_uncompress_len(fragᵢ) for the size after zip-size modifications (v12)
     QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ. properties of QNAME flavor (v15) 
+    char unused[44];
 } SectionHeaderTxtHeader, *SectionHeaderTxtHeaderP; 
 
 typedef struct {

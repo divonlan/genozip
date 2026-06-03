@@ -18,7 +18,7 @@
 
 #pragma GENDICT FASTA_CONTIG=DTYPE_FIELD=CONTIG
 
-#pragma GENDICT FASTA_QNAME=DTYPE_FIELD=QNAME // MAX_QNAME_ITEMS - same did as SAM/FASTQ/GFF - used for testing if file is actually a QUAL-less FASTQ
+#pragma GENDICT FASTA_QNAME=DTYPE_FIELD=QNAME // same did as SAM/FASTQ/GFF - used for testing if file is actually a QUAL-less FASTQ
 #pragma GENDICT FASTA_Q0NAME=DTYPE_1=Q0NAME // must have a did_i directly after QNAME
 #pragma GENDICT FASTA_Q1NAME=DTYPE_1=Q1NAME 
 #pragma GENDICT FASTA_Q2NAME=DTYPE_1=Q2NAME
@@ -33,9 +33,7 @@
 #pragma GENDICT FASTA_QBNAME=DTYPE_1=QBNAME 
 #pragma GENDICT FASTA_QCNAME=DTYPE_1=QCNAME 
 #pragma GENDICT FASTA_QDNAME=DTYPE_1=QDNAME 
-#pragma GENDICT FASTA_QENAME=DTYPE_1=QENAME 
-#pragma GENDICT FASTA_QFNAME=DTYPE_1=QFNAME 
-#pragma GENDICT FASTA_QGNAME=DTYPE_1=QGNAME // if adding more Q*NAMEs - add sam.h, fasta.h, gff.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT FASTA_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add sam.h and gff.h too
 #pragma GENDICT FASTA_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT FASTA_LINEMETA=DTYPE_FIELD=LINEMETA

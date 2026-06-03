@@ -193,11 +193,9 @@ void sam_seg_correct_for_semcol_in_contig (uint32_t *n_repeats, rom *repeats, ui
 
 void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
 {
-    START_TIMER;
-
     // case: still "unknown". set to "yes" or "no" and proceed accordingly. this can happen in any VB.
-    if (segconf.sam_has_BWA_XA_Z == unknown && !sam_seg_verify_BWA_XA (vb, STRa(xa))) {
-        DO_ONCE memcpy (segconf.sam_malformed_XA, xa, MIN_(xa_len, sizeof (segconf.sam_malformed_XA)));
+    if (segconf.sam_has_BWA_XA_Z == unknown && !sam_seg_verify_BWA_XA (vb, STRa(xa) && z_file)) {
+        DO_ONCE memcpy (z_file->sam_malformed_XA, xa, MIN_(xa_len, sizeof (z_file->sam_malformed_XA)-1));
 
         seg_by_did (VB, STRa(xa), OPTION_XA_Z, add_bytes); // fallback;        
         return;
@@ -207,8 +205,8 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
     if (!CTX(OPTION_XA_Z)->is_initialized)
         sam_seg_BWA_XA_initialize (vb);
 
-    static const MediumContainer container_XA = {
-        .repeats      = 0, 
+    static const Container(6) container_XA = {
+        .repeats      = 1,  // faster seg if this happens to be correct 
         .nitems_lo    = 6, 
         .repsep       = {';'}, // including last item
         .items        = { { .dict_id = { _OPTION_XA_LOOKBACK }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK } }, 
@@ -228,7 +226,7 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
                                  (MP(GEM3) && segconf.sam_bisulfite) ? sam_seg_gem3_XA_strand_cb : sam_seg_BWA_XA_strand_cb, 
                                  sam_seg_BWA_XA_pos_cb, sam_seg_0A_cigar_cb, 0 };
 
-    int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_XA_Z), container_XA, STRa(xa), 
+    int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_XA_Z), (ContainerP)&container_XA, STRa(xa), 
                                            use_lb ? callbacks : callbacks_no_lb, 
                                            segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                            add_bytes);
@@ -236,10 +234,8 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
     // case: we failed to seg as a container - flush lookbacks (rare condition, and complicated to rollback given the round-robin and unlimited repeats)
     if (use_lb && repeats == -1) {
         SET_XA (yes, no); // this file's XA:Z is not bwa format after all 
-        lookback_flush (VB, &container_XA);
+        lookback_flush (VB, (ContainerP)&container_XA);
     }
-
-    COPY_TIMER(sam_seg_BWA_XA_Z);
 }
 
 // PIZ up to v13: this is called for XA that are a container, but not for invalid XA that are segged as a simple snip
@@ -260,7 +256,7 @@ void sam_piz_XA_field_insert_lookback_v13 (VBlockP vb)
 // ----------------------------------------------------------------------------------------------------------
 // XC:i (bwa) Undocumented: usually seq_len minus the final soft-clip (right if forward and left if rev-comp) 
 // ----------------------------------------------------------------------------------------------------------
-void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t XC, unsigned add_bytes)
+void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t XC, unsigned add_bytes)
 {
     decl_ctx (OPTION_XC_i);
     int64_t prediction = dl->SEQ.len - vb->soft_clip[!dl->FLAG.rev_comp || dl->FLAG.unmapped];
@@ -386,10 +382,8 @@ static inline int sam_XS_get_mux_channel (uint8_t MAPQ)
 }
 
 // usually XS:i, but ZS:i in hisat2
-void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int64_t xs, unsigned add_bytes)
+void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int64_t xs, unsigned add_bytes)
 {
-    START_TIMER;
-
     // "Suboptimal alignment score" - multiplex by MAPQ and (sometimes) delta vs AS
     if (has(AS_i) && ABS(xs) < 10000) {
 
@@ -419,8 +413,6 @@ void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int64_t xs,
     // delta doesn't make sense - store as snip
     else
         seg_integer (VB, CTX(did_i), xs, true, add_bytes);
-
-    COPY_TIMER (sam_seg_BWA_XS_i);
 }
 
 // v14: De-multiplex XS by MAPQ

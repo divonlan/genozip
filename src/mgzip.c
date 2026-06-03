@@ -202,7 +202,7 @@ static void gz_free_deflator (VBlockP vb, FlagsMgzip mgzip_flags)
 static uint32_t bgzf_igzip_deflate (VBlockP vb, FlagsMgzip mgzip_flags, STRp(uncomp), STRp(comp))
 {
     ASSERTNOTNULL (vb->gz_deflate_mem);
-
+    
     struct isal_zstream strm = {};
     isal_deflate_stateless_init (&strm);
 
@@ -664,11 +664,11 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
                 // case: while attempting to skip bogus gz headers, we inadvertedly skipped a real one (because didn't match the expected format or ratio)
                 // symptom: ratio just gets worse and worse with every block we read (bsize keeps growing but not isize), 
                 // and if we don't stop, we will read he entire file
-                if (ratio < 0.95)
-                    RESTART ("--no-bgzf", "Failed to identify next gz-block's gz header, marking the close of this block. file=%s codec=%s offset=%"PRIu64" file_size=%"PRIu64, 
-                            codec_name (codec), file->basename, (uint64_t)ftello64 ((FILE *)file->file) - file->gz_data.len, file->disk_size);
+                if (ratio < 0.95 && !discovering)
+                    RESTART ("--no-bgzf", "Failed to identify next gz-block's gz header, marking the close of this block. file=%s codec=%s offset=%"PRId64" file_size=%"PRIu64, 
+                             file->basename, codec_name (codec), (int64_t)ftello64 ((FILE *)file->file) - file->gz_data.len, file->disk_size);
                             
-                // loop back to extend the block, if the ratio doesn't make sense, but not if bsize is too small to judge ratio
+                // final while condition: loop back to extend the block, if the ratio doesn't make sense, but not if bsize is too small to judge ratio
                 bsize > 2 KB && 
                 (ratio < segconf.gz_comp_ratio / RATIO_MULT || ratio > segconf.gz_comp_ratio * RATIO_MULT); })));
     
@@ -705,7 +705,7 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
         // case: final data in file is not a full gz block and truncation allowed: 
         // account and then ignore the data that will not be gz-decompressed 
         if (flag.truncate) {
-            WARN ("FYI: %s is truncated - its final %s block in incomplete. Dropping final %u bytes of the GZ data.", 
+            WARN (_FYI "%s is truncated - its final %s block in incomplete. Dropping final %u bytes of the GZ data.", 
                   txt_name, codec_name (codec), file->gz_data.len32);
 
             if (flag_show_bgzf) mgzip_show_truncated (file, file->gz_data.len32);
@@ -900,7 +900,7 @@ GzStatus mgzip_read_block_with_bsize (FileP file, bool discovering, Codec codec)
 
             // case: truncation allowed: account and then discard the data that will not be gz-decompressed 
             if (flag.truncate) { 
-                WARN ("FYI: %s is truncated - its final BGZF block in incomplete. Dropping final %u bytes of the GZ data.", txt_name, file->gz_data.len32);
+                WARN (_FYI "%s is truncated - its final BGZF block in incomplete. Dropping final %u bytes of the GZ data.", txt_name, file->gz_data.len32);
 
                 mgzip_set_is_exactable (file, false, "File is truncated");
                 if (flag_show_bgzf) mgzip_show_truncated (file, file->gz_data.len32);
@@ -1265,13 +1265,11 @@ static void bgzf_show_compress (VBlockP vb, int32_t gz_blk_i/*# of block in file
 
 static void bgzf_failed_exact_verification (void)
 {
-    if (flag.bgzf == BGZF_EXACT_STRICT) {
-        if (txt_file && !txt_file->redirected) {
-            FCLOSE (txt_file->file, txt_file->name); // can't call file_close from writer thread
-            file_remove (txt_file->name, true);
-        }
-        ABORTINP ("%s %s", NON_EXACT_ERROR, WEBSITE_GZ);
-    } 
+    if (flag.bgzf == BGZF_EXACT_STRICT) 
+        ABORTINP ("%s (technical details: library=%s) %s", 
+                  NON_EXACT_ERROR, bgzf_lib_name_level (txt_file->mgzip_flags).s, WEBSITE_GZ);
+
+    flag.bgzf = BGZF_EXACT_FAILED; // no point continuing to test + avoid full-file verification and error message
     
     WARN ("%s A different gz-recompression method was used.", NON_EXACT_ERROR);
 }
@@ -1292,8 +1290,6 @@ static void bgzf_failed_exact_verification_one_block (VBlockP vb, const BgzfBloc
             if (file_put_data (dump_fn, STRa(gz_data), 0))
                 fprintf (stderr, "\nDumped file %s\n", dump_fn);
         }
-
-        flag.bgzf = BGZF_EXACT_FAILED; // no point continuing to test + avoid full-file verification and error message
 
         bgzf_failed_exact_verification();
     }
@@ -1559,8 +1555,7 @@ static bool show_gz_uncompress_gz_block (rom filename, size_t *block_txt_len, si
 {
     enum libdeflate_result ret;
     
-    while ((ret = libdeflate_gzip_decompress_ex (evb->gz_inflate_mem, show_gz_next, show_gz_remaining,  
-                                       STRb(evb->txt_data), block_gz_len, block_txt_len))
+    while ((ret = libdeflate_gzip_decompress_ex (evb->gz_inflate_mem, show_gz_next, show_gz_remaining, STRb(evb->txt_data), block_gz_len, block_txt_len))
             == LIBDEFLATE_INSUFFICIENT_SPACE)
             // double the size of txt_data if not enough txt space
             buf_alloc_exact (evb, evb->txt_data, evb->txt_data.len * 2, char, NULL); 
@@ -1605,9 +1600,11 @@ void show_gz (rom filename)
     while (file_remaining) {
         
         // move previously read final partial block to beginning of z_data
-        memmove (B1ST8(evb->z_data), show_gz_next, show_gz_remaining);
-        evb->z_data.len  = show_gz_remaining;
-        evb->z_data.next = 0;
+        if (evb->z_data.next) {
+            memmove (B1ST8(evb->z_data), show_gz_next, show_gz_remaining);
+            evb->z_data.len  = show_gz_remaining;
+            evb->z_data.next = 0;
+        }
         
         // top up z_data as much as possible
         uint64_t bytes_to_read = MIN_(evb->z_data.size - evb->z_data.len, file_remaining);
@@ -1621,11 +1618,17 @@ void show_gz (rom filename)
             
             // case: only partial block is available at end of z_data
             if (!show_gz_uncompress_gz_block (filename, &block_txt_len, &block_gz_len)) {
-                // case: we haven't read the entire file yet - top up for data and try again
-                if (file_remaining)
+                bool is_full = (evb->z_data.len == evb->z_data.size && evb->z_data.next == 0);
+
+                // case: we haven't read the entire file yet - top up for data and try again (unless entire data is full)
+                if (file_remaining && !is_full)
                     break;
 
-                if (show_gz_remaining > 40 && !flag.explicit_quiet)
+                if (is_full && !offset)
+                    printf ("SINGLE GZ BLOCK (judging by first %s): gz_header=%s\n", 
+                            str_size (evb->z_data.size).s, display_gz_header (show_gz_next, show_gz_remaining, false).s);
+
+                else if (show_gz_remaining > 40 && !flag.explicit_quiet)
                     printf ("PARTIAL GZ BLOCK #%u offset=%"PRIu64": gz_header=%s\n", 
                             gz_blk_i, offset, display_gz_header (show_gz_next, show_gz_remaining, false).s);
 

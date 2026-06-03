@@ -9,7 +9,7 @@
 #include "vcf_private.h"
 #include "url.h"
 
-sSTRl (hgvsg_con_snip, 64);
+sSTRl (hgvsg_con_snip, con_snip_sizeof(2));
 sSTRl (copy_chrom_snip, 32);
 static Did hgvsg_did_accession, hgvsg_did_hgvs;
 
@@ -19,16 +19,16 @@ void vcf_mastermind_zip_initialize (void)
 {
     // init HGVSG
     DictId hgvsg_dict_id_accession = (DictId)DICT_ID_MAKE1_6("H0GVSG");
-    DictId hgvsg_dict_id_hgvs = (DictId)DICT_ID_MAKE1_6("H1GVSG");
+    DictId hgvsg_dict_id_hgvs      = (DictId)DICT_ID_MAKE1_6("H1GVSG");
     
     hgvsg_did_accession = ctx_add_new_zf_ctx_at_init ("HGVSG_ACCESSION", 15, hgvsg_dict_id_accession)->did_i;
     hgvsg_did_hgvs = ctx_add_new_zf_ctx_at_init ("HGVSG_HGVS", 10, hgvsg_dict_id_hgvs)->did_i;
     
     DO_ONCE {
-        SmallContainer con = { .repeats   = 1,
-                               .nitems_lo = 2,
-                               .items     = { { .dict_id = hgvsg_dict_id_accession, .separator[0] = ':' },
-                                              { .dict_id = hgvsg_dict_id_hgvs                           } } };
+        Container(2) con = { .repeats   = 1,
+                             .nitems_lo = 2,
+                             .items     = { { .dict_id = hgvsg_dict_id_accession, .separator[0] = ':' },
+                                            { .dict_id = hgvsg_dict_id_hgvs                           } } };
 
         container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(hgvsg_con_snip));
 
@@ -85,8 +85,9 @@ static bool vcf_seg_INFO_MMID3_gene (VBlockP vb, ContextP ctx, STRp(mmid3_gene),
 // Example: MMID3=OR4F5:G136S
 void vcf_seg_INFO_MMID3 (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    static MediumContainer con = { 
+    static Container(2) con = { 
         .repsep[0] = ',',
+        .repeats   = 1,  // faster seg if this happens to be correct
         .drop_final_repsep = true,
         .nitems_lo = 2,
         .items     = { { .dict_id.num = DICT_ID_MAKE1_6("M0MID3"), .separator[0] = ':' },
@@ -95,7 +96,7 @@ void vcf_seg_INFO_MMID3 (VBlockVCFP vb, ContextP ctx, STRp(value))
 
     SegCallback callbacks[2] = { vcf_seg_INFO_MMID3_gene, 0 };
 
-    seg_array_of_struct (VB, ctx, con, STRa(value), callbacks, NULL, value_len);
+    seg_array_of_struct (VB, ctx, (ContainerP)&con, STRa(value), callbacks, NULL, value_len);
 }
 
 // <ID=MMURI3,Number=1,Type=String,Description="Mastermind search URI for articles including other DNA-level variants resulting in the same amino acid change">

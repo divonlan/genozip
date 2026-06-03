@@ -31,7 +31,7 @@ void sam_produce_solo_huffmans (VBlockSAMP vb)
     // note: outer-loop on lines and inner of tags for better cpu caching of txt_data and vb->lines
     for_line 
         for (int tag_i = 0; tag_i < NUM_SOLO_TAGS; tag_i++) {
-            ZipDataLineSAMP dl = DATA_LINE(line_i);
+            ZipDataLineSAM𐤐 dl = DATA_LINE(line_i);
             if (dl->solo_z_fields[tag_i].len)
                 huffman_chew_one_sample (solo_props[tag_i].did_i, STRline(dl, solo_z_fields[tag_i]), false);
         }        
@@ -112,9 +112,10 @@ static void sam_seg_CB_Z_segconf (VBlockSAMP vb, STRp(cb))
          
     segconf.n_CR_CB_CY_seps = n_items - has_suffix - 1;
 
-    if (n_items > SMALL_CON_NITEMS) return; // it won't fit in a SmallContainer - we will just seg as a whole
+    if (n_items > MAX_CB_ITEMS) return; // it won't fit in the container - we will just seg as a whole
 
-    segconf.CB_con = (SmallContainer){ .nitems_lo = n_items, .repeats = 1 };
+    segconf.CB_con.nitems_lo = n_items;
+    segconf.CB_con.repeats   = 1;
 
     for (int i=0; i < n_items-1; i++)
         segconf.CB_con.items[i] = (ContainerItem){ .dict_id = { _OPTION_CB_ARR }, .separator = { segconf.CR_CB_seperator } };
@@ -152,9 +153,8 @@ bool sam_can_seg_depn_solo_against_sag (VBlockSAMP vb, Did did_i, SoloTags solo,
     return !memcmp (str, uncomp, str_len);
 }
 
-void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_bytes)
+void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cb), unsigned add_bytes)
 {
-    START_TIMER;
     ContextP cb_ctx = CTX(OPTION_CB_Z); 
 
     set_LineWord_str (dl, solo_z_fields[SOLO_CB], cb);
@@ -171,8 +171,6 @@ void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_byt
                                   add_bytes);
 
     seg_set_last_txt (VB, cb_ctx, STRa(cb));
-
-    COPY_TIMER(sam_seg_CB_Z);
 }
 
 static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), unsigned add_bytes)
@@ -204,9 +202,8 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
     }
 }
 
-void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_bytes)
+void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cr), unsigned add_bytes)
 {
-    START_TIMER;
     decl_ctx (OPTION_CR_Z);
 
     set_LineWord_str (dl, solo_z_fields[SOLO_CR], cr);
@@ -217,8 +214,6 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_byt
     // copy CB, and if different than CB - xor against it
     else 
         sam_seg_buddied_Z_fields (vb, dl, MATED_CR, STRa(cr), sam_seg_CR_do_seg, add_bytes);                                
-
-    COPY_TIMER(sam_seg_CR_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -229,11 +224,9 @@ void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_byt
 // Note: Seggable against prim, but not against mate (since each mate might have different quality for its barcode sequence)
 // Note: Might be multiple elements seperated by a space (spec recommentation) or '_' (observed in STARsolo) 
 // Requirements: 1. array did, 2. zip callback function
-bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTags solo, uint8_t n_seps, 
-                           STRp(qual), qSTRp (con_snip), MiniContainerP con, unsigned add_bytes)
+bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, SoloTags solo, uint8_t n_seps, 
+                           STRp(qual), qSTRp (con_snip), ContainerP con, unsigned add_bytes)
 {
-    START_TIMER;
-
     Did array_did_i = did_i + 1; // must be one after
     bool dont_compress = false;
 
@@ -248,15 +241,13 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTag
         if (sep) {
             str_split (qual, qual_len, 0, sep, item, false);
             
-            *con = (MiniContainer){
-                .nitems_lo         = 1,
-                .repeats           = n_items,
-                .repsep            = { sep },
-                .drop_final_repsep = true,
-                .items[0]          = { .dict_id = CTX(array_did_i)->dict_id }
-            };
+            con_initialize (con, 1);
+            con->repeats           = n_items;
+            con->repsep[0]         = sep;
+            con->drop_final_repsep = true;
+            con->items[0].dict_id  = CTX(array_did_i)->dict_id;
 
-            container_prepare_snip ((ContainerP)con, 0, 0, STRa(con_snip));
+            container_prepare_snip (con, 0, 0, STRa(con_snip));
         }
     }
 
@@ -280,7 +271,6 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTag
         // note: this goes into the primary did_i, not the array item
         seg_add_to_local_string (VB, CTX(did_i), STRa(qual), LOOKUP_SIMPLE, add_bytes);
 
-    COPY_TIMER(sam_seg_barcode_qual);
     return dont_compress;
 }
 
@@ -323,10 +313,8 @@ static void sam_seg_RX_array (VBlockSAMP vb, ContextP ctx, STRp(rx), unsigned ad
     seg_array (VB, ctx, OPTION_RX_Z, STRa(rx), segconf.RX_sep, 0, false, STORE_NONE, _OPTION_RX_Z_X, add_bytes);
 }
 
-void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rx), unsigned add_bytes)
+void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(rx), unsigned add_bytes)
 {
-    START_TIMER;
-
     // In Novoalign, AGeNT Trimmer (and maybe others) RX can consist of multiple barcodes eg: "GTCCCT-TTTCTA"
     if (segconf_running && !segconf.n_RX_seps) {    
         if      (memchr (rx, '_', rx_len)) segconf.RX_sep = '_'; 
@@ -349,8 +337,6 @@ void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rx), unsigned add_byt
                                   segconf.RX_sep ? sam_seg_RX_array   // Novoalign-like case - array of short barcodes
                                                  : sam_seg_RX_do_seg, // cellranger/longranger-like case - long barcodes, possibly diffed against UB/BX
                                   add_bytes);                                
-
-    COPY_TIMER (sam_seg_RX_Z);
 }
 
 static void sam_seg_BX_Z_do (VBlockSAMP vb, ContextP ctx, STRp(bx), uint32_t add_bytes)
@@ -405,10 +391,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BX)
     return NO_NEW_VALUE;
 }
 
-void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_bytes)
+void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(bx), unsigned add_bytes)
 {
-    START_TIMER;
-
     set_LineWord_str (dl, solo_z_fields[SOLO_BX], bx);
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_BX_Z, SOLO_BX, STRa(bx)))
@@ -419,18 +403,14 @@ void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bx), unsigned add_byt
         sam_seg_buddied_Z_fields (vb, dl, MATED_BX, STRa(bx), sam_seg_BX_Z_do, add_bytes);
 
     seg_set_last_txt (VB, CTX(OPTION_BX_Z), STRa(bx));
-
-    COPY_TIMER (sam_seg_BX_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
 // QX:Z (longranger, novoalign, AGeNT Trimmer) UY:Z (cellranger) - "Chromium molecular barcode read quality. Phred scores as reported by sequencer"
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qx), unsigned add_bytes)
+void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(qx), unsigned add_bytes)
 {
-    START_TIMER;
-
     set_LineWord_str (dl, solo_z_fields[SOLO_QX], qx);
 
     if (sam_can_seg_depn_solo_against_sag (vb, OPTION_QX_Z, SOLO_QX, STRa(qx))) {
@@ -445,8 +425,6 @@ void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qx), unsigned add_byt
         CTX(OPTION_QX_Z)->local.len32 += qx_len;
         seg_lookup_with_length (VB, CTX(OPTION_QX_Z), qx_len, add_bytes); // actual data will be accessed by the codec with a callback
     }
-
-    COPY_TIMER (sam_seg_QX_Z);
 }
 
 
@@ -459,10 +437,8 @@ static void sam_seg_BC_array (VBlockSAMP vb, ContextP ctx, STRp(bc), unsigned ad
     seg_array (VB, ctx, OPTION_BC_Z, STRa(bc), segconf.BC_sep, 0, false, STORE_NONE, _OPTION_BC_ARR, add_bytes);
 }
 
-void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_bytes)
+void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(bc), unsigned add_bytes)
 {
-    START_TIMER;
-
     if (segconf_running && !segconf.n_BC_QT_seps) {    
         if      (memchr (bc, '_', bc_len)) segconf.BC_sep = '_'; 
         else if (memchr (bc, '-', bc_len)) segconf.BC_sep = '-'; // as recommended by the SAM spec
@@ -480,8 +456,6 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_byt
         sam_seg_buddied_Z_fields (vb, dl, MATED_BC, STRa(bc),  
                                   segconf.n_BC_QT_seps ? sam_seg_BC_array : 0,
                                   add_bytes);
-
-    COPY_TIMER (sam_seg_BC_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -491,7 +465,7 @@ void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_byt
 // gx:z - STARsolo: Gene IDs for unique- and multi-gene reads (;-seperated list)
 //-----------------------------------------------------------------------------------------------------
 
-static void sam_seg_GX_GN_do (VBlockSAMP vb, ZipDataLineSAMP dl, bool isupper)
+static void sam_seg_GX_GN_do (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool isupper)
 {
     Did gx_did = isupper ? OPTION_GX_Z : OPTION_gx_Z;
     Did gn_did = isupper ? OPTION_GN_Z : OPTION_gn_Z;
@@ -529,9 +503,8 @@ static void sam_seg_GX_GN_do (VBlockSAMP vb, ZipDataLineSAMP dl, bool isupper)
     seg_special0 (VB, SAM_SPECIAL_GX_GN, CTX(gn_did), 0);
 }
 
-void sam_seg_GX_GN (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes)
+void sam_seg_GX_GN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(value), unsigned add_bytes)
 {
-    START_TIMER;
     decl_ctx (did_i);
 
     ctx_set_encountered (VB, ctx);
@@ -550,8 +523,6 @@ void sam_seg_GX_GN (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), u
     // case: not "normal" setup - seg GX separately 
     else 
         seg_array (VB, CTX(did_i), did_i, STRa(value), ';', 0, false, STORE_NONE, DICT_ID_NONE, add_bytes);
-
-    COPY_TIMER (sam_seg_GX_GN);
 }
 
 // note: GX is always reconstructed before GN
@@ -596,10 +567,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_GX_GN)
 // fx:Z - CellRanger: Feature identifier matched to this Feature Barcode read. Specified in the id column of the feature reference.
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(fx), unsigned add_bytes)
+void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(fx), unsigned add_bytes)
 {
-    START_TIMER;
-
     // it is often a copy of GX. TO DO: support case where fx is before GX (bug 623)
     if (ctx_encountered_in_line (VB, OPTION_GX_Z)) {
         if (str_issame_(STRa(fx), last_txtx(vb, CTX(OPTION_GX_Z)), vb->last_txt_len(OPTION_GX_Z)))
@@ -611,8 +580,6 @@ void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(fx), unsigned add_byt
 
     else fallback:
         seg_by_did (VB, STRa(fx), OPTION_fx_Z, add_bytes);
-
-    COPY_TIMER (sam_seg_fx_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -620,23 +587,17 @@ void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(fx), unsigned add_byt
 // TQ:Z - longranger & cellranger: Sequence of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 sequence.
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(seq), unsigned add_bytes)
+void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(seq), unsigned add_bytes)
 {
-    START_TIMER;
-
     seg_add_to_local_blob (VB, CTX(did_i), STRa(seq), add_bytes);
-
-    COPY_TIMER (sam_seg_other_seq);
 }
 
 //-----------------------------------------------------------------------------------------------------
 // GR:Z
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gr), unsigned add_bytes)
+void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gr), unsigned add_bytes)
 {
-    START_TIMER;
-
     // diff against CR if possible
     if (has(CR_Z)) {
         STR(cr);
@@ -657,18 +618,14 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gr), unsigned add_byt
         // add redirection GR -> GR_X
         seg_by_ctx (VB, STRa(redirect_to_GR_X_snip), CTX(OPTION_GR_Z), 0); 
     }
-
-    COPY_TIMER (sam_seg_GR_Z);
 }
 
 //-----------------------------------------------------------------------------------------------------
 // GY:Z
 //-----------------------------------------------------------------------------------------------------
 
-void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gy), unsigned add_bytes)
+void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gy), unsigned add_bytes)
 {
-    START_TIMER;
-
     // diff against CY if possible
     if (has(CY_Z)) {
         STR(cy);
@@ -687,8 +644,6 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gy), unsigned add_byt
         // add redirection GY -> GY_X
         seg_by_ctx (VB, STRa(redirect_to_GY_X_snip), CTX(OPTION_GY_Z), 0); 
     }
-
-    COPY_TIMER (sam_seg_GY_Z);
 }
 
 
@@ -916,12 +871,11 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_TEXTUAL_CIGAR)
 
 // eg: TX:Z:hg19_ENST00000456328,+1336,91M;hg19_ENST00000515242,+1329,91M;hg19_ENST00000518655,+1162,91M
 //     AN:Z:hg19_ENST00000456328,-1400,91M;hg19_ENST00000515242,-1393,91M;hg19_ENST00000518655,-1226,91M
-void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes)
+void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(value), unsigned add_bytes)
 {
-    START_TIMER;
-
-    static const MediumContainer tx_con = {
+    static const Container(7) tx_con = {
         .nitems_lo         = 7, 
+        .repeats           = 1, // most common number of repeats (faster seg if correct)
         .drop_final_repsep = true,
         .repsep            = {';'},
         .items             = { { .dict_id = { _OPTION_TX_LOOKBACK  }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK } }, 
@@ -933,8 +887,9 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value),
                                { .dict_id = { _OPTION_TX_SAM_POS   }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK   } } }
     };
 
-    static const MediumContainer an_con = {
+    static const Container(7) an_con = {
         .nitems_lo         = 7,
+        .repeats           = 1, // most common number of repeats (faster seg if correct)
         .drop_final_repsep = true,
         .repsep            = {';'},
         .items             = { { .dict_id = { _OPTION_AN_LOOKBACK  }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK } }, 
@@ -951,21 +906,19 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value),
     SegCallback callbacks_lb[]    = { seg_do_nothing_cb, seg_do_nothing_cb, sam_seg_TX_AN_gene, 0, sam_seg_TX_AN_pos,          sam_seg_TX_AN_cigar, sam_seg_TX_AN_sam_pos };
     SegCallback callbacks_no_lb[] = { seg_do_nothing_cb, seg_do_nothing_cb, 0,                  0, sam_seg_TX_AN_pos_unsorted, sam_seg_TX_AN_cigar, sam_seg_TX_AN_sam_pos };
 
-    ConstMediumContainerP con = (did_i == OPTION_TX_Z) ? &tx_con : &an_con;
+    ContainerP con = (did_i == OPTION_TX_Z) ? (ContainerP)&tx_con : (ContainerP)&an_con;
 
-    int32_t repeats = seg_array_of_struct (VB, CTX(did_i), *con, STRa(value),
+    int32_t repeats = seg_array_of_struct (VB, CTX(did_i), con, STRa(value),
                                            use_lb ? callbacks_lb : callbacks_no_lb, 
                                            NULL, add_bytes);
 
     // case: we failed to seg as a container - flush lookbacks (rare condition, and complicated to rollback given the round-robin and unlimited repeats)
     if (use_lb && repeats == -1) 
         lookback_flush (VB, con);
-
-    COPY_TIMER(sam_seg_TX_AN_Z);
 }
 
 // First: somewhat close to POS; Last: very close to POS; Mated: =mate(MP)
-void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes)
+void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes)
 {
     int channel_i = sam_has_mate?2 : dl->FLAG.rev_comp?1 : 0;
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_GP_i, (MultiplexerP)&vb->mux_GP, channel_i);
@@ -996,7 +949,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_crdna_GP)
 }
 
 // rev_comp: very close to PNEXT; !rev_comp: somewhat close to PNEXT; Mated: =mate(GP)
-void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes)
+void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes)
 {
     int channel_i = sam_has_mate?2 : dl->FLAG.rev_comp?1 : 0;
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MP_i, (MultiplexerP)&vb->mux_MP, channel_i);
@@ -1021,7 +974,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_by_REVCOMP_MATE)
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
 
-void sam_seg_xf_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes)
+void sam_seg_xf_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes)
 {
     int channel_i = dl->FLAG.duplicate;
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_xf_i, (MultiplexerP)&vb->mux_xf, channel_i);

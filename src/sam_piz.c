@@ -70,11 +70,11 @@ void sam_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.SA_CIGAR_abbreviated  = header->sam.segconf_SA_CIGAR_abb;
         segconf.SA_NM_by_CIGAR_X      = header->sam.segconf_SA_NM_by_X;
         segconf.CIGAR_has_eqx         = header->sam.segconf_CIGAR_has_eqx;
-        segconf.has[OPTION_MQ_i]      = header->sam.segconf_has_MQ;
         segconf.is_interleaved        = header->sam.segconf_is_ileaved;
         segconf.s1_to_cm_32           = header->sam.segconf_s1_to_cm_32;
         segconf.xcons_std_seq_len     = header->sam.xcons_std_seq_len_M100 ? (header->sam.xcons_std_seq_len_M100 + 100) : 0;
         flag.deep                     = header->flags.genozip_header.is_deep; 
+        segconf_load_has (OPTION_MQ_i, header->sam.segconf_has_MQ);
 
         z_file->max_conc_writing_vbs  = MAX_(1, BGEN16 (header->sam.conc_writing_vbs)); // since 15.0.64. For earlier v14,15 versions, this will be 0 in the file and set to 1 here, and might be further updated when uncompressing SectionHeaderReconPlan.
     }

@@ -18,7 +18,7 @@ void vcf_segconf_finalize_GQ (VBlockVCFP vb)
     else if ((segconf.count_GQ_by_PL > vb->lines.len * vcf_num_samples / 5) && (segconf.count_GQ_by_PL >= segconf.count_GQ_by_GP))
         segconf.FMT_GQ_method = BY_PL;
 
-    else if (segconf.has[FORMAT_DP])
+    else if (segconf_has(FORMAT_DP))
         segconf.FMT_GQ_method = MUX_DOSAGExDP;
 
     else if (segconf.vcf_is_giggle)

@@ -112,6 +112,8 @@ typedef struct Context {
     Buffer last_samples;       // ZIP/PIZ: VCF: VCF_SAMPLES: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples, entry [format_node_i,sample_i] is TxtWord of last sample sample_i (could be this line or previous line with FORMAT type format_node_i)
     Buffer sample_copied;      // ZIP/PIZ: VCF: VCF_COPY_SAMPLE: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples of bool, true if last sample_i was copied
     Buffer lookback;           // ZIP/PIZ: VCF/SAM: vctx: lookback for contexts that use lookback
+    Buffer width_count;        // ZIP Segconf ZCTX VCF: used for calculating width of VCF_ID, VCF_QUAL, INFO_AC, INFO_MLEAC, INFO_AN, INFO_AF, INFO_SF, INFO_QD, INFO_DP INFO_AS_SB_TABLE, INFO_BaseCounts, INFO_DPB
+    Buffer vep_spec;           // ZIP initialization ZCTX VCYF: INFO_vep
     };
 
     Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
@@ -132,7 +134,8 @@ typedef struct Context {
 
         // CODECs
         Buffer packed;             // PIZ: vctx: used by contexts that compressed CODEC_ACTG               
-        Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL with PACB codec, iq:Z
+        Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL with PACB or TMPL codecs, iq:Z
+        Buffer template;           // ZIP: zctx (QUAL+1): CODEC_TMPL 
         Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
         Buffer longr_state;        // ZIP: Used by LONGR codec on QUAL contexts
         Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
@@ -209,6 +212,7 @@ typedef struct Context {
         struct {                   // SAM_QUAL, OPTION_OQ_Z, FASTQ_QUAL: 
             bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
             bool domq_has_diverse; // ZIP vctx, DOMQ codec internal use
+            bool tmpl_calculated;  // ZIP zctx: TMPL codec - template calculated 
         };
         thool XG_inc_S;            // ZIP: bsseeker2 OPTION_XG_Z: whether to include soft_clip[0]
         struct ctx_tp {            // PIZ: OPTION_tp_B_ARR (15.0.10-15.0.27: OPTION_tp_B_c)
@@ -267,6 +271,8 @@ typedef struct Context {
         struct { packed_enum { PS_NONE, PS_POS, PS_POS_REF_ALT, PS_UNKNOWN } ps_type; }; // FORMAT_PS, FORMAT_PID, FORMAT_IPSphased
         ContextP other_ctx;         // ZIP: used by FORMAT/RO, FORMAT/AO
 
+        uint8_t field_width;        // ZCTX ZIP/PIZ: VCF_ID, VCF_QUAL, INFO_AC, INFO_MLEAC, INFO_AN, INFO_AF, INFO_SF, INFO_QD, INFO_DP INFO_AS_SB_TABLE, INFO_BaseCounts, INFO_DPB
+         
         // FASTQ
         packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } r1_is_aligned;  // FASTQ_SQBITMAP: PIZ: used when reconstructing pair-2
         BamAssTrimCigarTreatment bamass_trims; // ZIP FASTQ_CIGAR: bamass: set to segconf.bamass_trims at VB init. 
@@ -383,7 +389,7 @@ typedef struct Context {
         Buffer cigar_anal_history; // PIZ: used in SAM_CIGAR - items of type CigarAnalItem
         Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
         Buffer domq_denorm;        // PIZ: SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
-        Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec
+        Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec ; FASTQ: used by TMPL codec
         Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
     };
 
@@ -411,9 +417,9 @@ typedef struct {
 } ContextIndex;
 
 typedef struct ContextArray {
+    Did d2d_map[65536 * 2]; // 256 KB
     Buffer ctx_index;  // sorted index into contexts for binary-search lookup if d2d_map fails (PIZ VB / ZIP evb in stats_get_compressed_sizes)
     Did num_contexts;             
-    Did d2d_map[65536 * 2];
     Context contexts[MAX_DICTS];
 } ContextArray, *ContextArrayP;
 typedef const struct ContextArray *ConstContextArrayP;

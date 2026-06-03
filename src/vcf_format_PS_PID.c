@@ -19,7 +19,7 @@
 #define PS_PID_LOOKBACK_LINES (flag.fast ? 4 : flag.best ? 16 : 10) // may be modified without affecting backward compatability
 
 sSTRl_ARRAY(ps_lookback_snip, MAX_PS_PID_LOOKBACK_LINES, 32);
-sSTRl(ps_pra_snip, 200);
+sSTRl(ps_pra_snip, con_snip_sizeof(3));
 
 void vcf_samples_zip_initialize_PS_PID (void)
 {
@@ -28,7 +28,7 @@ void vcf_samples_zip_initialize_PS_PID (void)
         for (int i=0; i < PS_PID_LOOKBACK_LINES; i++)
             seg_prepare_snip_other_chari (SNIP_LOOKBACK, _VCF_LOOKBACK, 'T'+i, ps_lookback_snip, i);
 
-        SmallContainer con_PS_pos_ref_alt = {
+        static const Container(3) con_PS_pos_ref_alt = {
             .repeats   = 1,
             .nitems_lo = 3,
             .items     = { { .dict_id.num = _FORMAT_PSpos, .separator = "_"},
@@ -118,7 +118,7 @@ static inline bool vcf_seg_FORMAT_PS_PID_ps_matches_pid (VBlockVCFP vb, STRp(ps)
 // <ID=PID,Number=1,Type=String,Description="Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group">
 // Encountered formats: 1. PID="18182014_G_A", PS="18182014" ; 2. PS="18182014_G_A", no PID
 // Value is the same as POS,REF,ALT of this line, or the same as PS/PID of this sample in one of the few previous lines
-void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(value))
+void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, STRp(value))
 {
     int64_t ps_value;
     uint32_t lookback, lb_lines;    
@@ -198,7 +198,7 @@ void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_o
 }
 
 // returns true is the sample has a non-'.' PS value
-bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STRps(sf))
+bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STR𐤐s(sf))
 {
     ContextP ps_ctx = CTX(FORMAT_PS);
     uint16_t sf_i = SF_I(FORMAT_PS);

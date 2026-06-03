@@ -515,7 +515,7 @@ do_compress: ({});
         ABORT ("%s: Compressing %s with %s need %u bytes, but allocated only %u", VB_NAME, qual_ctx->tag_name, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
     }
 
-    COPY_TIMER_COMPRESS (compressor_domq); // don't account for sub-codec compressor, it accounts for itself
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_domq); // don't account for sub-codec compressor, it accounts for itself
 
     return compress (vb, qual_ctx, header, B1STc(*qual_buf), uncompressed_len, NULL, STRa(compressed), false, name);
 }
@@ -638,18 +638,21 @@ static void codec_domq_reconstruct_runs_v13 (VBlockP vb, ContextP qual_ctx, Reco
 // PIZ: returns de-normalization vector for dom_i (i.e. for current line)
 bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx, uint8_t dom_i, uint8_t num_norm_qs)
 {
+    START_TIMER;
+
     // initialize, if not already initialized
     if (!domqruns_ctx->domq_denorm.len) {
         STR(snip);
         PEEK_SNIP (domqruns_ctx->did_i); // only one snip per VB - used for all lines
 
-        buf_alloc_exact (vb, domqruns_ctx->domq_denorm, snip_len, uint8_t, "domq_denorm");
-        domqruns_ctx->domq_denorm.len32 = base64_decode (snip, &snip_len, B1ST8(domqruns_ctx->domq_denorm), -1);
+        buf_alloc_exact (vb, domqruns_ctx->domq_denorm, snip_len + 4/*base64_decode overflow requirement*/, uint8_t, "domq_denorm");
+        domqruns_ctx->domq_denorm.len32 = base64_decode (snip, snip_len, B1ST8(domqruns_ctx->domq_denorm), -1);
 
         if (flag.show_qual)
             show_denormalize (vb, domqruns_ctx-1, B1ST8(domqruns_ctx->domq_denorm), NULL, NULL, num_norm_qs, domqruns_ctx->domq_denorm.len32 / (uint32_t)num_norm_qs);
     }
 
+    COPY_TIMER (codec_domq_piz_get_denorm);
     return B8(domqruns_ctx->domq_denorm, (uint32_t)dom_i * (uint32_t)num_norm_qs);    
 }
 
@@ -661,6 +664,8 @@ bytes codec_domq_piz_get_denorm (VBlockP vb, ContextP domqruns_ctx, uint8_t dom_
 static void codec_domq_reconstruct_runs (VBlockP vb, ContextP qual_ctx, ContextP domqruns_ctx, 
                                          uint32_t len, uint8_t dom_i, uint8_t no_dom, ReconType reconstruct)
 {
+    START_TIMER;
+
     bytes denormalize = codec_domq_piz_get_denorm (vb, domqruns_ctx, dom_i, no_dom);
 
     uint8_t dom = denormalize[0];
@@ -695,32 +700,37 @@ static void codec_domq_reconstruct_runs (VBlockP vb, ContextP qual_ctx, ContextP
     }
 
     // normal case: reconstruct runs
-    else while (qual_len < expected_qual_len) {
-        uint8_t q_norm = NEXTLOCAL (uint8_t, qual_ctx);
+    else { 
+        while (qual_len < expected_qual_len) {
+            uint8_t q_norm = NEXTLOCAL (uint8_t, qual_ctx);
 
-        if (q_norm != no_dom) { 
-            qual_len += codec_domq_reconstruct_dom_run (vb, domqruns_ctx, dom, expected_qual_len - qual_len, reconstruct);
+            if (q_norm != no_dom) { 
+                uint32_t run_len = codec_domq_reconstruct_dom_run (vb, domqruns_ctx, dom, expected_qual_len - qual_len, reconstruct);
+                qual_len += run_len;
 
-            // case: we're at an end of a line that ended with a run
-            if (qual_len == expected_qual_len) {
-                qual_ctx->next_local--; // unconsume q_norm
+                // case: we're at an end of a line that ended with a run
+                if (qual_len == expected_qual_len) {
+                    qual_ctx->next_local--; // unconsume q_norm
+                    break;
+                }
+            }
+
+            else if (qual_ctx->local.len32 == qual_ctx->next_local) { // this is an final-run indicator
+                uint32_t run_len = codec_domq_reconstruct_dom_run (vb, domqruns_ctx, dom, expected_qual_len - qual_len, reconstruct);
+                qual_len += run_len;
+                
+                qual_ctx->next_local--; // leave it unconsumed as it might be needed by the next lines
                 break;
             }
-        }
+            
+            else 
+                q_norm = NEXTLOCAL (uint8_t, qual_ctx);
 
-        else if (qual_ctx->local.len32 == qual_ctx->next_local) { // this is an final-run indicator
-            qual_len += codec_domq_reconstruct_dom_run (vb, domqruns_ctx, dom, expected_qual_len - qual_len, reconstruct);
-            qual_ctx->next_local--; // leave it unconsumed as it might be needed by the next lines
-            break;
+            if (reconstruct) 
+                RECONSTRUCT1 (denormalize[q_norm]); 
+            
+            qual_len++;
         }
-        
-        else 
-            q_norm = NEXTLOCAL (uint8_t, qual_ctx);
-
-        if (reconstruct) 
-            RECONSTRUCT1 (denormalize[q_norm]); 
-        
-        qual_len++;
     }
 
     if (missing_qual) { 
@@ -730,11 +740,15 @@ static void codec_domq_reconstruct_runs (VBlockP vb, ContextP qual_ctx, ContextP
     
     ASSPIZ (qual_len == expected_qual_len, "expecting qual_len=%u == expected_qual_len=%u in ctx=%s", 
             qual_len, expected_qual_len, qual_ctx->tag_name);   
+
+    COPY_TIMER (codec_domq_reconstruct_runs);
 }
 
 static void codec_domq_reconstruct_divr (VBlockP vb, ContextP divrqual_ctx, ContextP domqruns_ctx, 
                                          uint32_t len, uint8_t dom_i, uint8_t no_dom, ReconType reconstruct)
 {
+    START_TIMER;
+
     if (VER2(15,76)) {  
         bytes denormalize = codec_domq_piz_get_denorm (vb, domqruns_ctx, dom_i, no_dom);
 
@@ -750,6 +764,8 @@ static void codec_domq_reconstruct_divr (VBlockP vb, ContextP divrqual_ctx, Cont
 
     else // up to 15.0.75 diverse lines were stored verbatim (not normalized)
         RECONSTRUCT_NEXT (divrqual_ctx, len);
+
+    COPY_TIMER (codec_domq_reconstruct_divr);
 }
 
 CODEC_RECONSTRUCT (codec_domq_reconstruct)

@@ -799,7 +799,7 @@ static unsigned num_stats=0, num_buffers=0;
 
 static bool buflist_show_memory_add_buf (ConstBufferP buf, VBlockPoolType pool_type, VBID vb_id, void *unused)
 {
-    ASSERTW (buf->name && strlen (buf->name) > 0, "FYI: buffer allocated in %s:%u has no name", buf->func, buf->code_line);
+    ASSERTW (buf->name && strlen (buf->name) > 0, _FYI "Buffer allocated in %s:%u has no name", buf->func, buf->code_line);
 
     bool found = false;
     for (unsigned st_i=0; st_i < num_stats && !found; st_i++) 

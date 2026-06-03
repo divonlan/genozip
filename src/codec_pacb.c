@@ -55,7 +55,7 @@ static void codec_pacb_init_ctxs (VBlockP vb, ContextP ctx, uint8_t n_channels, 
 
 static uint8_t get_max_np (void)
 {
-    return (TXT_DT(FASTQ) || !segconf.has[OPTION_np_i] /* CLR */) ? 1 : MAX_np;    
+    return (TXT_DT(FASTQ) || !segconf_has(OPTION_np_i) /* CLR */) ? 1 : MAX_np;    
 }
 
 void codec_pacb_segconf_finalize (VBlockP vb)
@@ -117,7 +117,7 @@ bool codec_pacb_maybe_used (Did did_i)
 {
     if (flag.force_qual_codec == CODEC_PACB) return true;
     
-    return (TECH(PACBIO) || TECH(UNKNOWN)) // any "UNKNOWN" long-reads file will be assigned PACB by this (if rest of conditions in this statement are met)
+    return (TECH(PACBIO) || tech_is_unknown()) // any "UNKNOWN" long-reads file will be assigned PACB by this (if rest of conditions in this statement are met)
          && segconf.is_long_reads  
          && !flag.no_pacb 
          && segconf.nontrivial_qual 
@@ -227,7 +227,7 @@ COMPRESS (codec_pacb_compress)
     *compressed = 0;
     *uncompressed_len = *compressed_len = 1;
     
-    COPY_TIMER_COMPRESS (compressor_pacb); 
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_pacb); 
     return true;
 }
 

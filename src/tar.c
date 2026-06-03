@@ -223,7 +223,7 @@ FILE *tar_open_file (rom fn_on_disk, rom fn_in_tar)
     
     // remove leading /
     if (fn_in_tar[0] == '/') {
-        WARN_ONCE ("FYI: within the tar file, leading '/' are removed from file names%s", "");
+        WARN_ONCE (_FYI "Within the tar file, leading '/' are removed from file names%s", "");
         fn_in_tar++;
     }
 

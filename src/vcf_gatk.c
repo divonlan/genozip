@@ -15,7 +15,7 @@
 #define _RAW_MQ  DICT_ID_MAKE1_7("R1AW_MQ")    
 #define _RAW_DP2 DICT_ID_MAKE1_8("R2AW_DP2")  
 
-static SmallContainer RAW_MQandDP_con = {
+static const Container(3) RAW_MQandDP_con = {
     .nitems_lo = 3, 
     .repeats   = 1, 
     .items     = { { .dict_id={ _RAW_DP }, .separator = { CI0_INVISIBLE } },
@@ -23,7 +23,7 @@ static SmallContainer RAW_MQandDP_con = {
                    { .dict_id={ _RAW_DP2 }                                } }
 };
 
-sSTRl(RAW_MQandDP_snip, 64 + 3 * 16);     
+sSTRl(RAW_MQandDP_snip, con_snip_sizeof(3));     
 sSTRl(copy_RAW_DP_int, 30);
 
 void vcf_gatk_zip_initialize (void)
@@ -49,7 +49,7 @@ void vcf_gatk_seg_initialize (VBlockVCFP vb)
                       INFO_BaseCounts, // bc we rely on ctx->last_wi for reconstruction
                       DID_EOL);
 
-    if (segconf.has[INFO_RAW_MQandDP]) { // create contexts only if they're needed
+    if (segconf_has(INFO_RAW_MQandDP)) { // create contexts only if they're needed
         ctx_set_dyn_int (VB, ctx_get_ctx (vb, _RAW_DP)->did_i, ctx_get_ctx (vb, _RAW_MQ)->did_i, DID_EOL);
         ctx_get_ctx (vb, _RAW_DP)->flags.same_line = true; // INFO/DP may be before after RAW_MQandDP
 
@@ -329,12 +329,12 @@ void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs
     STRlast (ad, FORMAT_AD);
     bool use_ad = vcf_num_samples == 1 && ctx_encountered_in_line (VB, FORMAT_AD) &&
                   !flag.secure_DP && // if secure_DP, then we need to reconstruct even when samples are dropped, as we can't rely on FORMAT_AD
-                  segconf.has[INFO_BaseCounts] && !segconf.vcf_is_varscan; // AD.last_txt is set in these conditions
+                  segconf_has(INFO_BaseCounts) && !segconf.vcf_is_varscan; // AD.last_txt is set in these conditions
     int64_t ad_i;
 
     #define SET_SORTED_COUNTS(sc_i,b) ({                    \
-        sorted_counts[sc_i] = counts[acgt_encode[(int)b]];  \
-        counts[acgt_encode[(int)b]] = -1/*= consumed*/;     \
+        sorted_counts[sc_i] = counts[acgt_encode(b)];       \
+        counts[acgt_encode(b)] = -1/*= consumed*/;          \
         if (use_ad && str_item_i_int (STRa(ad), ',', sc_i, &ad_i) && ad_i == sorted_counts[sc_i]) \
             sorted_counts[sc_i] = -9; /*predicted by AD*/   \
     })
@@ -380,7 +380,7 @@ static int64_t vcf_piz_calculate_BaseCounts (VBlockVCFP vb, STRp(snip), qSTRp(ou
     if (out) { // reconstruction needed
         int32_t counts[4] = { -1, -1, -1, -1 }; // counts correspond to A, C, G, T
 
-        #define SET_COUNTS(b,sc_i) counts[acgt_encode[(uint8_t)b]] = sorted_counts[sc_i]
+        #define SET_COUNTS(b,sc_i) counts[acgt_encode(b)] = sorted_counts[sc_i]
 
         // set counts corresponding to REF and ALT alleles    
         SET_COUNTS (*vb->REF, 0);

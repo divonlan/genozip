@@ -17,8 +17,9 @@
 //                     polymorphism. ‘D’ and ‘I’ indicate a deletion and an insertion, respectively." (http://daehwankimlab.github.io/hisat2/manual/)
 void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes)
 {
-    static const MediumContainer con = {
+    static const Container(3) con = {
         .nitems_lo   = 3, 
+        .repeats     = 1,  // faster seg if this happens to be correct 
         .drop_final_repsep = true,
         .repsep      = {','},
         .items       = { { .dict_id.num = _OPTION_Zs_POS,  .separator = {'|'} },
@@ -26,6 +27,6 @@ void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes)
                          { .dict_id.num = _OPTION_Zs_RS                       } }
     };
     
-    seg_array_of_struct (VB, CTX(OPTION_Zs_Z), con, STRa(zs), (SegCallback[]){0, 0, seg_id_field_varlen_int_cb}, NULL, add_bytes);
+    seg_array_of_struct (VB, CTX(OPTION_Zs_Z), (ContainerP)&con, STRa(zs), (SegCallback[]){0, 0, seg_id_field_varlen_int_cb}, NULL, add_bytes);
 }
 

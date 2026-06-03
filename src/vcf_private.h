@@ -38,7 +38,7 @@ typedef struct {
     PosType32 pos;          // 
     TxtWord BND_id;         // BND variants: a number as close as possible to unique of a BND event
     TxtWord tw[NUM_TWs];    // used by vcf_seg_sv_copy_mate 
-} ZipDataLineVCF, *ZipDataLineVCFP;
+} ZipDataLineVCF, *restrict ZipDataLineVCF𐤐;
 
 #define DATA_LINE(i) B(ZipDataLineVCF, vb->lines, i)
 
@@ -49,8 +49,6 @@ typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 }
 #define ZIP_MAX_PLOIDY_FOR_MUX 4 // ZIP only. In PIZ use z_file->max_ploidy_for_mux
 #define ZIP_NUM_DOSAGES_FOR_MUX (ZIP_MAX_PLOIDY_FOR_MUX+1) // ZIP only: 0 to ZIP_MAX_PLOIDY_FOR_MUX
 typedef MULTIPLEXER(ZIP_NUM_DOSAGES_FOR_MUX) DosageMultiplexer, *DosageMultiplexerP;
-
-#define VCF_MAX_ARRAY_ITEMS SMALL_CON_NITEMS
 
 typedef packed_enum { 
     VT_UNKNOWN, 
@@ -153,7 +151,8 @@ typedef struct VBlockVCF {
     Multiplexer3 mux_pbsv_I1D;
 
     // FORMAT/AD
-    int64_t ad_values[VCF_MAX_ARRAY_ITEMS];
+    #define MAX_ALLELES 16 // maximum number of of alleles (including reference allele)
+    int64_t ad_values[MAX_ALLELES];
     
     #define first_idx idx_AN        // ZIP: INFO fields indices within INFO
     // IMPORTANT: when adding, add to X() in vcf_parse_info_subfields
@@ -199,12 +198,14 @@ typedef struct {
 
 #define VB_VCF ((VBlockVCFP)vb)
 
-typedef ContextP ContextPBlock[MAX_FIELDS];
-
 extern uint32_t vcf_num_samples; 
 extern char *vcf_samples_is_included;
 #define samples_am_i_included(sample_i) (!flag.samples || ((bool)(vcf_samples_is_included[sample_i]))) // macro for speed - this is called in the critical loop of reconstructing samples
 extern VcfVersion vcf_header_get_version (void);
+
+// record width during segconf, finalized by vcf_segconf_finalize_field_width
+#define SEGCONF_MAX_WIDTH 63
+#define SEGCONF_RECORD_WIDTH(did_i, width) if (segconf_running && (width) <= SEGCONF_MAX_WIDTH && z_file) (*B32(ZCTX(did_i)->width_count, width))++
 
 #define BII(x) B(InfoItem, vb->ca.contexts[VCF_INFO].info_items, vb->idx_##x)
 
@@ -212,10 +213,9 @@ extern void vcf_seg_field_fallback (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_string (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), StoreType type);
 extern void vcf_segconf_finalize_optimizations (VBlockVCFP vb);
-extern DictId make_array_item_dict_id (uint64_t dict_id_num, unsigned item_i);
 
 // POS stuff
-extern void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCFP dl, STRp(pos_str));
+extern void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(pos_str));
 extern void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str));
 
 // QUAL stuff
@@ -241,20 +241,26 @@ extern void vcf_seg_INFO_MAF (VBlockVCFP vb, ContextP ctx, STRp(maf));
 extern void vcf_seg_INFO_NS (VBlockVCFP vb, ContextP ctx, STRp(ns_str));
 
 // Samples stuff
-extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCFP dl, STRp(fmt));
+#define MAX_FORMAT_FIELDS 64 // maximum format (sample) fields in any one variant. note: this can be increased or decreaed at will, no backcomp issues.
+typedef Container(MAX_FORMAT_FIELDS) FormatContainer;
+typedef FormatContainer *restrict FormatContainer𐤐;
+typedef const FormatContainer *restrict ConstFormatContainer𐤐;
+typedef ContextP ContextPBlock[MAX_FORMAT_FIELDS];
+
+extern void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(fmt));
 extern void vcf_samples_zip_initialize (void);
 extern void vcf_samples_seg_initialize (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize (VBlockVCFP vb);
-extern bool vcf_seg_sample_has_null_value (Did did_i, ContextP *ctxs, STRps(sf));
+extern bool vcf_seg_sample_has_null_value (Did did_i, ContextP *ctxs, STR𐤐s(sf));
 
-extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCFP dl, int32_t len, char *next_field, bool *has_13);
+extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, int32_t len, char *next_field, bool *has_13);
 extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb);
 extern int vcf_piz_get_mux_channel_i (VBlockVCFP vb);
 extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
 extern void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), void *mux_p);
 
 // FORMAT/GT stuff
-extern void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCFP dl, STRp(cell), ContextP *ctxs, STRps(sf));
+extern void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF𐤐 dl, STRp(cell), ContextP *ctxs, STR𐤐s(sf));
 extern void vcf_seg_FORMAT_GT_finalize_line (VBlockVCFP vb, uint32_t line_n_samples);
 extern void vcf_seg_analyze_copied_GT (VBlockVCFP vb, STRp(gt));
 extern void vcf_piz_FORMAT_GT_rewrite_predicted_phase (VBlockVCFP vb, char *recon, uint32_t recon_len);
@@ -268,9 +274,9 @@ extern bool vcf_is_GT_only (VBlockVCFP vb);
 extern void vcf_copy_sample_seg_initialize (VBlockVCFP vb);
 extern void vcf_copy_samples_segconf_finalize (VBlockVCFP vb);
 extern void vcf_copy_sample_seg_finalize (VBlockVCFP vb);
-extern unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP *ctxs, ContainerP format, STRp(sample));
-extern void vcf_copy_sample_seg_set_copied (VBlockVCFP vb, ZipDataLineVCFP dl, bool is_copied);
-extern void seg_mux_by_is_prev_sample_copied (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP ctx, Multiplexer2P mux, STRp(value));
+extern unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP *ctxs, ConstFormatContainer𐤐 format, STRp(sample));
+extern void vcf_copy_sample_seg_set_copied (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, bool is_copied);
+extern void seg_mux_by_is_prev_sample_copied (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, Multiplexer2P mux, STRp(value));
 extern void vcf_sample_copy_piz_init_vb (VBlockVCFP vb);
 extern void vcf_copy_sample_piz_store (VBlockVCFP vb, STRp(recon_sample));
 
@@ -281,8 +287,8 @@ extern void vcf_seg_FORMAT_LAA (VBlockVCFP vb, ContextP ctx, STRp(laa));
 extern void vcf_giab_zip_initialize (void);
 extern void vcf_giab_seg_initialize (VBlockVCFP vb);
 extern void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt));
-extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP ctx, STRp(ips));
-extern void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values);
+extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, STRp(ips));
+extern void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), ContextP *item_ctxs, const int64_t *values);
 eSTRl(datasets_snip); eSTRl(callsets_snip); eSTRl(platforms_snip);
 
 #define IS_TRIVAL_FORMAT_SUBFIELD ((!recon_len || IS_PERIOD(recon)) && dict_id_is_vcf_format_sf (ctx->dict_id))
@@ -293,9 +299,9 @@ extern void vcf_FORMAT_PL_after_vbs (Did did_i);
 extern void vcf_samples_zip_initialize_PS_PID (void);
 extern void vcf_samples_seg_initialize_LOOKBACK (VBlockVCFP vb);
 extern void vcf_samples_seg_finalize_PS_PID (VBlockVCFP vb);
-extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCFP dl, ContextP ctx, STRp(value));
+extern void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, STRp(value));
 extern void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_of_sample);
-extern bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STRps(sf));
+extern bool vcf_seg_sample_has_PS (VBlockVCFP vb, ContextP *ctxs, STR𐤐s(sf));
 extern void vcf_samples_seg_initialize_PS_PID (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_piz_ps_pid_lookback_insert (VBlockVCFP vb, Did did_i, STRp(recon)); 
 extern void vcf_piz_ps_pid_lookback_shift (VBlockP vb, STRp(insert));
@@ -541,7 +547,7 @@ extern void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value));
     bitset_set (VB_VCF->is_deferred_, (ctx)->did_i);\
     if (reconstruct) {                              \
         (ctx)->recon_insertion = vb->line_i + 1;    \
-        Ltxt += segconf.wid[(ctx)->did_i].width; /* our best guess - minimize memory moves during vcf_piz_insert_field */ \
+        Ltxt += ZCTX((ctx)->did_i)->field_width; /* our best guess - minimize memory moves during vcf_piz_insert_field */ \
     }                                               \
 })
 

@@ -42,6 +42,8 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
                                     RangeP *range_p, RefLock *lock, bool *critical_error)
 {
     char *md = *md_in_out;
+    uint32_t my_M_D_bases = *M_D_bases;
+    PosType32 my_pos = *pos;
 
     if (! *md || *md != '^' || !IS_ACGT(md[1])) {
         *critical_error = true;
@@ -58,11 +60,11 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
     rom error=NULL;
     while (IS_ACGT(*md) && D_bases) {
         if (!error)
-            error = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); 
+            error = sam_seg_analyze_set_one_ref_base (vb, is_depn, my_pos, *md, my_M_D_bases, range_p, lock); 
             
         D_bases--;
-        (*M_D_bases)--;
-        (*pos)++;
+        my_M_D_bases--;
+        my_pos++;
         md++;
     }
 
@@ -72,6 +74,9 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
     }
 
     *md_in_out = md;
+    *M_D_bases = my_M_D_bases;
+    *pos = my_pos;
+
     return error; // NULL if success
 }
 
@@ -80,7 +85,12 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
                                     Bits *M_is_ref, uint64_t *M_is_ref_i,
                                     RangeP *range_p, RefLock *lock, bool *critical_error)
 {
-    char *md = *md_in_out;
+    char *md               = *md_in_out;
+    uint32_t my_M_D_bases  = *M_D_bases;
+    uint64_t my_M_is_ref_i = *M_is_ref_i;
+    PosType32 my_pos       = *pos;
+    int32_t mismatch_bases_by_MD = vb->mismatch_bases_by_MD;
+
     rom error = NULL;
 
     // expecting a series of <number><base> where number can be 0 and the base of the last pair can be missing. eg: 0T12A4
@@ -91,7 +101,8 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
         }
 
         // matching bases
-        int match_len = strtod (md, &md); // get number and advance past number
+        int match_len = fast_atoi (md, &md); 
+        // strtoul (md, &md, 10); // get number and advance past number
 
         // case: MD number is bigger than needed by current CIGAR op (perhaps partially covering the next CIGAR op) - update MD in-place
         if (match_len > M_bases || (match_len == M_bases && *md && *md != '^')) {
@@ -101,10 +112,10 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
             match_len = M_bases;
         }
 
-        M_bases     -= match_len;
-        *M_D_bases  -= match_len;
-        *pos        += match_len;
-        *M_is_ref_i += match_len;              
+        M_bases       -= match_len;
+        my_M_D_bases  -= match_len;
+        my_pos        += match_len;
+        my_M_is_ref_i += match_len;              
         
         ASSERT (M_bases >= 0, "Expecting M_bases=%d >= 0", M_bases);
 
@@ -120,22 +131,27 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
                 error = (*md=='N' ? "Encountered 'N' base while parsing M" : "Not A,C,G,T,N while parsing M"); // Genozip reference supports only A,C,G,T, but this "base" in the MD string is not one of them
 
             else { // set base (if A,C,G,T) even if previous bases had an error
-                rom result = sam_seg_analyze_set_one_ref_base (vb, is_depn, *pos, *md, *M_D_bases, range_p, lock); // continue counting mismatch_bases_by_MD despite error
+                rom result = sam_seg_analyze_set_one_ref_base (vb, is_depn, my_pos, *md, my_M_D_bases, range_p, lock); // continue counting mismatch_bases_by_MD despite error
                 if (result && !error) error = result;
             }
 
-            bits_clear (M_is_ref, *M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
-            (*M_is_ref_i)++;              
+            bits_clear (M_is_ref, my_M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
+            my_M_is_ref_i++;              
 
             M_bases--;
-            (*M_D_bases)--;
-            (*pos)++;
+            my_M_D_bases--;
+            my_pos++;
             md++;
-            vb->mismatch_bases_by_MD++;
+            mismatch_bases_by_MD++;
         }
     }
 
-    *md_in_out = md;
+    *md_in_out  = md;
+    *M_D_bases  = my_M_D_bases;
+    *M_is_ref_i = my_M_is_ref_i;
+    *pos        = my_pos;
+    vb->mismatch_bases_by_MD = mismatch_bases_by_MD;
+
     return error; // NULL if success
 }
 
@@ -147,7 +163,7 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
 //   sam_seg_SEQ will conduct the final verification step of comparing this bitmap to the one calculated from the SEQ data.
 // Note: a correct MD:Z may still appear sometimes as "unverified" in REF_INTERNAL, if the locus in the internal reference was populated
 // by an earlier read with a base different than the base in the reference with which this SAM file was generated.
-void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, rom md_orig, uint32_t md_len, PosType32 pos)
+void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom md_orig, uint32_t md_len, PosType32 pos)
 {
     START_TIMER;
 
@@ -188,6 +204,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM *dl, rom md_orig, uint3
     
     bool critical_error=false;
     rom error=NULL;
+
     for_cigar (vb->binary_cigar) {
         case BC_M: case BC_E: case BC_X:
             if ((error = sam_md_consume_M (vb, is_depn, &md, &M_D_bases, &pos, op->n, M_is_ref, &M_is_ref_i, &range, &lock, &critical_error))
@@ -241,7 +258,7 @@ done:
 // MD's logical length is normally the same as seq_len, we use this to optimize it.
 // In the common case that it is just a number equal the seq_len, we replace it with an empty string.
 // if MD value can be derived from the seq_len, we don't need to store - store just an empty string
-void sam_seg_MD_Z (VBlockSAMP vb, ZipDataLineSAM *dl, STRp(md), unsigned add_bytes)
+void sam_seg_MD_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(md), unsigned add_bytes)
 {
     decl_ctx (OPTION_MD_Z);
     uint32_t md_value;

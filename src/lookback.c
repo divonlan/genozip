@@ -140,7 +140,7 @@ uint8_t lookback_size_to_local_param (uint32_t size)
 }
 
 // ZIP
-void lookback_flush (VBlockP vb, ConstMediumContainerP con)
+void lookback_flush (VBlockP vb, ConstContainer𐤐 con)
 {
     for (unsigned i=1; i < con->nitems_lo; i++)
         if (con->items[i].separator[1] == CI1_LOOKBACK) {

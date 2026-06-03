@@ -21,9 +21,9 @@ static void decode_dicts (VBlockP vb, ContextP ctx, pSTRp(snip), int num_dicts/*
 
     buf_alloc_zero (vb, &ctx->ctx_cache, 0, MAX_SNIP_DICTS, ContextP, 1, "ctx_cache");
 
-    DictId dicts[MAX_SNIP_DICTS];
-    uint32_t b64_len = *snip_len; // might end up being shorter 
-    ctx->ctx_cache.len32 = base64_decode (*snip, &b64_len, (uint8_t *)dicts, num_dicts * sizeof(DictId)) / sizeof (DictId);
+    DictId dicts[MAX_SNIP_DICTS + 1]; // +1 bc base64_decode requires 4 bytes of overflow space
+    uint32_t b64_len = (num_dicts > 0) ? (base64_size (sizeof(DictId) * num_dicts)) : *snip_len; 
+    ctx->ctx_cache.len32 = base64_decode (*snip, b64_len, (uint8_t *)dicts, (num_dicts > 0) ? num_dicts * sizeof(DictId) : -1) / sizeof (DictId);
 
     ASSPIZ (num_dicts == -1 || num_dicts == ctx->ctx_cache.len32, "ctx=%s: expecting %u dicts in snip, but found %u",
             ctx->tag_name, num_dicts, ctx->ctx_cache.len32);
@@ -133,7 +133,7 @@ SPECIAL_RECONSTRUCTOR (piz_special_PLUS)
 SPECIAL_RECONSTRUCTOR (piz_special_MINUS)
 {
     if (!ctx->ctx_cache.len32) 
-        decode_dicts (vb, ctx, pSTRa(snip), 2);
+        decode_dicts (vb, ctx, pSTRa(snip), 2); // note: 16 bytes of dicts -> 24 bytes of base24 where last two bytes are '=' padding
 
     if (ctx->flags.same_line) 
         new_value->i = reconstruct_peek (vb, (*B(ContextP, ctx->ctx_cache, 0)), 0, 0).i - 
@@ -143,7 +143,7 @@ SPECIAL_RECONSTRUCTOR (piz_special_MINUS)
         new_value->i = (*B(ContextP, ctx->ctx_cache, 0))->last_value.i - 
                        (*B(ContextP, ctx->ctx_cache, 1))->last_value.i;
 
-    if (str_is_1char (snip, 'A')) 
+    if (str_is_1char (snip, 'A')) // note: almost a bug. this works only because our base64 ends with '='. would have been better to choose a character that is not in base64.
         new_value->i = ABS (new_value->i); // ABS option since 15.0.48
 
     if (reconstruct)
@@ -213,7 +213,7 @@ void seg_textual_float (VBlockP vb, ContextP ctx, STRp(f), unsigned add_bytes)
     if (!ctx->is_initialized) {
         ctx_set_ltype (VB, LT_UINT8, frac_ctx->did_i, sign_ctx->did_i, DID_EOL);
 
-        int num_per_line = (ctx->did_i < MAX_NUM_PREDEFINED) ? segconf.local_per_line[ctx->did_i] : 1;        
+        int num_per_line = (ctx->did_i < MAX_NUM_PREDEFINED) ? segconf.per_line[ctx->did_i].local : 1;        
         buf_alloc (vb, &frac_ctx->local, 0, vb->lines.len32 * num_per_line, uint8_t, 0, C_LOCAL); // initial allocation
         buf_alloc (vb, &sign_ctx->local, 0, vb->lines.len32 * num_per_line, uint8_t, 0, C_LOCAL);
         

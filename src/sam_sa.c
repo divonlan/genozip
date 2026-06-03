@@ -60,7 +60,7 @@ bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item_i, pSTRp(out))
     int predicted_aln_i = segconf.is_sorted ? 0 : (vb->line_i - vb->saggy_line_i) - 1; // mirrors prediction in sam_seg_SA_get_prim_item
 
     // split SA:Z into alignments
-    ZipDataLineSAMP prim_dl = DATA_LINE (vb->saggy_line_i);
+    ZipDataLineSAM𐤐 prim_dl = DATA_LINE (vb->saggy_line_i);
     if (!prim_dl->SA.len) return false; // prim line has no SA:Z
 
     str_split (Btxt (prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
@@ -87,7 +87,7 @@ bool sam_seg_is_item_predicted_by_prim_SA (VBlockSAMP vb, int sa_item_i, int64_t
            sa_item == value;
 }
 
-static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(aln), bool is_bam)
+static inline bool sam_seg_SA_field_is_line_matches_aln (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(aln), bool is_bam)
 {
     if (dl->RNAME == WORD_INDEX_NONE) return false; // RNAME="*" for this line
 
@@ -133,12 +133,12 @@ static inline void sam_seg_set_depn_clip_hard (VBlockSAMP vb)
     // note: if CIGAR has neither S or H, depn_clipping_type remains DEPN_CLIP_UNKNOWN
 }
 
-static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(depn_sa))
+static bool sam_seg_SA_field_is_depn_from_prim (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(depn_sa))
 {
     bool is_bam = IS_BAM_ZIP;
 
     // parse primary SA
-    ZipDataLineSAMP prim_dl = DATA_LINE (vb->saggy_line_i);
+    ZipDataLineSAM𐤐 prim_dl = DATA_LINE (vb->saggy_line_i);
     str_split (Btxt (prim_dl->SA.index), prim_dl->SA.len, MAX_SA_NUM_ALNS, ';', prim_aln, false);
     if (n_prim_alns < 2) return false;
     n_prim_alns--; // remove last empty alignment due terminal ';'
@@ -227,18 +227,19 @@ static bool sam_segconf_SA_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uin
     return sam_seg_0A_cigar_cb (vb, ctx, STRa(cigar), repeat);
 }
 
-void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_bytes)
+void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sa), unsigned add_bytes)
 {
-    START_TIMER;
-
-    static const MediumContainer container_SA = { .nitems_lo = NUM_SA_ITEMS,      
-                                                  .repsep    = { ';' }, // including on last repeat    
-                                                  .items     = { { .dict_id = { _OPTION_SA_RNAME  }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_POS    }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_STRAND }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_CIGAR  }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_MAPQ   }, .separator = {','} },  
-                                                                 { .dict_id = { _OPTION_SA_NM     },                  } } };
+    static const Container(NUM_SA_ITEMS) container_SA = { 
+        .nitems_lo = NUM_SA_ITEMS,   
+        .repeats   = 1,  // faster seg if this happens to be correct
+        .repsep    = { ';' }, // including on last repeat    
+        .items     = { { .dict_id = { _OPTION_SA_RNAME  }, .separator = {','} },  
+                       { .dict_id = { _OPTION_SA_POS    }, .separator = {','} },  
+                       { .dict_id = { _OPTION_SA_STRAND }, .separator = {','} },  
+                       { .dict_id = { _OPTION_SA_CIGAR  }, .separator = {','} },  
+                       { .dict_id = { _OPTION_SA_MAPQ   }, .separator = {','} },  
+                       { .dict_id = { _OPTION_SA_NM     },                  } } 
+    };
 
     decl_ctx (OPTION_SA_Z);
     bool has_prim = sam_has_prim; // has a saggy, and that saggy is a prim line
@@ -266,7 +267,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
                 [SA_MAPQ]  = sam_seg_0A_mapq_cb 
             };
 
-            seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), container_SA, STRa(sa), callbacks, 
+            seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), (ContainerP)&container_SA, STRa(sa), callbacks, 
                                  segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                  add_bytes); 
         }
@@ -291,7 +292,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
         }
 
         SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-        int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks,  // 0 if SA is malformed 
+        int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, (ContainerP)&container_SA, STRa(sa), callbacks,  // 0 if SA is malformed 
                                                                    segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                                                    add_bytes); 
 
@@ -319,7 +320,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
 
         else {
             SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-            seg_array_of_struct (VB, ctx, container_SA, STRa(sa), callbacks, 
+            seg_array_of_struct (VB, ctx, (ContainerP)&container_SA, STRa(sa), callbacks, 
                                  segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                  add_bytes); 
         }
@@ -329,8 +330,6 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_byt
     }
 
     dl->SA = TXTWORD(sa);
-
-    COPY_TIMER (sam_seg_SA_Z);
 }
 
 //---------

@@ -58,6 +58,8 @@ typedef enum { RT_NONE,     // value of ranges.param if ranges is unallocated
                RT_LOADED    // one Range per chrom (contig), overlayed on genome
              } RangesType;
               
+typedef enum { REF_ACCESS_RANDOM, REF_ACCESS_SEQUENTIAL } ReferenceAccessMode;
+
 extern void ref_initialize_ranges (RangesType type);
 extern void ref_finalize (bool also_free_filename);
 extern void ref_load_external_reference (ContextP chrom_ctx);
@@ -68,6 +70,7 @@ extern void ref_set_reference (rom filename, ReferenceType ref_type, bool is_exp
 extern void ref_set_ref_file_info (Digest genome_digest, DigestAlg alg, rom fasta_name, Version genozip_version);
 extern void ref_unload_reference (void);
 extern void ref_destroy_reference (void);
+extern void ref_set_access_mode (ReferenceAccessMode genome_mode, ReferenceAccessMode refhash_mode);
 extern void ref_destroy_genome (void);
 extern ConstRangeP ref_piz_get_range (VBlockP vb, FailType soft_fail);
 extern RangeP ref_get_range_by_ref_index (VBlockP vb, WordIndex ref_contig_index);
@@ -83,7 +86,7 @@ extern uint64_t ref_get_max_gpos (void);
 extern void ref_get_is_set_bytemap (VBlockP vb, PosType64 gpos, uint32_t num_bases, bool rev_comp, BufferP is_set, rom buf_name);
 extern void ref_set_genome_is_used (PosType64 gpos, uint32_t len);
 extern DigestAlg ref_get_genome_digest_alg (void);
-extern rom ref_get_textual_seq (PosType64 gpos, STRc(ref), bool revcomp);
+extern rom ref_get_textual_seq (VBlock𐤐 vb, PosType64 gpos, STRc𐤐(ref), bool revcomp);
 extern Digest reference_re_digest_genome (DigestAlg alg, bool full_genome_digest);
 
 // ZIPping a reference
@@ -136,15 +139,19 @@ static inline uint32_t nuke_encode      (char c) { return c=='A'?0 : c=='T'?3 : 
 static inline uint32_t nuke_encode_comp (char c) { return c=='T'?0 : c=='A'?3 : c=='G'?1 : c=='C'?2 : 4; }
 
 // encoding of A,C,G,T to 0-3, encodes IUPACs to one of their bases 0-3, and everything else to 0
-extern const uint8_t acgt_encode[256];
-extern const uint8_t acgt_encode_comp[256];
+static inline uint32_t acgt_encode (char c) { 
+    extern const uint8_t _acgt_encode[256];
+    return _acgt_encode[(uint8_t)c]; // note: L1 memory lookup (~4 cycles) is faster than nuke_encode
+}
+
+static inline uint32_t acgt_encode_comp (char c) { 
+    extern const uint8_t _acgt_encode_comp[256];
+    return _acgt_encode_comp[(uint8_t)c]; 
+}
 
 // note that the following work on idx and not pos! (idx is the index within the range)
 static inline void ref_set_nucleotide (RangeP range, uint32_t idx, uint8_t value) 
-    { bits_assign2 (&range->ref, idx*2, acgt_encode[value]); }
-
-static inline void ref_set_nucleotide_acgt (RangeP range, uint32_t idx, uint8_t value) // caller guarantees value is A,C,G or T
-    { bits_assign2 (&range->ref, idx*2, nuke_encode(value)); }
+    { bits_assign2 (&range->ref, idx*2, acgt_encode (value)); }
 
 static inline bool ref_is_nucleotide_set (ConstRangeP range, uint32_t idx) { return (bool)bits_get (&range->is_set, idx); }
 

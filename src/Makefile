@@ -99,6 +99,8 @@ ifdef osx_arm64
 ifndef BUILD_PREFIX # not conda 
 	CFLAGS += -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk 
 endif
+	CFLAGS   += -DGENOZIP_ALLOW_UNALIGNED_ACCESS 
+	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
 	ARCHS = arm64
 	VALID_ARCHS = arm64 
 endif
@@ -156,10 +158,10 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  sam_star.c sam_abra2.c sam_minimap2.c sam_modify.c sam_recon_plan_piz.c sam_parse.c					\
 		  gencomp_zip.c gencomp_piz.c																			\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c fastq_aux.c    \
-		  fastq_nonbio.c deep.c																					\
+		  fastq_parse.c fastq_10xGen.c deep.c																					\
 		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c base64.c							\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c sections_show.c mgzip.c mgzip_sections.c  \
-		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c					\
+		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c codec_tmpl.c		\
 		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
 		  codec_smux.c codec_oq.c																				\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c 			\
@@ -200,6 +202,7 @@ INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtf
 			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h writer_private.h zriter.h bases_filter.h genols.h 		\
 			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h sam_friend.h me23.h fasta.h fasta_friend.h gff.h bed.h locs.h			\
 			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h								\
+			flags_assign.c aligner_layered.c																								\
 			\
 			zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h													\
 			\
@@ -453,14 +456,16 @@ GENDICT_OBJS := $(addprefix $(OBJDIR)/,$(GENDICT_SRCS:.c=.o))
 # Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
 # Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
 # Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
-ifdef Windows
-ifndef BUILD_PREFIX # not conda
+ifndef BUILD_PREFIX # avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate and check in to github
 OB := \( # an escaped open-bracket sent as-is to egrep
 dict_id_gen.h : $(shell egrep -w "GENDICT|SPECIAL $(OB)" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
 	@echo Generating $@
-	@./dict_id_gen.sh $(CC)
-endif
-endif # ugly hack to avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate on Windows and check in to github
+	@bash --noprofile --norc ./dict_id_gen.sh $(CC)
+
+flags_assign.c : flags.h flags_assign.sh
+	@echo Generating $@
+	@bash --noprofile --norc ./flags_assign.sh
+endif 
 
 genozip$(EXE): dict_id_gen.h $(OBJS) $(DISTOBJ)
 	@echo Linking $@

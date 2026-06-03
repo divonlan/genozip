@@ -15,54 +15,51 @@
 #define _ALT_BND_INS      DICT_ID_MAKEF_7("BND_INS")
 // note: VCF_MATE_CHROM and VCF_MATE_POS are defined in vcf.h 
 
-static char con_BND_snips[4][96]; 
-static uint32_t con_BND_snip_lens[4] = {96, 96, 96, 96};
+static char con_BND_snips[4][con_snip_sizeof(5)]; 
+static uint32_t con_BND_snip_lens[4] = { con_snip_sizeof(5), con_snip_sizeof(5), con_snip_sizeof(5), con_snip_sizeof(5) };
 sSTRl (copy_ALT_BND_REF_snip, 32);
 
 void vcf_refalt_zip_initialize (void)
 {
     DO_ONCE {
-        SmallContainer con_BND[4];
-
-        // REF=A ALT="AAACTCCT[hs37d5:33588521["
-        con_BND[0] = (SmallContainer){
-            .repeats   = 1,
-            .nitems_lo = 5,
-            .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
-                           { .dict_id.num = _ALT_BND_REF2,                        },
-                           { .dict_id.num = _ALT_BND_INS,    .separator[0] = '['  },
-                           { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                           { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  } } };
-
-        // REF=A ALT="AAACTCCT]hs37d5:33588521]"
-        con_BND[1] = (SmallContainer){
-            .repeats   = 1,
-            .nitems_lo = 5,
-            .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
-                           { .dict_id.num = _ALT_BND_REF2,                        },
-                           { .dict_id.num = _ALT_BND_INS,    .separator[0] = ']'  },
-                           { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                           { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  } } };
-
-        // REF=G       ALT="[hs37d5:35428323[TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
-        con_BND[2] = (SmallContainer){
-            .repeats   = 1,
-            .nitems_lo = 5,
-            .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t["  },
-                           { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                           { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  },
-                           { .dict_id.num = _ALT_BND_INS,                         },
-                           { .dict_id.num = _ALT_BND_REF2                         } } };
-
-        // REF=G       ALT="]hs37d5:35428323]TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
-        con_BND[3] = (SmallContainer){
-            .repeats   = 1,
-            .nitems_lo = 5,
-            .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t]"  },
-                           { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
-                           { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  },
-                           { .dict_id.num = _ALT_BND_INS,                         },
-                           { .dict_id.num = _ALT_BND_REF2                         } } };
+        static const Container(5) con_BND[4] = {
+            [0] = { // REF=A ALT="AAACTCCT[hs37d5:33588521[" 
+                .repeats   = 1,
+                .nitems_lo = 5,
+                .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
+                               { .dict_id.num = _ALT_BND_REF2,                        },
+                               { .dict_id.num = _ALT_BND_INS,    .separator[0] = '['  },
+                               { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                               { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  } } 
+            },  
+            [1] = { // REF=A ALT="AAACTCCT]hs37d5:33588521]"
+                .repeats   = 1,
+                .nitems_lo = 5,
+                .items     = { { .dict_id.num = _ALT_BND_REF,    .separator[0] = '\t' },
+                               { .dict_id.num = _ALT_BND_REF2,                        },
+                               { .dict_id.num = _ALT_BND_INS,    .separator[0] = ']'  },
+                               { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                               { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  } } 
+            },
+            [2] = { // REF=G ALT="[hs37d5:35428323[TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
+                .repeats   = 1,
+                .nitems_lo = 5,
+                .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t["  },
+                               { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                               { .dict_id.num = _VCF_MATE_POS,   .separator[0] = '['  },
+                               { .dict_id.num = _ALT_BND_INS,                         },
+                               { .dict_id.num = _ALT_BND_REF2                         } } 
+            },
+            [3] = { // REF=G ALT="]hs37d5:35428323]TAAGAGCCGCTGGCTGGCTGTCCGGGCAGGCCTCCTGGCTGCACCTGCCACAGTGCACAGGCTGACTGAGGTGCACG"
+                .repeats   = 1,
+                .nitems_lo = 5,
+                .items     = { { .dict_id.num = _ALT_BND_REF,    .separator  = "\t]"  },
+                               { .dict_id.num = _VCF_MATE_CHROM, .separator[0] = ':'  },
+                               { .dict_id.num = _VCF_MATE_POS,   .separator[0] = ']'  },
+                               { .dict_id.num = _ALT_BND_INS,                         },
+                               { .dict_id.num = _ALT_BND_REF2                         } }
+            }
+        };
 
         for (int i=0; i < 4; i++)
             container_prepare_snip ((ContainerP)&con_BND[i], 0, 0, con_BND_snips[i], &con_BND_snip_lens[i]);
@@ -200,6 +197,8 @@ static void vcf_refalt_seg_BND (VBlockVCFP vb)
 
 void vcf_refalt_seg_REF_ALT (VBlockVCFP vb, STRp(ref), STRp(alt))
 {
+    START_TIMER;
+
     bool do_account = true;
 
     // optimize ref/alt in the common case of single-character
@@ -225,6 +224,8 @@ void vcf_refalt_seg_REF_ALT (VBlockVCFP vb, STRp(ref), STRp(alt))
 
     if (do_account)    
         CTX(VCF_REFALT)->txt_len += ref_len + alt_len + 2; // 2 tabs
+
+    COPY_TIMER_SEG_FIELD (VCF_REFALT);
 }
 
 // ---------
@@ -412,7 +413,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_REFALT)
     ref_alt[0] = (snip[0] == '-') ? ref_value : snip[0];
 
     // if --drop-genotypes, we don't normally conusme VCF_SAMPLES, so we do it here
-    if (flag.drop_genotypes && segconf.has[FORMAT_RGQ]) {
+    if (flag.drop_genotypes && segconf_has(FORMAT_RGQ)) {
         ASSPIZ0 (!vb->frozen_state.prm8[0], "Peek mode node supported - we're consuming");
         LOAD_SNIP (VCF_SAMPLES);
     }

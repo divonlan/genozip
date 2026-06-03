@@ -390,7 +390,7 @@ do_analyze:
 }
 
 // analyze the binary cigar 
-void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAMP dl/*NULL if PIZ*/, uint32_t *seq_consumed)
+void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl/*NULL if PIZ*/, uint32_t *seq_consumed)
 {
     *seq_consumed = 0; // everything else is initialized in sam_reset_line
     ARRAY (BamCigarOp, cigar, vb->binary_cigar);
@@ -672,7 +672,7 @@ done:
 }
 
 // Seg
-static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAMP dl)
+static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
 {
     if (segconf.disable_random_access || IS_ASTERISK (vb->chrom_name) || dl->POS <= 0) return;
 
@@ -697,7 +697,7 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAMP dl)
     }
 }
 
-void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes)
+void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes)
 {
     START_TIMER
     
@@ -789,7 +789,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, 
     }
 
     // case: we mate non-trival CIGARs with MC:Z. We don't mate eg "151M" bc this will add rather than reduce entropy in b250
-    else if (last_cigar_len > 4 && sam_has_mate && segconf.has[OPTION_MC_Z] && !segconf_running && 
+    else if (last_cigar_len > 4 && sam_has_mate && segconf_has(OPTION_MC_Z) && !segconf_running && 
              cigar_snip_len == 2 && // we don't mate if CIGAR or SEQ are "*"
              str_issame_(vb->last_cigar, last_cigar_len, STRtxt(DATA_LINE (vb->mate_line_i)->MC))) {
 
@@ -829,7 +829,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, 
     }
     
     if (segconf_running) 
-        segconf.sam_cigar_len += last_cigar_len;
+        segconf.cummul_sam_cigars_len += last_cigar_len;
 
     else if (dl->POS >= 1 && vb->ref_consumed)
         sam_cigar_update_random_access (vb, dl);
@@ -873,9 +873,9 @@ uint32_t sam_cigar_get_MC_ref_consumed (STRp(mc))
 }
 
 // MC:Z "CIGAR string for mate/next segment" (https://samtools.github.io/hts-specs/SAMtags.pdf)
-void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mc), uint32_t add_bytes)
+void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(mc), uint32_t add_bytes)
 {
-    ZipDataLineSAMP mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
+    ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MC_Z, (MultiplexerP)&vb->mux_MC, sam_has_mate);
 
@@ -1264,7 +1264,7 @@ void sam_prepare_deep_cigar (VBlockP vb, ConstBamCigarOpP cigar, uint32_t cigar_
 //---------------------------------------------------------------------------------------------------
 
 uint64_t cigar_sign (VBlockSAMP vb, 
-                     ZipDataLineSAMP dl, // set if field originates from SAM_CIGAR, NULL if it originates from SA:Z 
+                     ZipDataLineSAM𐤐 dl, // set if field originates from SAM_CIGAR, NULL if it originates from SA:Z 
                      STRp(cigar))
 {
     StrText abbrev_cigar; // memory allocation for abbreviated cigar, if needed

@@ -336,34 +336,23 @@ extern void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t 
 #define bits_copy(dst, dstindex, src, srcindx, length) \
     bits_copy_do ((dst), (dstindex), (src), (srcindx), (length), __FUNCLINE)
 
-// revcomp one byte: the order of the 4 bases in a byte is swapped, and each base is complemented A⇔T C⇔G
+// revcomp one word: the order of the 32 bases in a word is swapped, and each base is complemented A⇔T C⇔G
 static inline uint64_t bits_revcomp_word (uint64_t w) 
 {
-#ifdef __clang__ 
-    w = ~w; // reverses bit values - effectively A(00)⇔T(11) C(01)⇔G(10)
-
+#if defined(__clang__) && defined(__aarch64__) // 4-5 clock cycles on ARM (bitreverse64 does not exist natively on x86)
     w = __builtin_bitreverse64(w); // reverse bit order, however this also swaps the bits within every 2bits 
 
     // swap back the bits within every 2bits
     w = ((w & 0xAAAAAAAAAAAAAAAAULL) >> 1) | // picks bits 1, 3, 5...
         ((w & 0x5555555555555555ULL) << 1);  // picks bits 0, 2, 4...
 
-#else
-    extern const uint8_t rev_comp_table[256];
-    
-    w = __builtin_bswap64(w); // reverse order of the 8 bytes
-
-    // reverse-complement each byte
-    w = ((uint64_t)rev_comp_table[w         & 0xff]       ) |
-        ((uint64_t)rev_comp_table[(w >>  8) & 0xff] <<  8 ) |
-        ((uint64_t)rev_comp_table[(w >> 16) & 0xff] << 16 ) |
-        ((uint64_t)rev_comp_table[(w >> 24) & 0xff] << 24 ) |
-        ((uint64_t)rev_comp_table[(w >> 32) & 0xff] << 32 ) |
-        ((uint64_t)rev_comp_table[(w >> 40) & 0xff] << 40 ) |
-        ((uint64_t)rev_comp_table[(w >> 48) & 0xff] << 48 ) |
-        ((uint64_t)rev_comp_table[(w >> 56) & 0xff] << 56 );
+#else // 4 clock cycles on Intel, 7-9 on ARM
+    w = ((w >> 2) & 0x3333333333333333ULL) | ((w & 0x3333333333333333ULL) << 2);  // within every nibble, swap the first 2 bits with the last 2 bits
+    w = ((w >> 4) & 0x0F0F0F0F0F0F0F0FULL) | ((w & 0x0F0F0F0F0F0F0F0FULL) << 4);  // within every byte, swap the first nibble with the last nibble
+    w = __builtin_bswap64(w); // reverse the 8 bytes of the word 
 #endif
-    return w;
+ 
+    return ~w; // reverses bit values - effectively A(00)⇔T(11) C(01)⇔G(10)
 }
 
 extern void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint64_t nbits);

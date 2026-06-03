@@ -12,7 +12,7 @@
 // NM:i "Number of differences"
 // ----------------------------
 
-static inline void sam_seg_NM_get_prediction (VBlockSAMP vb, ZipDataLineSAMP dl, bool with_indels,
+static inline void sam_seg_NM_get_prediction (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool with_indels,
                                               int32_t *predicted_by_SEQ, int32_t *predicted_by_MD)
 {
     int32_t indels_count = with_indels ? (vb->deletions + vb->insertions) : 0;
@@ -34,10 +34,8 @@ static inline void sam_seg_NM_get_prediction (VBlockSAMP vb, ZipDataLineSAMP dl,
 // Note: we observed cases (eg PacBio data with bwa-sw) that NM is slightly different than expected, potentially
 // seggable with a delta. However, the added entropy to b250 outweighs the benefit, and we're better off without delta.
 // 2) Binary NM: 0 if sequence fully matches the reference when aligning according to CIGAR, 1 is not.
-void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add_bytes)
+void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsigned add_bytes)
 {
-    START_TIMER;
-
     decl_ctx (OPTION_NM_i);
 
     // check for evidence that NM is integer (not binary) - usually, this happens in segconf, but it can also happen later in the execution
@@ -99,8 +97,6 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
         // count NM field contribution to OPTION_SA_NM, so sam_stats_reallocate can allocate the z_data between NM and SA:Z
         CTX(OPTION_SA_NM)->counts.count += add_bytes; 
     }
-
-    COPY_TIMER (sam_seg_NM_i);
 }
 
 // -------------------------------------------------
@@ -108,7 +104,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add
 // appears in bwa, dragen, bowtie2, novoalign...
 // -------------------------------------------------
 
-void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xm, int16_t idx, unsigned add_bytes)
+void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xm, int16_t idx, unsigned add_bytes)
 {
     decl_ctx (OPTION_XM_i);
     int32_t predicted_by_SEQ, predicted_by_MD;
@@ -136,7 +132,7 @@ void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xm, int16_t idx, u
 // nM:i: (STAR) the number of mismatches per (paired) alignment, not to be confused with NM, which is the number of mismatches in each mate.
 // --------------------------------------------------------------------------------------------------------------
 
-void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add_bytes)
+void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsigned add_bytes)
 {
     ContextP ctx = CTX (OPTION_nM_i);
 

@@ -80,7 +80,7 @@ void ref_make_create_range (VBlockP vb)
         bytes line_seq = B8 (vb->txt_data, seq_data_start);
         for (uint64_t base_i=0; base_i < seq_len; base_i++, bit_i += 2) {
             char base = line_seq[base_i];
-            bits_assign2 (&r->ref, bit_i, acgt_encode[(int)base]); // note: upper and lower case bases, and IUPACs, are accepted
+            bits_assign2 (&r->ref, bit_i, acgt_encode(base)); // note: upper and lower case bases, and IUPACs, are accepted
 
             // store very rare IUPAC bases (GRCh38 has 94 of them)
             ref_iupacs_add (vb, bit_i/2, base);
@@ -196,7 +196,7 @@ rom ref_fasta_to_ref (FileP file)
     // if file reference doesn't exist yet - --make-reference now, in a separate process
     if (!file_exists (ref_filename)) {
 
-        WARN ("FYI: cannot find reference file %s: generating it now from %s", ref_filename, file->name);
+        WARN (_FYI "Cannot find reference file %s: generating it now from %s", ref_filename, file->name);
 
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
                                           arch_get_genozip_executable().s, "--make-reference", file->name, 
@@ -263,5 +263,5 @@ void ref_download_eval_ref (rom dt_name)
     }
 
     else 
-        WARN0 ("\nFailed to download and make reference file: continuing without a reference");
+        WARN ("Failed to download and make reference file: continuing without a reference", NULL);
 }

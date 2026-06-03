@@ -18,34 +18,15 @@ extern PizDisCoords piz_dis_coords (VBlockP vb); // for ASSPIZ
 typedef struct { char s[100]; } PizDisQname; 
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
-extern void asspiz_text (VBlockP vb, FUNCLINE);
 extern StrText1K piz_advise_biopsy (VBlockP vb);
 extern StrText1K piz_advise_biopsy_line (CompIType comp_i, VBIType vblock_i, LineIType line_i, rom filename);
 
-#define ASSPIZ(condition, format, ...) ({ \
-    if (__builtin_expect (!(condition), 0)) { \
-        DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
-            asspiz_text (VB, __FUNCLINE);\
-            fprintf (stderr, format "\n%s\n", __VA_ARGS__, piz_advise_biopsy(VB).s);\
-            exit_on_error(true); \
-        } \
-        else stall(); \
-    } \
-})
-
-#define ASSPIZ0(condition, string) ASSPIZ (condition, string "%s", "")
+// assert piz
+extern void noreturn error_asspiz (VBlockP vb, FUNCLINE, rom format, ...);
+#define ASSPIZ(condition, format, ...) ({ if (__builtin_expect (!(condition), 0)) error_asspiz (VB, __FUNCLINE, (format), ##__VA_ARGS__); })
+#define ASSPIZ0(condition, string) ASSPIZ (condition, string, 0)
 #define ASSPIZNOTZERO(n)           ASSPIZ ((n), "%s=0", #n)
-
-#define ABORT_PIZ(format, ...) ({ \
-    DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
-        asspiz_text ((VBlockP)vb, __FUNCLINE);\
-        fprintf (stderr, format "\n", __VA_ARGS__); \
-        exit_on_error(true); \
-    } \
-    else stall(); \
-})
-
-#define ABORT_PIZ0(string) ABORT_PIZ (string "%s", "")
+#define ABORT_PIZ(format, ...) error_asspiz (VB, __FUNCLINE, (format), ##__VA_ARGS__)
 
 // goes into ctx->history if not STORE_INT
 typedef packed_enum {        LookupTxtData,   LookupDict,   LookupLocal,   LookupPerLine } LookupType;
@@ -190,8 +171,6 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
        if (add_tab) RECONSTRUCT1 ('\t');        \
        wi;                               })
 
-// binary reconstructions
-#define RECONSTRUCT_BIN8(n)  RECONSTRUCT (&n, 1)
-#define RECONSTRUCT_BIN16(n) ({ uint16_t lten = (uint16_t)(n); lten = LTEN16(lten); RECONSTRUCT (&lten, sizeof (uint16_t)); })
+// binary reconstructions (output little-endian)
 #define RECONSTRUCT_BIN32(n) ({ uint32_t lten = (uint32_t)(n); lten = LTEN32(lten); RECONSTRUCT (&lten, sizeof (uint32_t)); })
 #define RECONSTRUCT_BIN64(n) ({ uint64_t lten = (uint64_t)(n); lten = LTEN64(lten); RECONSTRUCT (&lten, sizeof (uint64_t)); })

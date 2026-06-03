@@ -36,7 +36,6 @@
 // For more information, please refer to <http://unlicense.org/>
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-#include <stdalign.h>
 #include "genozip.h" 
 #include "vblock.h"
 #include "aes.h"

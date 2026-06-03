@@ -12,7 +12,7 @@
 
 // Mapping strand (C=Crick, W=Watson) and alignment conversion pattern (C2T or G2A)
 // 4 possible values: W_C2T ; W_G2A ; C_C2T ; C_G2A
-void sam_seg_bsbolt_YS_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(ys), unsigned add_bytes)
+void sam_seg_bsbolt_YS_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(ys), unsigned add_bytes)
 {
     // note: we expect Watson strand alignments to be revcomp=false and Crick to be revcomp=true
     ASSSEG (ys_len == 5 && (ys[0]=='W' || ys[0]=='C') && (!memcmp (ys+1, "_C2T", 4) || !memcmp (ys+1, "_G2A", 4)),
@@ -38,7 +38,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BSBOLT_YS)
 
 // enter methylatble bases into the INTERNAL reference in their unconverted form 
 // (not currently used as bisulfite features are disabled for REF_INTERNAL (bug 648), and not thoroughly tested)
-void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl)
+void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
 {
     if (!IS_REF_INTERNAL || // analyzing sets bases in an internal reference - not needed if not internal
         has_MD ||           // analyzing MD sets the same bases
@@ -103,7 +103,7 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl)
     if (range) ref_unlock (&lock);
 }
 
-static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), rom extra)
+static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), rom extra)
 {
     iprintf ("%s: QNAME=\"%.*s\" bisulfite_strand=%c XB=\"%.*s\" CIGAR=\"%.*s\" %s\n", 
              LN_NAME, STRfQNAME, vb->bisulfite_strand, STRf(XB), STRfw(dl->CIGAR), extra);
@@ -114,10 +114,8 @@ static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), rom extr
 // Read bisulfite conversion position and context
 // Example: XB:Z:2z10x4z10z5zzZz10z1z5zZzz3z9z1zzz1zzz1z3z8zz15z1X2z5
 // X/x=methylated/unmethylated CpG ; Y/y=CHG Z/z=CHH ; numbers=gaps
-void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), unsigned add_bytes)
+void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), unsigned add_bytes)
 {
-    START_TIMER;
-
     static const char bsbolt_to_bismark[256] = { ['X']='Z', ['x']='z', ['Y']='X', ['y']='x', ['Z']='H', ['z']='h' };    
 
     // in PRIM and DEPN we dont have the methylation call because we didn't seg SEQ vs reference. To do: generate methylation call prediction in this case too/
@@ -161,8 +159,6 @@ void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), unsigned ad
 
     if (flag.show_wrong_xb && !segconf_running && vb->scratch.len32 && vb->meth_call.len32 && !str_issame_(STRb(vb->scratch),STRb(vb->meth_call))) 
         show_wrong_xb (vb, dl, STRa(XB), vb->meth_call.len ? "" : "(no meth_call)");
-
-    COPY_TIMER (sam_seg_bsbolt_XB); // note: sam_seg_bismark_XM_Z accounts for itself
 
     sam_seg_bismark_XM_Z (vb, dl, OPTION_XB_Z, SAM_SPECIAL_BSBOLT_XB, STRb(vb->scratch), add_bytes);
 

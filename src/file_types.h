@@ -186,7 +186,7 @@
 
 typedef enum {TXT_FILE, Z_FILE} FileSupertype; 
 
-typedef enum FileType { 
+typedef packed_enum FileType { 
     UNKNOWN_FILE_TYPE, 
     REF_GENOZIP,
     VCF, VCF_GZ, VCF_BGZF, VCF_BZ2, VCF_XZ,                 VCF_GENOZIP, 

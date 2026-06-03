@@ -31,7 +31,7 @@ typedef struct {
     bool deep_qual;             // QUAL is to be fully or partially copied from Deep
     bool monochar;              // sequence is entirely of the same character (eg: NNNNN)
     bool qual_is_trims_only;    // Deep: fastq_zip_qual has modified the QUAL data to be trims only 
-} ZipDataLineFASTQ, *ZipDataLineFASTQP;
+} ZipDataLineFASTQ, *restrict ZipDataLineFASTQ𐤐;
 
 // IMPORTANT: if changing fields in VBlockFASTQ, also update vb_fast_release_vb 
 typedef struct VBlockFASTQ {
@@ -130,7 +130,7 @@ extern bool fastq_segconf_analyze_saux (VBlockFASTQP vb, STRp(saux));
 extern void fastq_seg_saux (VBlockFASTQP vb, STRp(saux));
 
 // AUX
-extern int fastq_seg_aux (VBlockFASTQP vb, STRps(item));
+extern int fastq_seg_aux (VBlockFASTQP vb, STR𐤐s(item));
 
 // Agilent stuff
 extern void agilent_seg_initialize (VBlockP vb);
@@ -142,28 +142,33 @@ extern void sam_MM_zip_initialize (void);
 extern void sam_seg_MM_Z (VBlockP vb, STRp(mm), unsigned add_bytes);
 
 // SEQ
-extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), bool deep);
+extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), bool deep);
 extern void fastq_update_coverage_aligned (VBlockFASTQP vb);
 
 // QUAL
-extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(qual));
+extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(qual));
 
 // Pairing stuff
 extern bool fastq_piz_R1_test_aligned (VBlockFASTQP vb);
 extern int64_t reconstruct_from_pair_int (VBlockFASTQP vb, ContextP ctx);
 
-// Non-biological reads stuff
-extern void fastq_SPLiT_seg_initialize (VBlockFASTQP vb);
-extern bool fastq_SPLiT_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), PosType64 gpos_R1, bool is_forward_R1, bool *is_excess_aligned);
+// Parse stuff
+extern void fastq_parse_seg_initialize (VBlockFASTQP vb);
+extern bool fastq_parse_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), PosType64 gpos_R1, bool is_forward_R1, bool *is_excess_aligned);
+
+// 10xGenomics stuff
+extern void fastq_10xGen_segconf_finalize (VBlockP vb);
+extern void fastq_10xGen_seg_initialize (VBlockFASTQP vb);
+extern bool fastq_10xGen_seg_SEQ (VBlockFASTQP vb, STRp(seq));
 
 // Deep stuff
 extern void fastq_deep_zip_initialize (void);
-extern bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), uint32_t *uncanonical_suffix_len);
+extern bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(qname), STRp(qname2), STRp(seq), STRp(qual), uint32_t *uncanonical_suffix_len);
 extern void fastq_deep_seg_finalize_segconf (uint32_t n_lines);
 extern void fastq_deep_seg_initialize (VBlockFASTQP vb);
 extern void fastq_deep_seg_QNAME (VBlockFASTQP vb, Did did_i, STRp(qname), uint32_t uncanonical_suffix_len, unsigned add_bytes);
-extern void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx);
-extern void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQP dl, ContextP qual_ctx, uint32_t qual_len);
+extern void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx);
+extern void fastq_deep_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, ContextP qual_ctx, uint32_t qual_len);
 extern void fastq_deep_zip_after_compute (VBlockFASTQP vb);
 extern void fastq_deep_zip_finalize (void);
 extern void fastq_deep_piz_wait_for_deep_data (void);
@@ -177,11 +182,10 @@ extern void fastq_bamass_zip_comp_cb (VBlockFASTQP vb, ContextP ctx, SectionType
 extern void fastq_bamass_zip_after_compress (VBlockFASTQP vb);
 extern void fastq_bamass_zip_finalize (bool is_last_fastq);
 extern void fastq_bamass_retrieve_ent (VBlockP vb, const BamAssEnt *e, bool get_cigar, bool *is_fwd, PosType64 *gpos, uint32_t *seq_len, uint32_t *ref_consumed, uint32_t *ref_and_seq_consumed, uint32_t *insertions);
-extern MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), bool am_i_R2, PosType64 gpos_R1, bool is_forward_R1);
+extern MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), bool am_i_R2, PosType64 gpos_R1, bool is_forward_R1);
 extern void fastq_bamass_seg_CIGAR (VBlockFASTQP vb);
-extern DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQP dl, DeepHash *deep_hash, STRp(seq), BamAssEnt **matching_ent);
+extern DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, DeepHash *deep_hash, STRp(seq), BamAssEnt **matching_ent);
 extern StrText1K bamass_dis_ent (VBlockP vb, const BamAssEnt *e, uint64_t qname_hash);
 extern void fastq_bamass_consider_stopping_aligner (VBlockFASTQP vb);
 
 extern Buffer bamass_ents, bamass_heads;
-eSTRl(copy_qname_snip);

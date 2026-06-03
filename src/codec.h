@@ -103,6 +103,7 @@ typedef struct {
 [CODEC_HOMP   ] = { 0, 0, "HOMP", "+",      codec_homp_compress,      USE_SUBCODEC,             codec_homp_reconstruct,    codec_complex_est_size,  }, \
 [CODEC_PACB   ] = { 0, 0, "PACB", "+",      codec_pacb_compress,      USE_SUBCODEC,             codec_pacb_reconstruct,    codec_trivial_size,      }, \
 [CODEC_SMUX   ] = { 0, 0, "SMUX", "+",      codec_smux_compress,      USE_SUBCODEC,             codec_smux_reconstruct,    codec_trivial_size,      }, \
+[CODEC_TMPL   ] = { 0, 0, "TMPL", "+",      codec_tmpl_compress,      USE_SUBCODEC,             codec_tmpl_reconstruct,    codec_trivial_size,      }, \
 /* zfile codecs - compound - other */ \
 [CODEC_ACGT   ] = { 0, 0, "ACGT", "+",      codec_acgt_compress,      codec_acgt_uncompress,    NA3,                       codec_complex_est_size   }, \
 [CODEC_XCGT   ] = { 0, 0, "XCGT", "+",      USE_SUBCODEC,             codec_xcgt_uncompress,    NA3,                       NA4                      }, \
@@ -120,7 +121,7 @@ extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compres
                      codec_RANB_compress, codec_RANW_compress, codec_RANb_compress, codec_RANw_compress, 
                      codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress,
                      codec_longr_compress, codec_normq_compress, codec_homp_compress, codec_t0_compress,
-                     codec_pacb_compress, codec_smux_compress, codec_oq_compress;
+                     codec_pacb_compress, codec_smux_compress, codec_oq_compress, codec_tmpl_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
                        codec_bsc_uncompress, codec_none_uncompress, codec_gtshark_uncompress, codec_pbwt_uncompress,
@@ -128,7 +129,8 @@ extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_u
 
 extern CodecReconstruct codec_domq_reconstruct, codec_pbwt_reconstruct, 
                         codec_longr_reconstruct, codec_normq_reconstruct, codec_homp_reconstruct,
-                        codec_t0_reconstruct, codec_pacb_reconstruct, codec_smux_reconstruct, codec_oq_reconstruct;
+                        codec_t0_reconstruct, codec_pacb_reconstruct, codec_smux_reconstruct, 
+                        codec_oq_reconstruct, codec_tmpl_reconstruct;
 
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_domq_est_size,
                         codec_RANB_est_size, codec_RANW_est_size, codec_RANb_est_size, codec_RANw_est_size, 
@@ -156,7 +158,6 @@ extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLine
 #define TAG_NAME (ctx ? ctx->tag_name : "NoContext")
 
 // ACGT stuff
-extern const uint8_t acgt_encode[256], acgt_encode_comp[256];
 extern void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i, bool has_x);
 extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
 
@@ -201,6 +202,11 @@ extern bool codec_pacb_maybe_used (Did did_i);
 extern void codec_pacb_segconf_finalize (VBlockP vb);
 extern bool codec_pacb_comp_init (VBlockP vb, Did did_i, LocalGetLineCB callback, bool force);
 static inline bool codec_pacb_smux_is_qual (DictId dict_id) { return !memcmp (&dict_id.id[3], "-QUAL", 5); }
+
+// TMPL stuff
+extern bool codec_tmpl_maybe_used (Did did_i);
+extern void codec_tmpl_segconf_finalize (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb);
+extern bool codec_tmpl_comp_init (VBlockP vb, Did qual_did_i, bool force);
 
 // LONGR stuff
 extern bool codec_longr_maybe_used (VBlockP vb, Did did_i);

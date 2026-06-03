@@ -47,7 +47,7 @@ void locs_seg_initialize (VBlockP vb)
 
 void locs_seg_finalize (VBlockP vb)
 {
-    SmallContainer top_level_locs = { 
+    Container(2) top_level_locs = { 
         .repeats      = vb->lines.len,
         .is_toplevel  = true,
         .nitems_lo    = 2,

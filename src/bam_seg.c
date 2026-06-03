@@ -6,7 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include <stdalign.h>
 #include "sam_private.h"
 #include "txtfile.h"
 #include "mgzip.h"
@@ -21,7 +20,7 @@ void bam_seg_initialize (VBlockP vb)
     *BAFTtxt = '*'; // missing qual;
 
     if (line_textual_cigars_used)
-        buf_alloc (vb, &VB_SAM->line_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len32 / (segconf.is_long_reads ? 4 : 1),/*divide in case sam_cigar_len is not representative*/
+        buf_alloc (vb, &VB_SAM->line_textual_cigars, 0, segconf.sam_cigar_len * vb->lines.len32,
                    char, CTX_GROWTH, "line_textual_cigars");
 }
 
@@ -114,7 +113,7 @@ static int32_t bam_unconsumed_scan_backwards (rom bam_data, uint64_t bam_data_le
         
         // final test option 2: if QNAME is of a known flavor - test for that flavor
         else if (segconf.qname_flavor[QNAME1]) {
-            if (qname_test_flavor (aln->read_name, aln->l_read_name-1, QNAME1, segconf.qname_flavor[QNAME1], true)) // >0 if not qname_flavor
+            if (qname_test_flavor (aln->read_name, aln->l_read_name-1, QNAME1, segconf.qname_flavor[QNAME1], true, NULL)) // >0 if not qname_flavor
                 continue;
         }
 
@@ -224,7 +223,7 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
     return n_auxs;
 }
 
-void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, BaiBinType bin /* used only in bam */, bool is_bam)
+void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, BaiBinType bin /* used only in bam */, bool is_bam)
 {
     PosType32 this_pos = dl->POS;
     PosType32 last_pos = dl->FLAG.unmapped ? this_pos : (this_pos + vb->ref_consumed - 1); // note: it is possible to have RNAME/POS set and FLAG.unmapped. The SAM spec calls this "placed unmapped"; 
@@ -235,7 +234,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, BaiBinType bin /* used only
     
     else {
 #ifdef DEBUG // we show this warning only in DEBUG because I found actual files that have edge cases that don't work with our formula (no harm though)
-        WARN_ONCE ("FYI: %s: bad bin value in: this_pos=%d ref_consumed=%u flag=%u last_pos=%d: bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
+        WARN_ONCE (_FYI "%s: bad bin value in: this_pos=%d ref_consumed=%u flag=%u last_pos=%d: bin=%u but reg2bin=%u. No harm. This warning will not be shown again for this file.",
                     LN_NAME, this_pos, vb->ref_consumed, dl->FLAG.value, last_pos, bin, reg2bin);
 #endif
         seg_integer_as_snip (vb, SAM_BAM_BIN, bin, is_bam);
@@ -243,7 +242,7 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAMP dl, BaiBinType bin /* used only
     }
 }
 
-static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int32_t ref_id, int32_t compare_to_ref_i)
+static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int32_t ref_id, int32_t compare_to_ref_i)
 {
     ASSERT (ref_id == -1 || (sam_hdr_contigs && IN_RANGE (ref_id, 0, sam_hdr_contigs->contigs.len32)), 
             "%s: encountered %s.ref_id=%d but header has only %u contigs%s", 
@@ -357,7 +356,7 @@ void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
 }
 
 // segconf
-static uint32_t bam_segconf_get_transated_sam_line_len (VBlockSAMP vb, ZipDataLineSAMP dl, SamTlenType tlen)
+static uint32_t bam_segconf_get_translated_sam_line_len (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamTlenType tlen)
 {
     unsigned rname_len, rnext_len;
 
@@ -429,7 +428,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     // case: --show - only print BAM lines, no segging
     if (flag.show_bam) return bam_show_line (vb, alignment, remaining_txt_len);
 
-    ZipDataLineSAMP dl = DATA_LINE (vb->line_i);
+    ZipDataLineSAM𐤐 dl = DATA_LINE (vb->line_i);
     dl->line_start = vb->line_start;
 
     rom next_field = alignment;
@@ -603,7 +602,7 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     MAXIMIZE (vb->longest_seq_len, dl->SEQ.len);
 
     if (segconf_running)
-        segconf.est_segconf_sam_size += bam_segconf_get_transated_sam_line_len (vb, dl, tlen);
+        segconf.commul_translated_sam_size += bam_segconf_get_translated_sam_line_len (vb, dl, tlen);
 
 done: {}
     buf_free (vb->textual_cigar);

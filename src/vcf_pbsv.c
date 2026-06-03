@@ -22,19 +22,19 @@
     ContextP bnd1_ctx UNUSED = ctx_get_ctx (vb, _ID_BND1);  \
     ContextP bnd2_ctx UNUSED = ctx_get_ctx (vb, _ID_BND2); 
 
-static SmallContainer id_bnd_con = { // goes into I1D
+static Container(3) id_bnd_con = { // goes into I1D
     .nitems_lo = 3,
     .repeats   = 1,
     .items = { { .dict_id.num = _ID_BND0, .separator[0] = ':' },     // copy of CHROM
                { .dict_id.num = _ID_BND1, .separator[0] = '-' },     // copy of POS
                { .dict_id.num = _ID_BND0,                     } } }; // copy of chrom:pos of mate as appears in ALT
+sSTRl(con_id_bnd_snip, con_snip_sizeof(3));
 
 static Did tw_dids[NUM_PBSV_TWs] = PBSV_TW_DIDS;
 
 static int i0d_mux_channel[NUM_VTs] = { [VT_BND]=0, [VT_SYM_CNV]=1, [VT_DEL]=2, [VT_SYM_DEL]=2, [VT_INS]=3, [VT_SYM_INS]=3, [VT_SYM_INV]=4, [VT_SYM_DUP]=5 };
 static int i1d_mux_channel[NUM_VTs] = { [VT_BND]=2, [VT_SYM_CNV]=1, [VT_DEL]=0, [VT_SYM_DEL]=0, [VT_INS]=0, [VT_SYM_INS]=0, [VT_SYM_INV]=0, [VT_SYM_DUP]=0 };
 
-sSTRl(con_id_bnd_snip, 64);
 
 void vcf_pbsv_zip_initialize (void)
 {

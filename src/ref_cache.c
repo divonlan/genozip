@@ -130,7 +130,7 @@ bool ref_cache_initialize_genome (void)
 
     if (gref.cache_state == CACHE_READY) goto cache_ok; // cache already loaded
 
-    #define FAIL_MSG "FYI: Reference file cache is not used. Technical details: "
+    #define FAIL_MSG _FYI "Reference file cache is not used. Technical details: "
     ASSERT (gref.cache_state == CACHE_INITITAL, "unexpected cache_state=%d", gref.cache_state);
     ASSERT0 (flag.reading_reference && z_file && z_file->file, "not reading reference");
 
@@ -151,7 +151,7 @@ bool ref_cache_initialize_genome (void)
     gref.cache_shm = shmget (key, shm_size, (flag.removing_cache ? 0 : IPC_CREAT) | permissions); 
 
     if (flag.is_mac && gref.cache_shm == -1 && (errno == EINVAL/*shmmax issue*/ || errno == ENOMEM/*shmall issue*/)) {
-        WARN_ONCE ("FYI: Failed to cache the reference file in shared memory, because shared memory limits are too small. To increase limits temporarily until next reboot:\n====\n"
+        WARN_ONCE (_FYI "Failed to cache the reference file in shared memory, because shared memory limits are too small. To increase limits temporarily until next reboot:\n====\n"
                    "genozip --no-cache\n"
                    "sudo sysctl -w kern.sysv.shmmax=%"PRIu64"\n"
                    "sudo sysctl -w kern.sysv.shmall=%"PRIu64"\n====\n"
@@ -462,7 +462,7 @@ void ref_cache_remove_all (RefCacheRemoveType rm_type)
     
     unsigned n_removed = ref_cache_iterator (do_remove, rm_type == REF_CACHE_REMOVE_DORMANT);
     
-    WARN_IF0 (!n_removed && rm_type == REF_CACHE_REMOVE_ALL, "No in-memory cached reference files found");
+    WARN_IF (!n_removed && rm_type == REF_CACHE_REMOVE_ALL, "No in-memory cached reference files found", NULL);
 }
 
 static CACHE_ITERATOR_CB (do_list)
@@ -498,7 +498,7 @@ static CACHE_ITERATOR_CB (do_list)
 void ref_cache_ls (void)
 {
     if (!ref_cache_iterator (do_list, false))
-        WARN0 ("No in-memory cached reference files found");
+        WARN ("No in-memory cached reference files found", NULL);
 }
 
 // note: buffers attached to this cache become invalid after shm is detached. best to free/destroy them before.

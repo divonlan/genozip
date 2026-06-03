@@ -38,6 +38,8 @@ typedef struct {
     Did did_i;      // of container 
 } ConStack;
 
+#define MAX_ROLLBACK_CTXS 100
+
 #define VBLOCK_COMMON_FIELDS \
     /************* fields that survive buflist_free_vb *************/ \
     Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated or overlayed in this VB (either by the main thread or its compute thread). */\
@@ -103,7 +105,7 @@ typedef struct {
     union {                                     \
     struct { /* ZIP */                          \
     uint32_t num_rollback_ctxs;   /* ZIP: Seg rollback contexts */ \
-    Did rollback_dids[MEDIUM_CON_NITEMS];       \
+    Did rollback_dids[MAX_ROLLBACK_CTXS];       \
     };                                          \
     struct { /* PIZ */                          \
     uint32_t con_stack_len;                     \
@@ -209,7 +211,7 @@ typedef struct {
     \
     /* copies of the values in flag, for flags that may change during the execution */\
     bool preprocessing;           /* PIZ: this VB is preprocessing, not reconstructing (SAM: loading SA Groups FASTA/FASTQ: grepping) */ \
-    bool show_containers; \
+    bool show_containers;         /* ZIP/PIZ: user wants to see containers of this VB */\
     \
     /* Codec stuff */ \
     Codec codec_using_codec_bufs; /* codec currently using codec_bufs */\

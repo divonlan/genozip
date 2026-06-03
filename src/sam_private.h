@@ -189,7 +189,7 @@ typedef struct {
     bool dont_compress_U2   : 1;   // 
     bool dont_compress_CQ   : 1;   // 
     bool qname_mate_copied_exactly : 1; // qname segged as COPY_BUDDY, without need to flip the mate 1<>2 
-} ZipDataLineSAM, *ZipDataLineSAMP;
+} ZipDataLineSAM, *restrict ZipDataLineSAM𐤐;
 
 // note: making VBlockSAM packed will ruin the math in sam_seg_buddied_i_fields
 typedef struct VBlockSAM {
@@ -215,7 +215,7 @@ typedef struct VBlockSAM {
             idx_pr_i, idx_qs_i, idx_ws_i, idx_ZM_B, idx_xq_i, idx_XQ_i,
             idx_cm_i;
     #define has(f)   (vb->idx_##f  != -1)
-    #define has_MD   (has(MD_Z) && segconf.has[OPTION_MD_Z])
+    #define has_MD   (has(MD_Z) && segconf_has(OPTION_MD_Z))
 
     #define first_sam_piz_vb_ff_per_line mate_line_i
     LineIType mate_line_i;         // Seg/PIZ: the mate of this line. 
@@ -337,7 +337,7 @@ typedef struct VBlockSAM {
 
 #define VB_SAM ((VBlockSAMP)vb)
 
-#define line_textual_cigars_used (segconf.has[OPTION_MC_Z] || /* sam_cigar_seg_MC_Z might be called  */ \
+#define line_textual_cigars_used (segconf_has(OPTION_MC_Z) || /* sam_cigar_seg_MC_Z might be called  */ \
                                   IS_MAIN(vb))                /* sam_seg_SA_field_is_depn_from_prim might be called */
 #define line_cigar(dl) Bc (*(IS_BAM_ZIP ? &vb->line_textual_cigars : &vb->txt_data), (dl)->CIGAR.index)
 #define STRacigar(dl) line_cigar(dl), (dl)->CIGAR.len
@@ -486,16 +486,16 @@ typedef void (*ArrayItemCallback)           (VBlockSAMP vb, ContextP ctx, void *
 
 extern bool bam_txt_file_is_last_alignment_unmapped (void);
 
-extern void      sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qname), unsigned add_additional_bytes);
-extern WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom), bool against_sa_group_ok, unsigned add_bytes);
-extern WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp (chrom), unsigned add_bytes);
-extern void      sam_seg_MAPQ  (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes);
-extern void      sam_seg_TLEN  (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(tlen), SamTlenType tlen_value, bool is_rname_rnext_same);
-extern void      bam_seg_BIN   (VBlockSAMP vb, ZipDataLineSAMP dl, BaiBinType bin, bool is_bam);
+extern void      sam_seg_QNAME (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(qname), unsigned add_additional_bytes);
+extern WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp (chrom), bool against_sa_group_ok, unsigned add_bytes);
+extern WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp (chrom), unsigned add_bytes);
+extern void      sam_seg_MAPQ  (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes);
+extern void      sam_seg_TLEN  (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(tlen), SamTlenType tlen_value, bool is_rname_rnext_same);
+extern void      bam_seg_BIN   (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, BaiBinType bin, bool is_bam);
 
 // mismatch counters
-extern void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType NM, unsigned add_bytes);
-extern void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xm, int16_t idx, unsigned add_bytes);
+extern void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType NM, unsigned add_bytes);
+extern void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xm, int16_t idx, unsigned add_bytes);
 
 extern void sam_seg_verify_RNAME (VBlockSAMP vb);
 extern void sam_piz_set_sag (VBlockSAMP vb);
@@ -504,8 +504,8 @@ extern void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value),
 
 static inline bool sam_is_depn (SamFlags f) { return f.supplementary || f.secondary; }
 
-static bool inline sam_line_is_depn (ZipDataLineSAMP dl) { return  sam_is_depn (dl->FLAG); }
-static bool inline sam_line_is_prim (ZipDataLineSAMP dl) { return !sam_is_depn (dl->FLAG); }
+static bool inline sam_line_is_depn (ZipDataLineSAM𐤐 dl) { return  sam_is_depn (dl->FLAG); }
+static bool inline sam_line_is_prim (ZipDataLineSAM𐤐 dl) { return !sam_is_depn (dl->FLAG); }
 
 #define sam_has_mate  (VB_SAM->mate_line_i  != NO_LINE)
 #define sam_has_saggy (VB_SAM->saggy_line_i != NO_LINE)
@@ -525,11 +525,11 @@ extern rom buddy_type_name (BuddyType bt);
 
 // FLAG stuff
 extern StrText1K sam_dis_FLAG (SamFlags f);
-extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAMP dl, unsigned add_bytes);
+extern void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes);
 #define last_flags ((SamFlags){ .value = CTX(SAM_FLAG)->last_value.i })
 
 // AUX stuff
-extern void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAMP dl);
+extern void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM𐤐 dl);
 extern rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len);
 extern void bam_get_one_aux (VBlockSAMP vb, int16_t idx, rom *tag, char *type, char *array_subtype, pSTRp(value), ValueType *numeric);
 extern void sam_seg_idx_aux (VBlockSAMP vb);
@@ -537,8 +537,6 @@ extern ValueType sam_piz_peek_OPTION (VBlockSAMP vb, ContextP option_ctx, pSTRp(
 
 extern uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx, int32_t *number, bool is_bam, int32_t min_value, int32_t max_value, FailType soft_fail);
 #define sam_seg_get_aux_int_(vb,tag) ({ int32_t value; sam_seg_get_aux_int (vb, vb->idx_##tag, &value, IS_BAM_ZIP, -0x80000000, 0x7fffffff, HARD_FAIL); value; })
-
-extern uint32_t sam_seg_get_aux_float (VBlockSAMP vb, int16_t idx, double *number, bool is_bam, FailType soft_fail);
 
 extern void sam_seg_get_aux_Z (VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam);
 extern char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam);
@@ -548,15 +546,15 @@ extern bool sam_seg_peek_int_field (VBlockSAMP vb, Did did_i, int16_t idx, int32
 extern uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, rom *auxs, uint32_t *aux_lens);
 
 typedef void (*SegBuddiedCallback)(VBlockSAMP, ContextP, STRp(value), unsigned add_bytes);
-extern void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAMP dl, MatedZFields f, STRp(value), SegBuddiedCallback seg_cb, unsigned add_bytes);
-extern void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int64_t my_value, int32_t *mate_value, MultiplexerP mux, STRp(copy_snip), unsigned add_bytes);
+extern void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, MatedZFields f, STRp(value), SegBuddiedCallback seg_cb, unsigned add_bytes);
+extern void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int64_t my_value, int32_t *mate_value, MultiplexerP mux, STRp(copy_snip), unsigned add_bytes);
 
 #define STRauxZ(name,is_bam) (vb->auxs[vb->idx_##name]+((is_bam) ? 3 : 5)), (vb->aux_lens[vb->idx_##name]-((is_bam) ? 4 : 5))
 #define TXTWORDauxZ(name,is_bam) ((TxtWord){ .index = BNUMtxt (vb->auxs[vb->idx_##name]+((is_bam) ? 3 : 5)), .len = vb->aux_lens[vb->idx_##name]-((is_bam) ? 4 : 5) }) 
 
 // POS / PNEXT stuff
-extern PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAMP dl, WordIndex prev_line_chrom, unsigned add_bytes);
-extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes);
+extern PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, WordIndex prev_line_chrom, unsigned add_bytes);
+extern void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes);
 
 // CIGAR / MC:Z stuff
 #define CIGAR_DIGIT              1
@@ -567,15 +565,15 @@ extern const uint8_t cigar_lookup_bam[16];
 
 extern void sam_seg_cigar_initialize (VBlockSAMP vb);
 extern void sam_cigar_analyze (VBlockSAMP vb, STRp(cigar), bool cigar_is_in_textual_cigar, uint32_t *seq_consumed);
-extern void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t *seq_consumed);
+extern void bam_seg_cigar_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint32_t *seq_consumed);
 extern bool sam_is_cigar (STRp(cigar), bool allow_empty);
-extern void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes);
-extern void sam_cigar_seg_binary (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t l_seq, BamCigarOpP cigar, uint32_t n_cigar_op);
-extern void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mc), uint32_t add_bytes);
+extern void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes);
+extern void sam_cigar_seg_binary (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint32_t l_seq, BamCigarOpP cigar, uint32_t n_cigar_op);
+extern void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(mc), uint32_t add_bytes);
 extern bool sam_cigar_is_valid (STRp(cigar));
 extern void sam_seg_other_CIGAR (VBlockSAMP vb, ContextP ctx, STRp (cigar), bool squanking_allowed, unsigned add_bytes);
 extern rom display_binary_cigar (VBlockSAMP vb);
-extern uint64_t cigar_sign (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cigar));
+extern uint64_t cigar_sign (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cigar));
 
 extern bool sam_seg_0A_rname_cb (VBlockP vb, ContextP ctx, STRp(oa_rname), uint32_t repeat);
 extern bool sam_seg_0A_pos_cb (VBlockP vb, ContextP ctx, STRp(oa_pos), uint32_t repeat);
@@ -598,7 +596,7 @@ extern uint32_t sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a,
 extern StrText sam_piz_display_aln_cigar (VBlockP vb, const SAAln *a);
 
 // SEQ stuff
-extern void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(seq), unsigned add_bytes);
+extern void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(seq), unsigned add_bytes);
 extern bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, FailType soft_fail);
 extern rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, PosType32 pos, char base, uint32_t ref_consumed, RangeP *range_p, RefLock *lock);
 extern void sam_zip_report_monochar_inserts (void);
@@ -611,17 +609,17 @@ extern uint32_t sam_seq_copy (char *dst, rom src, uint32_t src_start_base, uint3
 
 // QUAL stuff
 extern void sam_seg_QUAL_initialize (VBlockSAMP vb);
-extern void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, rom qual, uint32_t qual_data_len, unsigned add_bytes);
+extern void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom qual, uint32_t qual_data_len, unsigned add_bytes);
 extern rom bam_qual_display (bytes qual, uint32_t l_seq); 
-extern void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAMP dl, uint32_t *txt_index, LineWordS *line_word, Did did_i, STRp(qual), unsigned add_bytes);
+extern void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint32_t *txt_index, LineWordS *line_word, Did did_i, STRp(qual), unsigned add_bytes);
 extern void sam_qual_produce_huffman (VBlockSAMP vb);
 
 // --deep stuff
 // Stuff that happens during SAM seg
 extern void sam_deep_zip_finalize (void);
-extern void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAMP dl, QType q, STRp(qname));
-extern void sam_deep_set_SEQ_hash (VBlockSAMP vb,ZipDataLineSAMP dl, STRp(textual_seq));
-extern void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual));
+extern void sam_deep_set_QNAME_hash (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, QType q, STRp(qname));
+extern void sam_deep_set_SEQ_hash (VBlockSAMP vb,ZipDataLineSAM𐤐 dl, STRp(textual_seq));
+extern void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(qual));
 extern void sam_piz_deep_initialize (void);
 extern void sam_piz_set_deep_seq (VBlockSAMP vb, bool not_end_of_contig, PosType64 gpos);
 extern void sam_piz_deep_grab_deep_ents (VBlockSAMP vb);
@@ -632,12 +630,12 @@ extern void sam_piz_deep_QUAL_cb (VBlockSAMP vb, STRp(recon));
 extern StrText128K sam_display_qual_from_sag (VBlockP vb, const Sag *g);
 
 // MD:Z stuff
-extern void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(md), PosType32 pos);
-extern void sam_seg_MD_Z (VBlockSAMP vb,  ZipDataLineSAMP dl, STRp(md), unsigned add_bytes);
+extern void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(md), PosType32 pos);
+extern void sam_seg_MD_Z (VBlockSAMP vb,  ZipDataLineSAM𐤐 dl, STRp(md), unsigned add_bytes);
 extern void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), PosType32 pos, BitsP sqbitmap, uint64_t sqbitmap_start);
 
 // SA:Z stuff
-extern void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), unsigned add_bytes);
+extern void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sa), unsigned add_bytes);
 extern bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint32_t repeat);
 extern bool sam_seg_SA_get_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
 extern void sam_piz_SA_get_saggy_prim_item (VBlockSAMP vb, int sa_item, pSTRp(out));
@@ -651,31 +649,31 @@ extern void sam_MM_zip_initialize (void);
 // BWA stuff
 extern void sam_seg_BWA_X1_i (VBlockSAMP vb, int64_t X1, unsigned add_bytes);
 extern void sam_seg_BWA_XT_A (VBlockSAMP vb, char XT, unsigned add_bytes);
-extern void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t XC, unsigned add_bytes);
-extern void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, ValueType XS, unsigned add_bytes);
+extern void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t XC, unsigned add_bytes);
+extern void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, ValueType XS, unsigned add_bytes);
 extern void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes);
 extern void sam_piz_XA_field_insert_lookback_v13 (VBlockP vb);
 extern void sam_seg_correct_for_semcol_in_contig (uint32_t *n_repeats, rom *repeats, uint32_t *repeat_lens);
 
 // bowtie2 stuff
-extern void sam_seg_bowtie2_YS_i (VBlockSAMP vb, ZipDataLineSAMP dl, ValueType YS, unsigned add_bytes);
+extern void sam_seg_bowtie2_YS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, ValueType YS, unsigned add_bytes);
 
 // minimap2 stuff
 extern void sam_minimap2_seg_initialize (VBlockSAMP vb);
-extern void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s1, unsigned add_bytes);
-extern void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s1, unsigned add_bytes);
-extern void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t cm, unsigned add_bytes);
+extern void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t s1, unsigned add_bytes);
+extern void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t s1, unsigned add_bytes);
+extern void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t cm, unsigned add_bytes);
 
 // PacBio stuff
 extern void sam_pacbio_seg_initialize (VBlockSAMP vb);
-extern void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes);
-extern void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t np, unsigned add_bytes);
-extern void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qs, unsigned add_bytes);
-extern void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t qe, unsigned add_bytes);
-extern void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t we, unsigned add_bytes);
+extern void sam_seg_pacbio_xq (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(value), unsigned add_bytes);
+extern void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t np, unsigned add_bytes);
+extern void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qs, unsigned add_bytes);
+extern void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qe, unsigned add_bytes);
+extern void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t we, unsigned add_bytes);
 extern void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes);
 extern bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual), unsigned add_bytes);
-extern void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAMP dl, rom sn, int sn_len);
+extern void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom sn, int sn_len);
 extern void sam_recon_pacbio_qual (VBlockSAMP vb, ContextP ctx, bool reconstruct);
 extern void sam_recon_skip_pacbio_qual (VBlockSAMP vb);
 
@@ -687,20 +685,21 @@ extern ARRAY_ITEM_CALLBACK (sam_seg_ULTIMA_tp);
 extern void sam_seg_ultima_bi (VBlockSAMP vb, STRp(bi_str), unsigned add_bytes);
 extern void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes);
 extern void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes);
-extern void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(t0), unsigned add_bytes);
-extern void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mi), unsigned add_bytes);
-extern void sam_seg_ultima_a3 (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t a3, unsigned add_bytes);
-extern void sam_seg_ultima_pt (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t pt, unsigned add_bytes);
+extern void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(t0), unsigned add_bytes);
+extern void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(mi), unsigned add_bytes);
+extern void sam_seg_ultima_a3 (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t a3, unsigned add_bytes);
+extern void sam_seg_ultima_pt (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t pt, unsigned add_bytes);
 
 // STAR stuff
 extern void sam_star_zip_initialize (void);
 extern void sam_star_seg_initialize (VBlockSAMP vb);
-extern void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAMP dl, SamNMType nm, unsigned add_bytes);
-extern void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(raw), bool is_bam);
+extern void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsigned add_bytes);
+extern void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(raw), bool is_bam);
 
 // Dragen stuff
 extern void sam_dragen_seg_initialize (VBlockSAMP vb);
-extern void sam_dragen_seg_sd_f (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sd), ValueType numeric, unsigned add_bytes);
+extern void sam_dragen_seg_sd_f (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sd), ValueType numeric, unsigned add_bytes);
+extern void sam_dragen_seg_ga_Z (VBlockSAMP vb, STRp(field), unsigned add_bytes);
 
 // hisat2 stuff
 extern void sam_seg_HISAT2_Zs_Z (VBlockSAMP vb, STRp(zs), unsigned add_bytes);
@@ -710,35 +709,35 @@ extern void sam_seg_CPU_XL_Z (VBlockSAMP vb, STRp(xl), unsigned add_bytes);
 
 // tmap (IonXpress) stuff
 extern void sam_seg_tmap_XM_i (VBlockSAMP vb, int64_t xm, unsigned add_bytes);
-extern void sam_seg_tmap_XT_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xt, unsigned add_bytes);
+extern void sam_seg_tmap_XT_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xt, unsigned add_bytes);
 
-extern void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAMP dl);
+extern void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAM𐤐 dl);
 
 // Bismark stuff
 #define bisulfite_strand meth_call.prm8[0]
-extern void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl);
-extern void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, int special_code, STRp(xm), unsigned add_bytes);
-extern void sam_seg_bismark_XG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(xg), unsigned add_bytes);
+extern void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl);
+extern void sam_seg_bismark_XM_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int special_code, STRp(xm), unsigned add_bytes);
+extern void sam_seg_bismark_XG_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(xg), unsigned add_bytes);
 extern void sam_bismark_zip_update_meth_call (VBlockSAMP vb, RangeP range, uint32_t range_len, int32_t idx, bool methylated, uint32_t M_i, uint32_t Mseg_len, uint32_t i);
 extern void sam_bismark_piz_update_meth_call (VBlockSAMP vb, rom ref, int32_t idx, uint32_t seq_i, uint32_t M_i, uint32_t Mseg_len, ConstBamCigarOpP op, char bisulfite, bool methylated);
 
 // BS-Seeker2 stuff
-extern void sam_seg_bsseeker2_XO_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XO), unsigned add_bytes);
-extern void sam_seg_bsseeker2_XM_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XM), unsigned add_bytes);
-extern void sam_seg_bsseeker2_XG_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XG), unsigned add_bytes);
-extern void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XG), PosType32 line_pos);
+extern void sam_seg_bsseeker2_XO_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XO), unsigned add_bytes);
+extern void sam_seg_bsseeker2_XM_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XM), unsigned add_bytes);
+extern void sam_seg_bsseeker2_XG_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XG), unsigned add_bytes);
+extern void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XG), PosType32 line_pos);
 
 // BSBolt stuff
-extern void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAMP dl);
-extern void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(XB), unsigned add_bytes);
-extern void sam_seg_bsbolt_YS_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(YS), unsigned add_bytes);
+extern void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl);
+extern void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), unsigned add_bytes);
+extern void sam_seg_bsbolt_YS_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(YS), unsigned add_bytes);
 
 // Gem3 mapper stuff
-extern void sam_seg_gem3_XB_A (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(xb), unsigned add_bytes);
+extern void sam_seg_gem3_XB_A (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(xb), unsigned add_bytes);
 extern bool sam_seg_gem3_XA_strand_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep);
 
 // BLASR stuff
-extern void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t fi, unsigned add_bytes);
+extern void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t fi, unsigned add_bytes);
 
 // scRNA-seq stuff (STARsolo and cellranger)
 extern bool sam_is_solo_loaded (VBlockSAMP vb);
@@ -746,36 +745,36 @@ extern void sam_produce_solo_huffmans (VBlockSAMP vb);
 extern bytes sam_solo_sag_data (VBlockSAMP vb, const SoloAln *solo_aln, SoloTags solo);
 extern void sam_segconf_retag_UBURUY (void);
 extern void sam_10xGen_seg_initialize (VBlockSAMP vb);
-extern void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes);
+extern void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(value), unsigned add_bytes);
 
-extern void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_bytes);
-extern void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_bytes);
-extern void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(ur), unsigned add_bytes);
-extern void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(ub), unsigned add_bytes);
-extern void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(uy), unsigned add_bytes);
-extern void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(fx), unsigned add_bytes);
-extern void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(bc), unsigned add_bytes);
-extern void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(seq),unsigned add_bytes);
-extern void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gr), unsigned add_bytes);
-extern void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(gy), unsigned add_bytes);
-extern void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes);
-extern void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes);
-extern void sam_seg_xf_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t value, unsigned add_bytes);
+extern void sam_seg_CR_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cr), unsigned add_bytes);
+extern void sam_seg_CB_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cb), unsigned add_bytes);
+extern void sam_seg_RX_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(ur), unsigned add_bytes);
+extern void sam_seg_BX_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(ub), unsigned add_bytes);
+extern void sam_seg_QX_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(uy), unsigned add_bytes);
+extern void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(fx), unsigned add_bytes);
+extern void sam_seg_BC_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(bc), unsigned add_bytes);
+extern void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(seq),unsigned add_bytes);
+extern void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gr), unsigned add_bytes);
+extern void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gy), unsigned add_bytes);
+extern void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes);
+extern void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes);
+extern void sam_seg_xf_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes);
 
-extern bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, SoloTags solo, uint8_t n_seps, STRp(qual), qSTRp (con_snip), MiniContainerP con, unsigned add_bytes);
-extern void sam_seg_GX_GN (VBlockSAMP vb, ZipDataLineSAMP dl, Did did_i, STRp(value), unsigned add_bytes);
+extern bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, SoloTags solo, uint8_t n_seps, STRp(qual), qSTRp (con_snip), ContainerP con, unsigned add_bytes);
+extern void sam_seg_GX_GN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(value), unsigned add_bytes);
 
 // Parse Biosciences stuff
 extern void sam_parse_seg_initialize (VBlockSAMP vb);
-extern void sam_seg_pN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pn), unsigned add_bytes);
-extern void sam_seg_pB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pb), unsigned add_bytes);
-extern void sam_seg_RE_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(re), unsigned add_bytes);
-extern void sam_seg_CR_Z_Parse (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_bytes);
-extern void sam_seg_CB_Z_Parse (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_bytes);
+extern void sam_seg_pN_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pn), unsigned add_bytes);
+extern void sam_seg_pB_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pb), unsigned add_bytes);
+extern void sam_seg_RE_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(re), unsigned add_bytes);
+extern void sam_seg_CR_Z_Parse (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cr), unsigned add_bytes);
+extern void sam_seg_CB_Z_Parse (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cb), unsigned add_bytes);
 
 // biobambam2 stuff
 extern uint32_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual));
-extern void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t ms, unsigned add_bytes);
+extern void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t ms, unsigned add_bytes);
 extern void sam_seg_mc_i (VBlockSAMP vb, int64_t mc, unsigned add_bytes);
 
 // Agilent stuff
@@ -785,16 +784,16 @@ extern void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_byt
 
 // xcons stuff
 extern void sam_xcons_seg_initialize (VBlockSAMP vb);
-extern void sam_segconf_xcons_one_line (VBlockSAMP vb, ZipDataLineSAMP dl);
+extern void sam_segconf_xcons_one_line (VBlockSAMP vb, ZipDataLineSAM𐤐 dl);
 extern void sam_segconf_finalize_xcons (void);
 extern void sam_seg_xcons_YY (VBlockSAMP vb, int64_t yy, unsigned add_bytes);
-extern void sam_seg_xcons_XC (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xc, unsigned add_bytes);
-extern void sam_seg_xcons_XO (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xo, unsigned add_bytes);
+extern void sam_seg_xcons_XC (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xc, unsigned add_bytes);
+extern void sam_seg_xcons_XO (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xo, unsigned add_bytes);
 extern ARRAY_ITEM_CALLBACK (sam_seg_xcons_XD_callback);
 
 // NanoSeq stuff
-extern void sam_seg_rb (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(rb), unsigned add_bytes);
-extern void sam_seg_mb (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mb), unsigned add_bytes);
+extern void sam_seg_rb (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(rb), unsigned add_bytes);
+extern void sam_seg_mb (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(mb), unsigned add_bytes);
 
 // Abra2 stuff
 extern void sam_abra2_zip_initialize (void);
@@ -809,13 +808,13 @@ static inline bool sam_seg_has_sag_by_nonSA (VBlockSAMP vb) { return !IS_SAG_SA 
 extern void sam_sag_zip_init_vb (VBlockSAMP vb);
 extern void sam_set_sag_type (void);
 extern void sam_seg_gc_initialize (VBlockSAMP vb);
-extern bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), bool is_bam);
-extern bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t num_alns/* inc primary aln*/, bool is_bam);
-extern int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), int64_t this_nm, bool is_bam);
-extern void sam_seg_prim_add_sag_NH (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh);
-extern void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh);
-extern void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAMP dl);
-extern void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_cigar), rom textual_seq, bool is_bam);
+extern bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(alignment), bool is_bam);
+extern bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint16_t num_alns/* inc primary aln*/, bool is_bam);
+extern int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sa), int64_t this_nm, bool is_bam);
+extern void sam_seg_prim_add_sag_NH (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t nh);
+extern void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t nh);
+extern void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAM𐤐 dl);
+extern void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_cigar), rom textual_seq, bool is_bam);
 extern void sam_sa_prim_initialize_ingest(void);
 extern void sam_zip_prim_ingest_vb (VBlockSAMP vb);
 extern void sam_gencomp_trim_memory (void);
@@ -825,7 +824,7 @@ extern Sag *sam_piz_get_prim_vb_first_sa_grp (VBlockSAMP vb);
 extern void sam_show_sag (void);
 extern bool sam_is_sag_loaded (void);
 extern void sam_sag_by_flag_scan_for_depn (void);
-extern bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAMP dl, int32_t n_alns/*0 if unknown*/);
+extern bool sam_might_have_saggies_in_other_VBs (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int32_t n_alns/*0 if unknown*/);
 extern void scan_index_qnames_seg (VBlockSAMP vb);
 extern uint32_t sam_piz_get_plsg_i (VBIType vb_i);
 extern void sam_add_main_vb_info (VBlockP vb, uint64_t prim_first_line, uint32_t prim_num_lines, uint64_t depn_first_line, uint32_t depn_num_lines);
@@ -835,7 +834,7 @@ typedef struct { char s[1024]; } ShowAln;
 extern void sam_show_sag_one_grp (VBlockP vb, SAGroup grp_i);
 extern ShowAln sam_show_sag_one_SA_aln (VBlockP vb, const Sag *g, const SAAln *a);
 
-extern void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAMP dl, DictId dict_id, uint8_t type, rom array, int array_len, ArrayItemCallback callback, void *cb_param, PizSpecialReconstructor length_predictor);
+extern void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, DictId dict_id, uint8_t type, rom array, int array_len, ArrayItemCallback callback, PizSpecialReconstructor length_predictor);
 
 #define SAM_PIZ_HAS_SAG (((VBlockSAMP)vb)->sag && ((VBlockSAMP)vb)->sag_line_i == vb->line_i)
 
@@ -883,7 +882,7 @@ static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
     return 0; // number out of range
 }
 
-extern DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_bam, rom tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric, int16_t idx);
+extern DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_bam, rom tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric, int16_t idx);
 
 typedef struct { char s[200]; } DisFlagsStr;
 extern DisFlagsStr sam_dis_flags (SamFlags flags);

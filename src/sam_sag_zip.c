@@ -93,18 +93,18 @@ void sam_set_sag_type (void)
     // Note that STAR uses NH:i for secondary and SA:Z for supplamentary. We choose to gencomp for
     // secondaries as they are usually more numerous that supplamentaries (bug 1148).
     // we identify a PRIM as a line that is (1) not supp/secondary (2) has NH >= 2
-    else if (segconf.HI_has_two_plus && segconf.has[OPTION_NH_i])
+    else if (segconf.HI_has_two_plus && segconf_has(OPTION_NH_i))
         segconf.sag_type = segconf.has_barcodes ? SAG_BY_SOLO : SAG_BY_NH; 
 
     // SAG_BY_SA: the preferd Sag method - by SA:Z
     // we identify a PRIM line - if it (1) has SA:Z and (2) supp/secondary flags are clear
-    else if (segconf.sam_has_SA_Z || segconf.has[OPTION_SA_Z]) 
+    else if (segconf.sam_has_SA_Z || segconf_has(OPTION_SA_Z)) 
         segconf.sag_type = SAG_BY_SA;
 
     // SAG_BY_CC: cases where there is NH, but no HI or SA, and all lines in a SAG have NH>=2, and, 
     // except the last line in the SAG, also have CC and CP.
     // Note: we don't test for CC/CP here, because only lines with NH>=2 have them, and that might not have been encountered yet
-    else if (segconf.has[OPTION_NH_i] && !segconf.has[OPTION_HI_i] && !segconf.has[OPTION_SA_Z])
+    else if (segconf_has(OPTION_NH_i) && !segconf_has(OPTION_HI_i) && !segconf_has(OPTION_SA_Z))
         segconf.sag_type = SAG_BY_CC;
 
     // SAG_BY_FLAG: cases (eg BLASR) where there might be dependent lines, but no auxilliary fields to support them
@@ -114,7 +114,7 @@ void sam_set_sag_type (void)
              !txt_file->redirected && !txt_file->is_remote) { // conditions for using sam_sag_by_flag_scan_for_depn
         sam_sag_by_flag_scan_for_depn ();
         segconf.sag_type = !z_file->sag_depn_index.len ? SAG_NONE
-                         : segconf.has[OPTION_SA_Z]    ? SAG_BY_SA  // scan can detect SA:Z not previously detected by segconf
+                         : segconf_has(OPTION_SA_Z)    ? SAG_BY_SA  // scan can detect SA:Z not previously detected by segconf
                          :                               SAG_BY_FLAG;
     }
 
@@ -164,7 +164,7 @@ void sam_seg_gc_initialize (VBlockSAMP vb)
 // Call in seg PRIM line (both in MAIN and PRIM vb): 
 // MAIN: test that line is a valid prim before moving it to the PRIM gencomp file
 // PRIM: add SA Group (not alignments) to the data structure in VB 
-bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t num_alns/* inc primary aln*/, bool is_bam)
+bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint16_t num_alns/* inc primary aln*/, bool is_bam)
 {
     rom seq = vb->textual_seq_str;
     uint32_t seq_len = dl->SEQ.len;
@@ -215,7 +215,7 @@ bool sam_seg_prim_add_sag (VBlockSAMP vb, ZipDataLineSAMP dl, uint16_t num_alns/
 // MAIN: called in sam_seg_is_gc_line to test that line is a valid prim before moving it to the PRIM gencomp file
 // PRIM: call in seg of seg of SA:Z add SA Group (including alignments) to the data structure in VB
 // return n_alns if successful and 0 if not
-int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), int64_t this_nm, bool is_bam)
+int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sa), int64_t this_nm, bool is_bam)
 {
     str_split (sa, sa_len, 0, ';', aln, false); // n_alns is 1+number of repeats in SA, because of terminating ';'. so it is the total number of alignments, including the primary
     FAILIF (n_alns < 2 || n_alns > MAX_SA_NUM_ALNS, "n_alns=%d is not in [2,%u]", n_alns, MAX_SA_NUM_ALNS); // we cannot add this SA - either invalid or over the max number of alignments
@@ -307,14 +307,14 @@ int32_t sam_seg_prim_add_sag_SA (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(sa), in
 }       
 
 // PRIM: call in seg of seg of NH:i add SA Group to the data structure in VB 
-void sam_seg_prim_add_sag_NH (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh)
+void sam_seg_prim_add_sag_NH (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t nh)
 {
     sam_seg_prim_add_sag (vb, dl, nh, IS_BAM_ZIP);
     vb->sag_alns.count += nh;
 }
 
 // PRIM: call in seg of seg of NH:i add SA Group to the data structure in VB 
-void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh)
+void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t nh)
 {
     sam_seg_prim_add_sag (vb, dl, nh, IS_BAM_ZIP);
 
@@ -329,7 +329,7 @@ void sam_seg_prim_add_sag_CC (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t nh)
 }
 
 // PRIM: called to ingest a segged VB data into solo "alignments" 
-void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAMP dl)
+void sam_seg_prim_add_sag_SOLO (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
 {
     sam_seg_prim_add_sag (vb, dl, dl->NH, IS_BAM_ZIP);
 
@@ -353,7 +353,7 @@ static void sam_seg_MAIN_determine_abbreviated (VBlockSAMP vb, bool is_bam)
 
 // Seg MAIN: returns true if this line is a Primary or Dependent line of a supplementary/secondary group - 
 // and should be moved to a generated component. Called by compute thread in seg of Normal VB.
-bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(alignment), bool is_bam)
+bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(alignment), bool is_bam)
 {
     START_TIMER;
 
@@ -592,7 +592,7 @@ static inline bool sam_seg_depn_find_SA_aln (VBlockSAMP vb, const Sag *g,
     if (*prim_aln_index_in_SA_Z == 0) 
         return false; // the primary alignment is missing from my SA:Z
 
-    uint32_t my_SA_aln_i=1; // index into my_alns (starting from [1], becaues [0] if the main-fields DEPN alignment)
+    uint32_t my_SA_aln_i=1; // index into my_alns (starting from [1], because [0] if the main-fields DEPN alignment)
     for (uint64_t grp_aln_i=1; grp_aln_i < g->num_alns; grp_aln_i++) { // skip 0, iterate on depn alignments of this group
         if (my_SA_aln_i == *prim_aln_index_in_SA_Z) 
             my_SA_aln_i++; // skip primary alignment in SA:Z - we already handled it above
@@ -619,7 +619,7 @@ static inline bool sam_seg_depn_find_SA_aln (VBlockSAMP vb, const Sag *g,
 }
 
 // parse my SA field, and build my alignments based on my main fields data + SA data
-static inline bool sam_sa_seg_depn_get_my_SA_alns (VBlockSAMP vb, ZipDataLineSAMP dl,
+static inline bool sam_sa_seg_depn_get_my_SA_alns (VBlockSAMP vb, ZipDataLineSAM𐤐 dl,
                                                    WordIndex my_rname_contig, PosType32 my_pos, uint8_t my_mapq, 
                                                    STRp(my_cigar), int64_t my_nm, bool my_revcomp, 
                                                    STRp(SA), // 0,0 if no SA (eg STAR alignment) 
@@ -668,7 +668,7 @@ static inline bool sam_sa_seg_depn_get_my_SA_alns (VBlockSAMP vb, ZipDataLineSAM
 // Seg of DEPN by SA:Z tag: find matching SAGroup and seg SAM_SAG. We identify the group by matching (qname,rname,pos,cigar,revcomp,nm) 
 // and matching flags and SEQ
 // sets vb->sag (NULL if not found).
-static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP dl, 
+static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, 
                                                 STRp(textual_cigar), rom textual_seq, bool is_bam)
 {
     #define DONE ({ sam_cigar_restore_H (htos); return; })
@@ -745,7 +745,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAMP d
 // Seg of DEPN by NH:Z tag: find matching SAGroup and seg SAM_SAG. We identify the group by matching (qname,rname,pos,cigar,revcomp,nm) 
 // and matching flags and SEQ
 // sets vb->sag (NULL if not found).
-static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl, rom textual_seq, bool is_bam)
+static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom textual_seq, bool is_bam)
 {
     vb->sag = NULL; // initialize to "not found"
 
@@ -822,7 +822,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAMP dl
 }
 
 // Seg compute VB: called when segging PRIM/DEPN VBs
-void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_cigar), rom textual_seq, bool is_bam)
+void sam_seg_sag_stuff (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_cigar), rom textual_seq, bool is_bam)
 {
     START_TIMER;
 

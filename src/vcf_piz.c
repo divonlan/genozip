@@ -27,7 +27,7 @@ void vcf_piz_finalize (bool is_last_z_file)
 void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
 {
     if (VER(14)) 
-        segconf.has[FORMAT_RGQ] = header->vcf.segconf_has_RGQ;
+        segconf_load_has (FORMAT_RGQ, header->vcf.segconf_has_RGQ);
 
     if (VER(15)) {
         z_file->max_ploidy_for_mux    = header->vcf.max_ploidy_for_mux; // since 15.0.36
@@ -36,20 +36,20 @@ void vcf_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.INFO_DP_method        = header->vcf.segconf_INF_DP_method;
         segconf.MATEID_method         = header->vcf.segconf_MATEID_method;
         segconf.vcf_del_svlen_is_neg  = header->vcf.segconf_del_svlen_is_neg;
-        segconf.vcf_sample_copy          = header->vcf.segconf_sample_copy;
+        segconf.vcf_sample_copy       = header->vcf.segconf_sample_copy;
         segconf.Q_to_O                = BGEN32F (header->vcf.segconf_Q_to_O);
-        segconf.wid[INFO_AC].width    = header->vcf.width.AC;
-        segconf.wid[INFO_AF].width    = header->vcf.width.AF;
-        segconf.wid[INFO_AN].width    = header->vcf.width.AN;
-        segconf.wid[INFO_DP].width    = header->vcf.width.DP;
-        segconf.wid[INFO_QD].width    = header->vcf.width.QD;
-        segconf.wid[INFO_SF].width    = header->vcf.width.SF;
-        segconf.wid[INFO_MLEAC].width = header->vcf.width.MLEAC;
-        segconf.wid[INFO_AS_SB_TABLE].width = header->vcf.width.AS_SB_TABLE;
-        segconf.wid[VCF_ID].width     = header->vcf.width.ID;
-        segconf.wid[VCF_QUAL].width   = header->vcf.width.QUAL;
-        segconf.wid[INFO_BaseCounts].width  = header->vcf.width.BaseCounts;
-        segconf.wid[INFO_DPB].width   = header->vcf.width.DPB;
+        ZCTX(INFO_AC)->field_width    = header->vcf.width.AC;
+        ZCTX(INFO_AF)->field_width    = header->vcf.width.AF;
+        ZCTX(INFO_AN)->field_width    = header->vcf.width.AN;
+        ZCTX(INFO_DP)->field_width    = header->vcf.width.DP;
+        ZCTX(INFO_QD)->field_width    = header->vcf.width.QD;
+        ZCTX(INFO_SF)->field_width    = header->vcf.width.SF;
+        ZCTX(INFO_MLEAC)->field_width = header->vcf.width.MLEAC;
+        ZCTX(VCF_ID)->field_width     = header->vcf.width.ID;
+        ZCTX(VCF_QUAL)->field_width   = header->vcf.width.QUAL;
+        ZCTX(INFO_DPB)->field_width   = header->vcf.width.DPB;
+        ZCTX(INFO_BaseCounts)->field_width  = header->vcf.width.BaseCounts;
+        ZCTX(INFO_AS_SB_TABLE)->field_width = header->vcf.width.AS_SB_TABLE;
     }
 }
 
@@ -98,7 +98,7 @@ IS_SKIP (vcf_piz_is_skip_section)
 {
     if (flag.drop_genotypes && // note: if all samples are filtered out with --samples then flag.drop_genotypes=true (set in vcf_samples_analyze_field_name_line)
         (dict_id.num == _VCF_FORMAT || 
-         (dict_id.num == _VCF_SAMPLES && !segconf.has[FORMAT_RGQ]) || // note: if has[RGQ], vcf_piz_special_REFALT peeks SAMPLES so we need it 
+         (dict_id.num == _VCF_SAMPLES && !segconf_has(FORMAT_RGQ)) || // note: if has[RGQ], vcf_piz_special_REFALT peeks SAMPLES so we need it 
          dict_id_is_vcf_format_sf (dict_id)))
         return true;
 
@@ -124,13 +124,14 @@ IS_SKIP (vcf_piz_is_skip_section)
 void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
 #ifdef DEBUG
-    DO_ONCE WARN_IF (segconf.wid[ctx->did_i].width==0, "segconf.wid[%s].width=0. This can legimately happen if this field is not encountered in segconf, or all segconf occurances are longer than %u, or this field didn't exist in version %s, or possibly a bug", ctx->tag_name, SEGCONF_MAX_WIDTH, STRver(file_version()).s);
+    DO_ONCE WARN_IF (ZCTX(ctx->did_i)->field_width==0, "ZCTX(%s)->field_width=0. This can legimately happen if this field is not encountered in segconf, or all segconf occurances are longer than %u, or this field didn't exist in version %s, or possibly a bug", 
+                     ctx->tag_name, SEGCONF_MAX_WIDTH, STRver(file_version()).s);
 #endif
 
     if (!IS_RECON_INSERTION(ctx)) return;
     
     char *addr = last_txtx (VB, ctx);
-    int move_by = (int)value_len - segconf.wid[ctx->did_i].width;
+    int move_by = (int)value_len - ZCTX(ctx->did_i)->field_width;
 
     // actually insert or remove space in txt_data if different than what was reserved
     if (move_by) {
@@ -192,8 +193,8 @@ bool vcf_piz_line_has_RGQ (VBlockVCFP vb)
     decl_ctx (FORMAT_RGQ);
 
     if (ctx->line_has_RGQ == unknown)
-        ctx->line_has_RGQ = segconf.has[FORMAT_RGQ] && 
-                            container_peek_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ, false); // note: segconf.has[FORMAT_RGQ] is never set in PIZ prior to v14
+        ctx->line_has_RGQ = segconf_has(FORMAT_RGQ) && 
+                            container_peek_has_item (VB, CTX(VCF_SAMPLES), (DictId)_FORMAT_RGQ, false); // note: segconf_has(FORMAT_RGQ) is never set in PIZ prior to v14
 
     return ctx->line_has_RGQ;
 }

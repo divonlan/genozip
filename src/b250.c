@@ -46,13 +46,14 @@
 // ZIP
 // ------
 
-// caller guarantees that n∈[1-4]
-static inline void memcpy4 (uint8_t *dst, uint8_t *src, uint_fast8_t n)
+static inline void memcpy4 (uint8_t *restrict dst, uint8_t *restrict src, uint_fast8_t n)
 {
-    if      (n == 1) { dst[0]=src[0]; }
-    else if (n == 2) { dst[0]=src[0]; dst[1]=src[1]; }
-    else if (n == 3) { dst[0]=src[0]; dst[1]=src[1]; dst[2]=src[2]; }
-    else             { dst[0]=src[0]; dst[1]=src[1]; dst[2]=src[2]; dst[3]=src[3]; }
+    switch (n) { // caller guarantees that n∈[1-4]
+        case 1: dst[0]=src[0]; break;
+        case 2: dst[0]=src[0]; dst[1]=src[1]; break; // note: compiler will coalesce these to a single write, thanks to restrict
+        case 3: dst[0]=src[0]; dst[1]=src[1]; dst[2]=src[2]; break;
+        case 4: dst[0]=src[0]; dst[1]=src[1]; dst[2]=src[2]; dst[3]=src[3]; break;
+    }
 }
 
 // SEG (before conversion): MSB containing type is last byte
@@ -78,7 +79,7 @@ WordIndex b250_seg_get_wi (const uint8_t *msb_p) // pointer to msb - last byte o
 }
 
 // returns number of bytes written
-static inline uint32_t b250_set_wi (uint8_t *dst, // begining of writing if piz_format=false, end of writing if true 
+static inline uint32_t b250_set_wi (uint8_t *restrict dst, // begining of writing if piz_format=false, end of writing if true 
                                     WordIndex wi, bool piz_format)
 {
     uint32_t enc; // encoding
@@ -108,9 +109,9 @@ static inline uint32_t b250_set_wi (uint8_t *dst, // begining of writing if piz_
     return enc_len;
 }
 
-void b250_seg_append (VBlockP vb, ContextP ctx, WordIndex node_index)
+void b250_seg_append (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index)
 {
-    #define AT_LEAST(did_i) ((uint64_t)(10.0 + (((did_i) < MAX_NUM_PREDEFINED) ? segconf.b250_per_line[did_i] * (float)(vb->lines.len32) : 0)))
+    #define AT_LEAST(did_i) (10 + (((did_i) < MAX_NUM_PREDEFINED) ? (uint64_t)segconf.per_line[did_i].b250 * vb->lines.len32 : 0))
 
     // case: context is currently all_the_same - (ie count>=1, but only one actual entry)...
     if (ctx->flags.all_the_same) {
@@ -122,10 +123,17 @@ void b250_seg_append (VBlockP vb, ContextP ctx, WordIndex node_index)
             buf_alloc (vb, &ctx->b250, word_len * (ctx->b250.count+1), AT_LEAST(ctx->did_i), char, CTX_GROWTH, C_B250); // add 1 more, meaning a total of len+1
         
             // add (count-1) copies of first_node to the one already existing
-            for (unsigned i=0; i < ctx->b250.count - 1; i++) {
-                memcpy4 (BAFT8(ctx->b250), B1ST8(ctx->b250), word_len);
-                ctx->b250.len32 += word_len;
+            if (word_len == 1) 
+                memset (BAFT8(ctx->b250), *B1ST8(ctx->b250), ctx->b250.count - 1);
+
+            else {
+                uint8_t *restrict first = B1ST8(ctx->b250);
+                uint8_t *restrict next  = first + word_len;
+                for (int i=0; i < ctx->b250.count - 1; i++, next += word_len) 
+                    memcpy4 (next, first, word_len);
             }
+
+            ctx->b250.len32 = ctx->b250.count * word_len;
 
             ctx->flags.all_the_same = false; // no longer all_the_same 
 
@@ -157,7 +165,7 @@ void b250_seg_append (VBlockP vb, ContextP ctx, WordIndex node_index)
     ctx->b250.count++; // counts number of words in this b250    
 }
 
-void b250_seg_remove_last (VBlockP vb, ContextP ctx, WordIndex node_index/*optional*/)
+void b250_seg_remove_last (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index/*optional*/)
 {
     ctx_decrement_count (vb, ctx, node_index != WORD_INDEX_NONE ? node_index : b250_seg_get_last (ctx));
     
@@ -173,7 +181,7 @@ void b250_seg_remove_last (VBlockP vb, ContextP ctx, WordIndex node_index/*optio
     if (ctx->b250.count <= 1) ctx->flags.all_the_same = (bool)ctx->b250.count;
 }
 
-static inline uint_fast8_t get_converted_wi (VBlockP vb, ContextP ctx, const uint8_t *msb_p, WordIndex needs_conversion_threadshold, WordIndex *converted_wi)
+static inline uint_fast8_t get_converted_wi (VBlock𐤐 vb, Context𐤐 ctx, const uint8_t *msb_p, WordIndex needs_conversion_threadshold, WordIndex *converted_wi)
 {
     uint_fast8_t orig_wi_len = VARL_BYTES (*msb_p);
     WordIndex orig_wi = b250_seg_get_wi (msb_p);
@@ -191,7 +199,7 @@ static inline uint_fast8_t get_converted_wi (VBlockP vb, ContextP ctx, const uin
 // 1. change words to big endian, so that the MSB, used to determine the word length, is the first byte
 // 2. every node_index new to this VB (which is always 4B) is converted to a word_index of the appropriate length
 // 3. in case a word_index is +1 the previous word index, it is replaced with VARL_ONE_UP
-bool b250_zip_generate (VBlockP vb, ContextP ctx)
+bool b250_zip_generate (VBlock𐤐 vb, Context𐤐 ctx)
 {
     START_TIMER;
     bool ret = true;
@@ -224,6 +232,8 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
     WordIndex converted_wi, prev_converted_wi = WORD_INDEX_NONE;
     uint_fast8_t orig_wi_len, prev_orig_wi_len=0;
     WordIndex needs_conversion_threadshold = ctx->ol_nodes.len32;
+
+    bool one_up_ok = (ctx->nodes.len + ctx->ol_nodes.len32 > 1024); // note: in small dictionaries introducing an extra symbol WORD_INDEX_ONE_UP worsens compression
     
     // scan backwards as type is in MSB which is the last byte in each yet-to-be-converted b250
     while (src >= first) {
@@ -238,7 +248,7 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
         if (src - orig_wi_len >= first) 
             prev_orig_wi_len = get_converted_wi (vb, ctx, src - orig_wi_len, needs_conversion_threadshold, &prev_converted_wi);
 
-        if (prev_converted_wi >= 0 && converted_wi >= 0 && converted_wi == prev_converted_wi + 1) 
+        if (one_up_ok && prev_converted_wi >= 0 && converted_wi >= 0 && converted_wi == prev_converted_wi + 1) 
             converted_wi = WORD_INDEX_ONE_UP;
 
         src -= orig_wi_len;

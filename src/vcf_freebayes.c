@@ -20,8 +20,8 @@ void vcf_freebayes_zip_initialize (void)
 void vcf_freebayes_seg_initialize (VBlockVCFP vb)
 {
     if (segconf.FMT_RO_AO_method == RO_AO_by_AD) {
-        CTX(FORMAT_RO)->other_ctx = ctx_get_ctx (vb, make_array_item_dict_id (_FORMAT_AD, 0));
-        CTX(FORMAT_AO)->other_ctx = ctx_get_ctx (vb, make_array_item_dict_id (_FORMAT_AD, 1));
+        CTX(FORMAT_RO)->other_ctx = ctx_get_ctx (vb, sub_dict_id (_FORMAT_AD, '0'));
+        CTX(FORMAT_AO)->other_ctx = ctx_get_ctx (vb, sub_dict_id (_FORMAT_AD, '1'));
 
         ctx_set_store (VB, STORE_INT, CTX(FORMAT_RO)->other_ctx->did_i, CTX(FORMAT_AO)->other_ctx->did_i, DID_EOL);
     }

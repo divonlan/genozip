@@ -26,12 +26,11 @@
 #include "mgzip.h"
 #include "license.h"
 #include "refhash.h"
+#include "stats.h"
 
 #define dict_id_is_fastq_qname_sf dict_id_is_type_1
 #define dict_id_is_fastq_aux      dict_id_is_type_2
 #define dict_id_fastq_qname_sf dict_id_type_1
-
-STRl (copy_qname_snip, 30);
 
 unsigned fastq_vb_size (DataType dt) { return sizeof (VBlockFASTQ); }
 unsigned fastq_vb_zip_dl_size (void) { return sizeof (ZipDataLineFASTQ); }
@@ -139,7 +138,7 @@ thool fastq_verify_and_sort_pairs (int n_fns, rom *fns, FailType soft_fail)
             if (fastq_is_pair_strings (fqs[i].fn, strlen(fqs[i].fn), fqs[i+1].fn, strlen(fqs[i+1].fn)) == PAIR_R2)
                 SWAP (fqs[i], fqs[i+1]); // if filename indicates reverse order - swap
             
-            // try to distguish R1 vs R2 based on QNAME2 (e.g. "1:N:0:41" vs "2:N:0:41" in QF2_ILLUM_0bc)
+            // try to distguish R1 vs R2 based on QNAME2 (e.g. "1:N:0:41" vs "2:N:0:41" in QF2_ILLUM_00)
             else if (fastq_is_pair_strings (STRa(fqs[i].qname2), STRa(fqs[i+1].qname2)) == PAIR_R2)
                 SWAP (fqs[i], fqs[i+1]); // if QNAME2 indicates reverse order - swap
         }
@@ -428,7 +427,6 @@ void fastq_zip_init_vb (VBlockP vb)
 
 void fastq_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header)
 {
-    vb_header->flags.vb_header.fastq.is_nonbio = (segconf.nonbio_type != NONBIO_NONE); // 15.0.83. Note: may be different for R1 and R2, so not in genozip_header
 }
 
 // called by main thread, as VBs complete (might be out-of-order)
@@ -450,7 +448,7 @@ void fastq_zip_after_compute (VBlockP vb)
     z_file->fq_num_nonbio          += VB_FASTQ->num_nonbio;
     global_num_consumed            += VB_FASTQ->num_consumed;
 
-    if (!flag.deep && IS_REF_LOADED_ZIP) {
+    if (!flag.deep && !(IS_NONBIO(10xGen) && !IS_R2) && IS_REF_LOADED_ZIP) {
         DO_ONCE ref_verify_organism (vb);
     }
 
@@ -524,11 +522,10 @@ static void fastq_tip_if_should_be_pair (void)
 
 // called by main thread at the beginning of zipping this txt file  
 void fastq_zip_initialize (void)
-{
-    DO_ONCE {
-        seg_prepare_snip_other (SNIP_COPY, _FASTQ_QNAME, 0, 0, copy_qname_snip);
-    }
-    
+{    
+    if (IS_REF_LOADED_ZIP)
+        ref_set_access_mode (REF_ACCESS_RANDOM, REF_ACCESS_RANDOM);
+
     // reset lcodec for STRAND and GPOS, as these may change between PAIR_R1 and PAIR_R2 files
     ZCTX(FASTQ_STRAND)->lcodec = CODEC_UNKNOWN;
     ZCTX(FASTQ_GPOS  )->lcodec = CODEC_UNKNOWN;
@@ -593,13 +590,12 @@ void fastq_seg_initialize (VBlockP vb_)
     vb->has_extra = segconf.has_extra; // VB-private copy
 
     ctx_set_ltype (VB, LT_BITMAP, FASTQ_SQBITMAP, FASTQ_STRAND, FASTQ_STRAND_R2, DID_EOL);
-    ctx_set_ltype (VB, LT_INT16,  FASTQ_GPOS_DELTA, DID_EOL);
     ctx_set_ltype (VB, LT_STRING, FASTQ_CIGAR, DID_EOL);
     ctx_set_ltype (VB, LT_UINT8,  FASTQ_SEQINS_A, FASTQ_SEQINS_C, FASTQ_SEQINS_G, FASTQ_SEQINS_T, 
                                   FASTQ_SEQMIS_A, FASTQ_SEQMIS_C, FASTQ_SEQMIS_G, FASTQ_SEQMIS_T,DID_EOL);
     ctx_set_ltype (VB, LT_BLOB,   FASTQ_NONREF, FASTQ_QUAL, DID_EOL); // for QUAL, might be changed later to LT_CODEC (eg domq, longr), for NONREF, by codec_acgt_seg_initialize
 
-    ctx_set_dyn_int (VB, FASTQ_GPOS, FASTQ_GPOS_R2, DID_EOL); // this also sets STORE_INT
+    ctx_set_dyn_int (VB, FASTQ_GPOS, FASTQ_GPOS_R2, FASTQ_GPOS_DELTA, DID_EOL); // this also sets STORE_INT
 
     ctx_set_store (VB, STORE_INDEX, T(!flag.deep, FASTQ_CONTIG)/*since v12*/, DID_EOL);
     
@@ -616,7 +612,6 @@ void fastq_seg_initialize (VBlockP vb_)
         if (segconf.is_interleaved) {            
             buf_alloc (vb, &gpos_ctx->local,    1, vb->lines.len / 2, uint32_t, CTX_GROWTH, C_LOCAL); 
             buf_alloc (vb, &gpos_r2_ctx->local, 1, vb->lines.len / 2, uint32_t, CTX_GROWTH, C_LOCAL); 
-            buf_alloc (vb, &gpos_Δ_ctx->local,  1, vb->lines.len / 2, int16_t,  CTX_GROWTH, C_LOCAL); 
 
             buf_alloc (vb, &strand_ctx->local,    0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, C_LOCAL); 
             buf_alloc (vb, &strand_r2_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len / 2), uint8_t, 0, C_LOCAL); 
@@ -624,14 +619,14 @@ void fastq_seg_initialize (VBlockP vb_)
         else {
             buf_alloc (vb, &gpos_ctx->local, 1, vb->lines.len, uint32_t, CTX_GROWTH, C_LOCAL); 
             buf_alloc (vb, &strand_ctx->local, 0, roundup_bits2bytes64 (vb->lines.len), uint8_t, 0, C_LOCAL); 
-
-            if (vb->R1_vb_i)
-                buf_alloc (vb, &gpos_Δ_ctx->local,  1, vb->lines.len, int16_t, CTX_GROWTH, C_LOCAL); 
         }
     }
 
-    if (segconf.nonbio_type == NONBIO_SPLiT_seq)
-        fastq_SPLiT_seg_initialize (vb);
+    if (IS_NONBIO(Parse))
+        fastq_parse_seg_initialize (vb);
+
+    if (IS_NONBIO(10xGen))
+        fastq_10xGen_seg_initialize (vb);
 
     if (flag.bam_assist) 
         fastq_bamass_seg_initialize (vb);
@@ -662,6 +657,7 @@ void fastq_seg_initialize (VBlockP vb_)
 
     if (!segconf_running) { // note: if segconf.running, we initialize in qname_segconf_discover_flavor
         qname_seg_initialize (VB, QNAME1, FASTQ_QNAME); 
+        qname_seg_initialize (VB, QEMBED, FASTQ_QNAME);
         qname_seg_initialize (VB, QNAME2, (segconf.desc_is_l3 ? FASTQ_LINE3 : FASTQ_QNAME)); 
         qname_seg_initialize (VB, QLINE3, FASTQ_LINE3); 
         ctx_consolidate_stats (VB, (segconf.desc_is_l3 ? FASTQ_LINE3 : FASTQ_QNAME), FASTQ_AUX, FASTQ_EXTRA, DID_EOL);
@@ -674,7 +670,7 @@ void fastq_seg_initialize (VBlockP vb_)
     // be a singleton (since not the first appearance), causing both b250 and local to differ between the R's. 
     if (flag.pair)
         for (Did did_i=0; did_i < MAX_DICTS; did_i++)
-            if (segconf.has[did_i]) // aux and saux contexts. note: for non-predefined contexts, their did_i will be the same in all VBs, bc the format of all lines in FASTQ is the same. Even if not, all non-predefined contexts in FASTQ are DTYPE_2, and we are setting no_stons for DTYPE_2 contexts anyway
+            if (segconf_has(did_i)) // aux and saux contexts. note: for non-predefined contexts, their did_i will be the same in all VBs, bc the format of all lines in FASTQ is the same. Even if not, all non-predefined contexts in FASTQ are DTYPE_2, and we are setting no_stons for DTYPE_2 contexts anyway
                 CTX(did_i)->no_stons = true;
 
     if (flag.deep)
@@ -702,6 +698,15 @@ void fastq_seg_initialize (VBlockP vb_)
     COPY_TIMER (seg_initialize);
 }
 
+bool fastq_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
+{
+    return
+        // typically big
+        dict_id.num == _FASTQ_NONBIO_BC0 ||
+        dict_id.num == _FASTQ_NONBIO_BC1 ||
+        dict_id.num == _FASTQ_NONBIO_BC2;
+}
+
 void fastq_segconf_finalize (VBlockP vb)
 {
     if (!flag.deep) { // in Deep, this is a SAM file and SAM segconf gets to decide these
@@ -714,16 +719,28 @@ void fastq_segconf_finalize (VBlockP vb)
 
     if (flag.deep || flag.bam_assist) fastq_deep_seg_finalize_segconf (vb->lines.len32);
 
+    // if possibly a 10xGenomics non-biological file, verify if it is indeed the case
+    if (IS_NONBIO(10xGen))
+        fastq_10xGen_segconf_finalize (vb);
+
     // test if file is non-biological (i.e. barcodes only)
-    if (!segconf.is_long_reads && !segconf.is_interleaved &&
+    if (!segconf.is_long_reads && !segconf.is_interleaved && 
+        !segconf.nonbio_type && // not already found to be another type of nonbiological
         !flag.pair) // note: if paired, we test R2 in segconf_calculate_nonfirst_FASTQ
-        fastq_segconf_set_non_biological (vb);
+        fastq_segconf_check_if_Parse (vb);
 
     // if no reference, test if fastq is multiseq
     if (!flag.reference && !flag.fast && !segconf.nonbio_type) 
         segconf_test_multiseq (VB, FASTQ_NONREF);
 
-    if (!segconf.multiseq && !segconf.nonbio_type && 
+    // note: same logic as in sam_seg_finalize_segconf
+    if (segconf_has(OPTION_ZA_Z) && segconf_has(OPTION_ZB_Z) && segconf_has(OPTION_RX_Z) && segconf_has(OPTION_QX_Z) && segconf_has(OPTION_BC_Z)) {
+        segconf.has_agent_trimmer = true;
+        stats_add_one_program (_S("AGeNT_Trimmer"));
+    }
+
+    if (!segconf.multiseq && 
+        !(segconf.nonbio_type && !flag.pair) && // compressing a single non-biological file
         !flag.reference && !txt_file->redirected && !flag.seg_only && !flag.restarted) {
 
         if (!flag.force && license_is_eval() && isatty(0) && isatty(1)) 
@@ -752,6 +769,9 @@ void fastq_segconf_finalize (VBlockP vb)
     if (codec_longr_maybe_used (vb, FASTQ_QUAL)) 
         codec_longr_segconf_calculate_bins (vb, CTX(FASTQ_QUAL + 1), fastq_zip_qual);
 
+    if (codec_tmpl_maybe_used (FASTQ_QUAL)) 
+        codec_tmpl_segconf_finalize (vb, FASTQ_QUAL, fastq_zip_qual);
+
     // note: we calculate the smux stdv to be reported in stats, even if SMUX is not used
     codec_smux_calc_stats (vb);
     
@@ -759,12 +779,12 @@ void fastq_segconf_finalize (VBlockP vb)
 
     // set optimizations (these might tell get canceled in segconf_finalize_optimize())
     if (flag.optimize) {
-        segconf.optimize[FASTQ_QNAME]  = !flag.deep && !flag.bam_assist; 
-        segconf.optimize[FASTQ_QNAME2] = (!flag.deep && !flag.bam_assist && segconf.has_qname2); // note: we don't reset has_qname2 as fastq_zip_modify needs it to parse the read
-        segconf.optimize[FASTQ_LINE3]  = (segconf.line3 != L3_EMPTY);
+        segconf_set_optimize (FASTQ_QNAME, !flag.deep && !flag.bam_assist); 
+        segconf_set_optimize (FASTQ_QNAME2, (!flag.deep && !flag.bam_assist && segconf.has_qname2)); // note: we don't reset has_qname2 as fastq_zip_modify needs it to parse the read
+        segconf_set_optimize (FASTQ_LINE3, (segconf.line3 != L3_EMPTY));
 
         // optimize QUAL unless already binned (8 is the number of bins in Illimina: https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf)
-        segconf.optimize[FASTQ_QUAL]   = (segconf_get_num_qual_scores(QHT_QUAL) > 8); 
+        segconf_set_optimize (FASTQ_QUAL, (segconf_get_num_qual_scores(QHT_QUAL) > 8)); 
     }
 }
 
@@ -788,19 +808,19 @@ void fastq_zip_after_segconf (VBlockP vb)
     if (IS_R1) 
         fastq_zip_after_segconf_alloc_r1_z_bufs();
 
-    if (segconf.optimize[FASTQ_LINE3]) {
+    if (segconf_optimize (FASTQ_LINE3)) {
          segconf.line3 = L3_EMPTY;
 
          if (segconf.desc_is_l3)
             segconf.seq_len_dict_id.num = 0;
     }
 
-    if (segconf.optimize[FASTQ_QNAME2]) {
+    if (segconf_optimize (FASTQ_QNAME2)) {
         segconf.qname_flavor[QNAME2] = NULL;
         ZCTX(FASTQ_QNAME2)->st_did_i = FASTQ_QNAME; // consolidate_stats doesn't work for QNAME2 because it is not merged if optimized 
     }
 
-    if (segconf.optimize[FASTQ_QNAME]) {
+    if (segconf_optimize (FASTQ_QNAME)) {
         segconf.qname_flavor[QNAME1] = qname_get_optimize_qf();
         fastq_get_optimized_qname_read_name();
     }
@@ -820,7 +840,7 @@ void fastq_seg_finalize (VBlockP vb)
         fastq_bamass_seg_finalize (VB_FASTQ);
 
     // top level snip
-    SmallContainer top_level = { 
+    Container(FASTQ_NUM_TOP_LEVEL_FIELDS) top_level = { 
         .repeats        = vb->lines.len32,
         .is_toplevel    = true,
         .filter_items   = true,
@@ -1127,7 +1147,7 @@ rom fastq_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     *next++ = DC;
 
     // case: --optimize_DESC: we replace the description with "filename.line_i" (optimized string stored in segconf.optimized_qname)
-    if (segconf.optimize[FASTQ_QNAME]) {
+    if (segconf_optimize (FASTQ_QNAME)) {
         char *save_next = next;
         next = mempcpy (next, segconf.optimized_qname.s, segconf.optimized_qname_len);
         next += str_int (vb->first_line + vb->line_i, next);
@@ -1141,7 +1161,7 @@ rom fastq_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
         CTX(FASTQ_QNAME)->txt_shrinkage += qname_len - (next - save_next);
 
         // case: we have QNAME2 - copy line except QNAME and QNAME2
-        if (segconf.optimize[FASTQ_QNAME2] && qname2_len) {
+        if (segconf_optimize (FASTQ_QNAME2) && qname2_len) {
             next = mempcpy (next, qname2 + qname2_len, line1_len - qname_len - 1/*sep*/ - qname2_len);
             
             CTX(FASTQ_QNAME2)->txt_shrinkage += qname2_len + 1/*sep*/;
@@ -1165,7 +1185,7 @@ rom fastq_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
         *next++ = '+'; 
 
         // case: optimize -> empty line3
-        if (segconf.optimize[FASTQ_LINE3]) 
+        if (segconf_optimize (FASTQ_LINE3)) 
             CTX(FASTQ_LINE3)->txt_shrinkage += line3_len + (segconf.desc_is_l3 ? (1 + desc_len) : 0);
         else {
             next = mempcpy (next, line3, line3_len);
@@ -1178,7 +1198,7 @@ rom fastq_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
         *next++ = '\n'; 
 
         // QUAL: optimize or not
-        next = segconf.optimize[FASTQ_QUAL] ? optimize_phred_quality_string (STRa(qual), next, false, false) 
+        next = segconf_optimize (FASTQ_QUAL) ? optimize_phred_quality_string (STRa(qual), next, false, false) 
                                             : mempcpy (next, qual, qual_len);
         *next++ = '\n'; 
     }
@@ -1208,10 +1228,12 @@ void fastq_segconf_index_R2_lines (VBlockP vb_)
         next = fastq_seg_get_lines (vb, next, BAFTtxt - next, pSTRa(qname), pSTRa(qname2), pSTRa(desc), pSTRa(seq), pSTRa(line3), pSTRa(qual), 
                                     &line1_len, line_has_13);
 
-        ZipDataLineFASTQP dl = DATA_LINE (line_i);
+        ZipDataLineFASTQ𐤐  dl = DATA_LINE (line_i);
         dl->qname = TXTWORD(qname);
         dl->seq   = TXTWORD(seq); 
         dl->qual  = TXTWORD(qual);
+
+        MAXIMIZE (segconf.std_seq_lR2, seq_len);
     }
 }
 
@@ -1230,7 +1252,7 @@ rom fastq_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining, bool *h
                                      &line1_len, line_has_13);
     
     // set dl fields, consumed by fastq_zip_qual/seq
-    ZipDataLineFASTQP dl = DATA_LINE (vb->line_i);
+    ZipDataLineFASTQ𐤐  dl = DATA_LINE (vb->line_i);
     dl->seq   = TXTWORD(seq); 
     dl->qname = TXTWORD(qname);
 
@@ -1526,6 +1548,7 @@ void fastq_zip_genozip_header (SectionHeaderGenozipHeader *header)
     header->fastq.segconf_fa_as_fq           = segconf.fasta_as_fastq;      // 15.0.58
     header->fastq.segconf_is_ileaved         = segconf.is_interleaved;      // 15.0.58
     header->fastq.segconf_std_seq_len        = BGEN32(segconf.std_seq_len); // 15.0.69
+    header->fastq.segconf_std_seq_lR2        = BGEN32(segconf.std_seq_lR2); // 15.0.84
     header->fastq.segconf_use_ins_ctxs       = segconf.use_insertion_ctxs;  // 15.0.69
     
     header->flags.genozip_header.is_bamass = (flag.bam_assist != NULL);     // 15.0.77
@@ -1540,6 +1563,7 @@ void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header)
         segconf.fasta_as_fastq     = header->fastq.segconf_fa_as_fq;
         segconf.is_interleaved     = header->fastq.segconf_is_ileaved;
         segconf.std_seq_len        = BGEN32(header->fastq.segconf_std_seq_len);
+        segconf.std_seq_lR2        = BGEN32(header->fastq.segconf_std_seq_lR2);
         segconf.use_insertion_ctxs = header->fastq.segconf_use_ins_ctxs;
     }
 

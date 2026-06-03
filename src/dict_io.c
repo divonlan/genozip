@@ -165,6 +165,7 @@ static void dict_io_compress_one_fragment (VBlockP vb)
     comp_compress (vb, vb->fragment_ctx, &vb->z_data, &header, vb->fragment_start, NO_CALLBACK, "SEC_DICT");
 
     COPY_TIMER (dict_io_compress_one_fragment);
+    COPY_TIMER_COMPRESS_BY_FIELD (vb->fragment_ctx);
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
@@ -419,7 +420,11 @@ StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
         case SNIP_LOOKBACK             : SNPRINTF0(s, "[LOOKBACK]");    break;
         case v13_SNIP_COPY_BUDDY       : SNPRINTF0(s, "[BCOPY]");       break; 
         case SNIP_DIFF                 : SNPRINTF0(s, "[DIFF]");        break; 
-        case SNIP_NUMERIC              : SNPRINTF0(s, "[NUMERIC]");     break; 
+        case SNIP_NUMERIC              : SNPRINTF (s, "[NUMERIC-%u][%s%s]", snip[i+i]-'0', 
+                                                   snip_len==4 ? "0x-" : "", 
+                                                   snip[i]=='0'?"decimal" : snip[i]=='1'?"hex" : "HEX");
+                                         i=snip_len; 
+                                         break; 
         case SNIP_SPECIAL              : if (z_file && special_names[dt][snip[1]-32]) 
                                             SNPRINTF (s, "[%s_SPECIAL_%s]", dt_name(dt), special_names[dt][snip[1]-32]);
                                          else 
@@ -438,31 +443,47 @@ StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
         X_VCF(LEN_OF) || X_VCF(ARRAY_LEN_OF) || X_VCF(COPY_MATE) || (X_VCF(GQ) && snip_len > 8) ||
         (X_SAM(COPY_BUDDY) && snip_len > 3))
     {
-        unsigned b64_len = base64_sizeof (DictId);
-        DictId dict_id;
-        base64_decode (&snip[1 + (op==SNIP_SPECIAL)], &b64_len, dict_id.id, sizeof(DictId));
+        DictId dict_id = base64_decode_dict_id (&snip[1 + (op==SNIP_SPECIAL)]);
         SNPRINTF (s, "(%s)", dis_dict_id (dict_id).s);
-        i += b64_len;
+        i += base64_sizeof (DictId);
     }
 
     else if (op == SNIP_CONTAINER) {
+        uint32_t n_items  = base64_get_container_nitems (snip+1);
+        uint32_t con_size = con_sizeof_(n_items);
+        uint32_t b64_len  = base64_size (con_size); // shorter than snip_len, if snip includes prefixes too
+
+        ASSERT (snip_len-1 >= b64_len, "b64_len=%u (implied by n_items=%u) > (snip_len-1)=%u. snip=\"%s\"", 
+                b64_len, n_items, snip_len-1, str_to_printable_(STRa(snip)).s);
+
         // decode
-        Container con;
-        unsigned b64_len = snip_len - 1; // maximum length of b64 
-        base64_decode (&snip[1], &b64_len, (uint8_t*)&con, -1);
+        Container(MAX_FIELDS+1) con; // +1 for base64_decode overflow space (clang doesn't allow variable-length containers)
+        base64_decode (&snip[1], b64_len, (uint8_t*)&con, -1);
         i += b64_len;
 
-        con.repeats = BGEN24 (con.repeats);
+        if (!VER2(15,84)) // up to 15.0.83 repeats was big endian
+            con.repeats = BGEN24 (con.repeats);
+            
         unsigned prefixes_len = snip_len - i;
-        SNPRINTF (s, "%.*s", (int)sizeof(s)-20, container_to_json (&con, &snip[i], prefixes_len).s);
+        SNPRINTF (s, "%.*s", (int)sizeof(s)-20, container_to_json ((ContainerP)&con, &snip[i], prefixes_len).s);
         i += prefixes_len;
+    }
+
+    else if (op == SNIP_SELF_DELTA) {
+        if (i < snip_len) {
+            if      (snip[i] == 'd') { SNPRINTF (s, "[NUMERIC-%u]", snip[i+1]-'A'); i += 2; }
+            else if (snip[i] == 'x') { SNPRINTF0 (s, "[hex]"); i++; }
+            else if (snip[i] == 'X') { SNPRINTF0 (s, "[HEX]"); i++; }
+        }
+
+        if (i < snip_len && snip[i] == '$') { SNPRINTF0 (s, "[LOOKUP]"); i++; }
     }
 
     // case: MINUS
     else if (X_VCF(MINUS) || X_GFF(MINUS)) {
-        DictId dicts[2]; 
-        unsigned b64_len = snip_len - 2; 
-        base64_decode (&snip[2], &b64_len, (uint8_t *)dicts, 2 * sizeof(DictId));
+        DictId dicts[2+1]; // +1 for base64_decode required overflow space
+        unsigned b64_len = base64_size (sizeof(DictId) * 2); 
+        base64_decode (&snip[2], b64_len, (uint8_t *)dicts, 2 * sizeof(DictId));
 
         i += b64_len;
 
@@ -471,9 +492,9 @@ StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
         
     // case: PLUS
     else if (X_VCF(PLUS) || X_SAM(PLUS)) {
-        DictId dicts[MAX_SNIP_DICTS]; 
-        unsigned b64_len = snip_len - 2; 
-        int num_dicts = base64_decode (&snip[2], &b64_len, (uint8_t *)dicts, -1) / sizeof (DictId);
+        DictId dicts[MAX_SNIP_DICTS + 1]; // +1 for base64_decode required overflow space
+        unsigned b64_len = snip_len - 2; // entire snip is only dicts
+        int num_dicts = base64_decode (&snip[2], b64_len, (uint8_t *)dicts, -1) / sizeof (DictId);
 
         SNPRINTF0 (s, " (");
 
@@ -511,6 +532,12 @@ StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
                   (snip_len >= 8 && snip[7]=='1') ? " FRC_VERBATIM" : "");
         return s;
     }
+
+    else if (X_SAM(RG_by_QNAME)) {
+        SNPRINTF (s, "[%s]", RG_method_name (snip[2] - '0'));
+        return s;
+    }
+
     else if (X_FASTQ(SEQ_by_bamass)) {
         SNPRINTF (s, "[%s]", snip[2]=='0' ? "PERFECT" : "BITMAP");
         return s;
@@ -523,14 +550,11 @@ StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
         unsigned start_at = i + (snip[snip_len-2] - '0');
         str_split (snip + start_at, snip_len - start_at, 0, '\t', item, false);
 
-        DictId dict_id_1st, dict_id_lst;
-        unsigned b64_len = item_lens[0]; 
-        base64_decode (items[0], &b64_len, dict_id_1st.id, sizeof(DictId));
+        DictId dict_id_1st, dict_id_lst; 
+        dict_id_1st = base64_decode_dict_id (items[0]);
 
-        if (n_items > 2) {
-            b64_len = item_lens[1]; 
-            base64_decode (items[n_items-2], &b64_len, dict_id_lst.id, sizeof(DictId));
-        }
+        if (n_items > 2) 
+            dict_id_lst = base64_decode_dict_id (items[n_items-2]);
 
         SNPRINTF (s, " %.*s∈{%s%s}", STRfi (item, n_items-1), dis_dict_id (dict_id_1st).s, 
                   cond_str (n_items > 2, " → ", dis_dict_id (dict_id_lst).s));

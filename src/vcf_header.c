@@ -366,8 +366,8 @@ static bool vcf_inspect_txt_header_zip (BufferP txt_header)
         rom quote = strpbrk (vep, "\"\n");
         if (quote && *quote == '"') { // cursory verification of field format
             unsigned vep_len = quote - vep;
-            segconf.vcf_vep_spec = CALLOC (vep_len + 1); 
-            memcpy (segconf.vcf_vep_spec, vep, vep_len); // consumed and freed by by vcf_vep_zip_initialize
+            buf_alloc_exact (evb, ZCTX(INFO_vep)->vep_spec, vep_len, char, "vep_spec");
+            memcpy (B1STc(ZCTX(INFO_vep)->vep_spec), vep, vep_len); // consumed and freed by by vcf_vep_zip_initialize
         }
     }
     
@@ -536,7 +536,7 @@ static void vcf_header_subset_samples (BufferP vcf_field_name_line)
     ARRAY (char, line, *vcf_field_name_line);
 
     flag.samples = is_field_name_line (STRa(line));
-    RETURNW (flag.samples,, "Warning: found non-standard VCF sample header line. Ingoring --samples : \n%.*s", (int)line_len, line);
+    ASSWRET (flag.samples,, "Warning: found non-standard VCF sample header line. Ingoring --samples : \n%.*s", (int)line_len, line);
 
     int32_t num_samples=-8;
     for (unsigned i=0; i < line_len; i++)

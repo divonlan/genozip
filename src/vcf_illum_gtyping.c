@@ -28,7 +28,7 @@ void vcf_illum_gtyping_seg_initialize (VBlockVCFP vb)
     ctx_set_ltype (VB, LT_BLOB, INFO_PROBE_A, INFO_PROBE_B, DID_EOL);
 
     // create ILLUMINA_STRAND nodes as we will refer to them by index 
-    if (segconf.has[INFO_ILLUMINA_STRAND]) {
+    if (segconf_has(INFO_ILLUMINA_STRAND)) {
         ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("TOP"));   // word_index=0
         ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("BOT"));   // word_index=1
         ctx_create_node (VB, INFO_ILLUMINA_STRAND, cSTR("PLUS"));  // word_index=2
@@ -73,8 +73,6 @@ void vcf_seg_ILLUMINA_POS (VBlockVCFP vb, ContextP ctx, STRp(pos))
 // The method here captures ~85% of lines. TO DO: improve  
 void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
 {
-    START_TIMER;
-
     RefLock lock = REFLOCK_NONE;
 
     // if we have a reference, we use it 
@@ -121,8 +119,6 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
 
     seg_set_last_txt (VB, ctx, STRa(probe));
     ctx_set_encountered (VB, ctx);
-
-    COPY_TIMER (vcf_seg_PROBE_A);
 }
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_PROBE_A)

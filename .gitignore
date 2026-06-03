@@ -1,10 +1,11 @@
 genozip.code-workspace
-.vscode
+.vscode/tasks.json
 private
 alibaba
 docs
 test
 scripts
+delegate
 launch.json
 telemetry.json
 *.back
@@ -114,6 +115,7 @@ unused-code
 genozip.threads-log.*
 .genozip_license*
 dict_id_gen.c
+dict_id_gen
 src/secure
 core
 SEC_*.body

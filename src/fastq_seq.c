@@ -14,7 +14,7 @@
     
 #define SEQ_LEN_BY_QNAME 0x7fffffff
 #define NONBIO_EXCESS_ALIGNED '@'
-#define NONBIO_UNALIGNED      '^'
+#define NONBIO_CONTAINERIZED  '^'
 
 static void fastq_get_pair_1_gpos_strand (VBlockFASTQP vb, PosType64 *gpos_R1, bool *is_forward_R1)
 {
@@ -42,7 +42,7 @@ static inline bool seq_len_by_qname (VBlockFASTQP vb, uint32_t seq_len)
            seq_len == ECTX(segconf.seq_len_dict_id)->last_value.i; // length is equal seq_len
 }
 
-void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), bool deeped)
+void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), bool deeped)
 {
     START_TIMER;
 
@@ -53,7 +53,11 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), bool deepe
     PosType64 gpos_R1 = NO_GPOS; 
     bool is_forward_R1 = false;
 
-    bool aligner_ok = flag.aligner_available && seq_len && !segconf.is_long_reads && !segconf_running;
+    if (seq_len == 28 && vb->line_i==0 && segconf_running && !IS_R2)
+        segconf.nonbio_type = NONBIO_10xGen; // optimistically - we will decide finally based on aligner results
+
+    bool aligner_ok = flag.aligner_available && seq_len && !segconf.is_long_reads && 
+                      (!segconf_running || IS_NONBIO(10xGen));
     bool is_excess_aligned;
     bool am_i_R2 = false;
 
@@ -80,11 +84,18 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), bool deepe
         fastq_deep_seg_SEQ (vb, dl, STRa(seq), bitmap_ctx, nonref_ctx);
 
     // case: Parse Biosciences or SPLiT-seq non-biological read (added 15.0.83)
-    else if (segconf.nonbio_type == NONBIO_SPLiT_seq) {
-        if (!fastq_SPLiT_seg_SEQ (vb, dl, STRa(seq), gpos_R1, is_forward_R1, &is_excess_aligned)) goto verbatim;
+    else if (IS_NONBIO(Parse)) {
+        if (!fastq_parse_seg_SEQ (vb, dl, STRa(seq), gpos_R1, is_forward_R1, &is_excess_aligned)) goto verbatim;
 
         // note: length is not needed, because it can deduced from the nonbio container
-        seg_special1 (VB, FASTQ_SPECIAL_unaligned_SEQ, is_excess_aligned ? NONBIO_EXCESS_ALIGNED : NONBIO_UNALIGNED, bitmap_ctx, 0);        
+        seg_special1 (VB, FASTQ_SPECIAL_unaligned_SEQ, is_excess_aligned ? NONBIO_EXCESS_ALIGNED : NONBIO_CONTAINERIZED, bitmap_ctx, 0);        
+        vb->num_nonbio++;
+    }
+
+    else if (IS_NONBIO(10xGen) && vb->comp_i == FQ_COMP_R1) {
+        if (!fastq_10xGen_seg_SEQ (vb, STRa(seq))) goto verbatim;
+
+        seg_special1 (VB, FASTQ_SPECIAL_unaligned_SEQ, NONBIO_CONTAINERIZED, bitmap_ctx, 0);        
         vb->num_nonbio++;
     }
 
@@ -154,7 +165,7 @@ uint32_t fastq_zip_get_seq_len (VBlockP vb, uint32_t line_i)
 // used by SEQ-dependent QUAL codecs: LONGR, PACB, SMUX and HOMP
 COMPRESSOR_CALLBACK (fastq_zip_seq) 
 {
-    ZipDataLineFASTQP dl = DATA_LINE (vb_line_i);
+    ZipDataLineFASTQ𐤐  dl = DATA_LINE (vb_line_i);
     bool trimmed = flag.deep && (dl->seq.len > dl->sam_seq_len);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
@@ -178,14 +189,13 @@ void fastq_seg_gpos_R2 (VBlockP vb, PosType64 gpos_R1, PosType64 gpos_R2, bool i
     declare_seq_contexts;
     ContextP my_gpos_ctx = segconf.is_interleaved ? gpos_r2_ctx : gpos_ctx;
     
-    #define MAX_GPOS_DELTA (32 KB - 1) // paired reads are usually with a delta less than 300 (fits in LT_INT16)
+    #define MAX_GPOS_DELTA (1 MB - 1)
 
     // case: we are pair-2 ; pair-1 is aligned ; delta is small enough : store a delta
     PosType64 gpos_Δ = is_forward_R2 ? (gpos_R1 - gpos_R2) : (gpos_R2 - gpos_R1); 
 
     if (gpos_R1 != NO_GPOS && gpos_R2 != NO_GPOS && ABS(gpos_Δ) <= MAX_GPOS_DELTA) {
-        int16_t gpos_Δ16 = gpos_Δ;
-        seg_integer_fixed (VB, gpos_Δ_ctx, &gpos_Δ16, false, 0);
+        seg_integer (VB, gpos_Δ_ctx, gpos_Δ, false, 0);
         seg_special1 (VB, FASTQ_SPECIAL_PAIR2_GPOS, segconf.is_interleaved ? 'I' : 'D', my_gpos_ctx, 0); // lookup from local and advance localR1.next to consume gpos
 
         ctx_set_last_value (vb, gpos_Δ_ctx, gpos_Δ); // consumed in aligner_seg_seq
@@ -231,7 +241,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_PAIR2_GPOS)
         else 
             gpos_r1 = gpos_ctx->last_value.i;
 
-        int16_t delta = VER(15) ? reconstruct_from_local_int (vb, gpos_Δ_ctx, 0, RECON_OFF) // starting v15, delta is stored in FASTQ_GPOS_DELTA.local
+        int64_t delta = VER(15) ? reconstruct_from_local_int (vb, gpos_Δ_ctx, 0, RECON_OFF) // starting v15, delta is stored in FASTQ_GPOS_DELTA.local
                                 : (int64_t)strtoull (snip, NULL, 10 /* base 10 */);         // up to v14, delta was encoded in the snip
 
         if (strand_ctx->last_value.i/*=is_forward_R2*/ && VER2(15,83))
@@ -418,7 +428,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
 
     else {
         // case: non-biological (containerized) sequence
-        if (VER(15) && (snip[0] == NONBIO_EXCESS_ALIGNED || snip[0] == NONBIO_UNALIGNED)) {
+        if (VER(15) && (snip[0] == NONBIO_EXCESS_ALIGNED || snip[0] == NONBIO_CONTAINERIZED)) {
             uint32_t len_before = Ltxt;
             reconstruct_from_ctx (vb, FASTQ_NONBIO, 0, true); // always reconstruct, so we can calculate seq_len
             vb->seq_len = Ltxt - len_before;

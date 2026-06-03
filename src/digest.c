@@ -24,7 +24,7 @@
 
 #define DIGEST_NAME digest_alg_name (IS_MD5?DIGEST_MD5 : (IS_ZIP || VER2(15,81))?DIGEST_XXH3 : DIGEST_ADLER)
 
-#define DIGEST_LOG_FILENAME (command==ZIP ? "digest.zip.log" : "digest.piz.log")
+#define DIGEST_LOG_FILENAME (IS_ZIP ? "digest.zip.log" : "digest.piz.log")
 
 static bool digest_recon_is_equal (const Digest recon_digest, const Digest expected_digest) 
 {
@@ -206,20 +206,20 @@ static void digest_piz_verify_one_vb (VBlockP vb,
                 snprintf (recon_size_warn, sizeof (recon_size_warn), "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"%s\n", 
                           vb->recon_size, vb->txt_data.len, (z_sam_gencomp ? " (note these sizes exclude gencomp data)" : ""));  
 
-            NOISYWARN ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from the %s file (%s=%s). File compressed with version=%s uncompressed with=%s\n%s",
-                       comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
-                       DIGEST_NAME, digest_display (piz_digest).s, 
-                       segconf.zip_txt_modified ? "modified" : "original",
-                       DIGEST_NAME, digest_display (vb->expected_digest).s, 
-                       STRver(file_version()).s , STRver(code_version()).s, 
-                       recon_size_warn);
+            warn ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from the %s file (%s=%s). File compressed with version=%s uncompressed with=%s\n%s",
+                  comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
+                  DIGEST_NAME, digest_display (piz_digest).s, 
+                  segconf.zip_txt_modified ? "modified" : "original",
+                  DIGEST_NAME, digest_display (vb->expected_digest).s, 
+                  STRver(file_version()).s , STRver(code_version()).s, 
+                  recon_size_warn);
 
             // case: first bad VB: dump bad VB to disk and maybe exit
             if (!test_and_set_relaxed (txt_file->vb_digest_failed)) { // not WARN_ONCE because we might be genounzipping multiple files - we want to show this for every failed file (see also note in digest_piz_verify_one_txt_file)
-                NOISYWARN ("Bad reconstructed %s has been dumped to: %s. vb_position_txt_file=%"PRIu64", txt_data.len=%u recon_size(expected)=%u\n%s%s",
-                           VB_NAME, txtfile_dump_vb (vb, z_name, txt_data).s, // note: txt_data dumped INCLUDES integrated gencomp lines (if there are any)
-                           vb->vb_position_txt_file, vb->txt_data.len32, vb->recon_size, 
-                           piz_advise_biopsy (vb).s, report_support_if_unexpected());
+                warn ("Bad reconstructed %s has been dumped to: %s. vb_position_txt_file=%"PRIu64", txt_data.len=%u recon_size(expected)=%u\n%s%s",
+                      VB_NAME, txtfile_dump_vb (vb, z_name, txt_data).s, // note: txt_data dumped INCLUDES integrated gencomp lines (if there are any)
+                      vb->vb_position_txt_file, vb->txt_data.len32, vb->recon_size, 
+                      piz_advise_biopsy (vb).s, report_support_if_unexpected());
 
                 if (flag.test) exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping
             }

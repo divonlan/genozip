@@ -11,7 +11,7 @@
 sSTRl(END_minus_SVLEN_snip, 32);
 sSTRl(START_plus_SVLEN_plus_DELTA_snip, 48);
 sSTRl(copy_END_snip, 32);
-sSTRl(con_meinfo_snip,96);
+sSTRl(con_meinfo_snip, con_snip_sizeof(5));
 
 #define _MEINFO_NAME     DICT_ID_MAKE1_8("M0E_NAME")
 #define _MEINFO_START    DICT_ID_MAKE1_8("M1E_STRT")
@@ -19,14 +19,14 @@ sSTRl(con_meinfo_snip,96);
 #define _MEINFO_END      DICT_ID_MAKE1_7("M3E_END")
 #define _MEINFO_POLARITY DICT_ID_MAKE1_8("M4E_POLR")
 
-static SmallContainer meinfo_con = { 
+static Container(5) meinfo_con = { 
     .repeats   = 1, 
     .nitems_lo = 5, 
     .items     = { { .dict_id.num = _MEINFO_NAME,  .separator = ","               }, 
-                    { .dict_id.num = _MEINFO_START, .separator = ","               }, 
-                    { .dict_id.num = _MEINFO_DELTA, .separator = { CI0_INVISIBLE } }, // MEINFO_END - (MEINFO_START + SVLEN) - calculated but not reconstructed
-                    { .dict_id.num = _MEINFO_END,   .separator = ","               }, 
-                    { .dict_id.num = _MEINFO_POLARITY                              } }
+                   { .dict_id.num = _MEINFO_START, .separator = ","               }, 
+                   { .dict_id.num = _MEINFO_DELTA, .separator = { CI0_INVISIBLE } }, // MEINFO_END - (MEINFO_START + SVLEN) - calculated but not reconstructed
+                   { .dict_id.num = _MEINFO_END,   .separator = ","               }, 
+                   { .dict_id.num = _MEINFO_POLARITY                              } }
 };
 
 void vcf_me_zip_initialize (void)
@@ -124,14 +124,14 @@ void vcf_seg_melt_ADJRIGHT (VBlockVCFP vb, ContextP ctx, STRp(adjright_str))
 // Example: INTERNAL=NM_000384,PROMOTER
 void vcf_seg_melt_INTERNAL (VBlockVCFP vb, ContextP ctx, STRp(internal))
 {
-    MediumContainer con = {
+    Container(2) con = {
         .repeats   = 1,
         .nitems_lo = 2,
         .items     = { { .dict_id.num = DICT_ID_MAKE1_8("I0N_GENE"), .separator = "," },
                        { .dict_id.num = DICT_ID_MAKE1_8("I1N_DESC")                   } }
     };    
 
-    seg_struct (VB, ctx, con, STRa(internal), NULL, internal_len, true);
+    seg_struct (VB, ctx, (ContainerP)&con, STRa(internal), NULL, internal_len, true);
 }
 
 static bool vcf_seg_melt_DIFF_arr (VBlockP vb, ContextP ctx, STRp(diff_arr), uint32_t repeat)
@@ -145,12 +145,12 @@ static bool vcf_seg_melt_DIFF_arr (VBlockP vb, ContextP ctx, STRp(diff_arr), uin
 // Example: DIFF=0.94:g73c,t89c,c96a,i127aaa,g145a,c174t,g237c
 void vcf_seg_melt_DIFF (VBlockVCFP vb, ContextP ctx, STRp(diff))
 {
-    MediumContainer con = {
+    Container(2) con = {
         .repeats   = 1,
         .nitems_lo = 2,
         .items     = { { .dict_id.num = DICT_ID_MAKE1_8("D0FF_VAL"), .separator = ":" },
                        { .dict_id.num = DICT_ID_MAKE1_8("D1FF_ARR")                   } }
     };    
 
-    seg_struct (VB, ctx, con, STRa(diff), (SegCallback[]){ 0, vcf_seg_melt_DIFF_arr }, diff_len, true);
+    seg_struct (VB, ctx, (ContainerP)&con, STRa(diff), (SegCallback[]){ 0, vcf_seg_melt_DIFF_arr }, diff_len, true);
 }

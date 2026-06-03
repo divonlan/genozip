@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   fastq_nonbio.c
+//   fastq_parse.c
 //   Copyright (C) 2026-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
@@ -28,9 +28,10 @@ static Did bc_did[2];
 rom fastq_nonbio_type_name (void)
 {
     switch (segconf.nonbio_type) {
-        case NONBIO_NONE      : return "None";
-        case NONBIO_SPLiT_seq : return "SPLiT-seq";
-        default               : return "Invalid_Nonbio";
+        case NONBIO_NONE   : return "None";
+        case NONBIO_Parse  : return "Parse";
+        case NONBIO_10xGen : return "10xGenomics";
+        default            : return "Invalid_Nonbio";
     }
 }
 
@@ -42,7 +43,7 @@ int fastq_nonbio_get_n_linkers (void)
 // report unrecognized nonbio
 StrText fastq_nonbio_get_linker_for_stats (unsigned linker_i)
 {
-    // note: we use non-ascii commans ﹐ to avoid splitting by comma
+    // note: we use non-ascii commas ﹐ to avoid splitting by comma
     StrText s = {};
     if (!n_linkers || segconf.nonbio_type) return s;
 
@@ -53,7 +54,7 @@ StrText fastq_nonbio_get_linker_for_stats (unsigned linker_i)
     else // UMI appears is one of QNAME's barcodes
         for (int bc_i=0; bc_i <= 1; bc_i++) // at most one of them will be set
             if (bc_did[bc_i] != DID_NONE)
-                snprintf (s.s, sizeof(s)-1, "umi=(did:%s len:%u),", ZCTX(bc_did[bc_i])->tag_name, umi_len);
+                snprintf (s.s, sizeof(s)-1, "umi=(did:%.16s len:%u),", ZCTX(bc_did[bc_i])->tag_name, umi_len);
 
     return s;
 }
@@ -68,8 +69,8 @@ static char linker_histo_to_base (const int histo[5], int max_histo)
 
 static void fastq_segconf_find_linkers (VBlockP vb, int seq_len)
 {
-    int linker_histo[seq_len][5];
-    memset (linker_histo, 0, seq_len * 5 * sizeof (int));
+    int linker_histo[seq_len][4];
+    memset (linker_histo, 0, seq_len * 4 * sizeof (int));
 
     for_line {
         if (DATA_LINE(line_i)->seq.len < seq_len) continue; // ignore reads that are too short
@@ -79,7 +80,7 @@ static void fastq_segconf_find_linkers (VBlockP vb, int seq_len)
 
         for (int i=0; i < seq_len; i++)
             if (qual[i] >= 'A')  // only consider high quality bases
-                linker_histo[i][nuke_encode(seq[i])]++;
+                linker_histo[i][acgt_encode(seq[i])]++;
     }
     
     LineWord l={};
@@ -182,7 +183,7 @@ static uint32_t get_5_percentile_seq_len (VBlockP vb)
     return lens_5_pc;
 }
 
-void fastq_segconf_set_non_biological (VBlockP vb)
+void fastq_segconf_check_if_Parse (VBlockP vb)
 {
     // seq_len is the sequence length for >95% of the reads are at least this long
     int seq_len = get_5_percentile_seq_len (vb);
@@ -206,7 +207,7 @@ void fastq_segconf_set_non_biological (VBlockP vb)
      && linker[1].index_in_read_seq - (linker[0].index_in_read_seq + linker[0].seq_len) == 8 // 2nd barcode is 8 bp
      && seq_len - (linker[1].index_in_read_seq + linker[1].seq_len) >= 8) { // 3rd barcode is 8 bp - we might have biological data after it 
 
-        segconf.nonbio_type = NONBIO_SPLiT_seq;
+        segconf.nonbio_type = NONBIO_Parse;
 
         #define X segconf.split_seq
         X.barcode_index[0] = 10; // fixed UMI length
@@ -222,7 +223,7 @@ void fastq_segconf_set_non_biological (VBlockP vb)
         else if (bc_did[1] != DID_NONE) X.umi_did_i = bc_did[1];
 
         // prepare container
-        SmallContainer con = {
+        const Container(7) con = {
             .nitems_lo = 7,
             .repeats   = 1,
             .items = {
@@ -247,15 +248,15 @@ void fastq_segconf_set_non_biological (VBlockP vb)
     }
 
     // case: unrecognized non-biological: report first 6 QNAMEs (if not already reported)
-    else if (n_linkers && !segconf.nonbio_type) {
+    else if (n_linkers && !segconf.nonbio_type && z_file) {
         // report first QNAMEs, unless already reported, linkers will be reported in stats_calc_hash_occ
-        if (!segconf.n_1st_flav_qnames[QNAME1]) {
-            segconf.n_1st_flav_qnames[QNAME1] = MIN_(vb->lines.len, NUM_COLLECTED_WORDS);
+        if (!z_file->n_1st_flav_qnames[QNAME1]) {
+            z_file->n_1st_flav_qnames[QNAME1] = MIN_(vb->lines.len, NUM_COLLECTED_WORDS);
             
-            for (int line_i=0; line_i < segconf.n_1st_flav_qnames[QNAME1]; line_i++) {
+            for (int line_i=0; line_i < z_file->n_1st_flav_qnames[QNAME1]; line_i++) {
                 rom qname = Btxt (DATA_LINE(line_i)->qname.index);
                 uint32_t qname_len = DATA_LINE(line_i)->qname.len;
-                memcpy (segconf.unk_flav_qnames[QNAME][line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
+                memcpy (z_file->unk_flav_qnames[QNAME][line_i], qname, MIN_(qname_len, UNK_QNANE_LEN));
             }
         }
     }
@@ -267,22 +268,26 @@ void fastq_segconf_set_non_biological (VBlockP vb)
     }
 }
 
-void fastq_SPLiT_seg_initialize (VBlockFASTQP vb)
+void fastq_parse_seg_initialize (VBlockFASTQP vb)
 {
     ctx_consolidate_stats (VB, FASTQ_SQBITMAP, FASTQ_NONBIO, FASTQ_NONBIO_BC0, FASTQ_NONBIO_BC1, FASTQ_NONBIO_BC2,
                            FASTQ_NONBIO_UMI, FASTQ_NONBIO_LINK0, FASTQ_NONBIO_LINK1, FASTQ_NONBIO_EXCESS, DID_EOL); 
-
-    // barcodes and the umi are expected to repeat many times in the file
-    ctx_set_no_stons (VB, FASTQ_NONBIO_UMI, DID_EOL);
     
+    // barcodes and the umi are expected to repeat many times in the file
     if (error_free)
         ctx_set_no_stons (VB, FASTQ_NONBIO_BC0, FASTQ_NONBIO_BC1, FASTQ_NONBIO_BC2, DID_EOL);
 
     // UINT8 required by seg_diff
     ctx_set_ltype (VB, LT_UINT8, FASTQ_NONBIO_LINK0, FASTQ_NONBIO_LINK1, DID_EOL);
+
+    // UMIs are a completely random sequence
+    ctx_set_ltype (VB, LT_BLOB, FASTQ_NONBIO_UMI, DID_EOL);
+    CTX(FASTQ_NONBIO_UMI)->lcodec = CODEC_RANB;
+    CTX(FASTQ_NONBIO_UMI)->lcodec_hard_coded = true;
+
 } 
 
-bool fastq_SPLiT_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), PosType64 gpos_R1, bool is_forward_R1,
+bool fastq_parse_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), PosType64 gpos_R1, bool is_forward_R1,
                           bool *is_excess_aligned)
 {
     #define X segconf.split_seq
@@ -294,7 +299,7 @@ bool fastq_SPLiT_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQP dl, STRp(seq), PosT
 
         seg_by_did (VB, STRa(segconf.copy_qname_umi_snip), FASTQ_NONBIO_UMI, 10);
     else 
-        seg_by_did (VB, &seq[0], 10, FASTQ_NONBIO_UMI, 10);
+        seg_add_to_local_fixed (VB, CTX(FASTQ_NONBIO_UMI), seq, 10, LOOKUP_WITH_LENGTH, 10);
 
     // seg barcodes
     for (int i=0; i < 3; i++)

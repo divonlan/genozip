@@ -265,7 +265,7 @@ static void sam_seg_bisulfite_M (VBlockSAMP vb,
         
         // case: seq base mismatches converted reference base
         if (base != converted_ref_base) {
-            uint8_t ref_base_2bit = acgt_encode[(uint8_t)unconverted_ref_base];
+            uint8_t ref_base_2bit = acgt_encode (unconverted_ref_base);
 
             BNXTc (seqmis_ctx[ref_base_2bit].local) = base;
             bits_clear (bitmap, first_bit + i);
@@ -300,12 +300,12 @@ static void sam_seg_analyze_monochar_inserts (VBlockSAMP vb, STRp(seq))
         case BC_I:
             if (IS_ACGT(seq[seq_i]) && str_is_monochar (&seq[seq_i], op->n)) {
                 if (seq_i > 0 && IS_ACGT(seq[seq_i-1]))
-                    count_ins_after[acgt_encode[(int8_t)seq[seq_i-1]]][acgt_encode[(int8_t)seq[seq_i]]] += op->n;
+                    count_ins_after[acgt_encode(seq[seq_i-1])][acgt_encode(seq[seq_i])] += op->n;
 
                 if (seq_i + op->n < seq_len && IS_ACGT(seq[seq_i+op->n]))
-                    count_ins_before[acgt_encode[(int8_t)seq[seq_i+op->n]]][acgt_encode[(int8_t)seq[seq_i]]] += op->n;
+                    count_ins_before[acgt_encode(seq[seq_i+op->n])][acgt_encode(seq[seq_i])] += op->n;
 
-                count_ins[acgt_encode[(int8_t)seq[seq_i]]] += op->n;
+                count_ins[acgt_encode(seq[seq_i])] += op->n;
             }
 
             else
@@ -392,7 +392,7 @@ static inline bool next_op_is_I (VBlockSAMP vb, uint32_t this_op_i)
 // - Edge case: no CIGAR (it is "*") - we just store the sequence in SAM_NONREF
 // - Edge case: no SEQ (it is "*") - we '*' in SAM_NONREF and indicate "different from reference" in the bitmap. We store a
 //   single entry, regardless of the number of entries indicated by CIGAR
-static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(seq), const PosType32 pos, bool is_revcomp,
+static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(seq), const PosType32 pos, bool is_revcomp,
                                        uint32_t ref_consumed, uint32_t ref_and_seq_consumed)
 {
     declare_seq_contexts;   
@@ -508,13 +508,13 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
                             bits_set (&range->is_set, next_ref); // we will need this ref to reconstruct
 
                         if (__builtin_expect (normal_base, true)) {
-                            ref_set_nucleotide_acgt (range, next_ref, seq[i]);
+                            ref_set_nucleotide (range, next_ref, seq[i]);
                             bit_i++; 
                         }
                         else { // e.g. 'N'
                             // set the reference to an arbitrarily to 'A' as we will store this non-normal base 
                             // in seqmis_ctx multiplexed by the reference base (i.e. in seqmis_ctx['A']).
-                            ref_set_nucleotide_acgt (range, next_ref, 'A');
+                            ref_set_nucleotide (range, next_ref, 'A');
                             goto mismatch;
                         }
                     }
@@ -548,7 +548,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
                     // mux by base after insertion in SEQ. 
                     // note: if i+n is the end of SEQ, then the byte after is 0 in BAM (see bam_seq_to_sam) and \t in SAM - both mapped to 0.
                     // note: if the next seq-consuming op is also I (e.g. in RNA: 621I2611N310I), map to 0 as reconstruct won't yet have seq[i+n] (since 15.0.61 - see defect 2024-06-16)
-                    int ins_ctx_i = next_op_is_I (vb, vb->binary_cigar.next - 1) ? 0 : acgt_encode[(int8_t)seq[i + n]];
+                    int ins_ctx_i = next_op_is_I (vb, vb->binary_cigar.next - 1) ? 0 : acgt_encode(seq[i + n]);
 
                     buf_add (&(seqins_ctx + ins_ctx_i)->local, &seq[i], n);
                 }
@@ -647,7 +647,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(s
 }
 
 // verify that the depn line is identical (modulo rev_comp and hard_clips) to the prim line
-static bool sam_seg_verify_saggy_line_SEQ (VBlockSAMP vb, ZipDataLineSAMP my_dl, ZipDataLineSAMP prim_dl, rom my_seq/*textual*/)
+static bool sam_seg_verify_saggy_line_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 my_dl, ZipDataLineSAM𐤐 prim_dl, rom my_seq/*textual*/)
 {
     START_TIMER;
 
@@ -686,7 +686,7 @@ static bool sam_seg_verify_saggy_line_SEQ (VBlockSAMP vb, ZipDataLineSAMP my_dl,
     return success;
 }
 
-void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq), unsigned add_bytes)
+void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_seq), unsigned add_bytes)
 {
     START_TIMER;
 
@@ -697,7 +697,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(textual_seq), unsigned
     bool perfect = false;
     bool vs_prim = false;
 
-    ZipDataLineSAMP saggy_dl;
+    ZipDataLineSAM𐤐 saggy_dl;
     bool unmapped = dl->FLAG.unmapped || vb->cigar_missing || !dl->POS || str_issame_(STRa(vb->chrom_name), "*", 1);
 
     ASSSEG (textual_seq[0] != '*' || textual_seq_len == 1, "Invalid SEQ - starts with '*' but length=%u", textual_seq_len);
@@ -935,7 +935,7 @@ uint32_t sam_zip_get_seq_len (VBlockP vb, uint32_t line_i)
 COMPRESSOR_CALLBACK_DT (sam_zip_seq) 
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
-    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAM𐤐 dl = DATA_LINE (vb_line_i);
         
     *line_data_len = dl->SEQ.len;
 
@@ -1003,7 +1003,7 @@ static inline rom sam_reconstruct_SEQ_get_textual_ref (VBlockSAMP vb, bool v14, 
     int32_t idx = RR_IDX ((int32_t)(pos - vb->range->first_pos) - (predict_meth_call ? 2 : 0)); // two bases before pos in case needed for methylation 
 
     uint32_t num_ref_bases = MIN_(num_bases, range_len - idx);
-    ref_get_textual_seq (vb->range->gpos + idx, ref, num_ref_bases, false);
+    ref_get_textual_seq (VB, vb->range->gpos + idx, ref, num_ref_bases, false);
 
 #ifdef DEBUG
     if (!IS_REF_EXTERNAL)
@@ -1012,7 +1012,7 @@ static inline rom sam_reconstruct_SEQ_get_textual_ref (VBlockSAMP vb, bool v14, 
 
     // if ref_consumed goes beyond end of range, take the rest from the beginning of range (i.e. circling around)
     if (num_ref_bases < num_bases) {
-        ref_get_textual_seq (vb->range->gpos, &ref[num_ref_bases], num_bases - num_ref_bases, false);
+        ref_get_textual_seq (VB, vb->range->gpos, &ref[num_ref_bases], num_bases - num_ref_bases, false);
 
 #ifdef DEBUG
         if (!IS_REF_EXTERNAL)
@@ -1266,7 +1266,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
         for_buf2 (BamCigarOp, op, op_i, vb->binary_cigar) {        
             if (op->op == BC_I) {
-                int ins_ctx_i = next_op_is_I (vb, op_i) ? 0 : acgt_encode[(int8_t)recon[op->n]];
+                int ins_ctx_i = next_op_is_I (vb, op_i) ? 0 : acgt_encode(recon[op->n]);
                 ContextP ins_ctx = seqins_ctx + ins_ctx_i; // mux by base after insertion in SEQ. 
                 
                 ASSPIZ (ins_ctx->next_local + op->n <= ins_ctx->local.len32, NEXT_ERRFMT " op_i=%u cigar=\"%s\"%s", 

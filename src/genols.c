@@ -67,7 +67,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         if (files_listed > 1) {
             float ratio = total_compressed_len ? ((float)total_uncompressed_len / (float)total_compressed_len) : 0;
 
-            if (flag.bytes) 
+            if (flag.ls_bytes) 
                 bufprintf (evb, &str_buf, foot_format_bytes, files_listed, str_int_s (total_compressed_len).s, 
                            str_int_s (total_uncompressed_len).s, ratio < 100, ratio);
             else 
@@ -82,7 +82,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
     }
 
     if (first_file) {
-        if (flag.bytes) 
+        if (flag.ls_bytes) 
             bufprintf (evb, &str_buf, head_format_bytes, "Type", "Lines", "Compressed", "Original", "Factor", -(int)FILENAME_WIDTH, "Name");
         else
             bufprintf (evb, &str_buf, head_format, "Type", "Lines", "Compressed", "Original", "Factor", " MD5 of original textual file    ", -(int)FILENAME_WIDTH, "Name", "Creation");
@@ -124,7 +124,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
 
     bool is_private = !z_file->section_list.len; // non-accessible private file (compressed with --sendto of someone else)
     
-    if (flag.bytes) 
+    if (flag.ls_bytes) 
         bufprintf (evb, &str_buf, item_format_bytes, dt_name (dt), str_int_commas (z_file->num_lines).s, 
                    str_int_s (z_file->disk_size).s, str_int_s (z_file->txt_data_so_far_bind).s, ratio < 100, ratio, 
                    (is_subdir ? subdir : ""), (is_subdir ? "/" : ""),

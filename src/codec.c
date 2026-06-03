@@ -369,8 +369,11 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
             case CODEC_SMUX  : codec_smux_comp_init  (vb, did_i, callback, true); break;
             case CODEC_PACB  : codec_pacb_comp_init  (vb, did_i, callback, true); break;
             case CODEC_HOMP  : codec_homp_comp_init  (vb, did_i, callback, true); break; 
+            case CODEC_TMPL  : codec_tmpl_comp_init  (vb, did_i, true);           break; 
             case CODEC_DOMQ  : codec_domq_comp_init  (vb, did_i, callback, true); break;
             case CODEC_NORMQ : codec_normq_comp_init (vb, did_i, maybe_revcomped, true); break;
+            case CODEC_ARTB  : break;
+            case CODEC_BSC   : break;
             default          : ABORT ("Can't force codec %s", codec_name (forced_codec));
         }
 
@@ -382,6 +385,8 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
 
     else if (!no_seq_dependency && codec_smux_comp_init (vb, did_i, callback, false));
         
+    else if (codec_tmpl_comp_init (vb, did_i, false));
+
     else if (codec_domq_comp_init (vb, did_i, callback, false));
 
     else if (codec_normq_comp_init (vb, did_i, maybe_revcomped, false)); 

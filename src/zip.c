@@ -277,7 +277,7 @@ static void zip_compress_all_contexts_b250 (VBlockP vb)
 
         START_TIMER; 
         uint32_t comp_len = zfile_compress_b250_data (vb, ctx);
-        COPY_TIMER(fields[ctx->did_i]);    
+        COPY_TIMER_COMPRESS_BY_FIELD (ctx);
 
         if (DTPT(zip_comp_cb)) DTPT(zip_comp_cb)(vb, ctx, SEC_B250, comp_len); // data-type specific callback
 
@@ -328,7 +328,7 @@ static void zip_compress_all_contexts_local (VBlockP vb)
 
             START_TIMER; 
             uint32_t comp_len = zfile_compress_local_data (vb, ctx, 0);
-            COPY_TIMER(fields[ctx->did_i]);    
+            COPY_TIMER_COMPRESS_BY_FIELD (ctx);
 
             if (DTPT(zip_comp_cb)) DTPT(zip_comp_cb)(vb, ctx, SEC_LOCAL, comp_len); // data-type specific callback
 
@@ -521,6 +521,8 @@ static void zip_compress_one_vb (VBlockP vb)
         mgzip_uncompress_vb (vb, vb->txt_codec);    // some of the blocks might already have been uncompressed while reading - we uncompress the remaining
 
     vb->txt_size = Ltxt; // this doesn't change with --optimize.
+
+    vb->show_containers  = (flag_show_containers == SHOW_CONTAINERS_ALL_VBs || flag_show_containers == vb->vblock_i); 
 
     // clone global dictionaries while granted exclusive access to the global dictionaries
     ctx_clone (vb);

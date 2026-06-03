@@ -36,10 +36,10 @@ static inline void set_d2d_map (ContextArrayP ca, DictId dict_id, Did did_i)
     // thread safety for z_file d2d_map: we don't bother with having a mutex, in the worst case scenario, two threads will test an entry
     // as empty and then both write to it, with one of them prevailing. that's fine (+ Likely its the same did_i anyway).
 
-    if (ca->d2d_map[dict_id.map_key[0]] == DID_NONE)    // d2d_map entry is free
-        ca->d2d_map[dict_id.map_key[0]] = did_i;
+    if (ca->d2d_map[MAP_KEY(dict_id)] == DID_NONE)    // d2d_map entry is free
+        ca->d2d_map[MAP_KEY(dict_id)] = did_i;
 
-    else if (ca->d2d_map[dict_id.map_key[0]] == did_i)  // already has requested value - nothing to do 
+    else if (ca->d2d_map[MAP_KEY(dict_id)] == did_i)  // already has requested value - nothing to do 
         {}
     
     else if (ca->d2d_map[ALT_KEY(dict_id)] == DID_NONE) // fallback entry is free or we can override it
@@ -132,7 +132,7 @@ WordIndex ctx_get_next_snip (VBlockP vb, ContextP ctx, bool is_pair, pSTRp (snip
 {
     ASSERT (ctx, "%s: ctx is NULL", VB_NAME);
     
-    bool zip_pair = (is_pair && command==ZIP);
+    bool zip_pair = (is_pair && IS_ZIP);
 
     ConstBufferP b250      = is_pair  ? &ctx->b250R1                 : &ctx->b250;
     B250Size b250_size     = is_pair  ? ctx->pair_b250_size          : ctx->b250_size;
@@ -319,7 +319,7 @@ static WordIndex ctx_commit_node (VBlockP vb, ContextP zctx, ContextP vctx, STRp
 
 // Seg: inserts snip into the hash, nodes and dictionary, if it was not already there, and returns its node index.
 // Does NOT add the word index to b250.
-WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STRp(snip), bool *is_new/*optional out*/)
+WordIndex ctx_create_node_do (VBlock𐤐 vb, Context𐤐 vctx, STR𐤐(snip), bool *restrict is_new/*optional out*/)
 {
     ASSERTNOTNULL (vctx);
     ASSERT (vctx->dict_id.num, "vctx has no dict_id (did_i=%u)", (unsigned)(vctx - vb->ca.contexts));
@@ -402,7 +402,7 @@ done:
 }
 
 // Seg only: create a node without adding to counts
-WordIndex ctx_create_node_is_new (VBlockP vb, Did did_i, STRp (snip), bool *is_new)
+WordIndex ctx_create_node_is_new (VBlock𐤐 vb, Did did_i, STR𐤐(snip), bool *is_new)
 {
     WordIndex node_index = ctx_create_node_do (vb, CTX(did_i), STRa(snip), is_new); 
     ctx_decrement_count (vb, CTX(did_i), node_index);
@@ -432,12 +432,12 @@ uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 }
 
 // Seg only: if after ctx_create_node_do we don't add the snip to b250, we need to reduce its count
-void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index)
+void ctx_decrement_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index)
 {
     ASSSEG (node_index < (WordIndex)ctx->counts.len32, "node_index=%d out of range %s.count.len=%"PRIu64, 
             node_index, ctx->tag_name, ctx->counts.len);
 
-    uint32_t *count_p = B32(ctx->counts, node_index);
+    uint32_t *restrict count_p = B32(ctx->counts, node_index);
 
     if (node_index < 0) return; // WORD_INDEX_EMPTY or WORD_INDEX_MISSING
      
@@ -452,7 +452,7 @@ void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 }
 
 // Seg only: if we add a b250 without evaluating (if node_index is known)
-void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index)
+void ctx_increment_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index)
 {
     ASSSEG (node_index < ctx->counts.len, "%s: node_index=%d out of range %s.counts.len=%"PRIu64, LN_NAME, node_index, ctx->tag_name, ctx->counts.len);
 
@@ -1277,7 +1277,7 @@ void ctx_initialize_predefined_ctxs (DataType dt)
         if (dt == DT_FASTQ && did_i == FASTQ_CONTIG) 
             dict_id.num = DICT_ID_MAKEF_6 ("CONTIG");
 
-        ASSERT (dict_id.num, "No did_i->dict_id mapping is defined for predefined did_i=%u in dt=%s", did_i, dt_name (dt));
+        ASSERT (dict_id.num, "No did_i->dict_id mapping is defined for predefined did_i=%u in dt=%s. "_TIP"Delete dict_id_gen.h", did_i, dt_name (dt));
 
         // skip if its an alias 
         AliasType alias_type = ALIAS_NONE;
@@ -1555,9 +1555,9 @@ static void ctx_show_counts (ContextP zctx)
         BNXT (ShowCountsEnt, show_counts_buf) = (ShowCountsEnt){ 
             .count = count_i,
             .word_index = i,
-            .snip  = maybe_longr     ? "" 
-                   : (command==ZIP)  ? ctx_get_z_snip_ex (zctx, i, 0, 0) 
-                   :                   ctx_get_words_snip (zctx, i)
+            .snip  = maybe_longr ? "" 
+                   : IS_ZIP      ? ctx_get_z_snip_ex (zctx, i, 0, 0) 
+                   :               ctx_get_words_snip (zctx, i)
         };
     }
 
@@ -1923,7 +1923,7 @@ void ctx_set_dyn_int (VBlockP vb,                    ...) { SET_MULTI_CTX (vb, d
 void ctx_set_ltype (VBlockP vb, int ltype,           ...) { SET_MULTI_CTX (ltype, ctx->ltype=(ltype)); ASSERT0 (!IS_LT_DYN(ltype), "Use ctx_set_dyn_int"); }
 void ctx_consolidate_stats (VBlockP vb, int parent,  ...) { SET_MULTI_CTX (parent, ({ ctx->st_did_i=parent; ctx->header_info=CTX(parent)->header_info; })); CTX(parent)->is_stats_parent = true;}
 
-void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con)
+void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ConstContainerP con)
 {
     uint32_t num_deps = con_nitems (*con);
 

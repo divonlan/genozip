@@ -43,26 +43,26 @@ static inline uint32_t vcf_get_n_repeats (VBlockVCFP vb, ContextP ctx)
 
 void vcf_segconf_finalize_optimizations (VBlockVCFP vb)
 {
-    segconf.optimize[VCF_INFO] = !CTX(VCF_INFO)->flags.all_the_same; 
-    segconf.optimize[VCF_QUAL] = !CTX(VCF_QUAL)->flags.all_the_same; 
+    segconf_set_optimize (VCF_INFO, !CTX(VCF_INFO)->flags.all_the_same); 
+    segconf_set_optimize (VCF_QUAL, !CTX(VCF_QUAL)->flags.all_the_same); 
     
     // conditional optimizations    
-    segconf.optimize[FORMAT_GP]  = segconf.has[FORMAT_GP] && (segconf.FMT_GP_content == GP_phred || segconf.FMT_GP_content == GP_probabilities);
-    segconf.optimize[FORMAT_PP]  = segconf.has[FORMAT_PP] && !segconf.vcf_is_pindel; // note: in Pindel, PP is used for something else
-    segconf.optimize[FORMAT_QR]  = segconf.has[FORMAT_QR] && segconf.vcf_is_freebayes; 
+    segconf_set_optimize (FORMAT_GP, segconf_has(FORMAT_GP) && (segconf.FMT_GP_content == GP_phred || segconf.FMT_GP_content == GP_probabilities));
+    segconf_set_optimize (FORMAT_PP, segconf_has(FORMAT_PP) && !segconf.vcf_is_pindel); // note: in Pindel, PP is used for something else
+    segconf_set_optimize (FORMAT_QR, segconf_has(FORMAT_QR) && segconf.vcf_is_freebayes); 
 
     // unconditional optimizations
-    segconf.optimize[FORMAT_GL]  = segconf.has[FORMAT_GL];
-    segconf.optimize[FORMAT_PL]  = segconf.has[FORMAT_PL];
-    segconf.optimize[FORMAT_SPL] = segconf.has[FORMAT_SPL];
-    segconf.optimize[FORMAT_PRI] = segconf.has[FORMAT_PRI];
-    segconf.optimize[FORMAT_GQ]  = segconf.has[FORMAT_GQ];
+    segconf_set_optimize (FORMAT_GL, segconf_has(FORMAT_GL));
+    segconf_set_optimize (FORMAT_PL, segconf_has(FORMAT_PL));
+    segconf_set_optimize (FORMAT_SPL, segconf_has(FORMAT_SPL));
+    segconf_set_optimize (FORMAT_PRI, segconf_has(FORMAT_PRI));
+    segconf_set_optimize (FORMAT_GQ, segconf_has(FORMAT_GQ));
 
     // optimize all floats. note: segconf_calculate guarantees us that all segconf vctx and zctx are the same at this point
     for (Did did_i=VCF_FIRST_OPTIONAL_DID; did_i < vb->ca.num_contexts; did_i++) {
         decl_zctx (did_i);
-        if (segconf.has[did_i] && zctx->header_info.vcf.Type == VCF_Float)
-            segconf.optimize[did_i] = true;
+        if (segconf_has(did_i) && zctx->header_info.vcf.Type == VCF_Float)
+            segconf_set_optimize (did_i, true);
     }
 }
 
@@ -92,7 +92,7 @@ void vcf_zip_add_line_numbers_init_vb (VBlockVCFP vb)
 void vcf_add_line_numbers_seg_initialize (VBlockVCFP vb)
 {
     // container just for adding a prefix to the delta-encoded line number (the container is all_the_same)
-    MiniContainer line_number_container = {
+    static const Container(1) line_number_container = {
         .repeats   = 1,
         .nitems_lo = 1,
         .items     = { { .dict_id = { _VCF_LINE_NUM } } }
@@ -103,7 +103,7 @@ void vcf_add_line_numbers_seg_initialize (VBlockVCFP vb)
                             CON_PX_SEP, // end of (empty) container-wide prefix
                             'L', 'N', '=', CON_PX_SEP };  // NOTE: if changing prefix, update LN_PREFIX_LEN
 
-    container_seg (vb, CTX(VCF_ID), (Container *)&line_number_container, prefix, sizeof prefix, 0); 
+    container_seg (vb, CTX(VCF_ID), (ContainerP)&line_number_container, prefix, sizeof prefix, 0); 
     ctx_decrement_count (VB, CTX(VCF_ID), 0);
     
     ctx_set_no_stons (VB, VCF_ID, VCF_LINE_NUM, DID_EOL);
@@ -222,7 +222,7 @@ static char *vcf_optimize_float_or_not (VBlockVCFP vb, ContextP ctx, STRp(value)
 {
     if (IS_PERIOD(value)) goto fallback;
     
-    if (value && ctx && ctx->header_info.vcf.Type == VCF_Float && ctx->dict_id.num && segconf.optimize[ctx->did_i]) {
+    if (value && ctx && ctx->header_info.vcf.Type == VCF_Float && ctx->dict_id.num && segconf_optimize (ctx->did_i)) {
         if (ctx->header_info.vcf.Number == 1)
             next = optimize_float_3_sig_dig (VB, ctx, STRa(value), next);
 
@@ -252,7 +252,7 @@ static char *vcf_optimize_INFO (VBlockVCFP vb, char *next, STRp(INFO))
     vcf_parse_info_subfields (vb, STRa(INFO));
 
     // case: --optimize-sort: sort the info fields in a consistent orderto reduce word count in the INFO dict. 
-    if (segconf.optimize[VCF_INFO] && ii_buf.len32 > 1) 
+    if (segconf_optimize (VCF_INFO) && ii_buf.len32 > 1) 
         qsort (B1ST(InfoItem, ii_buf), ii_buf.len32, sizeof(InfoItem), INFO_sorter);
 
     // INFO subfield optimizations
@@ -393,7 +393,7 @@ static char *vcf_optimize_QUAL (VBlockVCFP vb, char *next, STRp(qual))
 
     decl_ctx(VCF_QUAL);
     
-    if (segconf.optimize[VCF_QUAL]) {
+    if (segconf_optimize (VCF_QUAL)) {
         // case: QUAL is expected to be approximately the same as GP[0] - optimize like we optimize GP, so it continues to compress well 
         if (segconf.FMT_GP_content == GP_phred && segconf.vcf_QUAL_method == VCF_QUAL_by_GP)
             next = vcf_phred_optimize (vb, ctx, STRa(qual), next);
@@ -450,8 +450,8 @@ static char *vcf_optimize_samples (VBlockVCFP vb, STRp(format), rom samples, rom
                 #define H2(c1,c2)    (c1 | (c2<<8))
                 #define H3(c1,c2,c3) (c1 | (c2<<8) | (c3<<16))
 
-                #define CASE2(f,c1,c2)    case H2(c1,c2):    if (!segconf.optimize[FORMAT_##f]) break; 
-                #define CASE3(f,c1,c2,c3) case H3(c1,c2,c3): if (!segconf.optimize[FORMAT_##f]) break; 
+                #define CASE2(f,c1,c2)    case H2(c1,c2):    if (!segconf_optimize (FORMAT_##f)) break; 
+                #define CASE3(f,c1,c2,c3) case H3(c1,c2,c3): if (!segconf_optimize (FORMAT_##f)) break; 
 
                 if (fmt_lens[i] == 2)
                     switch (H2(fmts[i][0], fmts[i][1])) {
@@ -556,8 +556,8 @@ rom vcf_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
             *next++ = '\t';
 
             // case: samples modifications
-            if (segconf.optimize[FORMAT_GL] || segconf.optimize[FORMAT_GP] || 
-                segconf.optimize[FORMAT_PL] || segconf.optimize[FORMAT_PP] || segconf.optimize[FORMAT_PRI]) 
+            if (segconf_optimize (FORMAT_GL) || segconf_optimize (FORMAT_GP) || 
+                segconf_optimize (FORMAT_PL) || segconf_optimize (FORMAT_PP) || segconf_optimize (FORMAT_PRI)) 
                 next = vcf_optimize_samples (vb, field_start, field_len, next_field, after, next, has_13);
             
             // case: no mod - just copy all samples (excluding \r and \n)
@@ -569,7 +569,7 @@ rom vcf_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
 
         // now that we have completed optimizing the subfields (which required the original FORMAT)
         // we can chage GP->PP and/or GL->PL in format string
-        vcf_modify_format (STRa(format), segconf.optimize[FORMAT_GL], segconf.optimize[FORMAT_GP] && segconf.FMT_GP_content == GP_probabilities);
+        vcf_modify_format (STRa(format), segconf_optimize (FORMAT_GL), segconf_optimize (FORMAT_GP) && segconf.FMT_GP_content == GP_probabilities);
     }
 
     *next++ = '\n'; // note: no \r even if there was one

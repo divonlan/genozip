@@ -28,7 +28,7 @@ static int64_t xt_prediction (int64_t as)
     return round ((double)as * 0.2510174851 - 3.192195876); // based on AS vs XT regression in test.ion-cardiomyopathy.bam
 }
 
-void sam_seg_tmap_XT_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t xt, unsigned add_bytes)
+void sam_seg_tmap_XT_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xt, unsigned add_bytes)
 {
     decl_ctx (OPTION_XT_i);
 

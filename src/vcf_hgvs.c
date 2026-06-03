@@ -34,7 +34,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     v -= pos_str_len;
     if (memcmp (v, pos_str, pos_str_len)) return false; // POS differs
 
-    SmallContainer con = { 
+    static const Container(2) con = { 
         .repeats   = 1,
         .nitems_lo = 2,
         .items = { { .dict_id.num = _INFO_HGVS_snp_pos    },
@@ -128,7 +128,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     static const uint8_t special_end_pos[NUM_HGVS_TYPES]  = { VCF_SPECIAL_HGVS_DEL_END_POS, VCF_SPECIAL_HGVS_INS_END_POS, VCF_SPECIAL_HGVS_DELINS_END_POS, VCF_SPECIAL_HGVS_INS_END_POS, VCF_SPECIAL_HGVS_DELINS_END_POS };
     static const uint8_t special_payload[NUM_HGVS_TYPES]  = { VCF_SPECIAL_HGVS_DEL_PAYLOAD, VCF_SPECIAL_HGVS_INS_PAYLOAD, VCF_SPECIAL_HGVS_DELINS_PAYLOAD, 0                           , 0 };
 
-    SmallContainer con = { 
+    const Container(3) con = { 
         .repeats   = 1,
         .nitems_lo = 3,
         .items = { { .dict_id = dict_id_start_pos[t], .separator = "_" }, // separator deleted in container_reconstruct() if end_pos is missing

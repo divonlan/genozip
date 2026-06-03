@@ -15,7 +15,9 @@ sSTRl(copy_QNAME_snip, 32);
 
 // used in ZIP and PIZ - part of the file format
 #define TP_NUM_BINS 7
-static const uint8_t tp_bins[256] = { [0 ... 38]=0, [39 ... 41]=1, [42 ... 59]=2, [60 ...62]=3, [63 ... 64]=4, [65 ... 72]=5, [73 ... 255]=6 };
+static alignas(64) const uint8_t tp_bins[256] = { 
+    [0 ... 38]=0, [39 ... 41]=1, [42 ... 59]=2, [60 ...62]=3, [63 ... 64]=4, [65 ... 72]=5, [73 ... 255]=6 
+};
 
 #define TP_NON_CONDENSED 127
 
@@ -52,10 +54,10 @@ void sam_ultima_seg_initialize (VBlockSAMP vb)
 
 void sam_ultima_finalize_segconf (VBlockSAMP vb)
 {
-    segconf.sam_has_ultima_t0 = segconf.has[OPTION_t0_Z] && codec_t0_data_is_a_fit_for_t0(VB);
+    segconf.sam_has_ultima_t0 = segconf_has(OPTION_t0_Z) && codec_t0_data_is_a_fit_for_t0(VB);
 }
 
-static inline void seg_one_tp (VBlockSAMP vb, ContextP chan[TP_NUM_BINS], char *next[TP_NUM_BINS-1], char tp, char qual)
+static inline void seg_one_tp (VBlockSAMP vb, Context𐤐 chan[TP_NUM_BINS], char *restrict next[TP_NUM_BINS-1], char tp, char qual)
 {
     uint8_t bin = tp_bins[(uint8_t)qual];
     if (bin == 6) { // seg as a snip, as its expected to be all-the-same '0'
@@ -71,24 +73,22 @@ static inline void seg_one_tp (VBlockSAMP vb, ContextP chan[TP_NUM_BINS], char *
 // example: tp:B:c,1,1,1,1,1,1,-1,2,0,0,0,2,-1,1,1,-1,2,0,0,0,0,2,-1,1,1,0,0,
 ARRAY_ITEM_CALLBACK (sam_seg_ULTIMA_tp)
 {
-    START_TIMER;
-
-    char *tp = (char *)array; // this is OPTION_tp_B_ARR.local - we transfer it to the channels and free it
+    char *restrict tp = (char *)array; // this is OPTION_tp_B_ARR.local - we transfer it to the channels and free it
     uint32_t tp_len = array_len;
-    ZipDataLineSAMP dl = (ZipDataLineSAMP)cb_param;
+    ZipDataLineSAM𐤐 dl = (ZipDataLineSAM𐤐)cb_param;
 
     // note: flags.no_textual_seq is set to false, in sam_seg_finalize, as required by sam_piz_special_ULTIMA_tp
     ASSSEG (tp_len == dl->SEQ.len, "Expecting length of TP:B:c to be seq_len=%u but it is %u", dl->SEQ.len, tp_len);
     ASSSEG (tp_len < (1 << TP_LEN_BITS), "Genozip limitation: tp:B:c is supported up to length %u, but here tp_len=%u. %s", (1 << TP_LEN_BITS)-1, tp_len, report_support_if_unexpected());
 
-    rom seq = vb->textual_seq_str;
-    rom qual = Btxt (dl->QUAL.index);
+    rom𐤐 seq = vb->textual_seq_str;
+    rom𐤐 qual = Btxt (dl->QUAL.index);
 
     ContextP chan[TP_NUM_BINS];
     for (int bin=0; bin < TP_NUM_BINS; bin++)     
         chan[bin] = seg_mux_get_channel_ctx (VB, OPTION_tp_B_ARR, (MultiplexerP)&vb->mux_tp, bin); 
 
-    char *next[TP_NUM_BINS-1];
+    char *restrict next[TP_NUM_BINS-1];
     for (int bin=0; bin < TP_NUM_BINS-1; bin++) {
         buf_alloc (VB, &chan[bin]->local, tp_len, 0, int8_t, CTX_GROWTH, C_LOCAL);
         next[bin] = BAFTc(chan[bin]->local);
@@ -125,8 +125,6 @@ ARRAY_ITEM_CALLBACK (sam_seg_ULTIMA_tp)
         chan[bin]->local.len32 = BNUM (chan[bin]->local, next[bin]);
 
     ctx->local.len32 = 0; 
-
-    COPY_TIMER (sam_seg_ULTIMA_tp);
 }
 
 // 15.0.10 to 15.0.27, see also bug 959
@@ -268,7 +266,7 @@ static bool sam_seg_ultima_XV_MAPQ (VBlockP vb, ContextP ctx, STRp(mapq_str), ui
 // example: XV:Z:chr1,25173438,306,60
 void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes)
 {
-    static const MediumContainer container_XV = {
+    static const Container(4) container_XV = {
         .repeats      = 1, 
         .nitems_lo    = 4, 
         .items        = { { .dict_id.num = DICT_ID_MAKE2_8("X0V_RNAM"), .separator = "," }, 
@@ -276,33 +274,34 @@ void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes)
                           { .dict_id.num = DICT_ID_MAKE2_6("X2V_AS"),   .separator = "," }, 
                           { .dict_id.num = DICT_ID_MAKE2_8("X3V_MAPQ")                   } } };
 
-    SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS, sam_seg_ultima_XV_AS, sam_seg_ultima_XV_MAPQ }; 
+    static SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS, sam_seg_ultima_XV_AS, sam_seg_ultima_XV_MAPQ }; 
 
-    seg_struct (VB, CTX(OPTION_XV_Z), container_XV, STRa(xv), callbacks, add_bytes, true);
+    seg_struct (VB, CTX(OPTION_XV_Z), (ContainerP)&container_XV, STRa(xv), callbacks, add_bytes, true);
 }
 
 // describes the first few mismatches - except for .repeats, it can be 100% determined by MD:Z and SEQ
 // example: XW:Z:chr1,9206568,G,A;chr1,9206575,C,T;
 void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes)
 {
-    static const MediumContainer container_XW = { // bug 892
-        .repsep       = ";", 
-        .nitems_lo    = 4, 
-        .items        = { { .dict_id.num = DICT_ID_MAKE2_8("X0W_RNAM"), .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_7("X1W_POS"),  .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_7("X2W_REF"),  .separator = "," }, 
-                          { .dict_id.num = DICT_ID_MAKE2_7("X3W_ALT")                     } } };
+    static const Container(4) container_XW = { // bug 892
+        .repsep    = ";", 
+        .repeats   = 1,  // faster seg if this happens to be correct
+        .nitems_lo = 4, 
+        .items     = { { .dict_id.num = DICT_ID_MAKE2_8("X0W_RNAM"), .separator = "," }, 
+                       { .dict_id.num = DICT_ID_MAKE2_7("X1W_POS"),  .separator = "," }, 
+                       { .dict_id.num = DICT_ID_MAKE2_7("X2W_REF"),  .separator = "," }, 
+                       { .dict_id.num = DICT_ID_MAKE2_7("X3W_ALT")                     } } };
 
     SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS }; 
 
-    seg_array_of_struct (VB, CTX(OPTION_XW_Z), container_XW, STRa(xw), callbacks, 
+    seg_array_of_struct (VB, CTX(OPTION_XW_Z), (ContainerP)&container_XW, STRa(xw), callbacks, 
                          segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                          add_bytes); 
 }
 
 // t0:Z : supplemental base quality information
 // example: =77+**1119955))),,,..=I///;;;222888*****:;;>>>>AA<<<<IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII@@@@IIAAAA<<<<
-void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(t0), unsigned add_bytes)    
+void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(t0), unsigned add_bytes)    
 {                                                          
     decl_ctx (OPTION_t0_Z);
 
@@ -319,7 +318,7 @@ void sam_seg_ultima_t0 (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(t0), unsigned ad
 // callback function for compress to get data of one line (used by T0 codec)
 COMPRESSOR_CALLBACK (sam_zip_t0) 
 {
-    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAM𐤐 dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = MIN_(maximum_size, dl->t0.len);
@@ -336,7 +335,7 @@ void sam_ultima_update_t0_len (VBlockP vb, uint32_t line_i, uint32_t new_len)
 
 // MI:Z - QNAME format: if its non-duplicate - same as QNAME. If its duplicate - MI equals 
 // to the QNAME of the corresponding non-duplicate.
-void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(mi), unsigned add_bytes)    
+void sam_seg_ultima_MI (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(mi), unsigned add_bytes)    
 {
     #define MI_HISTORY_LEN 64
     decl_ctx (OPTION_MI_Z);
@@ -413,7 +412,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_ULTIMA_MI)
 }
 
 // a3:Z
-void sam_seg_ultima_a3 (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t a3, unsigned add_bytes)    
+void sam_seg_ultima_a3 (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t a3, unsigned add_bytes)    
 {
     SNIPi2 (SNIP_SPECIAL, SAM_SPECIAL_delta_seq_len, (int64_t)dl->SEQ.len - a3);
     seg_by_did (VB, STRa(snip), OPTION_a3_i, add_bytes);

@@ -10,14 +10,15 @@
 
 // Handle VEP fields: https://www.ensembl.org/info/docs/tools/vep/index.html
 
-static MediumContainer csq_con;
-static SegCallback csq_cbs[MEDIUM_CON_NITEMS];
+#define MAX_CSQ_ITEMS 100
+static Container(MAX_CSQ_ITEMS) csq_con;
+static SegCallback csq_cbs[MAX_CSQ_ITEMS];
 
 static uint64_t _INFO_Allele, _INFO_Existing_variation, _INFO_cDNA_position, _INFO_CDS_position, _INFO_Protein_position, _INFO_DISTANCE, 
                 _INFO_AFR_MAF, _INFO_AMR_MAF, _INFO_EAS_MAF, _INFO_EUR_MAF, _INFO_SAS_MAF, _INFO_AA_MAF, _INFO_EA_MAF, _INFO_ExAC_MAF;
 
 static DictId maf_dict_id[2];
-sSTRl(maf_container_snip,100);
+sSTRl(maf_container_snip, con_snip_sizeof(2));
            
 static bool vcf_vep_Existing_var_cb (VBlockP vb, ContextP ctx, STRp(ev), uint32_t repeat)
 {
@@ -74,9 +75,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_next_ALT)
 
 // called from vcf_inspect_txt_header_zip, NOT vcf_info_zip_initialize
 void vcf_vep_zip_initialize (void) // nul-terminated string containing list of fields. list of fields expected to be terminated by a '"'
-{
-    ASSERTNOTNULL (segconf.vcf_vep_spec); // allocated in vcf_inspect_txt_header_zip
-    
+{    
     _INFO_Allele             = dict_id_make (_S("Allele"),             DTYPE_VCF_INFO).num;
     _INFO_Existing_variation = dict_id_make (_S("Existing_variation"), DTYPE_VCF_INFO).num;
     _INFO_cDNA_position      = dict_id_make (_S("cDNA_position"),      DTYPE_VCF_INFO).num;
@@ -92,21 +91,20 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
     _INFO_EA_MAF             = dict_id_make (_S("EA_MAF"),             DTYPE_VCF_INFO).num;
     _INFO_ExAC_MAF           = dict_id_make (_S("ExAC_MAF"),           DTYPE_VCF_INFO).num; // note: this includes all ExAC_*_MAF fields that get mapped to the same context due to dict_id_make logic
 
-    rom spec = segconf.vcf_vep_spec;
-    int spec_len = strlen (segconf.vcf_vep_spec);
+    ASSERTISALLOCED (ZCTX(INFO_vep)->vep_spec); // allocated in vcf_inspect_txt_header_zip
+    ARRAY (char, spec, ZCTX(INFO_vep)->vep_spec);
 
     str_split (spec, spec_len, 0, '|', name, false);
 
-    if (n_names > MEDIUM_CON_NITEMS) { // if this every happens, we should switch to a larger container
-        WARN ("FYI: VEP CSQ field has %u annotations, but compression will be sub-optimal as it has more than %u fields. %s:\n%.*s", n_names, 
-              CONTAINER_MAX_DICTS, report_support(), STRf(spec));    
+    if (n_names > MAX_CSQ_ITEMS) { // if this every happens, we should switch to a larger container
+        WARN (_FYI "VEP CSQ field has %u annotations, but compression will be sub-optimal as it has more than %u fields. %s:\n%.*s", n_names, 
+              MAX_CSQ_ITEMS, report_support(), STRf(spec));    
         segconf.vcf_is_vep = false;
         return;
     }
 
-    memset (&csq_con, 0, sizeof (csq_con));
+    con_initialize (&csq_con, n_names);
     memset (csq_cbs,  0, sizeof (csq_cbs));
-    csq_con.nitems_lo = n_names;
     csq_con.drop_final_repsep = true;
     csq_con.repsep[0] = ',';
 
@@ -162,15 +160,15 @@ void vcf_vep_zip_initialize (void) // nul-terminated string containing list of f
     maf_dict_id[0] = (DictId)DICT_ID_MAKE1_8("VEP_MAF0");
     maf_dict_id[1] = (DictId)DICT_ID_MAKE1_8("VEP_MAF0");
     
-    SmallContainer con = { .repeats   = 1, 
-                           .nitems_lo = 2,
-                           .items[0]  = { .dict_id = maf_dict_id[0], .separator = ":" },
-                           .items[1]  = { .dict_id = maf_dict_id[1]                   } };
+    Container(2) con = { .repeats   = 1, 
+                         .nitems_lo = 2,
+                         .items[0]  = { .dict_id = maf_dict_id[0], .separator = ":" },
+                         .items[1]  = { .dict_id = maf_dict_id[1]                   } };
 
     maf_container_snip_len = sizeof (maf_container_snip); // re-initialize for every file
     container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa (maf_container_snip));
 
-    FREE (segconf.vcf_vep_spec); // allocated in vcf_inspect_txt_header_zip
+    buf_destroy (ZCTX(INFO_vep)->vep_spec); // allocated in vcf_inspect_txt_header_zip
 }
 
 void vcf_vep_seg_initialize (VBlockVCFP vb)
@@ -193,5 +191,5 @@ void vcf_vep_seg_initialize (VBlockVCFP vb)
 // example: CSQ=-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000423562|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000438504|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000450305|transcribed_unprocessed_pseudogene|6/6||ENST00000450305.2:n.448_449delGC||448-449|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000456328|processed_transcript|3/3||ENST00000456328.2:n.734_735delGC||734-735|||||rs780379327|1||1||deletion|1|HGNC|37102|YES||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000488147|unprocessed_pseudogene||||||||||rs780379327|1|917|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000515242|transcribed_unprocessed_pseudogene|3/3||ENST00000515242.2:n.727_728delGC||727-728|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|non_coding_transcript_exon_variant&non_coding_transcript_variant|MODIFIER|DDX11L1|ENSG00000223972|Transcript|ENST00000518655|transcribed_unprocessed_pseudogene|3/4||ENST00000518655.2:n.565_566delGC||565-566|||||rs780379327|1||1||deletion|1|HGNC|37102|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000538476|unprocessed_pseudogene||||||||||rs780379327|1|924|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|downstream_gene_variant|MODIFIER|WASH7P|ENSG00000227232|Transcript|ENST00000541675|unprocessed_pseudogene||||||||||rs780379327|1|876|-1||deletion|1|HGNC|38034|||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|,-|regulatory_region_variant|MODIFIER|||RegulatoryFeature|ENSR00001576075|CTCF_binding_site||||||||||rs780379327|1||||deletion|1|||||||||||||||||-:0||||||||-:0|-:1.128e-05|-:0|-:0|-:0|-:0|-:0|-:0|||||||||||||AGCT|
 void vcf_seg_INFO_CSQ (VBlockVCFP vb, ContextP ctx, STRp(csq))
 {
-    seg_array_of_struct (VB, ctx, csq_con, STRa(csq), csq_cbs, NULL, csq_len);
+    seg_array_of_struct (VB, ctx, (ContainerP)&csq_con, STRa(csq), csq_cbs, NULL, csq_len);
 }

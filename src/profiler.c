@@ -9,6 +9,7 @@
 
 #include "profiler.h"
 #include "file.h"
+#include "context.h"
 
 static ProfilerRec profile = {};    // data for this z_file 
 static TimeSpecType profiler_timer; // wallclock
@@ -20,7 +21,7 @@ void profiler_initialize (void)
     mutex_initialize (profile_mutex);
 }
 
-void profiler_add (ConstVBlockP vb)
+void profiler_add (VBlock𐤐 vb)
 {
     mutex_lock (profile_mutex);
 
@@ -29,8 +30,7 @@ void profiler_add (ConstVBlockP vb)
         profile.max_vb_size_mb = MAX_(profile.max_vb_size_mb, segconf.vb_size >> 20);
     }
 
-    int num_profiled = sizeof (profile.nanosecs) / sizeof (uint64_t) - MAX_DICTS + 
-                       (IS_PIZ ? vb->ca.num_contexts : 0); 
+    int num_profiled = &profile.nanosecs.compress_field[0] - (int64_t *)&profile.nanosecs;
     
     for (int i=0; i < num_profiled; i++) 
         if (((uint64_t *)&vb->profile.count)[i]) {
@@ -38,17 +38,26 @@ void profiler_add (ConstVBlockP vb)
             ((uint64_t *)&profile.count)[i]    += ((uint64_t *)&vb->profile.count)[i];
         }
 
-    // ZIP: add compressor data by zctx, while collected by vctx
-    if (IS_ZIP) 
-        for (int v=num_profiled; v < num_profiled + vb->ca.num_contexts; v++) 
-            if (((uint64_t *)&vb->profile.count)[v]) {
-                ContextP zctx = ctx_get_zctx_from_vctx (CTX(v-num_profiled), false, true);
-                if (!zctx) continue; // should never happen
+    // add compressor data by zctx, while collected by vctx
+    for_vctx {
+        Context𐤐 zctx = NULL;
 
-                int z = zctx->did_i + num_profiled;
-                ((uint64_t *)&profile.nanosecs)[z] += ((uint64_t *)&vb->profile.nanosecs)[v];
-                ((uint64_t *)&profile.count)[z]    += ((uint64_t *)&vb->profile.count)[v];
-            }
+        if (vb->profile.count.compress_field[vctx->did_i]) {
+            zctx = IS_ZIP ? ctx_get_zctx_from_vctx (vctx, false, true) : ZCTX(vctx->did_i);
+            if (!zctx) continue; // should never happen
+
+            profile.count   .compress_field[zctx->did_i] += vb->profile.count   .compress_field[vctx->did_i];
+            profile.nanosecs.compress_field[zctx->did_i] += vb->profile.nanosecs.compress_field[vctx->did_i];
+        }
+
+        if (vb->profile.count.seg_recon_field[vctx->did_i]) {
+            if (!zctx) zctx = IS_ZIP ? ctx_get_zctx_from_vctx (vctx, false, true) : ZCTX(vctx->did_i);
+            if (!zctx) continue;
+
+            profile.count   .seg_recon_field[zctx->did_i] += vb->profile.count   .seg_recon_field[vctx->did_i];
+            profile.nanosecs.seg_recon_field[zctx->did_i] += vb->profile.nanosecs.seg_recon_field[vctx->did_i];
+        }
+    }
 
     mutex_unlock (profile_mutex);
 }
@@ -60,12 +69,16 @@ void profiler_add_evb_and_print_report (void)
     profiler_add (evb);
 
     static rom space = "                                                   ";
-#   define PRINT_(x, label, level) if (profile.nanosecs.x)          \
-        iprintf ("%.*s %s: %s (N=%s)\n", (level)*3, space, (label), \
+#   define PRINT_CTX(label, x, ctx, level) if (profile.nanosecs.x)  \
+        iprintf ("%.*s %s %s/%s: %s (N=%s)\n", (level)*3, space,    \
+                 label, dtype_name_z(ctx->dict_id), ctx->tag_name,  \
                  str_int_commas (ms(profile.nanosecs.x)).s,         \
                  str_int_commas (profile.count.x).s);
 
-#   define PRINT(x, level) PRINT_(x, #x, (level)) 
+#   define PRINT(x, level) if (profile.nanosecs.x)                  \
+        iprintf ("%.*s %s: %s (N=%s)\n", (level)*3, space, #x,      \
+                 str_int_commas (ms(profile.nanosecs.x)).s,         \
+                 str_int_commas (profile.count.x).s);
     
     rom os = flag.is_windows ? "Windows"
            : flag.is_mac     ? "MacOS"
@@ -204,6 +217,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (fastq_bamass_seg_CIGAR, 3);        
         if (flag.bam_assist) PRINT (squank_seg, 4); // sub of either sam_cigar_seg or fastq_bamass_seg_CIGAR
         PRINT (fastq_bamass_seg_SEQ, 3);
+        if (flag.bam_assist) PRINT (ref_get_textual_seq, 4);
         PRINT (sam_seg_SEQ, 2);
         PRINT (sam_seg_SEQ_vs_ref, 3);
         PRINT (sam_seg_bisulfite_M, 4);
@@ -211,15 +225,15 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_analyze_copied_SEQ, 3);
         PRINT (aligner_seg_seq, 3);
         PRINT (aligner_best_match, 4);
-        PRINT (aligner_best_match_FLAT_search, 5);
-        PRINT (aligner_best_match_FLAT_search2, 5);
+        PRINT (aligner_evaluate_hooks, 5);
+        PRINT (aligner_evaluate_hooks2, 5);
         PRINT (aligner_update_best, 5);
         PRINT (aligner_seq_to_bitmap, 5);
         PRINT (aligner_get_junction, 5);
+        if (!Z_DT(VCF) && !flag.bam_assist) PRINT (ref_get_textual_seq, 4);
         PRINT (fastq_seg_DESC, 2);
         PRINT (fastq_seg_saux, 2);
         if (!flag.bam_assist) PRINT (bam_seq_to_sam, 2);
-        PRINT (fastq_seg_QUAL, 2);
         PRINT (sam_seg_QUAL, 2);
         PRINT (sam_seg_is_gc_line, 2);
         PRINT (sam_seg_MD_Z_analyze, 2);
@@ -227,36 +241,16 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_seg_bsseeker2_XG_Z_analyze, 2);
         PRINT (sam_seg_sag_stuff, 2);
         PRINT (sam_seg_aux_all, 2);
-        PRINT (sam_seg_SA_Z, 3);
-        PRINT (sam_seg_AS_i, 3);
-        PRINT (sam_seg_NM_i, 3);                       
-        PRINT (sam_seg_BWA_XA_Z, 3);
-        PRINT (sam_seg_BWA_XA_pos, 4);
-        PRINT (sam_seg_BWA_XS_i, 3);
-        PRINT (sam_seg_bismark_XM_Z, 3);
-        PRINT (sam_seg_bsbolt_XB, 3);
-        PRINT (sam_seg_TX_AN_Z, 3);
-        PRINT (sam_seg_barcode_qual, 3);
-        PRINT (sam_seg_CB_Z, 3);
-        PRINT (sam_seg_CR_Z, 3);
-        PRINT (sam_seg_RX_Z, 3); 
-        PRINT (sam_seg_BX_Z, 3);
-        PRINT (sam_seg_QX_Z, 3);
-        PRINT (sam_seg_BC_Z, 3);
-        PRINT (sam_seg_GX_GN, 3);
-        PRINT (sam_seg_fx_Z, 3);
-        PRINT (sam_seg_other_seq, 3);
-        PRINT (sam_seg_GR_Z, 3);
-        PRINT (sam_seg_GY_Z, 3);
-        PRINT (sam_seg_ULTIMA_tp, 3);
-        PRINT (vcf_seg_QUAL, 3)
+        PRINT (sam_seg_BWA_XA_pos, 3);
         PRINT (vcf_seg_samples, 3);
         PRINT (vcf_seg_copy_one_sample, 4);
         PRINT (vcf_seg_analyze_copied_GT, 5);
         PRINT (vcf_seg_one_sample, 4);
         PRINT (vcf_seg_info_subfields, 3);
-        PRINT (vcf_seg_PROBE_A, 4);
         PRINT (vcf_seg_finalize_INFO_fields, 3);
+        if (z_file)
+            for_ctx(&z_file->ca) // not for_zctx, so we get did_i which is different than zctx->did_i if alias
+                PRINT_CTX ("seg", seg_recon_field[did_i], ctx, 2);
         PRINT (random_access_merge_in_vb, 1); 
         PRINT (gencomp_absorb_vb_gencomp_lines, 1);
         PRINT (gencomp_flush, 2);
@@ -280,9 +274,9 @@ void profiler_add_evb_and_print_report (void)
         PRINT (wait_for_merge, 2);
         PRINT (sam_deep_zip_merge, 2);
         PRINT (zip_compress_ctxs, 1);
+        PRINT (codec_assign_best_codec, 2);
         PRINT (b250_zip_generate, 2);
         PRINT (zip_generate_local, 2);
-        PRINT (codec_assign_best_codec, 2);
         
         PRINT (compressor_bz2,   2);
         PRINT (compressor_lzma,  2);
@@ -299,9 +293,9 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_t0,    2);
         PRINT (compressor_pacb,  2);
         PRINT (compressor_smux,  2);
-
+        PRINT (compressor_tmpl,  2); 
         for_zctx 
-            PRINT_(fields[zctx->did_i], zctx->tag_name, 2);
+            PRINT_CTX("compress", compress_field[zctx->did_i], zctx, 2);
     }    
 
     else { // PIZ
@@ -363,7 +357,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (reconstruct_vb, 1);
         if (z_file)
             for_ctx(&z_file->ca) // not for_zctx, so we get did_i which is different than zctx->did_i if alias
-                PRINT_(fields[did_i], ctx->tag_name, 2);
+                PRINT_CTX ("recon", seg_recon_field[did_i], ctx, 2);
 
         PRINT (sam_piz_special_SEQ, 2);
         PRINT (sam_reconstruct_SEQ_vs_ref, 3);
@@ -374,6 +368,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_analyze_copied_SEQ, 4); // called from both reconstruct_SEQ_copy_sag_prim and reconstruct_SEQ_copy_saggy
         PRINT (fastq_special_SEQ_by_bamass, 2);
         PRINT (aligner_reconstruct_seq, 2);
+        PRINT (ref_get_textual_seq, 3); // called for reconstructing aligner, bamass, deep...
+
         PRINT (sam_piz_sam2bam_SEQ, 2);
         PRINT (sam_piz_special_QUAL, 2);
         if (z_file && (Z_DT(BAM) || Z_DT(SAM))) {
@@ -381,9 +377,13 @@ void profiler_add_evb_and_print_report (void)
             PRINT (codec_homp_reconstruct, 3);
             PRINT (codec_t0_reconstruct,   3);
             PRINT (codec_smux_reconstruct, 3);
+            PRINT (codec_tmpl_reconstruct, 3);
             PRINT (codec_pacb_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 3);
-            PRINT (codec_domq_reconstruct_dom_run, 4);
+            PRINT (codec_domq_reconstruct_runs, 4);
+            PRINT (codec_domq_reconstruct_dom_run, 5);
+            PRINT (codec_domq_reconstruct_divr, 4);
+            PRINT (codec_domq_piz_get_denorm, 4);
             PRINT (codec_oq_reconstruct, 3);
         }
         PRINT (fastq_special_monochar_QUAL, 2);        
@@ -411,9 +411,13 @@ void profiler_add_evb_and_print_report (void)
         if (z_file && Z_DT(FASTQ)) {
             PRINT (codec_longr_reconstruct, 3);
             PRINT (codec_domq_reconstruct, 2);
-            PRINT (codec_domq_reconstruct_dom_run, 3);
+            PRINT (codec_domq_reconstruct_runs, 3);
+            PRINT (codec_domq_reconstruct_dom_run, 4);
+            PRINT (codec_domq_reconstruct_divr, 3);
+            PRINT (codec_domq_piz_get_denorm, 3);
             PRINT (codec_homp_reconstruct, 2);
             PRINT (codec_smux_reconstruct, 2);
+            PRINT (codec_tmpl_reconstruct, 2);
             PRINT (codec_pacb_reconstruct, 2);
         }
         
@@ -457,6 +461,7 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_homp,  2);
         PRINT (compressor_pacb,  2);
         PRINT (compressor_smux,  2);
+        PRINT (compressor_tmpl,  2);
         PRINT (compressor_t0,    2);
         PRINT (compressor_oq,    2);
     }

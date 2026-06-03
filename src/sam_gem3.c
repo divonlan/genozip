@@ -17,7 +17,7 @@
 // ----------------------------------------------------------------------------------------------
 
 // 2 possible values: G C
-void sam_seg_gem3_XB_A (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(xb), unsigned add_bytes)
+void sam_seg_gem3_XB_A (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(xb), unsigned add_bytes)
 {
     decl_ctx (OPTION_XB_A);
 

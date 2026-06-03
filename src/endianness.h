@@ -148,14 +148,14 @@
 
 // getting and putting unaligned Little Endian words
 #ifdef GENOZIP_ALLOW_UNALIGNED_ACCESS
-    #define GET_UINT16(p)  LTEN16 (*((uint16_t *)(p)))
-    #define GET_UINT32(p)  LTEN32 (*((uint32_t *)(p)))
-    #define GET_UINT64(p)  LTEN64 (*((uint64_t *)(p)))
-    #define GET_FLOAT32(p) LTEN32F(*((float    *)(p)))
+    #define GET_UINT16(p)  LTEN16 (*((unaligned_uint16_t *)(p)))
+    #define GET_UINT32(p)  LTEN32 (*((unaligned_uint32_t *)(p)))
+    #define GET_UINT64(p)  LTEN64 (*((unaligned_uint64_t *)(p)))
+    #define GET_FLOAT32(p) LTEN32F(*((unaligned_float    *)(p)))
 
-    #define PUT_UINT16(p,n) *((uint16_t *)(p)) = LTEN16((uint16_t)n)
-    #define PUT_UINT32(p,n) *((uint32_t *)(p)) = LTEN32((uint32_t)n)
-    #define PUT_UINT64(p,n) *((uint64_t *)(p)) = LTEN64((uint64_t)n)
+    #define PUT_UINT16(p,n) *((unaligned_uint16_t *)(p)) = LTEN16((uint16_t)n)
+    #define PUT_UINT32(p,n) *((unaligned_uint32_t *)(p)) = LTEN32((uint32_t)n)
+    #define PUT_UINT64(p,n) *((unaligned_uint64_t *)(p)) = LTEN64((uint64_t)n)
 #else
     #define GET_UINT16(p)  LTEN16 (({ uint16_t n; memcpy (&n, p, 2); n; }))
     #define GET_UINT32(p)  LTEN32 (({ uint32_t n; memcpy (&n, p, 4); n; }))

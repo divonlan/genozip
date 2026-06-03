@@ -38,26 +38,26 @@ void sam_segconf_finalize_optimizations (void)
 {
     // optimize QUAL and other tags containing base qualities unless already binned (8 is the number of bins in Illimina: https://sapac.illumina.com/content/dam/illumina-marketing/documents/products/technotes/technote_understanding_quality_scores.pdf)
     if (segconf_get_num_qual_scores(QHT_QUAL) > 8) {
-        segconf.optimize[SAM_QUAL] = true; 
-        segconf.optimize[OPTION_QT_Z] = segconf.has[OPTION_QT_Z]; 
-        segconf.optimize[OPTION_CY_Z] = segconf.has[OPTION_CY_Z]; 
-        segconf.optimize[OPTION_BZ_Z] = segconf.has[OPTION_BZ_Z]; 
-        segconf.optimize[OPTION_UY_Z] = segconf.has[OPTION_UY_Z] && segconf.has_10xGen; 
-        segconf.optimize[OPTION_QX_Z] = segconf.has[OPTION_QX_Z] && segconf.has_10xGen; 
-        segconf.optimize[OPTION_sQ_Z] = segconf.has[OPTION_sQ_Z] && segconf.has_10xGen; 
-        segconf.optimize[OPTION_2Y_Z] = segconf.has[OPTION_2Y_Z] && segconf.has_10xGen; 
-        segconf.optimize[OPTION_GY_Z] = segconf.has[OPTION_GY_Z] && segconf.has_10xGen; 
-        segconf.optimize[OPTION_fq_Z] = segconf.has[OPTION_fq_Z] && segconf.has_10xGen; 
+        segconf_set_optimize (SAM_QUAL, true); 
+        segconf_set_optimize (OPTION_QT_Z, segconf_has(OPTION_QT_Z)); 
+        segconf_set_optimize (OPTION_CY_Z, segconf_has(OPTION_CY_Z)); 
+        segconf_set_optimize (OPTION_BZ_Z, segconf_has(OPTION_BZ_Z)); 
+        segconf_set_optimize (OPTION_UY_Z, segconf_has(OPTION_UY_Z) && segconf.has_10xGen); 
+        segconf_set_optimize (OPTION_QX_Z, segconf_has(OPTION_QX_Z) && segconf.has_10xGen); 
+        segconf_set_optimize (OPTION_sQ_Z, segconf_has(OPTION_sQ_Z) && segconf.has_10xGen); 
+        segconf_set_optimize (OPTION_2Y_Z, segconf_has(OPTION_2Y_Z) && segconf.has_10xGen); 
+        segconf_set_optimize (OPTION_GY_Z, segconf_has(OPTION_GY_Z) && segconf.has_10xGen); 
+        segconf_set_optimize (OPTION_fq_Z, segconf_has(OPTION_fq_Z) && segconf.has_10xGen); 
     }
 
-    segconf.optimize[OPTION_ZM_B_s] = segconf.has[OPTION_ZM_B_s] && ((MP(TMAP/*mapped file*/) || MP(TORRENT_BC/*unmapped file*/)));
+    segconf_set_optimize (OPTION_ZM_B_s, segconf_has(OPTION_ZM_B_s) && ((MP(TMAP/*mapped file*/) || MP(TORRENT_BC/*unmapped file*/))));
 
     // set float optimizations (note: all new contexts discovered by segconf were already added to z_file->contexts)
     for (Did did_i=SAM_FIRST_OPTIONAL_DID; did_i < z_file->ca.num_contexts; did_i++) {
         #define ID(i,c) (ZCTX(did_i)->dict_id.id[i] == (c))
-        if (segconf.has[did_i] && ((ID(2,':') && ID(3,'f') && ID(4,'\0')) || 
+        if (segconf_has(did_i) && ((ID(2,':') && ID(3,'f') && ID(4,'\0')) || 
                                    (ID(2,':') && ID(3,'B') && ID(4,':') && ID(5,'f') && ID(6,'\0'))))
-            segconf.optimize[did_i] = true;
+            segconf_set_optimize (did_i, true);
     }
 }
 
@@ -186,7 +186,7 @@ rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     buf_alloc (vb, &vb->optimized_line, 0, (next_line - line_start) * 2 + 1000, char, 0, "optimized_line"); // x2+1000 is plenty for types of modifications we have so far.
     char *next = mempcpy (B1STc(vb->optimized_line), line_start, flds[QUAL] - line_start); // initialize to exact copy of fields 1-10
 
-    next = segconf.optimize[SAM_QUAL] && !(TXT_DT(SAM) && str_issame_(STRfld(QUAL), "*", 1))
+    next = segconf_optimize (SAM_QUAL) && !(TXT_DT(SAM) && str_issame_(STRfld(QUAL), "*", 1))
            ? optimize_phred_quality_string (STRfld(QUAL), next, false, false) 
            : mempcpy (next, flds[QUAL], fld_lens[QUAL]);
   
@@ -200,8 +200,8 @@ rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
         DictId dict_id = auxs[f][3] != 'B' ? (DictId)DICT_ID_MAKE2_4(((char[]){ auxs[f][0], auxs[f][1], ':', auxs[f][3] }))
                                            : (DictId)DICT_ID_MAKE2_6(((char[]){ auxs[f][0], auxs[f][1], ':', auxs[f][3], ':', auxs[f][5] }));
         ContextP ctx;
-        #define IF(cond) if ((ctx = ECTX(dict_id)) && segconf.optimize[ctx->did_i] && (cond)) 
-        #define CASE(x) case x: if (!(ctx = ECTX(dict_id)) || !segconf.optimize[ctx->did_i]) goto fallback; 
+        #define IF(cond) if ((ctx = ECTX(dict_id)) && segconf_optimize (ctx->did_i) && (cond)) 
+        #define CASE(x) case x: if (!(ctx = ECTX(dict_id)) || !segconf_optimize (ctx->did_i)) goto fallback; 
         
         IF (auxs[f][3] == 'f') {
             next = mempcpy (next, auxs[f], 5);
@@ -260,7 +260,7 @@ rom bam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     uint32_t l_seq = LTEN32 (aln->l_seq);
     rom qual = aln->read_name + aln->l_read_name + LTEN16 (aln->n_cigar_op) * sizeof(uint32_t) + (l_seq+1)/2;
 
-    if (segconf.optimize[SAM_QUAL] && l_seq && (uint8_t)qual[0] != 0xff) // in case SEQ is present but QUAL is omitted, all qual is 0xff
+    if (segconf_optimize (SAM_QUAL) && l_seq && (uint8_t)qual[0] != 0xff) // in case SEQ is present but QUAL is omitted, all qual is 0xff
         optimize_phred_quality_string (qual, l_seq, Bc(vb->optimized_line, qual - line_start), true, false); 
 
     STR_ARRAY (aux,MAX_FIELDS) = bam_split_aux (vb, line_start, qual + l_seq, after, auxs, aux_lens);
@@ -270,7 +270,7 @@ rom bam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
                                            : (DictId)DICT_ID_MAKE2_6(((char[]){ auxs[f][0], auxs[f][1], ':', auxs[f][2], ':', auxs[f][3] }));
 
         ContextP ctx;
-        #define NEED_OPT ((ctx = ECTX(dict_id)) && segconf.optimize[ctx->did_i])
+        #define NEED_OPT ((ctx = ECTX(dict_id)) && segconf_optimize (ctx->did_i))
         #define CASE(x) case x: if (!NEED_OPT) break; 
 
         // optimize float fields

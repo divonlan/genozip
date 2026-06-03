@@ -492,14 +492,14 @@ batch_bgzf_exact()
 {
     batch_print_header
 
-    local files=( gz.bgzf.mgi.igzip⁀1.R2.fq.gz          \
-                  gz.bgzf.mgi.libdeflate19⁀7.R2.fq.gz   \
+    local files=( gz.bgzf.mgi.libdeflate19⁀7.R2.fq.gz   \
                   gz.bgzf.mgi.libdeflate7⁀4.R2.fq.gz    \
                   gz.bgzf.mgi.zlib⁀2.R2.fq.gz           \
                   gz.bgzf.illumina.libdeflate7⁀6.bam    \
                   special.3-bgzf-eof-blocks.fq.gz        \
                 )
-    
+                  # gz.bgzf.mgi.igzip⁀1.R2.fq.gz # bug 1283
+                  
     local recon=$OUTDIR/recon.fq.gz
     local file
 
@@ -510,9 +510,15 @@ batch_bgzf_exact()
         cmp_2_files_exact $GZTESTDIR/$file $recon
     done
 
-    test_header "--exact for $file - but file has 4 non-exactable gz blocks"
-    $genozip $GZTESTDIR/special.bgzf.mis-exacting.igzip⁀1.fq.gz -fXo $output || exit 1
-    $genounzip $output -fo $recon --bgzf=exact || exit 1 # should succeed, but not exact
+    test_header "--exact for $file - should succeed (file is purposely non-exactable)"
+    $genounzip $TESTDIR/special/special.igzip⁀1.fails-exact.fq.genozip -fo $recon --bgzf=exact || exit 1 # should succeed, but not exact
+
+    test_header "--exact-strict for $file - should fail (file is purposely non-exactable)"
+    $genounzip $TESTDIR/special/special.igzip⁀1.fails-exact.fq.genozip -fo $recon --bgzf=exact-strict
+    if (( $? == 0 )); then
+        echo "Expecting a failure, but it incorrectly succeeded"
+        exit 1
+    fi
 
     local files=( special.human2.15.0.62.bam.genozip \
                   special.human2.15.0.79.bam.genozip )
@@ -689,8 +695,8 @@ batch_iupac()
     if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
 
     # FASTQ (verifying with wc)
-    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --IUPAC=ACGTN" 20
-    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --IUPAC=^ACGTN" 4
+    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --bases=ACGTN" 20
+    test_count_genocat_lines ${TESTDIR}/basic.fq "-H --bases=^ACGTN" 4
     non_iupac_lines=5
     
     # FASTQ - using --count
@@ -1418,6 +1424,9 @@ batch_mgzip_fastq()
     # Has an empty (isize=0) BGZF block, but the payload is encoded as 01 00 00 fe ff rather than the more standard 03 00. This causes the file be unexactable but should otherwise work. 
     test_header "Non-EOF empty BGZF block"
     $genozip -tf $GZTESTDIR/special.non-EOF-zero-bgzf-block.vcf.gz
+
+    # Identified as igzip⁀1 but failed exactly: some bgzf blocks differ (but underlying data is fine)
+
 }
 
 
@@ -2085,6 +2094,18 @@ batch_reference_fastq()
 
     test_header "paired MGI FASTQ with --reference"
     test_standard "CONCAT -e$GRCh38 --pair" "" test.mgi-dragen.R1.fq.gz test.mgi-dragen.R2.fq.gz
+
+    test_header "paired Element FASTQ with --reference (WGS)"
+    test_standard "CONCAT -e$GRCh38 --pair" "" test.element.wgs.R1.fq.gz test.element.wgs.R2.fq.gz
+
+    test_header "paired Element FASTQ with --reference (RNA-seq)"
+    test_standard "CONCAT -e$GRCh38 --pair" "" test.element.rna-seq.R1.fq.gz test.element.rna-seq.R2.fq.gz
+
+    test_header "paired Element FASTQ with --reference (10xGenomics - R1 is non-biological)"
+    test_standard "CONCAT -e$GRCh38 --pair" "" test.element.10xGenomics.R1.fq.gz test.element.10xGenomics.R2.fq.gz
+
+    test_header "paired Sikun FASTQ with --reference"
+    test_standard "CONCAT -e$GRCh38 --pair" "" test.sikun.R1.fq.gz test.sikun.R2.fq.gz
 
     test_header "paired Illumina FASTQ with --reference, --password (BZ2), --md5, -B1"
     test_standard "CONCAT -e$GRCh38 -p 123 --pair -mB1" "-p123" test.human2-R1.fq.bz2 test.human2-R2.fq.bz2

@@ -408,7 +408,7 @@ int32_t url_read_string (rom url, rom user, rom password,
 
     if (!wget_available() && !curl_available()) {
         if (show_errors) 
-            fprintf (stderr, "\n❌ %s: neither curl nor wget are available\n", action);
+            fprintf (stderr, "\n"_ERR"%s: neither curl nor wget are available\n", action);
         
         return -3; // failure
     }
@@ -430,21 +430,21 @@ int32_t url_read_string (rom url, rom user, rom password,
 
     if (post && response_len >= 5 && strstr (response, "\"Error")) {
         if (show_errors) 
-            fprintf (stderr, "\n❌ Internal server error\n");
+            fprintf (stderr, "\n"_ERR"Internal server error\n");
 
         return -3;
     }
 
     if (error_len && !response_len) {
         if (show_errors) 
-            fprintf (stderr, "\n❌ %s: %.*s\n", action, STRf(error));
+            fprintf (stderr, "\n"_ERR"%s: %.*s\n", action, STRf(error));
 
         return -1; // failure
     }
 
     if (response_len && strstr (response, "Bad Request")) {
         if (show_errors) 
-            fprintf (stderr, "\n❌ %s: Bad Request\n", action);
+            fprintf (stderr, "\n"_ERR"%s: Bad Request\n", action);
 
         return -2;
     }
@@ -457,7 +457,7 @@ bool url_post_async (rom url, rom user, rom password, rom post)
 {
     if (!wget_available() && !curl_available()) {
         if (flag.telemetry && flag.debug) 
-            fprintf (stderr, "\n❌ neither curl nor wget are available\n");
+            fprintf (stderr, "\n"_ERR"Neither curl nor wget are available\n");
         return false;
     }
 
@@ -467,7 +467,7 @@ bool url_post_async (rom url, rom user, rom password, rom post)
     int exit_code = stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS);
 
     if (exit_code && flag.telemetry && flag.debug) 
-        fprintf (stderr, "\n❌ curl or wget exit_code=%u\n", exit_code);
+        fprintf (stderr, "\n"_ERR"curl or wget exit_code=%u\n", exit_code);
 
     return exit_code == 0; // true if curl/wget completed successfully (i.e. no connectivity issues)
 }

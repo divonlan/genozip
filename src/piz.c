@@ -141,25 +141,6 @@ StrText1K piz_advise_biopsy_line (CompIType comp_i, // if COMP_NONE, we will loo
     return s;
 }
 
-void asspiz_text (VBlockP vb, FUNCLINE)
-{
-    StrText4K s;
-    int s_len = 0;
-
-    for (int i=0; i < vb->con_stack_len; i++)
-        SNPRINTF (s, "%s[%u]➔ ", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
-
-    SNPRINTF (s, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
-
-    progress_newline(); 
-    fprintf (stderr, "%s %s: ❌ %s:%u biopsy-bytes=%"PRIu64",%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
-             str_time().s, LN_NAME, func, code_line,
-             vb->vb_position_txt_file, vb->recon_size, 
-             writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
-             cond_int (Z_DT(VCF), " sample_i=", vb->sample_i), 
-             piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, s.s, version_str().s); 
-}
-
 bool piz_grep_match (rom start, rom after)
 {
     bool found = false;
@@ -571,7 +552,7 @@ DataType piz_read_global_area (void)
     bool has_ref_sections = !!sections_last_sec (SEC_REFERENCE, SOFT_FAIL);
 
     ASSERTW (!has_ref_sections || !IS_REF_EXTERNAL || flag.reading_reference, 
-             "FYI: ignoring reference file %s because %s was not compressed with --reference", ref_get_filename(), z_name);
+             _FYI "Ignoring reference file %s because %s was not compressed with --reference", ref_get_filename(), z_name);
 
     if (!flag.reading_reference && has_ref_sections) {
         ref_destroy_reference();     // destroy an old reference, if one is loaded

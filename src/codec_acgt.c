@@ -6,7 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include <stdalign.h>
 #include "codec.h"
 #include "piz.h"
 #include "seg.h"
@@ -16,39 +15,6 @@
 // compress a sequence of A,C,G,T nucleotides - first squeeze into 2 bits and then LZMA.
 // It's about 25X faster and slightly better compression ratio than LZMA
 // -------------------------------------------------------------------------------------
-
-// table to convert ASCII to ACGT encoding. A,C,G,T (lower and upper case) are encoded as 0,1,2,3 respectively, 
-// and everything else (including N) is encoded as 0
-alignas(64) const uint8_t acgt_encode[256] = {
-    ['A']=0, ['C']=1, ['G']=2, ['T']=3,  // all others are 0
-    ['a']=0, ['c']=1, ['g']=2, ['t']=3, 
-                                
-    // IUPAC codes are mapped to one of their bases: http://www.bioinformatics.org/sms/iupac.html
-    // the base to which a IUPAC is mapped, is the lowest alphanetically of its participating bases, see VCF specification §1.6.1-REF
-    ['U']=3, ['R']=0, ['Y']=1, ['S']=1,
-    ['W']=0, ['K']=2, ['M']=0, ['B']=1,
-    ['D']=0, ['H']=0, ['V']=0, ['N']=0,
-
-    ['u']=3, ['r']=0, ['y']=1, ['s']=1,
-    ['w']=0, ['k']=2, ['m']=0, ['b']=1,
-    ['d']=0, ['h']=0, ['v']=0, ['n']=0  
-}; 
-
-// same as actg_encode, but produces the complement base. 
-// Note for the IUPACs: eg B=C,G,T (the lowest of them)=> C=1 
-//                   comp(B)=G,C,A (the lowest of them)=> A=0
-alignas(64) const uint8_t acgt_encode_comp[256] = { 
-    ['A']=3, ['C']=2, ['G']=1, ['T']=0,  // all others are 0
-    ['a']=3, ['c']=2, ['g']=1, ['t']=0, 
-    
-    ['U']=0, ['R']=1, ['Y']=0, ['S']=1,
-    ['W']=0, ['K']=0, ['M']=2, ['B']=0,
-    ['D']=0, ['H']=0, ['V']=1, ['N']=0,
-
-    ['u']=0, ['r']=1, ['y']=0, ['s']=1,
-    ['w']=0, ['k']=0, ['m']=2, ['b']=0,
-    ['d']=0, ['h']=0, ['v']=1, ['n']=0  
-}; 
 
 
 //--------------
@@ -86,7 +52,7 @@ static inline void codec_acgt_pack (BitsP packed, rom data, uint64_t data_len)
 
     // pack nucleotides - each character is packed into 2 bits
     for (uint64_t i=0 ; i < data_len ; i++, next_bit += 2)       
-        bits_assign2 (packed, next_bit, acgt_encode[(uint8_t)data[i]]);
+        bits_assign2 (packed, next_bit, acgt_encode(data[i]));
 }
 
 // This function decompsoses SEQ data into two buffers:
@@ -194,7 +160,7 @@ COMPRESS (codec_acgt_compress)
     buf_free (vb->scratch);
     // note: NONREF_X will be compressed after us as it is the subsequent context, and its local is now populated
 
-    COPY_TIMER_COMPRESS (compressor_acgt); // don't include sub-codec compressor - it accounts for itself
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_acgt); // don't include sub-codec compressor - it accounts for itself
     return true;
 }
 

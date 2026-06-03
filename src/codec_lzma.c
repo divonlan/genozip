@@ -157,7 +157,7 @@ COMPRESS (codec_lzma_compress)
 
     LzmaEnc_Destroy (lzma_handle);
 
-    COPY_TIMER_COMPRESS (compressor_lzma); // higher level codecs are accounted for in their codec code
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_lzma); // higher level codecs are accounted for in their codec code
 
     return success;
 }

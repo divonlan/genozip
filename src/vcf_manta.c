@@ -9,7 +9,7 @@
 #include "vcf_private.h"
 #include "libdeflate_1.19/libdeflate.h"
 
-static MediumContainer id_con = {
+static const Container(7) id_con = {
     .nitems_lo = 7,
     .repeats   = 1,
     .items = { { .dict_id.num = DICT_ID_MAKEF_3("I0D"), .separator[0] = ':' },
@@ -22,7 +22,7 @@ static MediumContainer id_con = {
 
 static Did tw_dids[NUM_MANTA_TWs] = MANTA_TW_DIDS;
 
-sSTRl(con_id_snip, 128);
+sSTRl(con_id_snip, con_snip_sizeof(7));
 
 void vcf_manta_zip_initialize (void)
 {
@@ -64,7 +64,7 @@ static bool vcf_seg_manta_ID_cb_3 (VBlockP vb, ContextP ctx, STRp(value), uint32
 
 void vcf_seg_manta_ID (VBlockVCFP vb, STRp(id))
 {
-    SegCallback callbacks[7] = { [3]=vcf_seg_manta_ID_cb_3 }; 
+    static SegCallback callbacks[7] = { [3]=vcf_seg_manta_ID_cb_3 }; 
 
     if (id_len > 15 && !memcmp (id, "MantaBND:", 9)) 
         vcf_seg_BND_mate (vb, STRa(id), 0, 0, crc32 (0, id, id_len-2)); // last digit is 0 or 1 - the mate
@@ -73,7 +73,7 @@ void vcf_seg_manta_ID (VBlockVCFP vb, STRp(id))
         seg_special0 (VB, VCF_SPECIAL_COPY_MATE, CTX(VCF_ID), id_len + 1); // +1 for \t
 
     else
-        seg_struct (VB, CTX(VCF_ID), id_con, STRa(id), callbacks, id_len + 1, true);
+        seg_struct (VB, CTX(VCF_ID), (ContainerP)&id_con, STRa(id), callbacks, id_len + 1, true);
 }
 
 static void vcf_manta_predcited_CIGAR (VBlockVCFP vb, qSTRp (cigar))

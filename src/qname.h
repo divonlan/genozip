@@ -16,26 +16,27 @@
 typedef packed_enum { 
     QF_NO_ID=0, 
     // Illumina flavors
-    QF_ILLUM_7, QF_ILLUM_7i, QF_ILLUM_7umi, QF_ILLUM_7_bc, QF_ILLUM_7gs, QF_ILLUM_5i, QF_ILLUM_5, QF_ILLUM_5rng, QF_ILLUM_6,
-    QF_ILLUM_X_0bc, QF_ILLUM_X_1bc, QF_ILLUM_X_2bc, QF_ILLUM_S_0bc, QF_ILLUM_S_1bc, QF_ILLUM_S_2bc, QF_ILLUM_7gsFQ, QF_ILLUM_7_2bc,
-    QF_ILLUM_7_rbc,
+    QF_ILLUM_7, QF_ILLUM_7i, QF_ILLUM_7umi, QF_ILLUM_7_bc, QF_ILLUM_7_2bc, 
+    QF_ILLUM_7gs, QF_ILLUM_7gsFQ, QF_ILLUM_7_rbc, QF_ILLUM_7embS, QF_ILLUM_7emb_,
+    QF_ILLUM_5i, QF_ILLUM_5, QF_ILLUM_5rng, QF_ILLUM_6,
     // Illumina-style FASTQ QNAME2 flavors (also appears in Ultima, Singular...)
-    QF2_ILLUM_2bc, QF2_ILLUM_1bc, QF2_ILLUM_0bc, QF2_ILLUM, 
+    QF2_ILLUM_2bc, QF2_ILLUM_1bc, QF2_ILLUM_0, QF2_ILLUM_00, QF2_ULTIM_0, 
     // MGI flavors
-    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_SAP8, QF_MGI_MFT, QF_MGI_varlen, QF_MGI_R6, QF_MGI_die6, QF_MGI_R7, QF_MGI_R8, QF_MGI_R8_1bc, QF_MGI_R8_2bc, QF_MGI__varlen, QF_MGI_Rgs8, QF_MGI_Rgs8FQ,
+    QF_MGI_NEW6, QF_MGI_NEW7, QF_MGI_NEW8, QF_MGI_SAP8, QF_MGI_MFT, QF_MGI_varlen, QF_MGI_R6, QF_MGI_die6, QF_MGI_R7, QF_MGI_R8, QF_MGI_R8_1bc, QF_MGI_R8_2bc, QF_MGI__varlen, QF_MGI_Rgs8, QF_MGI_Rgs8FQ, QF_MGI_7,
     // PacBio flavors 
     QF_PACBIO_3, QF_PACBIO_rng, QF_PACBIO_lbl, QF_PACBIO_pln, QF_ONSO,
     // Nanopore flavors
     QF_NANOPORE, QF_NANOPORE_rng, QF_NANOPORE_ext,
     // Ultima flavors
-    QF_ULTIMA_a, QF_ULTIMA_b6_bc, QF_ULTIMA_a_bc, QF_UG100, QF_UG100_bc, QF_UG100_2bc, QF_ULTIMA_b6, QF_ULTIMA_d, QF_ULTIMA_d_bc, 
-    QF_ULTIMA_b9, QF_ULTIMA_b9_bc, QF_ULTIMA_n, QF_ULTIMA_Z9,
+    QF_ULTIMA, QF_ULTIMA_bc, QF_ULTIMA_n, QF_UG100, QF_UG100_bc, QF_UG100_2bc,
     // Sikun flavors
     QF_SIKUN, QF2_SIKUN_2bc,
+    // Element flavors
+    QF_ELEMENT, QF_ELEMENT_umi, QF_ELEMENT_2umi,
     // Other sequencer flavors
-    QF_ION_TORR_3, QF_ROCHE_454, QF_HELICOS, QF_SINGULAR, QF_ELEMENT, QF_ELEMENT_AV, QF_ELEMENT_bc, 
+    QF_ION_TORR_3, QF_ROCHE_454, QF_HELICOS, QF_SINGULAR,  
     // Parse biosciences BAM flavors
-    QF_PARSE_ILLUM,
+    QF_PARSE_ILLUM, QF_PARSE_emb,
     // NCBI flavors
     QF_SRA_L, QF_SRA2, QF_SRA, QF_SRA_sra, QF_SRA_label,
     // Consensus alignments flavors
@@ -63,9 +64,11 @@ extern void qname_segconf_finalize (VBlockP vb);
 
 extern void qname_show_flavor (void);
 
-typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, QTR_NOT_BARCODE2, QTR_NO_MATE, QTR_BAD_MATE, QTR_FAILED_VALIDATE_FUNC, QTR_BARCODE_NOT_ACGTN, NUM_QTRs } QnameTestResult;
-#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE",   "BAD_MATE",   "FAILED_VALIDATE_FUNC",   "BARCODE_NOT_ACGTN" }
-extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet);
+typedef enum  { QTR_SUCCESS, QTR_QNAME_LEN_0, QTR_FIXED_LEN_MISMATCH, QTR_WRONG_Q, QTR_CONTAINER_MISMATCH, QTR_BAD_INTEGER, QTR_BAD_CHARS, QTR_BAD_NUMERIC, QTR_BAD_HEX, QTR_TECH_MISMATCH, QTR_NOT_BARCODE, QTR_NOT_BARCODE2, QTR_NO_MATE, QTR_BAD_MATE, QTR_FAILED_VALIDATE_FUNC, QTR_BARCODE_NOT_ACGTN, QTR_EMBEDDED_UNIDENTIFIED_FLAVOR, QTR_RECURSIVE_EMBEDDING, QTR_EMBED_NO_MATED, NUM_QTRs } QnameTestResult;
+#define QTR_NAME { "SUCCESS",   "QNAME_LEN=0",   "FIXED_LEN_MISMATCH",   "WRONG_Q",   "CONTAINER_MISMATCH",   "BAD_INTEGER",   "BAD_CHARS",   "BAD_NUMERIC",   "BAD_HEX",   "TECH_MISMATCH",   "NOT_BARCODE",   "NOT_BARCODE2",   "NO_MATE",   "BAD_MATE",   "FAILED_VALIDATE_FUNC",   "BARCODE_NOT_ACGTN",   "EMBEDDED_UNIDENTIFIED_FLAVOR",   "RECURSIVE_EMBEDDING",   "EMBED_NO_MATED", }
+
+typedef struct { int item_i; STR(item); } OffendingItem;
+extern QnameTestResult qname_test_flavor (STRp(qname), QType q, QnameFlavor qf, bool quiet, OffendingItem *offending_item_i);
 
 typedef enum { CRC32, CRC64 } CrcType;
 extern uint64_t qname_calc_hash (QType q, CompIType comp_i, STRp(qname), thool is_last, bool canonical, CrcType type, uint32_t *uncanonical_suffix_len);
@@ -80,3 +83,5 @@ extern DictIdAlias qname_get_alias (QType q);
 extern bool qf_is_mated (QType q);
 extern Did qf_get_barcode_did (int bc_i);
 extern void qname_get_barcode (STRp(qname), int bc_i, pSTRp(bc_seq));
+
+emSTRl(copy_qname, NUM_QTYPES, 16);

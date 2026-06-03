@@ -9,8 +9,8 @@
 #pragma once
 
 #include "sections.h"
+#include "base64.h"
 
-#pragma pack(1)
 #define CONTAINER_MAX_PREFIXES_LEN (32 * MAX_FIELDS)    // max len of just the names string, without the data eg "INFO1=INFO2=INFO3="
 #define CON_PX_SEP              '\x4'        // starts the prefix string and terminates every prefix within it
 #define CON_PX_SEP_             "\4"         // string version (careful not \x4 as it can combine with the next character to eg \x4F)
@@ -22,9 +22,11 @@
 #define CON_REPEATS_IS_SEQ_LEN 0xffffff
 #define CONTAINER_MAX_SELF_TRANS_CHANGE 50
 
-#define CONTAINER_MAX_DICTS 2047             // 11 bits -matches CONTAINER_FIELDS.nitems_lo+nitems_hi
+#define CONTAINER_MAX_DICTS 2047             // 11 bits: matches CONTAINER_FIELDS.nitems_lo+nitems_hi
 
-typedef struct ContainerItem {
+#pragma pack(1) 
+
+typedef struct ContainerItem { // 12 bytes
     DictId dict_id;                          // note: the code counts on this field being first (assigning "item = { dict_id }")
     uint8_t did_i_small;                     // PIZ only: can store dids 0->254, 255 means did_i too large to store
 
@@ -37,6 +39,7 @@ typedef struct ContainerItem {
     #define CI0_VAR_0_PAD    ((uint8_t)0x05) // variable width, but has at least sep[1] digits, zero padded if needed (introduced 15.0.75)
     #define CI0_LAST_MATCH   ((uint8_t)0x06) // item is terminated by LAST occurance of seperator of sep[1] in the string (introduced 15.0.80)
     #define CI0_ACGTN        ((uint8_t)0x07) // item is terminated by first A,C,G,T or N character - but not less than sep[1] characters (may be 0) (the ACGTN character will belong to the next item) (15.0.83)
+    #define CI0_COLONn       ((uint8_t)0x08) // item is terminated by after the n'th ':', seperator[1] being n. Note: only final should be accounted for in qf.num_seps (15.0.84)
 
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags
@@ -72,7 +75,6 @@ typedef struct ContainerItem {
     /* container flags set during reconstruction */ \
     uint32_t unused               : 4;  /* can be used to enlarge nitems_hi or to add flags */ \
     uint32_t no_translation       : 1;  /* Cancel translation for this container and all of its items */\
-    \
     uint32_t repeats              : CON_REPEATS_BITS; /* number of "repeats" (array elements) */ \
     uint8_t nitems_lo;                  /* LSB of num_items */  \
     /* container flags set during Seg */               \
@@ -87,14 +89,8 @@ typedef struct ContainerItem {
     char repsep[2];                    /* repeat separator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
-typedef struct Container       { CONTAINER_FIELDS(MAX_FIELDS)        } Container;
-typedef struct MiniContainer   { CONTAINER_FIELDS(1)                 } MiniContainer;
-
-#define SMALL_CON_NITEMS 18
-typedef struct SmallContainer  { CONTAINER_FIELDS(SMALL_CON_NITEMS)  } SmallContainer;
-
-#define MEDIUM_CON_NITEMS 100
-typedef struct MediumContainer { CONTAINER_FIELDS(MEDIUM_CON_NITEMS) } MediumContainer;
+#define Container(n) typeof (struct { CONTAINER_FIELDS((n)) }) // note: n must be constant: clang doesn't allow variable-length arrays in struct
+typedef struct ContainerTemplate { CONTAINER_FIELDS(0) } ContainerTemplate;
 
 #pragma pack()
 #define con_nitems(con) ((con).nitems_hi * 256 + (con).nitems_lo)
@@ -102,7 +98,20 @@ typedef struct MediumContainer { CONTAINER_FIELDS(MEDIUM_CON_NITEMS) } MediumCon
                                  (con).nitems_hi = (n) >> 8; (con).nitems_lo = ((n) & 0xff); }
 #define con_inc_nitems(con) con_set_nitems ((con), con_nitems (con) + 1)
 #define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
-#define con_sizeof(con) (sizeof(con) - sizeof((con).items) + con_nitems (con) * sizeof((con).items[0]))
+#define con_sizeof_(n_items) (sizeof(ContainerTemplate) + (n_items) * sizeof(ContainerItem))
+#define con_sizeof(con) con_sizeof_(con_nitems(con))
+#define con_snip_sizeof(n_items) (1 + base64_size(con_sizeof_(n_items)))
+
+#define con_initialize(con_p, n_items)          \
+    memset ((con_p), 0, con_sizeof_(n_items));  \
+    (con_p)->nitems_hi = (n_items) >> 8;        \
+    (con_p)->nitems_lo = (n_items) & 0xff;      \
+    (con_p)->repeats   = 1
+
+#define InitializedContainer(con, n_items)      \
+    ASSERT ((n_items) <= MAX_FIELDS, "Containter too large: %s=%u", #n_items, (n_items)); \
+    Container(MAX_FIELDS) con; /* allocate maximum on stack, but initialize only as needed. reason: clang doesn't allow VLA in struct (though gcc does) */ \
+    con_initialize (&con, (n_items))
 
 #define for_con(con) \
     for (ContainerItem *item=(ContainerItemP)&(con)->items[0], *after=(ContainerItemP)&(con)->items[con_nitems(*(con))]; item < after; item++)
@@ -128,12 +137,12 @@ extern bool curr_container_has (VBlockP vb, DictId item_dict_id);
 //     a prefix for each item (may be empty) + CON_PX_SEP
 //     a suffix for each repeat + CON_PX_SEP
 // empty prefixes of trailing items may be omitted
-extern void container_prepare_snip (ConstContainerP con, STRp(prefixes), qSTRp (snip));
-extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes), unsigned add_bytes, bool *is_new);
+extern void container_prepare_snip (ConstContainer𐤐 con, STR𐤐(prefixes), qSTR𐤐(snip));
+extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, STR𐤐(prefixes), unsigned add_bytes, bool *restrict is_new);
 #define container_seg(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (add_bytes), NULL)
 #define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg (vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 
-extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainerP con, STRp(prefixes));
+extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, STR𐤐(prefixes));
 extern ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), pSTRp(out_prefixes));
 extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
 extern bool container_peek_has_item (VBlockP vb, ContextP container_ctx, DictId item_dict_id, bool consume);

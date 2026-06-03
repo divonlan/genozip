@@ -13,7 +13,7 @@
 // SEG
 //---------
 
-static SamTlenType sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl, bool is_rname_rnext_same)
+static SamTlenType sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_rname_rnext_same)
 {
     PosType32 pnext_pos_delta = dl->PNEXT - dl->POS;
     SamTlenType prediction;
@@ -41,7 +41,7 @@ static SamTlenType sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl, bool
         
         // note: we only apply this logic if has[MC], so to save PIZ the need to lookup AUX and MC unnessarily in files that don't have MCs
         // note: until 15.0.75, if has[MC] but not encountered in this line, TLEN was segged as integer (prediction not used)
-        if (segconf.has[OPTION_MC_Z] && ctx_encountered_in_line(VB, OPTION_MC_Z)) // TLEN is segged after AUX in bam/sam_seg_txt_line
+        if (segconf_has(OPTION_MC_Z) && ctx_encountered_in_line(VB, OPTION_MC_Z)) // TLEN is segged after AUX in bam/sam_seg_txt_line
             approx_mate_ref_consumed = CTX(OPTION_MC_Z)->last_value.i;
 
         // if this line has a mate that appeared earlier in the same VB, get the mate's ref_consumed. 
@@ -81,7 +81,7 @@ static SamTlenType sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl, bool
 // 2. case: a non-zero value that is the negative of the previous line (usually a mate in a collated file) - a SNIP_DELTA & "-" (= value negation)
 // 3. case: tlen>0 and pnext_pos_delta>0 and seq_len>0 tlen is stored as SNIP_SPECIAL & tlen-pnext_pos_delta-seq_len
 // 4. otherwise: stored as is
-void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl, 
+void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, 
                    STRp(tlen), SamTlenType tlen_value, // option 1 and 2
                    bool is_rname_rnext_same)
 {
@@ -108,7 +108,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAMP dl,
 
     if (segconf.has_TLEN_non_zero && ABS (tlen_value - prediction) <= 7) {
         SNIPi4 (SNIP_SPECIAL, SAM_SPECIAL_TLEN, 
-                '0' + (segconf.has[OPTION_MC_Z] > 0), 
+                '0' + segconf_has(OPTION_MC_Z), 
                 '0' + segconf.sam_has_xcons, 
                 tlen_value - prediction);
         seg_by_ctx (VB, STRa(snip), ctx, add_bytes);

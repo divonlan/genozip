@@ -2655,8 +2655,6 @@ static size_t SeqOutStreamBuf_Write(const ISeqOutStream *pp, const void *data, s
   if (size > p->rem)
     return 0; // not enough memory in compressed buffer (added by divon)
 
-  ASSERTW0 (p->rem >= size, "FYI: compressed buffer too small while compressing with LZMA, no harm");
-
   memcpy(p->data, data, size);
   p->rem -= size;
   p->data += size;

@@ -917,6 +917,7 @@ void writer_create_plan (CompIType comp_i)
 #define PLAIN_FLUSH_THRESHOLD (4 MB) 
 #define FLUSH_THRESHOLD (TXT_IS(BGZF) ? BGZF_FLUSH_THRESHOLD : PLAIN_FLUSH_THRESHOLD)
 
+// writer thread
 static void writer_write (BufferP buf, uint64_t txt_data_len)
 {
     START_TIMER;

@@ -15,7 +15,7 @@ void vcf_segconf_finalize_QUAL (VBlockVCFP vb)
         segconf.vcf_QUAL_method = VCF_QUAL_local;
 
     // GATK GVCF - multiplex by has_RGQ
-    else if (segconf.has[FORMAT_RGQ] || segconf.vcf_is_gatk_gvcf)
+    else if (segconf_has(FORMAT_RGQ) || segconf.vcf_is_gatk_gvcf)
         segconf.vcf_QUAL_method = VCF_QUAL_by_RGQ;
     
     // Dragen - QUAL is predicted to equal for item of GP (TODO: may be applicable beyond dragen and single sample)
@@ -222,8 +222,11 @@ void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
         if (!IS_PERIOD(qual)) {
             rom period = memchr (qual, '.', qual_len); 
             uint8_t decimals = period ? qual_len - (period - qual)/*integer*/ - 1/*period*/ : 0;
-            if (decimals < segconf.vcf_QUAL_decimals) segconf.vcf_QUAL_truncate_trailing_zeros = true;
-            if (decimals > segconf.vcf_QUAL_decimals) segconf.vcf_QUAL_decimals = decimals;
+            if (decimals < segconf.vcf_QUAL_decimals) 
+                segconf.vcf_QUAL_truncate_trailing_zeros = true;
+            
+            if (decimals > segconf.vcf_QUAL_decimals && decimals <= MAX_VCF_QUAL_DECIMALS) 
+                segconf.vcf_QUAL_decimals = decimals;
         }
     }
 
@@ -255,6 +258,6 @@ void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
             ABORT ("invalid QUAL method %u", segconf.vcf_QUAL_method);
     }
 
-    COPY_TIMER (vcf_seg_QUAL);
+    COPY_TIMER_SEG_FIELD (VCF_QUAL);
 }
 

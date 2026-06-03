@@ -19,8 +19,8 @@ bool vcf_is_GT_only (VBlockVCFP vb)
 
     return fm_buf->len == 0 ||
               (fm_buf->len == 1 && 
-               con_nitems (*B(Container, *fm_buf, 0)) == 1 + segconf.vcf_sample_copy &&   
-               B(Container, *fm_buf, 0)->items[0 + segconf.vcf_sample_copy].dict_id.num == _FORMAT_GT);
+               con_nitems (*B(FormatContainer, *fm_buf, 0)) == 1 + segconf.vcf_sample_copy &&   
+               B(FormatContainer, *fm_buf, 0)->items[0 + segconf.vcf_sample_copy].dict_id.num == _FORMAT_GT);
 }
 
 // converts a FORMAT field name to a dict_id
@@ -41,8 +41,10 @@ static DictId vcf_seg_get_format_sf_dict_id (STRp (sf_name))
     return dict_id; 
 }
 
-void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
+void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(fmt))
 {
+    START_TIMER;
+
     ContextP format_ctx      = CTX(VCF_FORMAT);
     ContextP samples_ctx     = CTX(VCF_SAMPLES);
     ContextP copy_sample_ctx = CTX(VCF_COPY_SAMPLE);
@@ -71,7 +73,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
 
     str_split (fmt, fmt_len, 0, ':', sf_name, false);
 
-    Container format_mapper = (Container){ 
+    FormatContainer format_mapper = { 
         .drop_final_repsep   = true,
         .drop_final_item_sep = true,
         .callback            = true,
@@ -80,8 +82,8 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         .repsep              = "\t"
     };
 
-    ASSVCF (n_sf_names + segconf.vcf_sample_copy <= CONTAINER_MAX_DICTS, // tests only for fitting in the container, contexts overflow tested elsewhere
-            "FORMAT field has %u subfields, the maximum allowed is %u: \"%.*s\"", n_sf_names, CONTAINER_MAX_DICTS - segconf.vcf_sample_copy, STRf(fmt));
+    ASSVCF (n_sf_names + segconf.vcf_sample_copy <= MAX_FORMAT_FIELDS, // tests only for fitting in the container, context overflow tested elsewhere
+            "FORMAT field has %u subfields, the maximum allowed is %u: \"%.*s\"", n_sf_names, MAX_FORMAT_FIELDS - segconf.vcf_sample_copy, STRf(fmt));
 
     con_set_nitems (format_mapper, n_sf_names + segconf.vcf_sample_copy);
 
@@ -123,7 +125,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         ASSVCF (node_index == samples_ctx->format_mapper_buf.len32, 
                 "node_index=%d different than format_mapper_buf.len=%u", node_index, samples_ctx->format_mapper_buf.len32);
 
-        buf_alloc (vb, &samples_ctx->format_mapper_buf, 1, 0, Container, CTX_GROWTH, C_"format_mapper_buf");
+        buf_alloc (vb, &samples_ctx->format_mapper_buf, 1, 0, FormatContainer, CTX_GROWTH, C_"format_mapper_buf");
         samples_ctx->format_mapper_buf.len++;
 
         buf_alloc (vb, &samples_ctx->format_contexts, 1, 0, ContextPBlock, CTX_GROWTH, C_"format_contexts");
@@ -139,11 +141,13 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(fmt))
         }
     }    
 
-    ContainerP con = B(Container, samples_ctx->format_mapper_buf, node_index);
+    FormatContainer𐤐 con = B(FormatContainer, samples_ctx->format_mapper_buf, node_index);
     if (is_new || !con_nitems (*con)) { // assign if not already assigned (con->nitem=0 if format_mapper was already segged in another VB (so it is in ol_nodes), but not yet this VB) 
         *con = format_mapper; 
         memcpy (B(ContextPBlock, samples_ctx->format_contexts, node_index), ctxs, sizeof (ctxs));
     }
+
+    COPY_TIMER_SEG_FIELD (VCF_FORMAT);
 }
 
 // -----------

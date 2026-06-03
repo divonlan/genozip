@@ -326,13 +326,13 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
                 // case: --tar - include .genozip files verbatim
                 if (tar_zip_is_tar()) {
                     tar_copy_file (file->name, file->name);
-                    RETURNW (false, true, "Copied %s to the tar file", file_printname(file));
+                    ASSWRET (false, true, "Copied %s to the tar file", file_printname(file));
                 }    
                 else
-                    RETURNW (false, true, "Skipping %s - it is already compressed", file_printname(file));
+                    ASSWRET (false, true, "Skipping %s - it is already compressed", file_printname(file));
             }
 
-            RETURNW (false, true, "Skipping %s - genozip doesn't know how to compress this file type (use --input to tell it)", 
+            ASSWRET (false, true, "Skipping %s - genozip doesn't know how to compress this file type (use --input to tell it)", 
                     file_printname (file));
         }
         else {
@@ -345,7 +345,7 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
 
     // index files - best not to compress as BGZF / CRAM blocks might shift after genounzip
     else if (file->type == BAI || file->type == CRAI || file->type == CSI || file->type == TBI || file->type == GZI) {
-        RETURNW (!flag.skip_index, true, "Skipping %s - an index file", file_printname(file));
+        ASSWRET (!flag.skip_index, true, "Skipping %s - an index file", file_printname(file));
 
         if (file->type == BAI)
             TIP ("It is best NOT to compress %s as genounzip generates .bai files automatically. Consider using --skip-index. %s", 
@@ -914,7 +914,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
             if (file->file && txt_file && txt_file->name && !txt_file->is_remote) {
                 struct stat st;
                 if (stat (txt_file->name, &st))
-                    WARN ("FYI: Failed to set permissions of %s because failed to stat(%s): %s", file->name, txt_file->name, strerror(errno));
+                    WARN (_FYI "Failed to set permissions of %s because failed to stat(%s): %s", file->name, txt_file->name, strerror(errno));
                 
                 else 
                     chmod (file->name, st.st_mode); // ignore errors (e.g. this doesn't work on NTFS)
@@ -939,14 +939,14 @@ static void file_index_txt (ConstFileP file)
 {
     ASSERTNOTNULL (file);
 
-    RETURNW (file->name,, "%s: cannot create an index file when output goes to stdout", global_cmd);
+    ASSWRET (file->name,, "%s: cannot create an index file when output goes to stdout", global_cmd);
 
     StreamP indexing = NULL;
 
     switch (file->data_type) {
         case DT_FASTQ:
         case DT_FASTA:
-            RETURNW (file->effective_codec == CODEC_BGZF || file->effective_codec == CODEC_NONE,, 
+            ASSWRET (file->effective_codec == CODEC_BGZF || file->effective_codec == CODEC_NONE,, 
                      "%s: To be indexed, the output file cannot be compressed with %s", global_cmd, codec_name (file->effective_codec)); 
             indexing = stream_create (0, 0, 0, 0, 0, 0, 0, "to create an index", "samtools", "faidx", file->name, NULL); 
             break;
@@ -1088,7 +1088,7 @@ void file_gzip (char *filename)
         ret = system (command);
     }
 
-    ASSERTW (!ret, "FYI: \"%s\" returned %d. No harm.", command, ret); 
+    ASSERTW (!ret, _FYI "\"%s\" returned %d. No harm.", command, ret); 
 
     if (!ret) {
         // special case: rename .bam.gz -> .bam
@@ -1357,7 +1357,7 @@ void file_put_data_reset_after_fork (void)
 PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
 {
     PutLineFn fn;
-    snprintf (fn.s, sizeof (fn.s), "line.%u.%d.%s%s", vb->vblock_i, vb->line_i, command==ZIP ? "zip" : "piz",
+    snprintf (fn.s, sizeof (fn.s), "line.%u.%d.%s%s", vb->vblock_i, vb->line_i, IS_ZIP ? "zip" : "piz",
              file_plain_ext_by_dt ((VB_DT(SAM) && z_file->z_flags.txt_is_bin) ? DT_BAM : vb->data_type));
     
     file_put_data (fn.s, STRa(line), 0);

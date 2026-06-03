@@ -284,7 +284,7 @@ static void bamass_generate_bamass_ents (VBlockP vb_)
                 DO_ONCE 
                     qname_segconf_discover_flavor (VB, QNAME1, STRa(qname));
 
-                else if (!attempted_rediscover && qname_test_flavor (STRa(qname), QNAME1, segconf.qname_flavor[QNAME1], true) != QTR_SUCCESS) {
+                else if (!attempted_rediscover && qname_test_flavor (STRa(qname), QNAME1, segconf.qname_flavor[QNAME1], true, NULL) != QTR_SUCCESS) {
                     qname_segconf_rediscover_flavor (VB, QNAME1, STRa(qname));
                     attempted_rediscover = true;
                 }
@@ -712,9 +712,9 @@ void fastq_bamass_consider_stopping_aligner (VBlockFASTQP vb)
     if (num_attempted_alignment > 100 && // at least 100 reads in this VB had alignment attempted
         (fail_rate = (double)vb->num_verbatim / (double)num_attempted_alignment) > threashold) { // too many reads failed alignment
         
-        store_release (flag.aligner_available, false); 
+        flag.aligner_available = false; 
         if (flag.show_deep)
-            iprintf ("\n%s: FYI: Stopped using aligner from now on, because its fail-rate for non-bamass reads is %.2f%%\n", VB_NAME, fail_rate);
+            iprintf ("\n"_FYI "%s: Stopped using aligner from now on, because its fail-rate for non-bamass reads is %.2f%%\n", VB_NAME, fail_rate);
     }
 }
 
@@ -911,7 +911,7 @@ void fastq_bamass_zip_finalize (bool is_last_fastq)
     }
 }
 
-DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQP dl, DeepHash *deep_hash, STRp(seq),  
+DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, DeepHash *deep_hash, STRp(seq),  
                                     BamAssEnt **matching_ent) // out
 {
     START_TIMER;
@@ -990,7 +990,7 @@ static inline bool next_op_is_I (BamCigarOpP cigar, BamCigarOpP after_cigar)
     return false; // there are no further seq-consuming ops
 }
 
-MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(seq), bool am_i_R2, PosType64 gpos_R1, bool is_forward_R1)
+MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐 dl, STRp(seq), bool am_i_R2, PosType64 gpos_R1, bool is_forward_R1)
 {
     declare_seq_contexts;   
     START_TIMER;
@@ -1019,7 +1019,7 @@ MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(se
     // get reference sequence
     ASSERTNOTINUSE (vb->scratch);
     buf_alloc_exact (vb, vb->scratch, vb->ref_consumed, char, "scratch"); 
-    rom ref = ref_get_textual_seq (vb->gpos, B1STc(vb->scratch), vb->ref_consumed, !vb->is_forward);
+    rom ref = ref_get_textual_seq (VB, vb->gpos, B1STc(vb->scratch), vb->ref_consumed, !vb->is_forward);
     
     rom after_ref = ref + vb->ref_consumed;
     rom after_seq = seq + seq_len;
@@ -1068,7 +1068,7 @@ MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ *dl, STRp(se
                 // mux by base after insertion in SEQ. 
                 // note: the byte after SEQ, \n or \r, mapped to 0, so no need to test explicitly
                 // note: if the next seq-consuming op is also I (e.g. in RNA: 621I2611N310I), map to 0, as we won't yet know seq[n] yet during reconstruction 
-                int ins_ctx_i = (next_op_is_I (op, after_op) ? 0 : acgt_encode[(int8_t)seq[op->n]]);
+                int ins_ctx_i = (next_op_is_I (op, after_op) ? 0 : acgt_encode (seq[op->n]));
 
                 buf_add (&seqins_ctx[ins_ctx_i].local, seq, op->n);
             }
@@ -1117,10 +1117,12 @@ void fastq_bamass_seg_CIGAR (VBlockFASTQP vb)
     BamCigarOpP largest_op = NULL;
     uint32_t save_largest_n = 0;
 
+    uint32_t std_seq_len = IS_R2 ? segconf.std_seq_lR2 : segconf.std_seq_len; // 15.0.84
+
     // seq_len is calculable from QNAME or std_seq_len - improve cigar compression by dropping largest N   
     // (note: cigar is guaranteed by sam_prepare_deep_cigar to not contain any n=0 op) 
     if ((segconf.seq_len_dict_id.num  && vb->seq_len == ECTX(segconf.seq_len_dict_id)->last_value.i)
-     || (!segconf.seq_len_dict_id.num && vb->seq_len == segconf.std_seq_len)) {
+     || (!segconf.seq_len_dict_id.num && vb->seq_len == std_seq_len)) {
 
         // find largest seq-consuming op
         for_buf (BamCigarOp, op, vb_bamass_cigar) 
@@ -1184,7 +1186,8 @@ static void fastq_bamass_recon_cigar (VBlockFASTQP vb)
     // recover n=0 to actual value
     if (zero_n_op) {
         uint32_t real_seq_len = segconf.seq_len_dict_id.num ? reconstruct_peek_by_dict_id (VB, segconf.seq_len_dict_id, 0, 0).i // peek, since length can come from either line1 or line3
-                                                            : segconf.std_seq_len;
+                              : ((vb->comp_i == FQ_COMP_R2 && VER2(15,84))) ? segconf.std_seq_lR2
+                              :                                               segconf.std_seq_len;
         zero_n_op->n = real_seq_len - vb->seq_len;
         update_by_op (vb, zero_n_op);
     }
@@ -1231,7 +1234,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
     // get reference - the needed ref_consumed bases - revcomped if needed
     ASSERTNOTINUSE (vb->scratch);
     buf_alloc_exact (vb, vb->scratch, vb->ref_consumed, char, "scratch"); 
-    rom start_ref = ref_get_textual_seq (vb->gpos, B1STc(vb->scratch), vb->ref_consumed, !vb->is_forward); 
+    rom start_ref = ref_get_textual_seq (VB, vb->gpos, B1STc(vb->scratch), vb->ref_consumed, !vb->is_forward); 
     rom ref = start_ref;
 
     char *nonref      = Bc(nonref_ctx->local, nonref_ctx->next_local); // possibly, this VB has no nonref (i.e. everything is ref), in which case nonref would be an invalid pointer. That's ok, as it will not be accessed.
@@ -1305,7 +1308,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
 
         for_cigar (vb_bamass_cigar) {        
             case BC_I: {
-                int ins_ctx_i = next_op_is_I (op, after_op) ? 0 : acgt_encode[(int8_t)recon[op->n]];
+                int ins_ctx_i = next_op_is_I (op, after_op) ? 0 : acgt_encode (recon[op->n]);
                 ContextP ins_ctx = &seqins_ctx[ins_ctx_i]; // mux by base after insertion in SEQ. 
                 
                 ASSPIZ (ins_ctx->next_local + op->n <= ins_ctx->local.len32, NEXT_ERRFMT " op_i=%u cigar=\"%s\"", 

@@ -15,9 +15,19 @@
 #include "tip.h"
 #include "arch.h"
 
+// IMPORTANT: number of bits in each field MUST be the same as in SectionHeaderGenozipHeader
+struct { Did did_i; uint8_t bits; } vcf_widths[] = {
+    {VCF_ID,6}, {VCF_QUAL,4}, {INFO_AC,3}, {INFO_MLEAC,3}, {INFO_AN,3}, {INFO_AF,3}, {INFO_SF,3},
+    {INFO_QD,3}, {INFO_DP,3}, {INFO_AS_SB_TABLE, 4}, {INFO_BaseCounts,5}, {INFO_DPB,3} 
+};
+
 // called by main thread after reading the header
 void vcf_zip_initialize (void)
 {
+    if (IS_REF_LOADED_ZIP)
+        ref_set_access_mode (REF_ACCESS_SEQUENTIAL, // seqeuntial access to genome: VCF is sorted
+                             REF_ACCESS_RANDOM);    // refhash is always random (but anyway, xnot used in VCF)
+
     vcf_refalt_zip_initialize();
     vcf_samples_zip_initialize();
     vcf_info_zip_initialize();
@@ -44,6 +54,10 @@ void vcf_zip_initialize (void)
     // set header_info for QUAL, consumed by get_max_items
     ZCTX(VCF_QUAL)->header_info.vcf.Type   = VCF_Float;
     ZCTX(VCF_QUAL)->header_info.vcf.Number = 1;
+
+    // segconf counters for figuring out most common field width
+    for (int i=0; i < ARRAY_LEN(vcf_widths); i++)
+        buf_alloc_exact_zero (evb, ZCTX(vcf_widths[i].did_i)->width_count, SEGCONF_MAX_WIDTH+1, uint32_t, "width_count");
 }
 
 // called after each file
@@ -90,7 +104,7 @@ bool is_bcf (STRp(header), bool *need_more)
 // main thread: writing data-type specific fields to genozip header
 void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
 {
-    header->vcf.segconf_has_RGQ          = (segconf.has[FORMAT_RGQ] > 0); // introduced in v14
+    header->vcf.segconf_has_RGQ          = segconf_has(FORMAT_RGQ);       // introduced in v14
     header->vcf.segconf_GQ_method        = segconf.FMT_GQ_method;         // since 15.0.37
     header->vcf.segconf_INF_DP_method    = segconf.INFO_DP_method;        // since 15.0.52
     header->vcf.segconf_FMT_DP_method    = segconf.FMT_DP_method;         // since 15.0.37
@@ -99,18 +113,18 @@ void vcf_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     header->vcf.segconf_del_svlen_is_neg = segconf.vcf_del_svlen_is_neg;  // since 15.0.48
     header->vcf.segconf_sample_copy      = segconf.vcf_sample_copy;       // since 15.0.69
     header->vcf.segconf_Q_to_O           = BGEN32F (segconf.Q_to_O);      // since 15.0.61
-    header->vcf.width.MLEAC              = segconf.wid[INFO_MLEAC].width; // since 15.0.37
-    header->vcf.width.AC                 = segconf.wid[INFO_AC].width;    // since 15.0.37
-    header->vcf.width.AF                 = segconf.wid[INFO_AF].width;    // since 15.0.37
-    header->vcf.width.AN                 = segconf.wid[INFO_AN].width;    // since 15.0.37
-    header->vcf.width.DP                 = segconf.wid[INFO_DP].width;    // since 15.0.37
-    header->vcf.width.SF                 = segconf.wid[INFO_SF].width;    // since 15.0.37
-    header->vcf.width.QD                 = segconf.wid[INFO_QD].width;    // since 15.0.37
-    header->vcf.width.AS_SB_TABLE        = segconf.wid[INFO_AS_SB_TABLE].width; // since 15.0.41
-    header->vcf.width.ID                 = segconf.wid[VCF_ID].width;     // since 15.0.48
-    header->vcf.width.QUAL               = segconf.wid[VCF_QUAL].width;   // since 15.0.51
-    header->vcf.width.BaseCounts         = segconf.wid[INFO_BaseCounts].width;  // since 15.0.52
-    header->vcf.width.DPB                = segconf.wid[INFO_DPB].width;   // since 15.0.61
+    header->vcf.width.MLEAC              = ZCTX(INFO_MLEAC)->field_width; // since 15.0.37
+    header->vcf.width.AC                 = ZCTX(INFO_AC)->field_width;    // since 15.0.37
+    header->vcf.width.AF                 = ZCTX(INFO_AF)->field_width;    // since 15.0.37
+    header->vcf.width.AN                 = ZCTX(INFO_AN)->field_width;    // since 15.0.37
+    header->vcf.width.DP                 = ZCTX(INFO_DP)->field_width;    // since 15.0.37
+    header->vcf.width.SF                 = ZCTX(INFO_SF)->field_width;    // since 15.0.37
+    header->vcf.width.QD                 = ZCTX(INFO_QD)->field_width;    // since 15.0.37
+    header->vcf.width.AS_SB_TABLE        = ZCTX(INFO_AS_SB_TABLE)->field_width; // since 15.0.41
+    header->vcf.width.ID                 = ZCTX(VCF_ID)->field_width;     // since 15.0.48
+    header->vcf.width.QUAL               = ZCTX(VCF_QUAL)->field_width;   // since 15.0.51
+    header->vcf.width.BaseCounts         = ZCTX(INFO_BaseCounts)->field_width;  // since 15.0.52
+    header->vcf.width.DPB                = ZCTX(INFO_DPB)->field_width;   // since 15.0.61
 }
 
 // ZIP main thread
@@ -169,7 +183,7 @@ void vcf_seg_initialize (VBlockP vb_)
                    INFO_DP,
                    DID_EOL); 
 
-    ctx_set_store (VB, STORE_FLOAT, T(segconf.has[INFO_QD], VCF_QUAL), DID_EOL); // consumed by vcf_piz_insert_INFO_QD
+    ctx_set_store (VB, STORE_FLOAT, T(segconf_has(INFO_QD), VCF_QUAL), DID_EOL); // consumed by vcf_piz_insert_INFO_QD
 
     ctx_set_ltype (VB, LT_STRING, 
                    T(segconf.vcf_QUAL_method == VCF_QUAL_local, VCF_QUAL), 
@@ -192,7 +206,7 @@ void vcf_seg_initialize (VBlockP vb_)
     // room for already existing FORMATs from previous VBs
     ContextP samples_ctx = CTX(VCF_SAMPLES);
     uint32_t n_fmts = CTX(VCF_FORMAT)->ol_nodes.len;
-    buf_alloc_exact_zero (vb, samples_ctx->format_mapper_buf, n_fmts, Container, C_"format_mapper_buf");
+    buf_alloc_exact_zero (vb, samples_ctx->format_mapper_buf, n_fmts, FormatContainer, C_"format_mapper_buf");
     buf_alloc_exact_zero (vb, samples_ctx->format_contexts, n_fmts, ContextPBlock, C_"format_contexts");
 
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_RGQ) {
@@ -237,18 +251,38 @@ void vcf_seg_initialize (VBlockP vb_)
     if (!segconf.vcf_is_sv)         vcf_sv_seg_initialize (vb, 0, 0); // not known SV caller - initialize generic stuff
 }             
 
+static void vcf_segconf_finalize_field_width (void)
+{
+    for (int i=0; i < ARRAY_LEN(vcf_widths); i++) {
+        decl_zctx (vcf_widths[i].did_i);
+
+        ARRAY (int32_t, counts, zctx->width_count);
+
+        int max_count = -1;
+        int after = (1 << vcf_widths[i].bits);
+        
+        for (int i=0; i < after ; i++)
+            if (counts[i] > max_count) {
+                zctx->field_width = i;
+                max_count = counts[i];
+            }
+
+        buf_destroy (zctx->width_count);
+    }
+}
+
 void vcf_segconf_finalize (VBlockP vb_)
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
 
     if (!segconf.vcf_evidence_not_gvcf || // all POS values in segconf are consecutive
-        (segconf.has[FORMAT_ICNT] && segconf.has[FORMAT_SPL])) // DRAGEN GVCF - variants are consolidated using INFO/END so POS are not consecutive
+        (segconf_has(FORMAT_ICNT) && segconf_has(FORMAT_SPL))) // DRAGEN GVCF - variants are consolidated using INFO/END so POS are not consecutive
         segconf.vcf_is_gvcf = true;
 
     vcf_segconf_finalize_QUAL (vb);
     vcf_copy_samples_segconf_finalize (vb);
 
-    if (segconf.has[FORMAT_RGQ] || segconf.vcf_is_gatk_gvcf)
+    if (segconf_has(FORMAT_RGQ) || segconf.vcf_is_gatk_gvcf)
         segconf.vcf_INFO_method = VCF_INFO_by_RGQ;
 
     else if (segconf.vcf_is_isaac) 
@@ -258,7 +292,7 @@ void vcf_segconf_finalize (VBlockP vb_)
     if (segconf.vcf_is_gatk_gvcf) {
         Did gvcf_dids[] = { FORMAT_DP, FORMAT_RGQ, FORMAT_GT, FORMAT_PL, FORMAT_AD, FORMAT_GQ };
         for (int i=0; i < ARRAY_LEN(gvcf_dids); i++)
-            segconf.has[gvcf_dids[i]] = true;
+            segconf_set_has (gvcf_dids[i]);
 
         segconf.FMT_GQ_method = BY_PL;
         segconf.FMT_DP_method = BY_AD; // override potential setting to BY_AD in segconf, bc most lines don't have AD
@@ -266,38 +300,38 @@ void vcf_segconf_finalize (VBlockP vb_)
         if (flag.best) segconf.PL_mux_by_DP = yes;
     }
 
-    if (segconf.has[INFO_AS_SB_TABLE] && segconf.has[FORMAT_SB]) 
+    if (segconf_has(INFO_AS_SB_TABLE) && segconf_has(FORMAT_SB)) 
         segconf.AS_SB_TABLE_by_SB = true;
     
-    if (segconf.has[INFO_SNVHPOL] || (segconf.has[FORMAT_DPF] && segconf.has[FORMAT_GQX]))
+    if (segconf_has(INFO_SNVHPOL) || (segconf_has(FORMAT_DPF) && segconf_has(FORMAT_GQX)))
         segconf.vcf_is_isaac = true; // other Illumina tools that generate isaac-like annotations
         
-    if (segconf.has[INFO_DP]) {
-        if (segconf.has[INFO_BaseCounts] && !flag.secure_DP)
+    if (segconf_has(INFO_DP)) {
+        if (segconf_has(INFO_BaseCounts) && !flag.secure_DP)
             segconf.INFO_DP_method = BY_BaseCounts;
             
-        else if (segconf.has[FORMAT_DP] && segconf.FMT_DP_method != BY_INFO_DP && !flag.secure_DP)
+        else if (segconf_has(FORMAT_DP) && segconf.FMT_DP_method != BY_INFO_DP && !flag.secure_DP)
             segconf.INFO_DP_method = BY_FORMAT_DP;
 
         else 
             segconf.INFO_DP_method = INFO_DP_DEFAULT; // note: INFO_DP_DEFAULT≠0, so set explicitly 
     }
 
-    if (segconf.has[FORMAT_DP] && segconf.has[FORMAT_FI])
+    if (segconf_has(FORMAT_DP) && segconf_has(FORMAT_FI))
         segconf.FI_by_DP = true;
 
-    if (segconf.has[FORMAT_IGT] && segconf.has[FORMAT_IPS] && segconf.has[FORMAT_ADALL])
+    if (segconf_has(FORMAT_IGT) && segconf_has(FORMAT_IPS) && segconf_has(FORMAT_ADALL))
         segconf.vcf_is_giab_trio = true;
     
-    if (segconf.has[INFO_callsetnames] && segconf.has[FORMAT_ADALL])
+    if (segconf_has(INFO_callsetnames) && segconf_has(FORMAT_ADALL))
         segconf.vcf_is_giab = true;
 
     // an alternative way to discover dbSNP if ##source is missing
-    if (!!segconf.has[INFO_RS] + !!segconf.has[INFO_RSPOS] + !!segconf.has[INFO_SAO] + !!segconf.has[INFO_SSR] +
-        !!segconf.has[INFO_dbSNPBuildID] + !!segconf.has[INFO_VC] + !!segconf.has[INFO_NSM] + !!segconf.has[INFO_U3] >= 3)
+    if (segconf_has(INFO_RS) + segconf_has(INFO_RSPOS) + segconf_has(INFO_SAO) + segconf_has(INFO_SSR) +
+        segconf_has(INFO_dbSNPBuildID) + segconf_has(INFO_VC) + segconf_has(INFO_NSM) + segconf_has(INFO_U3) >= 3)
         segconf.vcf_is_dbSNP = true;
 
-    if (segconf.has[INFO_X_LM] && segconf.has[INFO_X_RM]) {
+    if (segconf_has(INFO_X_LM) && segconf_has(INFO_X_RM)) {
         segconf.vcf_is_ultima = true;
 
         if (!flag.reference && !flag.seg_only)
@@ -306,10 +340,10 @@ void vcf_segconf_finalize (VBlockP vb_)
                  z_dt_name(), arch_get_argv0(), txt_file->name);
     }
 
-    if (segconf.has[INFO_X_HIL] && segconf.has[INFO_X_HIN]) 
+    if (segconf_has(INFO_X_HIL) && segconf_has(INFO_X_HIN)) 
         segconf.vcf_is_ultima = true; // another way to identify Ultima
 
-    if (segconf.has[FORMAT_LAA] && segconf.has[FORMAT_LAD] && !segconf.has[FORMAT_AD] && !segconf.has[FORMAT_PL])
+    if (segconf_has(FORMAT_LAA) && segconf_has(FORMAT_LAD) && !segconf_has(FORMAT_AD) && !segconf_has(FORMAT_PL))
         segconf.vcf_local_alleles = true;
 
     // in gnomAD, we have a huge number of INFO fields in various permutations - generating a huge INFO dictionary, but which compresses very very well
@@ -321,7 +355,7 @@ void vcf_segconf_finalize (VBlockP vb_)
              "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
              arch_get_argv0(), txt_file->name);
 
-    else if (!flag.reference && segconf.vcf_is_platypus && (segconf.has[INFO_SC] || segconf.has[INFO_HP]) && !flag.seg_only)
+    else if (!flag.reference && segconf.vcf_is_platypus && (segconf_has(INFO_SC) || segconf_has(INFO_HP)) && !flag.seg_only)
         TIP ("Compressing a Platypus %s file using a reference file can reduce the compressed file's size by 30%%.\n"
              "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
              z_dt_name(), arch_get_argv0(), txt_file->name);
@@ -331,34 +365,27 @@ void vcf_segconf_finalize (VBlockP vb_)
             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n", 
             z_dt_name(), arch_get_argv0(), txt_file->name);
 
-    else if (segconf.has[INFO_SNVHPOL]) // isaac field
+    else if (segconf_has(INFO_SNVHPOL)) // isaac field
         TIP ("Compressing this particular %s using --reference could result in better compression", z_dt_name());
 
     // In case of dependency DAG: DP->(sum)AD->(mux)GT we can't have GT->(null)DP
     if (segconf.FMT_DP_method == BY_AD) segconf.use_null_DP_method = false;
 
     // whether we should seg GQ as a function of GP or PL (the better of the two) - only if this works for at least 20% of the samples
-    if (segconf.has[FORMAT_GQ] && !segconf.FMT_GQ_method) 
+    if (segconf_has(FORMAT_GQ) && !segconf.FMT_GQ_method) 
         vcf_segconf_finalize_GQ (vb);
 
     if (segconf.has_DP_before_PL && !flag.best)
         TIP ("Compressing this particular %s with --best could result in significantly better compression", z_dt_name());
 
     if (segconf.vcf_is_freebayes) {
-        if      (segconf.has[FORMAT_AD]) segconf.FMT_RO_AO_method = RO_AO_by_AD;
-        else if (segconf.has[FORMAT_DP]) segconf.FMT_RO_AO_method = RO_AO_by_DP;
+        if      (segconf_has(FORMAT_AD)) segconf.FMT_RO_AO_method = RO_AO_by_AD;
+        else if (segconf_has(FORMAT_DP)) segconf.FMT_RO_AO_method = RO_AO_by_DP;
 
         segconf.Q_to_O = segconf.Q_to_O / (float)segconf.n_Q_to_O; 
     }
 
-    // IMPORTANT: number of bits in each field MUST be the same as in SectionHeaderGenozipHeader
-    struct { Did did_i; uint8_t width; } wid[] = {
-        {VCF_ID,6}, {VCF_QUAL,4}, {INFO_AC,3}, {INFO_MLEAC,3}, {INFO_AN,3}, {INFO_AF,3}, {INFO_SF,3},
-        {INFO_QD,3}, {INFO_DP,3}, {INFO_AS_SB_TABLE, 4}, {INFO_BaseCounts,5}, {INFO_DPB,3} 
-    };
-
-    for (int i=0; i < ARRAY_LEN(wid); i++)
-        segconf_set_width (&segconf.wid[wid[i].did_i], wid[i].width);   
+    vcf_segconf_finalize_field_width();
 
     if (flag.optimize) 
         vcf_segconf_finalize_optimizations (vb);
@@ -380,22 +407,22 @@ void vcf_seg_finalize (VBlockP vb_)
     VBlockVCFP vb = (VBlockVCFP)vb_;
         
     // Toplevel snip for reconstructing this VBp
-    SmallContainer top_level = { 
+    Container(10) top_level = { 
         .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .callback     = (CTX(INFO_SF)->sf.SF_by_GT == yes),   // cases where we need a callback
         .filter_items = true,
         .nitems_lo    = 10,                                                                 
-        .items        = { { .dict_id = { _VCF_CHROM },   .separator = "\t" },
-                          { .dict_id = { _VCF_POS },     .separator = "\t" },
-                          { .dict_id = { _VCF_ID },      .separator = "\t" },
-                          { .dict_id = { _VCF_REFALT },  .separator = { '\t', CI1_ITEM_CB } }, // piz calls vcf_piz_refalt_parse
-                          { .dict_id = { _VCF_QUAL },    .separator = "\t" },
-                          { .dict_id = { _VCF_FILTER },  .separator = "\t" },
-                          { .dict_id = { _VCF_INFO },    .separator = "\t" }, 
-                          { .dict_id = { _VCF_FORMAT },  .separator = "\t" },
+        .items        = { { .dict_id = { _VCF_CHROM   }, .separator = "\t" },
+                          { .dict_id = { _VCF_POS     }, .separator = "\t" },
+                          { .dict_id = { _VCF_ID      }, .separator = "\t" },
+                          { .dict_id = { _VCF_REFALT  }, .separator = { '\t', CI1_ITEM_CB } }, // piz calls vcf_piz_refalt_parse
+                          { .dict_id = { _VCF_QUAL    }, .separator = "\t" },
+                          { .dict_id = { _VCF_FILTER  }, .separator = "\t" },
+                          { .dict_id = { _VCF_INFO    }, .separator = "\t" }, 
+                          { .dict_id = { _VCF_FORMAT  }, .separator = "\t" },
                           { .dict_id = { _VCF_SAMPLES }, .separator = ""   },
-                          { .dict_id = { _VCF_EOL },     .separator = ""   } },
+                          { .dict_id = { _VCF_EOL     }, .separator = ""   } },
     };
 
     ContextP ctx = CTX(VCF_TOPLEVEL);
@@ -475,11 +502,11 @@ void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), 
         return;
     }
 
-    MiniContainer con = { .repeats           = CON_REPEATS_IS_SPECIAL,
-                          .repsep            = ",",
-                          .drop_final_repsep = true,
-                          .nitems_lo         = 1, 
-                          .items             = { { .dict_id = sub_dict_id (ctx->dict_id, '0') } } };
+    Container(1) con = { .repeats           = CON_REPEATS_IS_SPECIAL,
+                         .repsep            = ",",
+                         .drop_final_repsep = true,
+                         .nitems_lo         = 1, 
+                         .items             = { { .dict_id = sub_dict_id (ctx->dict_id, '0') } } };
 
     if (!ctx->is_initialized) { 
         ctx_consolidate_stats_(VB, ctx, (ContainerP)&con);
@@ -529,6 +556,8 @@ static inline bool vcf_refalt_seg_ref_alt_line_has_RGQ (rom str)
 
 static void vcf_seg_FILTER (VBlockVCFP vb, STRp(filter))
 {
+    START_TIMER;
+    
     decl_ctx (VCF_FILTER);
 
     if (segconf.vcf_is_manta || segconf.vcf_is_pbsv)
@@ -539,6 +568,8 @@ static void vcf_seg_FILTER (VBlockVCFP vb, STRp(filter))
         seg_by_ctx (VB, STRa(filter), ctx, filter_len+1);
 
     set_last_txt (VCF_FILTER, filter);
+
+    COPY_TIMER_SEG_FIELD (VCF_FILTER);
 }
 
 // check if filter contains a specific string
@@ -554,7 +585,7 @@ bool vcf_FILTER_has (VBlockVCFP vb, rom test_for/*nul-terminated*/)
 }
 
 // true is ID is of the format 1_2704352_AT_A which is CHROM_POS_REF_ALT
-static inline bool vcf_seg_ID_is_variant (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(id))
+static inline bool vcf_seg_ID_is_variant (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(id))
 {
     str_split (id, id_len, 4, segconf.vcf_ID_is_variant, item, true);
     
@@ -565,8 +596,9 @@ static inline bool vcf_seg_ID_is_variant (VBlockVCFP vb, ZipDataLineVCF *dl, STR
            str_issame_(STRi(item,3), STRa(vb->ALT));
 }
 
-static inline void vcf_seg_ID (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(id))
+static inline void vcf_seg_ID (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(id))
 {
+    START_TIMER;    
     decl_ctx(VCF_ID);
     
     if (segconf_running && !flag.add_line_numbers) {
@@ -605,13 +637,15 @@ static inline void vcf_seg_ID (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(id))
         seg_id_field (VB, ctx, STRa(id), false, id_len+1);
     
     seg_set_last_txt (VB, ctx, STRa(id));
+
+    COPY_TIMER_SEG_FIELD (VCF_ID);
 }
 
 // segment a VCF line into its fields
 rom vcf_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining_txt_len, bool *has_13)     // index in vb->txt_data where this line starts
 {
     VBlockVCFP vb = (VBlockVCFP)vb_;
-    ZipDataLineVCF *dl = DATA_LINE (vb->line_i);
+    ZipDataLineVCF𐤐 dl = DATA_LINE (vb->line_i);
 
     rom next_field=line_start, field_start;
     int32_t len = remaining_txt_len;
@@ -646,7 +680,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining_txt_len, b
     // ID: seg after REFALT is parsed as in PBSV is predicted based on ALT
     vcf_seg_ID (vb, dl, STRd(VCF_ID));
 
-    CTX(FORMAT_RGQ)->line_has_RGQ = !segconf_running && segconf.has[FORMAT_RGQ] && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
+    CTX(FORMAT_RGQ)->line_has_RGQ = !segconf_running && segconf_has(FORMAT_RGQ) && vcf_refalt_seg_ref_alt_line_has_RGQ (VCF_ALT_str);
 
     // note: we treat REF+\t+ALT as a single field because REF and ALT are highly corrected, in the case of SNPs:
     // e.g. GG has a probability of 0 and GC has a higher probability than GA.
@@ -699,7 +733,7 @@ rom vcf_seg_txt_line (VBlockP vb_, rom line_start, uint32_t remaining_txt_len, b
     vcf_seg_finalize_INFO_fields (vb);
 
     if (!has_samples && vcf_num_samples)
-        WARN_ONCE ("FYI: variant CHROM=%.*s POS=%"PRId64" has no samples", vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS));
+        WARN_ONCE (_FYI "Variant CHROM=%.*s POS=%"PRId64" has no samples", vb->chrom_name_len, vb->chrom_name, vb->last_int (VCF_POS));
 
     SEG_EOL (VCF_EOL, false);
 

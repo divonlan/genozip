@@ -195,10 +195,10 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_pull_from_sag)
             return HAS_NEW_VALUE;
 
         case SAM_SQBITMAP:
-            ABORT_PIZ0 ("Expecting SAM_SQBITMAP to be handled by sam_piz_special_SEQ");
+            ABORT_PIZ ("Expecting SAM_SQBITMAP to be handled by sam_piz_special_SEQ", NULL);
         
         case SAM_QUAL:
-            ABORT_PIZ0 ("Expecting SAM_QUAL to be handled by sam_piz_special_QUAL");
+            ABORT_PIZ ("Expecting SAM_QUAL to be handled by sam_piz_special_QUAL", NULL);
 
         // solo tags
         case OPTION_BX_Z: if (reconstruct) sam_reconstruct_solo_from_sag (vb, ctx->did_i, SOLO_BX); return NO_NEW_VALUE;

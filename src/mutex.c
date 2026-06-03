@@ -65,7 +65,7 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)
 
             else 
                 if (lp[code_line].func != func) 
-                    WARN_ONCE ("FYI: Two calls to mutex_lock exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
+                    WARN_ONCE (_FYI "Two calls to mutex_lock exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
                                lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, mutex->name, func, code_line);
                 
             lp[code_line].accumulator += CHECK_TIMER; // luckily, we're protected by the mutex...
@@ -199,7 +199,7 @@ void thread_join_lock_point (rom thread_name, TimeSpecType profiler_timer, FUNCL
 
     else 
         if (lp[code_line].func != func) 
-            WARN_ONCE ("FYI: Two calls to mutex_lock/pthreads_join exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
+            WARN_ONCE (_FYI "Two calls to mutex_lock/pthreads_join exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
                         lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, thread_name, func, code_line);
 
     add_relaxed (lp[code_line].accumulator, CHECK_TIMER); 

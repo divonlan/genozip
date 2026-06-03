@@ -34,7 +34,7 @@ void vcf_giab_seg_initialize (VBlockVCFP vb)
 // Seg: if same as current_phase, seg SPECIAL_COPY_STORED. If not, check if same as pos,ref,alt and seg SPECIAL_IPS,
 // with a parameter of whether ref and alt appear rev-comped.
 // (no need for lookback as IPS is expected to always be either equal to pos/ref/alt, or to previous phase)
-void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF *dl, ContextP ctx, STRp(ips))
+void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, STRp(ips))
 {
     STRlast (igt, FORMAT_IGT);
     bool is_phased = (ctx_encountered (VB, FORMAT_IGT) && igt_len == 3 && igt[1] == '|');
@@ -138,7 +138,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_IGT)
 // FORMAT/ADALL: <ID=ADALL,Number=R,Type=Integer,Description="Net allele depths across all datasets">
 //--------------------------------------------------------------------------------------------------------
 
-void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STRps(item), ContextP *item_ctxs, const int64_t *values)
+void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), ContextP *item_ctxs, const int64_t *values)
 {
     for (unsigned i=0; i < n_items; i++) 
         if (i==0 || i==1) {

@@ -50,9 +50,9 @@ ExeType exe_type;
 
 unsigned file_i, n_files; // number of input files in the execution
 
-// primary_command vs command: primary_command is what the user typed on the command line. command is what is 
-// running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and command=PIZ
-CommandType command = NO_COMMAND, primary_command = NO_COMMAND; 
+// primary_command vs flag.command: primary_command is what the user typed on the command line. 
+// flag.commandcommand is what is running now - for example, when ZIP is unzipping a reference, primary_command=ZIP and flag.command=PIZ
+CommandType primary_command = NO_COMMAND; 
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 
@@ -64,7 +64,7 @@ bool input_files_has_FASTQ; // at least one of the input files is a FASTQ
 
 static rom help_genozip[] = {
     "",
-    "𝑇𝑟𝑦:\tgenozip myfile.bam --reference hs37d5.fa.gz                       # for BAM, --reference is optional",
+    "𝑇𝑟𝑦:\tgenozip myfile.bam --reference hs37d5.fa.gz  # for BAM, --reference is optional",
     "𝑜𝑟:\tgenozip myfile.fq.gz --reference hs37d5.fa.gz",
     "𝑜𝑟:\tgenozip --pair myfile-R1.fq.gz myfile-R2.fq.gz --reference hs37d5.fa.gz            # co-compression™",
     "𝑜𝑟:\tgenozip --deep myfile-R1.fq.gz myfile-R2.fq.gz myfile.bam --reference hs37d5.fa.gz # co-compression™",
@@ -110,7 +110,7 @@ rom report_support_if_unexpected (void) { return "\nIf this is unexpected, pleas
 
 rom command_name (void) // see CommandType
 {
-    switch (command) {
+    switch (flag.command) {
         case ZIP           : return "ZIP";
         case PIZ           : return "PIZ";
         case LIST          : return "LIST";
@@ -566,7 +566,7 @@ done:
 
 static inline DataType main_get_file_dt (rom filename)
 {   
-    switch (command) {
+    switch (flag.command) {
         case ZIP: return txtfile_zip_get_file_dt (filename);
         case PIZ: return zfile_piz_get_file_dt (filename);
         default : return DT_NONE;
@@ -752,7 +752,7 @@ static void main_no_files (int argc)
     }
 
     else if (flag.no_cache) {
-        command = RM_CACHE; // this is different than --no-cache when compressing a file
+        flag.command = RM_CACHE; // this is different than --no-cache when compressing a file
         if (IS_REF_LOADED_ZIP) ref_cache_remove(); // remove a specific cache
         else                   ref_cache_remove_all (REF_CACHE_REMOVE_ALL);
     }
@@ -783,6 +783,7 @@ static void main_no_files (int argc)
 int main (int argc, char *argv[])
 {     
     flag.test_i = getenv (GENOZIP_TEST);
+
     if (flag.test_i && !flag.test_i[0]) flag.test_i = NULL; // empty GENOZIP_TEST is the same as no GENOZIP_TEST
 
     flag.debug_or_test = flag.debug || flag.test_i;
@@ -808,13 +809,13 @@ int main (int argc, char *argv[])
     // --make-reference might be called by genocat or genounzip from ref_fasta_to_ref - we treat it as genozip
     if (flag.make_reference) {
         exe_type = EXE_GENOZIP;
-        command  = ZIP;
+        flag.command = ZIP;
     }
 
     flags_store_command_line (argc, argv); // can only be called after --password is processed
 
     // handle all commands that do NOT operate on files
-    switch (command) {
+    switch (flag.command) {
         case VERSION       : main_print_version();    return 0; 
         case LICENSE       : license_display (false); return 0;
         case HELP          : main_print_help (true);  return 0; 
@@ -850,10 +851,10 @@ int main (int argc, char *argv[])
                                         ? ((float)MAX_(arch_get_num_cores() * 0.75, arch_get_num_cores()-3))  // under-subscribe on Windows / Mac to maintain UI interactivity
                                         : ((float)arch_get_num_cores() * 1.1 ))); // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
 
-    ASSINP (input_files_len || !isatty(0) || IS_REF_EXTERNAL || command != ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
-    ASSINP (input_files_len || !isatty(0) || IS_REF_EXTERNAL || command != PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
+    ASSINP (input_files_len || !isatty(0) || IS_REF_EXTERNAL || !IS_ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
+    ASSINP (input_files_len || !isatty(0) || IS_REF_EXTERNAL || !IS_PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
-    primary_command = command; 
+    primary_command = flag.command; 
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
     // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
@@ -880,7 +881,7 @@ int main (int argc, char *argv[])
 
         if (next_input_file && next_input_file[0] == '\1') next_input_file++; // skip "MALLOC indicator"
 
-        ASSINP0 (next_input_file || command != PIZ || (flag.show_ref_iupacs && is_genocat), 
+        ASSINP0 (next_input_file || !IS_PIZ || (flag.show_ref_iupacs && is_genocat), 
                  "filename(s) required (redirecting from stdin is not possible)");
 
         ASSERTW (next_input_file || !flag.replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
@@ -895,7 +896,7 @@ int main (int argc, char *argv[])
         dispatcher_new_progress_bar(); // resets the progress bar
 
         if (next_input_file || !isatty (0)) { // either the user specified a file, or we are receiving input redirection
-            switch (command) {
+            switch (flag.command) {
                 case ZIP           : main_genozip (next_input_file, 
                                                    (next_input_file && file_i < input_files_len-1) ? input_files[file_i+1] : NULL, // file name of next file, if there is one
                                                    file_i, !next_input_file || is_last_txt_file); 
@@ -916,7 +917,7 @@ int main (int argc, char *argv[])
 
                 case LIST          : genols (next_input_file, false, NULL, false); break;
 
-                default   : ABORTINP ("unrecognized command %c", command);
+                default   : ABORTINP ("unrecognized command %c", flag.command);
             }
 
             if (!z_file) {
@@ -934,13 +935,13 @@ int main (int argc, char *argv[])
     }
 
     // if this is "list", finalize
-    if (command == LIST) genols (NULL, true, NULL, false);
+    if (IS_LIST) genols (NULL, true, NULL, false);
 
     // if we're genozipping with tar, finalize tar file
     if (IS_ZIP && tar_zip_is_tar()) tar_finalize();
 
     if (flag.multiple_files && flag.validate==VLD_REPORT_INVALID /* reporting invalid files, and none found */) 
-        WARN0 ("All files are valid genozip files");
+        WARN ("All files are valid genozip files", NULL);
 
     if (flag.biopsy) biopsy_finalize();
 

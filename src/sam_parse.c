@@ -17,7 +17,7 @@ void sam_parse_seg_initialize (VBlockSAMP vb)
 }
 
 // Parse Biosciences barcode indices - also in QNAME
-void sam_seg_pB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pb), unsigned add_bytes)
+void sam_seg_pB_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pb), unsigned add_bytes)
 {
     STRlast (qname, SAM_QNAME);
 
@@ -32,7 +32,7 @@ void sam_seg_pB_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pb), unsigned add_byt
 }
 
 // Parse Biosciences polyN (=UMI)
-void sam_seg_pN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pn), unsigned add_bytes)
+void sam_seg_pN_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pn), unsigned add_bytes)
 {
     STRlast (qname, SAM_QNAME); // note: using QNAME and not Q4NAME, as its available in PRIM/DEPN too
     STR(pn_in_qname);
@@ -47,7 +47,7 @@ void sam_seg_pN_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(pn), unsigned add_byt
         seg_by_did (VB, STRa(pn), OPTION_pN_Z, add_bytes);
 }
 
-void sam_seg_CB_Z_Parse (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned add_bytes)
+void sam_seg_CB_Z_Parse (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cb), unsigned add_bytes)
 {
     decl_ctx(OPTION_CB_Z);
     STRlast(qname, SAM_QNAME);
@@ -63,7 +63,7 @@ void sam_seg_CB_Z_Parse (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cb), unsigned a
 }
 
 // e.g. CATCATCC_AACGTGAT_AAACATCG (length=26)
-void sam_seg_CR_Z_Parse (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(cr), unsigned add_bytes)
+void sam_seg_CR_Z_Parse (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(cr), unsigned add_bytes)
 {
     decl_ctx(OPTION_CR_Z);    
     STRlast(qname, SAM_QNAME);
@@ -145,7 +145,7 @@ done:
 }
 
 // REgion (I=Intron, E=Exon, N=Inter-gene) (note: same field in cellranger is RE:A)
-void sam_seg_RE_Z (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(re), unsigned add_bytes)
+void sam_seg_RE_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(re), unsigned add_bytes)
 {
     int channel_i = (ctx_encountered_in_line (VB, OPTION_GX_Z) && CTX(OPTION_GX_Z)->last_txt.len > 0);
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_RE_Z, (MultiplexerP)&vb->mux_RE, channel_i);

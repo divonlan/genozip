@@ -166,7 +166,7 @@ void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event,
 
         // if thread other than main allocates evb it could cause corruption. we allocating
         if (log.size - log.len < 500) {
-            WARN ("FYI: Thread log is out of space, log.size=%u log.len=%u", (unsigned)log.size, log.len32);
+            WARN (_FYI "Thread log is out of space, log.size=%u log.len=%u", (unsigned)log.size, log.len32);
             threads_write_log (false);
             return;
         }
@@ -325,8 +325,8 @@ int pthread_cancel_safe (pthread_t t)
 // note: on Linux (and Mac?) threads waiting on a mutex will not be canceled, but will remain blocked forever, if the thread holding the mutex is canceled
 void threads_cancel_other_threads (void)
 {
-    if (!threads_am_i_main_thread())
-        pthread_cancel_safe (main_thread);
+    if (writer_thread_is_set && !threads_am_i_writer_thread())
+        pthread_cancel_safe (writer_thread);    
 
     mutex_lock (threads_mutex);
 
@@ -344,4 +344,7 @@ void threads_cancel_other_threads (void)
 #endif
 
     mutex_unlock (threads_mutex);
+
+    if (!threads_am_i_main_thread())
+        pthread_cancel_safe (main_thread); // now that all compute threads are canceled, won't hang on a thread_join
 }

@@ -858,7 +858,7 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     if (!ret) return 0; // failed
     
     // case: there is no genozip header. this can happen if the file was truncated (eg because compression did not complete)
-    RETURNW (BGEN32 (footer.magic) == GENOZIP_MAGIC, 0, "Error in %s: the file appears to be incomplete (it is missing the Footer).", z_name);
+    ASSWRET (BGEN32 (footer.magic) == GENOZIP_MAGIC, 0, "Error in %s: the file appears to be incomplete (it is missing the Footer).", z_name);
     
     uint64_t offset = flag.recover ? zfile_read_genozip_header_get_actual_offset() // get correct offset in case of corruption
                                    : BGEN64 (footer.genozip_header_offset);
@@ -866,15 +866,15 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     if (as_is) return offset;
 
     // read genozip_version directly, needed to determine the section header size
-    RETURNW (file_seek (z_file, offset, SEEK_SET, READ, WARNING_FAIL), 0, 
+    ASSWRET (file_seek (z_file, offset, SEEK_SET, READ, WARNING_FAIL), 0, 
              "Error in %s: corrupt offset=%"PRIu64" in Footer  (file_size=%"PRIu64")", 
              z_name, offset, z_file->disk_size);
 
     SectionHeaderGenozipHeader top = {};
-    RETURNW (fread (&top, 1, MIN_(sizeof (SectionHeaderGenozipHeader), z_file->disk_size - offset/*header was shorter in earlier verions*/), 
+    ASSWRET (fread (&top, 1, MIN_(sizeof (SectionHeaderGenozipHeader), z_file->disk_size - offset/*header was shorter in earlier verions*/), 
                     GET_FP(z_file)), 0, "Error in %s: failed to read genozip header", z_name);
 
-    RETURNW (BGEN32 (top.magic) == GENOZIP_MAGIC, 0, "Error in %s: offset=%"PRIu64" of the GENOZIP_HEADER section as it appears in the Footer appears to be wrong, or the GENOZIP_HEADER section has bad magic (file_size=%"PRIu64").%s", 
+    ASSWRET (BGEN32 (top.magic) == GENOZIP_MAGIC, 0, "Error in %s: offset=%"PRIu64" of the GENOZIP_HEADER section as it appears in the Footer appears to be wrong, or the GENOZIP_HEADER section has bad magic (file_size=%"PRIu64").%s", 
              z_name, offset, z_file->disk_size, flag.debug_or_test ? " Try again with --recover." : "");
 
     RESTORE_FLAG(quiet);

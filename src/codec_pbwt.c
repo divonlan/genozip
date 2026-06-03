@@ -281,7 +281,7 @@ COMPRESS (codec_pbwt_compress)
     buf_free (ht_ctx->local); 
     *compressed_len = 0;
 
-    COPY_TIMER_COMPRESS (compressor_pbwt);
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_pbwt);
 
     return true;
 }

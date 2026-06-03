@@ -96,35 +96,33 @@ static void tokenizer_split (STRp(field), rom is_sep, bool split_on_digit_bounda
     }
 }                                      
 
-static MediumContainer tokenizer_con_template; // uninitialized
+static Container(MAX_TOKENS) tokenizer_con_template; 
+
 void tokenizer_zip_initialize (void)
 {
     DO_ONCE {
-        tokenizer_con_template = (MediumContainer){ .repeats = 1 };
+        con_initialize (&tokenizer_con_template, MAX_TOKENS);
 
         DictId dict_id = dict_id_make (cSTR("TOKEN"), DTYPE_1); 
     
-        for (unsigned i=0; i < MAX_TOKENS; i++) {
-            bytes id = dict_id.id;
-            
-            char dict_id_str[8] = { id[0], base32(i), id[1], id[2], id[3], id[4], id[5], id[6] };
-            
-            tokenizer_con_template.items[i].dict_id = dict_id_make (dict_id_str, 8, DTYPE_1);
-        }
+        for (int i=0; i < MAX_TOKENS; i++) 
+            tokenizer_con_template.items[i].dict_id = sub_dict_id (dict_id, '0' + i);
     }
-
-    // note: contexts are not created here - they are created during seg only if actually needed
 }
 
 void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field), 
                     rom is_sep,   
                     unsigned add_additional_bytes)  // account for characters in addition to the field
 {
-    MediumContainer con = tokenizer_con_template; 
-    Token items[MAX_TOKENS];
 
-    tokenizer_split (STRa(field), is_sep, false, items, &con.nitems_lo);
-    
+    Token items[MAX_TOKENS];
+    uint8_t n_items;
+    tokenizer_split (STRa(field), is_sep, false, items, &n_items);
+
+    Container(MAX_TOKENS) con; // note: allocate maximum because clang doesn't allow a variable here (gcc does) - no harm, we only touch the memory actually needed
+    memcpy (&con, &tokenizer_con_template, con_sizeof_(n_items));
+    con.nitems_lo = n_items;
+
     char prefixes[field_len + con.nitems_lo + 2];
     prefixes[0] = prefixes[1] = CON_PX_SEP;
     unsigned prefixes_len = 2;
@@ -136,7 +134,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         Token *ci = &items[item_i];
 
         // process the subfield that just ended
-        Context *item_ctx = ctx_get_ctx (vb, item->dict_id);
+        ContextP item_ctx = ctx_get_ctx (vb, item->dict_id);
         ASSERT (item_ctx, "item_ctx for %s is NULL", dis_dict_id (item->dict_id).s);
 
         item_ctx->st_did_i = (field_ctx->st_did_i != DID_NONE) ? field_ctx->st_did_i : field_ctx->did_i;

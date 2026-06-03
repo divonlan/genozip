@@ -200,7 +200,7 @@ WordIndex chrom_seg_ex (VBlockP vb, Did did_i,
         !segconf_running  &&                      // segconf runs with flag.quiet so the user won't see the warning
         !test_and_set_relaxed (once[is_primary])) // skip if we've shown the warning already
             
-        WARN ("FYI: Contigs name mismatch between %s and reference file %s. For example: file: \"%.*s\" Reference file: \"%.*s\". This makes no difference for the compression.",
+        WARN (_FYI "Contigs name mismatch between %s and reference file %s. For example: file: \"%.*s\" Reference file: \"%.*s\". This makes no difference for the compression.",
               txt_name, ref_get_filename(), STRf(chrom), STRf(ref_contig));
         // we don't use WARN_ONCE bc we want the "once" to also include ref_contigs_get_matching
 
@@ -271,7 +271,7 @@ static SORTER (chrom_create_piz_sorter)
 void chrom_index_by_name (Did chrom_did_i)
 {
     sorter_zctx = ZCTX(chrom_did_i);
-    uint32_t num_words = (command==ZIP) ? sorter_zctx->nodes.len32 : sorter_zctx->word_list.len32;
+    uint32_t num_words = IS_ZIP ? sorter_zctx->nodes.len32 : sorter_zctx->word_list.len32;
 
     buf_free (chrom_sorter);
 

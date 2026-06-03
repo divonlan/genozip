@@ -121,7 +121,7 @@ void vcf_seg_analyze_copied_GT (VBlockVCFP vb, STRp(gt))
     COPY_TIMER (vcf_seg_analyze_copied_GT);
 }
 
-void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(gt), ContextP *ctxs, STRps(sf))
+void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF𐤐 dl, STRp(gt), ContextP *ctxs, STR𐤐s(sf))
 {
     set_last_txt (FORMAT_GT, gt);
 
@@ -131,12 +131,12 @@ void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF *dl, STRp(gt
 
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the separator 
     // determined by the phase
-    MiniContainer con = { .repeats              = n_hs, 
-                          .nitems_lo            = 1, 
-                          .callback             = true, // see vcf_piz_container_cb
-                          .drop_final_repsep    = true, 
-                          .items[0].dict_id.num = _FORMAT_GT_HT,
-                          .repsep[0]            = phase };
+    Container(1) con = { .repeats              = n_hs, 
+                         .nitems_lo            = 1, 
+                         .callback             = true, // see vcf_piz_container_cb
+                         .drop_final_repsep    = true, 
+                         .items[0].dict_id.num = _FORMAT_GT_HT,
+                         .repsep[0]            = phase };
 
     unsigned save_gt_len = gt_len;
     

@@ -63,8 +63,8 @@
 #define _FASTQ_QNAME2       _SAM_QNAME2
 #define _FASTQ_Q0NAME2      _SAM_Q0NAME2
 #define _FASTQ_Q1NAME2      _SAM_Q1NAME2
-#define _FASTQ_CIGAR        _SAM_CIGAR
 #define _FASTQ_QmNAME2      _SAM_QmNAME2
+#define _FASTQ_CIGAR        _SAM_CIGAR
 #define _FASTQ_AUX          _SAM_AUX
 #define _FASTQ_SQBITMAP     _SAM_SQBITMAP
 #define _FASTQ_NONREF       _SAM_NONREF
@@ -138,6 +138,7 @@ extern bool fastq_zip_use_pair_assisted (DictId dict_id, SectionType st);
 extern bool fastq_zip_use_pair_identical (DictId dict_id);
 extern uint32_t fastq_zip_get_seq_len (VBlockP vb, uint32_t line_i) ;
 extern uint32_t fastq_get_num_deeped (VBlockP vb);
+extern bool fastq_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 
 COMPRESSOR_CALLBACK (fastq_zip_seq);
 COMPRESSOR_CALLBACK(fastq_zip_qual); // used by codec_longr_compress
@@ -179,7 +180,7 @@ extern void fastq_piz_genozip_header (ConstSectionHeaderGenozipHeaderP header);
 extern void fastq_zip_set_vb_header_specific (VBlockP vb, SectionHeaderVbHeaderP vb_header);
 
 // nonbio stuff
-extern void fastq_segconf_set_non_biological (VBlockP vb);
+extern void fastq_segconf_check_if_Parse (VBlockP vb);
 extern rom fastq_nonbio_type_name (void);
 extern int fastq_nonbio_get_n_linkers (void);
 extern StrText fastq_nonbio_get_linker_for_stats (unsigned linker_i);

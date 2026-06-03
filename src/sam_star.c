@@ -19,7 +19,7 @@ void sam_star_seg_initialize (VBlockSAMP vb)
 }
 
 // jI:B:i,Start1,End1,Start2,End2,... Start and End of introns for all junctions (1-based).
-void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(raw), bool is_bam)
+void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(raw), bool is_bam)
 {
     decl_ctx (OPTION_jI_B_i);
     
@@ -78,7 +78,7 @@ void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(raw), bool is_bam)
     return;
 
 fallback:
-    sam_seg_array_one_ctx (vb, dl, ctx->dict_id, 'i', STRa(raw), NULL, NULL, NULL);
+    sam_seg_array_one_ctx (vb, dl, ctx->dict_id, 'i', STRa(raw), NULL, NULL);
 }
 
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)

@@ -73,7 +73,7 @@ do_compress: ({});
         ABORT ("%s: Compressing %s with %s need %u bytes, but allocated only %u", VB_NAME, qual_ctx->tag_name, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
     }
 
-    COPY_TIMER_COMPRESS (compressor_normq); // don't account for sub-codec compressor, it accounts for itself
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_normq); // don't account for sub-codec compressor, it accounts for itself
 
     return compress (vb, ctx, header, B1STc(*qual_buf), uncompressed_len, NULL, STRa(compressed), false, name);
 }

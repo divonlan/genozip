@@ -32,7 +32,7 @@ void fastq_seg_LINE3 (VBlockFASTQP vb, STRp(qline3), STRp(qline1), STRp(desc))
 {
     switch (segconf.line3) {
         case L3_EMPTY:  // no segging - we will drop the line from top_level
-            ASSSEG (!qline3_len || segconf.optimize[FASTQ_QNAME], "Invalid FASTQ file format (#1): expecting middle line to be a \"+\", but it is \"+%.*s\"", STRf(qline3));
+            ASSSEG (!qline3_len || segconf_optimize (FASTQ_QNAME), "Invalid FASTQ file format (#1): expecting middle line to be a \"+\", but it is \"+%.*s\"", STRf(qline3));
             CTX(FASTQ_LINE3)->txt_len++;      // account for the '+' (it is segged in the toplevel container)
             break;
 
@@ -72,10 +72,10 @@ void fastq_segconf_analyze_DESC (VBlockFASTQP vb, STRp(desc))
         str_split (items[i], item_lens[i], 2, segconf.aux_sep, side, true); // an AUX field is a name=value pair, eg "length=151"
         if (n_sides != 2) break;
 
-        // set segconf.has[]. 
+        // set segconf.count[]. 
         DictId dict_id = dict_id_make (STRi(side,0), DTYPE_2);
         ContextP ctx = ctx_get_ctx_tag (vb, dict_id, sides[0], side_lens[0]); // create if it doesn't already exist
-        segconf.has[ctx->did_i] = true;
+        segconf_set_has (ctx->did_i);
     }
 
     // exception: QNAME2 e.g. "1:N" is not an AUX

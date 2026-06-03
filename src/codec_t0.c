@@ -126,7 +126,7 @@ do_compress: ({});
                VB_NAME, ctx->tag_name, codec_name(header->sub_codec), min_required_compressed_len, *compressed_len);
     }
 
-    COPY_TIMER_COMPRESS (compressor_t0); // don't account for sub-codec compressor, it accounts for itself
+    COPY_TIMER_COMPRESS_BY_CODEC (compressor_t0); // don't account for sub-codec compressor, it accounts for itself
 
     return compress (vb, ctx, header, 0, uncompressed_len, get_line_cb, STRa(compressed), false, name);
 }

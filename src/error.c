@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <string.h>
 #include <sys/types.h>
+#include <stdarg.h>
 #ifdef _WIN32
 #include <windows.h>
 #include <tlhelp32.h>
@@ -42,6 +43,7 @@
 #include "url.h"
 #include "progress.h"
 #include "tip.h"
+#include "reconstruct.h"
 
 // mechanism to print a specific message upon exception
 static _Thread_local rom catch_msg=0, catch_func=0;
@@ -165,7 +167,7 @@ static LONG WINAPI windows_exception_handler (EXCEPTION_POINTERS *ep)
 {
     if (catch_msg) {
         progress_newline(); 
-        fprintf (stderr, "❌ %s:%u: %s\n", catch_func, catch_line, catch_msg);
+        fprintf (stderr, _ERR "%s:%u: %s\n", catch_func, catch_line, catch_msg);
     }
 
     else
@@ -236,7 +238,7 @@ static void noreturn signal_handler_bug (int signum)
 {
     if (catch_msg) {
         progress_newline(); 
-        fprintf (stderr, "❌ %s:%u: %s\n", catch_func, catch_line, catch_msg);
+        fprintf (stderr, _ERR "%s:%u: %s\n", catch_func, catch_line, catch_msg);
     }
 
     else {
@@ -311,18 +313,19 @@ noreturn void stall (void)
         usleep (100000); // cancelation point for pthread_cancel per POSIX requirement (tested upon entry)
 }
 
-static void error_delete_zfile (bool is_error)
+static void error_close_and_maybe_delete_file (FileP file, bool delete)
 {
-    STRli (save_name, strlen (z_file->name)+1);
+    if (!file) return;
+    bool is_disk_file = !!file->name; // not redirected
 
-    if (z_file && z_file->name) 
-        strcpy (save_name, z_file->name);
+    STRli (save_name, is_disk_file ? (strlen (file->name)+1) : 1);
+    if (is_disk_file) strcpy (save_name, file->name);
 
-    file_close (&z_file); // also frees file->name
+    file_close (&file); // also frees file->name
 
     // note: logic to avoid a race condition causing the file not to be removed - if another thread seg-faults
     // because it can't access a z_file filed after z_file is freed, and signal_handler_bug aborts
-    if (is_error && !flag.debug_or_test && file_exists (save_name)) 
+    if (delete && is_disk_file && !flag.debug_or_test && file_exists (save_name)) 
         file_remove (save_name, true);
 }
 
@@ -369,26 +372,34 @@ void noreturn error_exit (bool show_stack, bool is_error)
         } 
 
         if (is_error) {
-            close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
-            close (2);
-            url_close_remote_file_stream (NULL);  // <--- BREAKPOINT BRK
-            file_kill_external_compressors(); 
-        
-            // cancel all other compute threads before closing z_file, so other threads don't attempt to access it 
+            // cancel all other threads before closing z_file, so other threads don't attempt to access it 
             // (eg. z_file->data_type) and get a segmentation fault.
             threads_cancel_other_threads();
+
+            close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
+            close (2);
+
+            url_close_remote_file_stream (NULL);  // <--- BREAKPOINT BRK
+
+            file_kill_external_compressors(); 
         }
 
         // if we're in ZIP - delete z_file
-        if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary) 
-            error_delete_zfile (is_error);
+        if (primary_command == ZIP && !flag_loading_auxiliary/*z_file is a reference file*/) 
+            error_close_and_maybe_delete_file (z_file, is_error);
+
+        // if we're in PIZ - delete the txt_file
+        if (primary_command == PIZ) 
+            error_close_and_maybe_delete_file (txt_file, is_error);
 
         if (is_error) // call after canceling the writing threads 
             file_put_data_abort();
 
-        fflush (stdout);
-        fflush (stderr);
-        
+        if (!is_error) {
+            fflush (stdout);
+            fflush (stderr);
+        }
+
         if (!is_error && !flag.explicit_quiet && (flag.echo || flag.test_i)) { 
             progress_newline(); 
             fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), "Exiting : Success"); 
@@ -407,8 +418,97 @@ void noreturn error_exit (bool show_stack, bool is_error)
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
 
-void noreturn error_restart (rom add_cmd_option)
+void noreturn error_assert_failed (FUNCLINE, rom format, ...)
 {
+    progress_newline();    
+    fprintf (stderr, "%s "_ERR"%s:%u %s%s: ", str_time().s, func, code_line, version_str().s, license_get_number().s);
+
+    va_list args;                        
+    va_start (args, format);              
+    vfprintf (stderr, format, args);      
+    va_end (args);                        
+
+    fprintf (stderr, "%s", report_support_if_unexpected());
+    fflush (stderr);
+    error_exit (true, true);
+}
+
+void noreturn error_assertinp_failed (rom format, ...)
+{
+    progress_newline(); 
+    fprintf (stderr, "%s: ", global_cmd); 
+
+    va_list args;                        
+    va_start (args, format);              
+    vfprintf (stderr, format, args);      
+    va_end (args);                        
+
+    if (flags_command_line()) fprintf (stderr, "\n\ncommand: %s\n", flags_command_line()); 
+    else                      fprintf (stderr, "\n"); 
+        
+    fflush (stderr); 
+    
+    error_exit (false, true);
+}
+
+void warn (rom format, ...)
+{
+    progress_newline();                  
+    fprintf (stderr, "%s: ", global_cmd);
+
+    va_list args;                        
+    va_start (args, format);              
+    vfprintf (stderr, format, args);      
+    va_end (args);                        
+
+    fprintf (stderr, "\n");              
+    fflush (stderr);     
+}
+
+void noreturn error_asspiz (VBlockP vb, FUNCLINE, rom format, ...)
+{
+    DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
+        StrText4K s;
+        int s_len = 0;
+
+        for (int i=0; i < vb->con_stack_len; i++)
+            SNPRINTF (s, "%s[%u]➔ ", CTX(vb->con_stack[i].did_i)->tag_name, vb->con_stack[i].repeat);
+
+        SNPRINTF (s, "%s", (vb->curr_item != DID_NONE ? CTX(vb->curr_item)->tag_name : "N/A"));
+
+        progress_newline(); 
+        fprintf (stderr, "%s "_ERR"%s: %s:%u biopsy-bytes=%"PRIu64",%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
+                str_time().s, LN_NAME, func, code_line,
+                vb->vb_position_txt_file, vb->recon_size, 
+                writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
+                cond_int (Z_DT(VCF), " sample_i=", vb->sample_i), 
+                piz_dis_coords((VBlockP)(vb)).s, piz_dis_qname((VBlockP)(vb)).s, s.s, version_str().s); 
+
+        va_list args;                        
+        va_start (args, format);              
+        vfprintf (stderr, format, args);
+        fprintf (stderr, "\n%s\n", piz_advise_biopsy(VB).s);     
+        va_end (args);                        
+
+        error_exit (true, true);
+    }
+    
+    else stall(); // other threads stall while waiting for the first thread ^ to exit
+}
+
+void noreturn error_restart (rom add_cmd_option, rom format, ...)
+{
+    progress_newline();                  
+    fprintf (stderr, "%s: ", global_cmd);
+
+    va_list args;                        
+    va_start (args, format);              
+    vfprintf (stderr, format, args);      
+    va_end (args);                        
+
+    fprintf (stderr, "\n");              
+    fflush (stderr);     
+
     if (flag.restarted) exit_on_error (true); // if this is already a restarted process - we don't restart again
 
     DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
@@ -417,7 +517,7 @@ void noreturn error_restart (rom add_cmd_option)
         int max_allowed_files_to_restart = flag.deep ? 1 GB // unlimited - single z_file
                                          : flag.pair ? 2    // 2 files generate 1 z_file
                                          :             1;
-        if (n_files > max_allowed_files_to_restart) {
+        if (n_files > max_allowed_files_to_restart || (txt_file && txt_file->redirected)) {
             fprintf (stderr, "\n"_TIP"Rerun with %s\n\n", add_cmd_option); 
             exit_on_error(false);
         }
@@ -453,8 +553,8 @@ void noreturn error_restart (rom add_cmd_option)
         threads_cancel_other_threads();
 
         // if we're in ZIP - delete z_file
-        if (primary_command == ZIP && z_file && z_file->name && !flag_loading_auxiliary)
-            error_delete_zfile (true);
+        if (primary_command == ZIP && !flag_loading_auxiliary/*z_file is a reference fiel*/)
+            error_close_and_maybe_delete_file (z_file, true);
 
         file_put_data_abort();
 
@@ -518,3 +618,4 @@ void error_initialize (int argc, char *argv[])
 
     error_init_signal_handlers();
 }
+

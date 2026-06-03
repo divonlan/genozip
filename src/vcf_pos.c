@@ -9,7 +9,7 @@
 #include "vcf_private.h"
 #include "random_access.h"
 
-void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str))
+void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(pos_str))
 {
     decl_ctx (VCF_POS);
 
@@ -31,7 +31,7 @@ void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF *dl, STRp(pos_str))
         pos = dl->pos = seg_pos_field (VB, VCF_POS, VCF_POS, 0, '.', STRa(pos_str), 0, pos_str_len+1);
     
     if (pos == 0 && !IS_PERIOD(pos_str)) // POS == 0 - invalid value 
-        WARN_ONCE ("FYI: invalid POS=0 value in chrom=%.*s vb_i=%u vb_line_i=%d: line will be compressed, but not indexed", 
+        WARN_ONCE (_FYI "Invalid POS=0 value in chrom=%.*s vb_i=%u vb_line_i=%d: line will be compressed, but not indexed", 
                     vb->chrom_name_len, vb->chrom_name, vb->vblock_i, vb->line_i);
             
     if (pos) random_access_update_pos (VB, VCF_POS);

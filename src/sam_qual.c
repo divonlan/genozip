@@ -45,7 +45,7 @@ rom bam_qual_display (bytes qual, uint32_t l_seq) // caller should free memory
 // callback function for compress to get data of one line
 COMPRESSOR_CALLBACK (sam_zip_qual) 
 {
-    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);
+    ZipDataLineSAM𐤐 dl = DATA_LINE (vb_line_i);
 
     // note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec
     *line_data_len  = dl->dont_compress_QUAL ? 0 : MIN_(maximum_size, dl->QUAL.len);
@@ -64,7 +64,7 @@ COMPRESSOR_CALLBACK (sam_zip_qual)
 #define QUAL_ZIP_CALLBACK(tag, txt_index, len, may_be_revcomped)        \
 COMPRESSOR_CALLBACK (sam_zip_##tag)                                     \
 {                                                                       \
-    ZipDataLineSAMP dl = DATA_LINE (vb_line_i);                         \
+    ZipDataLineSAM𐤐 dl = DATA_LINE (vb_line_i);                         \
     *line_data_len = ((txt_index) <= dl->line_start || dl->dont_compress_##tag) ? 0 : MIN_(maximum_size, (len)); /* note: maximum_len might be shorter than the data available if we're just sampling data in codec_assign_best_codec */ \
     if (!line_data || ! *line_data_len) return; /* no data, or only lengths were requested */   \
     *line_data = Btxt (txt_index);                                      \
@@ -88,11 +88,11 @@ void sam_qual_produce_huffman (VBlockSAMP vb)
     huffman_start_chewing (SAM_QUAL, 0, 0, 0, 1);
 
     for_line {
-        ZipDataLineSAMP dl = DATA_LINE(line_i);
+        ZipDataLineSAM𐤐 dl = DATA_LINE(line_i);
         if (dl->no_qual) continue;
 
         // in case segconf decided to optimize QUAL: since segconf data was not optimized so we optimize it now
-        if (segconf.optimize[SAM_QUAL])
+        if (segconf_optimize (SAM_QUAL))
             optimize_phred_quality_string (STRtxt(dl->QUAL), Btxt (dl->QUAL.index), false, false); 
 
         huffman_chew_one_sample (SAM_QUAL, STRtxt(dl->QUAL), false);
@@ -170,7 +170,7 @@ static bool sam_seg_QUAL_diff_do (VBlockSAMP vb, rom my_qual, rom other_qual, ui
 
 // diff current QUAL against prim or saggy's QUAL. return false if diff was aborted
 typedef enum { QDT_DEFAULT=0, QDT_ABORTED=1, QDT_REVERSED=2/*v15*/ } QualDiffType; // this values are part of the file format
-static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(my_qual), 
+static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(my_qual), 
                                STRp (other_qual), bool other_revcomp, uint32_t *other_hard_clip, unsigned add_bytes)
 {
     QualDiffType diff_type = QDT_DEFAULT; // optimistic
@@ -236,7 +236,7 @@ static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(m
     return diff_type; // all good
 }
 
-static void sam_seg_QUAL_segconf (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual*/, bool monochar)
+static void sam_seg_QUAL_segconf (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(qual)/*always textual*/, bool monochar)
 {
     if (!monochar && !vb->qual_missing) segconf.nontrivial_qual = true;
 
@@ -267,18 +267,18 @@ static void sam_seg_warn_bad_qual (VBlockSAMP vb, STRp(qual))
  
     bad_qual_str (VB, STRa(qual));
         
-    WARN ("FYI: %s file violates the SAM specification: Found an alignment with invalid QUAL scores: QNAME=\"%.*s\". QUAL=\"%.*s\" ('■' marks an invalid score). No worries, Genozip will still compress this file correctly.\n",
+    WARN (_FYI "%s file violates the SAM specification: Found an alignment with invalid QUAL scores: QNAME=\"%.*s\". QUAL=\"%.*s\" ('■' marks an invalid score). Genozip will compress this file without issues, but you might want to look into this.\n",
           dt_name (vb->data_type), STRf(qname), STRfb(vb->scratch));
 
     buf_free (vb->scratch);
 }
 
-void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual*/, unsigned add_bytes)
+void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(qual)/*always textual*/, unsigned add_bytes)
 {
     START_TIMER;
 
     ContextP qual_ctx  = CTX(SAM_QUAL);
-    ZipDataLineSAMP saggy_dl;
+    ZipDataLineSAM𐤐 saggy_dl;
     bool prim_has_qual_but_i_dont = false; // will be set if this line has no QUAL, but its prim line does (very rare)
     QualDiffType diff_type = QDT_DEFAULT;  // quality scores are too different, we're better off not diffing (added 14.0.10)
     bool pacbio_diff = false;
@@ -383,7 +383,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAMP dl, STRp(qual)/*always textual
                 IS_PRIM(vb) ? SAM_QUALSA : SAM_QUAL, 0); 
    
     // get QUAL score, consumed by mate ms:i
-    if (!segconf_running && segconf.sam_ms_type == ms_BIOBAMBAM && !segconf.optimize[SAM_QUAL])
+    if (!segconf_running && segconf.sam_ms_type == ms_BIOBAMBAM && !segconf_optimize (SAM_QUAL))
         dl->QUAL_score = sam_get_QUAL_score (vb, STRa(qual));
  
     if (segconf_running) 
@@ -400,7 +400,7 @@ done:
 // 2Y:Z - CellRanger - R2 qual?
 // TQ:Z - CellRanger & longranger: Quality values of the 7 trimmed bases following the barcode sequence at the start of R1. Can be used to reconstruct the original R1 quality values.
 //-----------------------------------------------------------------------------------------------------
-void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAMP dl, 
+void sam_seg_other_qual (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, 
                          uint32_t *txt_index,  // optional out: if used, qual_len is expected to be the same as SEQ.len
                          LineWordS *line_word, // optional out
                          Did did_i, STRp(qual), unsigned add_bytes)

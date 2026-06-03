@@ -153,8 +153,8 @@ static void codec_longr_alg_init_read (LongrState *state, STRp(seq), bool is_rev
     // get first channel
     for (int32_t i=0; i < B_AHEAD_OF_Q; i++) 
         codec_longr_update_state (state, 
-                                  is_rev ? acgt_encode_comp[(seq_len-1-i) >= 0 ? seq[seq_len-1-i] : 'T']
-                                         : acgt_encode[i < seq_len ? seq[i] : 'A'],
+                                  is_rev ? acgt_encode_comp ((seq_len-1-i) >= 0 ? seq[seq_len-1-i] : 'T')
+                                         : acgt_encode (i < seq_len ? seq[i] : 'A'),
                                   0, 0);
 }
 

@@ -34,9 +34,7 @@
 #pragma GENDICT SAM_QBNAME=DTYPE_1=QBNAME 
 #pragma GENDICT SAM_QCNAME=DTYPE_1=QCNAME 
 #pragma GENDICT SAM_QDNAME=DTYPE_1=QDNAME 
-#pragma GENDICT SAM_QENAME=DTYPE_1=QENAME 
-#pragma GENDICT SAM_QFNAME=DTYPE_1=QFNAME 
-#pragma GENDICT SAM_QGNAME=DTYPE_1=QGNAME // if adding more Q*NAMEs - add sam.h, fasta.h, gff.h too, and update MAX_QNAME_ITEMS
+#pragma GENDICT SAM_QENAME=DTYPE_1=QENAME // if adding more Q*NAMEs - add fasta.h, gff.h too, and update MAX_QNAME_ITEMS
 #pragma GENDICT SAM_QmNAME=DTYPE_1=QmNAME // QmNAME reserved for mate number (always the last dict_id in the container)
 
 #pragma GENDICT SAM_QNAME2=DTYPE_FIELD=QNAME2
@@ -54,8 +52,26 @@
 #pragma GENDICT SAM_QBNAME2=DTYPE_1=qBNAME 
 #pragma GENDICT SAM_QCNAME2=DTYPE_1=qCNAME 
 #pragma GENDICT SAM_QDNAME2=DTYPE_1=qDNAME 
-#pragma GENDICT SAM_QeNAME2=DTYPE_1=qENAME 
+#pragma GENDICT SAM_QENAME2=DTYPE_1=qENAME 
 #pragma GENDICT SAM_QmNAME2=DTYPE_1=qmNAME 
+
+#pragma GENDICT SAM_QEMBED=DTYPE_FIELD=QEMBED
+#pragma GENDICT SAM_Q0EMBED=DTYPE_1=e0EMBD    
+#pragma GENDICT SAM_Q1EMBED=DTYPE_1=e1EMBD 
+#pragma GENDICT SAM_Q2EMBED=DTYPE_1=e2EMBD
+#pragma GENDICT SAM_Q3EMBED=DTYPE_1=e3EMBD
+#pragma GENDICT SAM_Q4EMBED=DTYPE_1=e4EMBD
+#pragma GENDICT SAM_Q5EMBED=DTYPE_1=e5EMBD
+#pragma GENDICT SAM_Q6EMBED=DTYPE_1=e6EMBD 
+#pragma GENDICT SAM_Q7EMBED=DTYPE_1=e7EMBD 
+#pragma GENDICT SAM_Q8EMBED=DTYPE_1=e8EMBD 
+#pragma GENDICT SAM_Q9EMBED=DTYPE_1=e9EMBD 
+#pragma GENDICT SAM_QAEMBED=DTYPE_1=eAEMBD 
+#pragma GENDICT SAM_QBEMBED=DTYPE_1=eBEMBD 
+#pragma GENDICT SAM_QCEMBED=DTYPE_1=eCEMBD 
+#pragma GENDICT SAM_QDEMBED=DTYPE_1=eDEMBD 
+#pragma GENDICT SAM_QEEMBED=DTYPE_1=eEEMBD 
+#pragma GENDICT SAM_QmEMBED=DTYPE_1=emEMBD 
 
 // Fields prefixed with "FASTQ_" are not used in SAM, but are here so that the did's are the same for SAM and FASTQ
 #pragma GENDICT FASTQ_EXTRA=DTYPE_1=DESC 
@@ -592,6 +608,14 @@
 #pragma GENDICT OPTION_xq_i=DTYPE_2=xq:i     // Extended MAPQ, output of --generate-xq-tags
 //#pragma GENDICT OPTION_XQ_i=DTYPE_2=XQ:i   // (dup) same as xq:i
 
+#pragma GENDICT OPTION_ga_Z=DTYPE_2=ga:Z     // "graph alignment", formated like SA:Z: https://help.dragen.illumina.com/product-guides/dragen-v4.5/dragen-host-software
+#pragma GENDICT OPTION_ga_CONTIG=DTYPE_2=g0a_CONTIG  
+#pragma GENDICT OPTION_ga_STRAND=DTYPE_2=g1a_STRAND 
+#pragma GENDICT OPTION_ga_POS=DTYPE_2=g2a_POS 
+#pragma GENDICT OPTION_ga_CIGAR=DTYPE_2=g3a_CIGAR 
+#pragma GENDICT OPTION_ga_NM=DTYPE_2=g4a_NM 
+#pragma GENDICT OPTION_ga_MAPQ=DTYPE_2=g5a_MAPQ 
+
 // added by GATK's BQSR (Base Quality Score Recalibration)
 #pragma GENDICT OPTION_BD_Z=DTYPE_2=BD:Z     // Deletion base quality  (not used in newer versions of GATK)
 #pragma GENDICT OPTION_BI_Z=DTYPE_2=BI:Z     // Insertion base quality (not used in newer versions of GATK)
@@ -997,6 +1021,6 @@ typedef enum { SAM_COMP_NONE=255, SAM_COMP_MAIN=0, SAM_COMP_PRIM=1, SAM_COMP_DEP
 #define IS_SRC_and_RECON_BAM_PIZ (IS_SRC_BAM_PIZ && vb->translation.trans_containers) 
 
 // source file. works for ZIP/PIZ. In PIZ: Source, NOT the data type reconstructed.
-#define IS_SRC_BAM (command==ZIP ? IS_BAM_ZIP : IS_SRC_BAM_PIZ)
+#define IS_SRC_BAM (IS_ZIP ? IS_BAM_ZIP : IS_SRC_BAM_PIZ)
 #define IS_SRC_CRAM (z_file->src_codec == CODEC_CRAM)          
 #define IS_SRC_BCF  (z_file->src_codec == CODEC_BCF)

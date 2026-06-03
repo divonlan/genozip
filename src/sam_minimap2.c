@@ -24,7 +24,7 @@ static inline int32_t s1_prediction (int32_t cm)
     return round ((double)cm * (double)segconf.s1_to_cm_32 / 32.0);
 }
 
-void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s1, unsigned add_bytes)
+void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t s1, unsigned add_bytes)
 {
     ContextP ctx = CTX (OPTION_s1_i);
     
@@ -34,7 +34,7 @@ void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s1, unsigned add_b
     if (segconf_running) {
         // calculate average (s1:i / cm:i) x32
         if (cm && s1 >= 1)
-            segconf.s1_to_cm_32 += round (((double)s1 * 32.0) / (double)cm);
+            segconf.cummul_s1_to_cm_32 += round (((double)s1 * 32.0) / (double)cm);
         goto fallback;
     }
 
@@ -68,7 +68,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_s1)
 // s2:i Chaining score of the best secondary chain
 // -------------------------------------------------------
 
-void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s2, unsigned add_bytes)
+void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t s2, unsigned add_bytes)
 {
     if (s2 == 0)
         seg_by_did (VB, "0", 1, OPTION_s2_i, add_bytes);
@@ -84,13 +84,13 @@ void sam_seg_s2_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t s2, unsigned add_b
 // cm:i Number of minimizers on the chain
 // -------------------------------------------------------
 
-void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t cm, unsigned add_bytes)
+void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t cm, unsigned add_bytes)
 {
     ContextP ctx = CTX (OPTION_cm_i);
 
     if (segconf_running) {
         // calculate average SEQ.len / cm:i
-        segconf.seq_len_to_cm += (cm > 0) ? round ((double)dl->SEQ.len / (double)cm) : 0;
+        segconf.cummul_seq_len_to_cm += (cm > 0) ? round ((double)dl->SEQ.len / (double)cm) : 0;
         goto fallback;
     }
 
@@ -126,7 +126,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_cm)
 // ms:i DP score of the max scoring segment in the alignment
 // ----------------------------------------------------------
 
-// void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAMP dl, int64_t ms, unsigned add_bytes)
+// void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t ms, unsigned add_bytes)
 // {
 //     // if (ms == vb->ref_and_seq_consumed)
 // }

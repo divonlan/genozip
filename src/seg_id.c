@@ -26,10 +26,12 @@ static inline ContextP id_num2_ctx (VBlockP vb, ContextP ctx)
 
 static void seg_id_add_to_unknown (ContextP ctx, STRp(id))
 {
+    if (!z_file) return;
+    
     int id_i = -1;
     
-    int i=0;  for (;i < NUM_COLLECTED_WORDS && segconf.unk_ids_tag_name[i][0]; i++)
-        if (!memcmp (ctx->tag_name, segconf.unk_ids_tag_name[i], MAX_TAG_LEN)) {
+    int i=0;  for (;i < NUM_COLLECTED_WORDS && z_file->unk_ids_tag_name[i][0]; i++)
+        if (!memcmp (ctx->tag_name, z_file->unk_ids_tag_name[i], MAX_TAG_LEN)) {
             id_i = i;
             break;
         }
@@ -38,12 +40,12 @@ static void seg_id_add_to_unknown (ContextP ctx, STRp(id))
 
     if (id_i == -1) {
         id_i = i;
-        memcpy (segconf.unk_ids_tag_name[i], ctx->tag_name, MAX_TAG_LEN);
+        memcpy (z_file->unk_ids_tag_name[i], ctx->tag_name, MAX_TAG_LEN);
     }
 
     for (i=0; i < NUM_UNK_ID_CTXS ; i++)
-        if (!segconf.unk_ids[id_i][i][0]) { // we still have room
-            memcpy (segconf.unk_ids[id_i][i], id, MIN_(id_len, UNK_ID_LEN));
+        if (!z_file->unk_ids[id_i][i][0]) { // we still have room
+            memcpy (z_file->unk_ids[id_i][i], id, MIN_(id_len, UNK_ID_LEN));
             break;
         }
 }
@@ -176,7 +178,7 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
             ctx_num1 = id_num1_ctx (vb, ctx);
             ContextP ctx_num2 = id_num2_ctx (vb, ctx);
             
-            SmallContainer con = {
+            Container(2) con = {
                 .repeats   = 1,
                 .nitems_lo = 2,
                 .items = { { .dict_id = ctx_num1->dict_id, .separator[0] = '.' },  // alpha and num1

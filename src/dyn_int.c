@@ -240,7 +240,7 @@ void dyn_int_init_ctx (VBlockP vb, ContextP ctx, int64_t value)
 static inline void dyn_init_alloc (VBlockP vb, ContextP ctx)
 {
     #define MIN_LOCAL_ALLOCATION 1024
-    #define AT_LEAST(did_i) ROUNDUP64 (MAX_(MIN_LOCAL_ALLOCATION * sizeof(int64_t), ((uint64_t)(((did_i) < MAX_NUM_PREDEFINED) ? segconf.local_per_line[did_i] * (float)(vb->lines.len32) : 0))))
+    #define AT_LEAST(did_i) ROUNDUP64 (MAX_(MIN_LOCAL_ALLOCATION * sizeof(int64_t), (((did_i) < MAX_NUM_PREDEFINED) ? (uint64_t)segconf.per_line[did_i].local * vb->lines.len32 : 0)))
 
     // non-initial alloc. skip the complicated computation in AT_LEAST
     if (ctx->local.len32)
