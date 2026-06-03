@@ -595,8 +595,8 @@ increment-version: # note: target name is not "version.h" so this is not invoked
 	@bash $(SCRIPTS)/increment-version.sh
 
 .archive.tar.gz : $(C_SRCS) $(X86_ASM_SRCS) $(ARM_ASM_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(INCLUDES) ../LICENSE.txt
-	@echo Creating github tag genozip-$(version) and archive
 	@$(SH_VERIFY_ALL_COMMITTED)
+	@echo Creating github tag genozip-$(version) and archive
 	@git push > /dev/null
 	@(git tag genozip-$(version) > /dev/null ; exit 0) # ignore errors if already exists (due to re-run of make)
 	@(cd secure; git tag genozip-$(version) > /dev/null ; exit 0)
@@ -690,6 +690,7 @@ push-build: # push files modified during the build process
 	@git stage $(BUILD_FILES) -f
 	@git commit -m $(version) 
 	@git push
+	@(cd secure; git commit -m $(version); git push)
 
 finalize-distribution:
 	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")

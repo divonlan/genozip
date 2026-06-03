@@ -91,7 +91,7 @@ uint64_t aligner_prefetch_gpos (VBlock𐤐 vb, Bits𐤐 seq, uint64_t base_i, bo
 
     // Locality=1 (only L3 caching) is best (tested). Reason: after reading the GPOS
     // from refhash, we probably will never access that location again, so caching just causes cache pollution.
-    // Howver, we cache just in L3, in case the Line Fill Buffer (LFB) was already evicted by the time the code was ready to pick it up. 
+    // However, we cache just in L3, in case the Line Fill Buffer (LFB) was already evicted by the time the code was ready to pick it up. 
     if (gpos_bytes == 4)
         __builtin_prefetch (B32(refhash_buf, hash), 0/*read-only*/, 1/*locality: cache just in L3*/);
 
