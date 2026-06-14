@@ -41,8 +41,8 @@ endif
 
 ifdef BUILD_PREFIX # conda 
 	ifdef Windows
-		CC=gcc # in Windows, override conda's default Visual C with gcc 
-		CXX=gcc
+		CC ?= gcc # in Windows, override conda's default Visual C with gcc 
+		CXX ?= g++
 		LDFLAGS  += -L$(PREFIX)/Library/lib
 		CFLAGS   += -I$(PREFIX)/Library/include 
 	endif
