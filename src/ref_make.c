@@ -263,5 +263,5 @@ void ref_download_eval_ref (rom dt_name)
     }
 
     else 
-        WARN ("Failed to download and make reference file: continuing without a reference", NULL);
+        WARN (_FYI "Failed to download and make reference file: continuing without a reference", NULL);
 }

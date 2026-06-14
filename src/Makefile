@@ -99,7 +99,6 @@ ifdef osx_arm64
 ifndef BUILD_PREFIX # not conda 
 	CFLAGS += -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk 
 endif
-	CFLAGS   += -DGENOZIP_ALLOW_UNALIGNED_ACCESS 
 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
 	ARCHS = arm64
 	VALID_ARCHS = arm64 
@@ -116,8 +115,11 @@ OPTFLAGS   += -O3
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
 ifdef x86_64 # tests show that this⇩ configuration is actually faster than -march=haswell or -march=native
-	CFLAGS   += -DGENOZIP_ALLOW_UNALIGNED_ACCESS -march=nehalem -msse4.1 -msse4.2
-	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
+# Uncomment for older machines
+# 	CFLAGS   += -march=nehalem -msse4.1 -msse4.2
+# 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
+	CFLAGS   += -march=haswell 
+	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
 endif
 
 # need old gcc linked to an old sysroot(=glibc) for older Linux machines
@@ -176,8 +178,8 @@ LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
 
 BSC_C_SRCS = bsc/libsais.c
 
-BSC_CXX_SRCS   = bsc/bwt.cpp bsc/coder.cpp bsc/detectors.cpp bsc/libbsc.cpp bsc/lzp.cpp 													\
-		  bsc/platform.cpp bsc/preprocessing.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/adler32.cpp
+BSC_CXX_SRCS = bsc/bwt.cpp bsc/coder.cpp bsc/detectors.cpp bsc/libbsc.cpp bsc/lzp.cpp bsc/platform.cpp 			\
+          bsc/preprocessing.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/adler32.cpp 
 
 HTSCODECS_SRC = htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c htscodecs/arith_dynamic.c
 
@@ -296,9 +298,10 @@ else
 	LDFLAGS += $(OBJDIR)/secure/license.o
 endif
 
-ifdef Windows
+ifdef Windows # link MingW DLLs staticly (order is important!)
 	EXE = .exe
-	LDFLAGS += -static -static-libgcc -lIPHLPAPI -lUrlmon -lDbgHelp # link MingW DLLs staticly
+#xxx 	LDFLAGS += -static -static-libgcc -lIPHLPAPI -lUrlmon -lDbgHelp
+	LDFLAGS := -static -static-libgcc -static-libstdc++ $(LDFLAGS) -lIPHLPAPI -lUrlmon -lDbgHelp
 endif
 
 ifdef linux_x86
@@ -329,13 +332,12 @@ ASFLAGS += -I$(IGZIP_ARCH_DIR)
 ifdef x86_64
 PLATFORM_DEPS = $(addprefix $(OBJDIR)/,$(X86_ASM_SRCS:.asm=.d)) $(addprefix $(OBJDIR)/,$(X86_SRCS:.c=.d))
 PLATFORM_OBJS = $(addprefix $(OBJDIR)/,$(X86_ASM_SRCS:.asm=.o)) $(addprefix $(OBJDIR)/,$(X86_SRCS:.c=.o))
-#  $(addprefix $(OBJDIR)/,bsc/qlfc_AVX2.o bsc/qlfc_AVX.o bsc/qlfc_SSE41.o bsc/adler32_AVX.o bsc/adler32_SSSE3.o)
 endif
 
 ifdef arm64
 PLATFORM_DEPS = $(addprefix $(OBJDIR)/,$(ARM_ASM_SRCS:.S=.d)) $(addprefix $(OBJDIR)/,$(ARM_SRCS:.c=.d))
 PLATFORM_OBJS = $(addprefix $(OBJDIR)/,$(ARM_ASM_SRCS:.S=.o)) $(addprefix $(OBJDIR)/,$(ARM_SRCS:.c=.o))
-#  $(addprefix $(OBJDIR)/,bsc/qlfc_A64.o bsc/adler32_A64.o)
+# 				$(addprefix $(OBJDIR)/,bsc/qlfc_A64.o bsc/adler32_A64.o) 
 endif
 
 OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.o))       $(PLATFORM_OBJS) $(BSC_OPT_OBJS)

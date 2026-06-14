@@ -1271,7 +1271,7 @@ static void bgzf_failed_exact_verification (void)
 
     flag.bgzf = BGZF_EXACT_FAILED; // no point continuing to test + avoid full-file verification and error message
     
-    WARN ("%s A different gz-recompression method was used.", NON_EXACT_ERROR);
+    WARN (_FYI "%s A different gz-recompression method was used.", NON_EXACT_ERROR);
 }
 
 static void bgzf_failed_exact_verification_one_block (VBlockP vb, const BgzfBlockPiz *restrict block, uint32_t this_block_digest, STRp(gz_data))
@@ -1509,7 +1509,7 @@ void bgzf_dispatch_compress (Dispatcher dispatcher, STRp (uncomp), CompIType com
 
         vb->is_txt_header = is_txt_header; // not BAI indexing on txt_header VB
 
-        // BGZF-compress vb->txt_data in a separate thread
+        // BGZF-compress vb->txt_data in a separate thread (unless -@1)
         dispatcher_compute (dispatcher, bgzf_compress_vb);
     }
 
@@ -1643,7 +1643,7 @@ void show_gz (rom filename)
             }
 
             if (!size_width && block_txt_len) 
-                size_width = -str_get_uint_textual_len (block_txt_len);
+                size_width = -str_int_len (block_txt_len);
 
             uint32_t h_len;
             StrText1K header_str = display_gz_header_ex (show_gz_next, block_gz_len, false, &h_len);

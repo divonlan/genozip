@@ -536,7 +536,7 @@ static void vcf_header_subset_samples (BufferP vcf_field_name_line)
     ARRAY (char, line, *vcf_field_name_line);
 
     flag.samples = is_field_name_line (STRa(line));
-    ASSWRET (flag.samples,, "Warning: found non-standard VCF sample header line. Ingoring --samples : \n%.*s", (int)line_len, line);
+    ASSWRET (flag.samples,, _WRN "Found non-standard VCF sample header line. Ingoring --samples : \n%.*s", (int)line_len, line);
 
     int32_t num_samples=-8;
     for (unsigned i=0; i < line_len; i++)
@@ -599,7 +599,7 @@ static void vcf_header_subset_samples (BufferP vcf_field_name_line)
 
     // warn about any --samples items that were not found in the vcf file (all the ones that still remain in the buffer)
     for (unsigned s=0; s < snames_len; s++) 
-        ASSERTW (false, "Warning: requested sample '%s' is not found in the VCF file, ignoring it", snames[s]);
+        ASSERTW (false, _WRN "Requested sample '%s' is not found in the VCF file, ignoring it", snames[s]);
 
     // if the user filtered out all samples, its equivalent of drop_genotypes
     if (!vcf_num_displayed_samples) flag.drop_genotypes = true;

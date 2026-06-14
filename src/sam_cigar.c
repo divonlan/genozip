@@ -16,16 +16,20 @@
 #include "dyn_int.h"
 #include "htscodecs/rANS_static4x16.h"
 
-static const bool cigar_valid_op[256] = { ['M']=true, ['I']=true, ['D']=true, ['N']=true, ['S']=true, ['H']=true, ['P']=true, ['=']=true, ['X']=true }; 
+alignas(64) static const bool cigar_valid_op[256] = { 
+    ['M']=true, ['I']=true, ['D']=true, ['N']=true, ['S']=true, ['H']=true, ['P']=true, ['=']=true, ['X']=true 
+}; 
 
 const char cigar_op_to_char[16] = "MIDNSHP=Xabcdefg"; // BAM to SAM (a-g are invalid values)
 
 #ifdef __clang__ 
 #pragma GCC diagnostic ignored "-Winitializer-overrides" // overlapping indices in this array initializer
 #endif
-static const uint8_t cigar_char_to_op[256] = { [0 ... 255]=BC_INVALID, 
-                                               ['M']=BC_M, ['I']=BC_I, ['D']=BC_D, ['N']=BC_N, ['S']=BC_S, 
-                                               ['H']=BC_H, ['P']=BC_P, ['=']=BC_E, ['X']=BC_X, ['*']=BC_NONE }; 
+alignas(64) static const uint8_t cigar_char_to_op[256] = { 
+    [0 ... 255]=BC_INVALID, 
+    ['M']=BC_M, ['I']=BC_I, ['D']=BC_D, ['N']=BC_N, ['S']=BC_S, 
+    ['H']=BC_H, ['P']=BC_P, ['=']=BC_E, ['X']=BC_X, ['*']=BC_NONE 
+}; 
 
 #undef S 
 #define S (c == 'S')
@@ -148,7 +152,9 @@ static uint32_t sam_cigar_get_seq_len_plus_H (STRp(cigar))
     return seq_len;
 }
 
-void sam_cigar_binary_to_textual (VBlockP vb, const BamCigarOp *cigar, uint16_t n_cigar_op, 
+void sam_cigar_binary_to_textual (VBlockP vb, 
+                                  const BamCigarOp *restrict cigar, // may be unaligned per definition of BamCigarOp
+                                  uint16_t n_cigar_op, 
                                   bool reverse, // reverse the cigar 15M3I20S -> 20S3I15M
                                   BufferP textual_cigar /* out */)
 {
@@ -177,17 +183,19 @@ void sam_cigar_binary_to_textual (VBlockP vb, const BamCigarOp *cigar, uint16_t 
 
     buf_alloc (vb, textual_cigar, len + 1 /* for \0 */, 100, char, 0, textual_cigar->name ? NULL : "textual_cigar");
 
-    char *next = BAFTc (*textual_cigar);
+    char *restrict next = BAFTc (*textual_cigar);
 
     if (!reverse)
         for (int i=0; i < n_cigar_op; i++) {
-            next += str_int_fast (cigar[i].n, next);
-            *next++ = cigar_op_to_char[cigar[i].op];
+            BamCigarOp op = cigar[i];
+            next += str_int_fast (op.n, next);
+            *next++ = cigar_op_to_char[op.op];
         }
     else
         for (int i=n_cigar_op-1; i >= 0 ; i--) {
-            next += str_int_fast (cigar[i].n, next);
-            *next++ = cigar_op_to_char[cigar[i].op];
+            BamCigarOp op = cigar[i];
+            next += str_int_fast (op.n, next);
+            *next++ = cigar_op_to_char[op.op];
         }
 
     *next = 0; // nul terminate
@@ -280,7 +288,7 @@ uint32_t sam_cigar_get_ref_consumed (STRp(cigar), bool is_bam, bool min_is_one)
     return ref_consumed;
 }
 
-bool sam_cigar_textual_to_binary (VBlockP vb, STRp(cigar), BufferP binary_cigar, rom buf_name)
+bool sam_cigar_textual_to_binary (VBlockP vb, STR𐤐(cigar), BufferP binary_cigar, rom buf_name)
 {
     ASSERTNOTINUSE (*binary_cigar);
 
@@ -290,7 +298,7 @@ bool sam_cigar_textual_to_binary (VBlockP vb, STRp(cigar), BufferP binary_cigar,
     for (int i=0; i < cigar_len; i++)
         if (!IS_DIGIT (cigar[i])) n_ops++;
 
-    ARRAY_alloc (BamCigarOp, ops, n_ops, false, *binary_cigar, vb, buf_name); // buffer must be already named by caller
+    ARRAY_alloc𐤐 (BamCigarOp, ops, n_ops, false, *binary_cigar, vb, buf_name); // buffer must be already named by caller
 
     rom after = cigar + cigar_len;
 
@@ -1095,12 +1103,6 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_COPY_BUDDY_CIGAR)
     CTX(SAM_CIGAR)->empty_lookup_ok = true; // in case CIGAR is "*" (i.e. empty in BAM) (was incorrectly missing, added in 15.0.62)
     sam_reconstruct_from_buddy_get_textual_snip (vb, CTX(SAM_CIGAR), bt, pSTRa(bam_cigar));
     
-#ifndef GENOZIP_ALLOW_UNALIGNED_ACCESS
-    char bam_cigar_copy[bam_cigar_len];
-    memcpy (bam_cigar_copy, bam_cigar, bam_cigar_len);
-    bam_cigar = bam_cigar_copy;
-#endif
-
     // convert binary CIGAR to textual MC:Z
     bam_cigar_len /= sizeof (uint32_t);
     sam_cigar_binary_to_textual (VB, (BamCigarOp *)STRa(bam_cigar), false, &vb->txt_data);
@@ -1221,12 +1223,12 @@ StrText sam_piz_display_aln_cigar (VBlockP vb, const SAAln *a)
 }
 
 // Deep and bamass: in-place collapse of X,= to M ; replaces N with D ; removes H,P - ahead of storing cigar in deep_ents/bamass_ents.
-void sam_prepare_deep_cigar (VBlockP vb, ConstBamCigarOpP cigar, uint32_t cigar_len, bool reverse)
+void sam_prepare_deep_cigar (VBlockP vb, const BamCigarOp *restrict cigar, uint32_t cigar_len, bool reverse)
 {
     ASSERTNOTZERO (cigar_len);
 
     buf_alloc_exact (vb, CTX(SAM_CIGAR)->deep_cigar, cigar_len, BamCigarOp, "deep_cigar");
-    BamCigarOpP deep_cigar = B1ST(BamCigarOp, CTX(SAM_CIGAR)->deep_cigar);
+    BamCigarOp *restrict deep_cigar = B1ST(BamCigarOp, CTX(SAM_CIGAR)->deep_cigar);
      
     for (int i=0; i < cigar_len; i++) {
         ConstBamCigarOpP op = &cigar[i];

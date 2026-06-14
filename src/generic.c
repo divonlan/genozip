@@ -166,7 +166,7 @@ rom fallback_to_generic (VBlockP vb) // vb is optional
     SAVE_FLAG(quiet);
 
     if (!flag.explicit_quiet) flag.quiet = false; // cancel segconf's quietness
-    WARN ("%s is not a valid %s file, compressing as GENERIC", txt_name, dt_name(txt_file->data_type));
+    WARN (_FYI "%s is not a valid %s file, compressing as GENERIC", txt_name, dt_name(txt_file->data_type));
     
     z_file->data_type = txt_file->data_type = DT_GNRIC;
 

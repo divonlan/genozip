@@ -483,13 +483,14 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 
     // display the rest of the snip first, and then the lookup up text.
     case SNIP_LOOKUP:
+        STRinc (snip, 1);
+        goto lookup;
+        
     case SNIP_OTHER_LOOKUP: {
-        if (snip[0] == SNIP_LOOKUP) 
-            STRinc (snip, 1);
-        else 
-            // we are request to reconstruct from another ctx
-            base_ctx = reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); // also updates snip and snip_len
+        // we are request to reconstruct from another ctx
+        base_ctx = reconstruct_get_other_ctx_from_snip (vb, snip_ctx, pSTRa(snip)); // also updates snip and snip_len
 
+    lookup:
         switch (base_ctx->ltype) {
             case LT_STRING:
             case LT_SINGLETON:
@@ -636,7 +637,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
         switch (store_type) {
             case STORE_INT: 
                 // store the value only if the snip in its entirety is a reconstructable integer (eg NOT "21A", "-0", "012" etc)
-                has_new_value = str_get_int (snip, snip_len, &new_value.i);
+                has_new_value = str_get_int (STRa(snip), &new_value.i);
                 break;
 
             case STORE_FLOAT: {

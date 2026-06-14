@@ -15,16 +15,21 @@
 #include "aligner.h"
 
 // splicing
-#define MIN_MATCH_PC       73  // fail alignment if less than 73% of bits match
-#define SPLICE_MIN_PC      50  // min and max bit match percent in which we search for splicing
+#define MIN_MATCH_PC       47  // fail alignment if less than this number of bases match
+#define SPLICE_MIN_PC      32  // min and max match percent in which we search for splicing
 #define SPLICE_MAX_PC      90  
 #define SPLICE_MIN_SEQ_LEN 32  // no splicing for sequences shorter than this - not worth it
 #define MAX_SPLICE_GAP     (32 KB - 1)  // max allowed gap beween gpos and gpos2
 #define MIN_SPLICE_MATCH_CONTRIBTION 10 // for splicing to compress better, the spliced alignment needs to have this many more matching bases 
 
 // pairing
-#define PAIR_MAX_DISTANCE  500 // if pair2 is more distant from pair1 than this, it will get a penalty
-#define NON_PAIR_PENALTY   17  // penalty reduction in matching bits, for a pair2 gpos that is too distant from pair1 gpos
+#define PAIR_MAX_DISTANCE  500 // if pair2's gpos' gap from pair1's is larger than this, it will get a penalty
+#define NON_PAIR_PENALTY   13  // penalty reduction in matching bases, for a pair2 gpos that is too far from pair1 gpos
+
+// good enough result - stop searching
+#define NEAR_PERFECT_NORM  3   // if we find a genome sequence with this many mismatches - we stop searching and declare "near perfect"
+#define NEAR_PERFECT_FAST  20
+#define NEAR_PERFECT_BEST  0
 
 // low level
 #define CPU_CACHE_LINE_BYTES 64
@@ -34,7 +39,7 @@ typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
 
 typedef struct {
     PosType64 gpos;
-    int32_t match_n_bits; // matching bits per hamming
+    int32_t n_matching; // matching bits per hamming
     int32_t score;        // matching_bits after applying penalty if needed (might be negative)
     bool is_forward; 
     bool is_perfect;
@@ -47,9 +52,9 @@ static inline uint32_t nuke_encode_dir (char c, bool is_forward)
     return is_forward ? nuke_encode(c) : nuke_encode_comp(c); 
 }
 
-static inline int percent_match (uint32_t match_n_bits, uint32_t seq_len)
+static inline int percent_match (uint32_t n_matching, uint32_t seq_len)
 {
-    return match_n_bits * 50 / seq_len; 
+    return n_matching * 100 / seq_len; 
 }
 
 // Foward example: If seq is: G-AGGGCT  (G is the hook)  -- matches reference AGGGCT       - function returns 110110101000 (A=00 is the LSb)
@@ -140,20 +145,67 @@ static Bits aligner_seq_to_bitmap (VBlock𐤐 vb, rom𐤐 seq, uint64_t seq_len,
     return seq_bits;
 }
 
+// return number of mismatching bases between seq_bis and the candidate genomic region
+// note: we already verified (in aligner_collect_gpos) that seq_bits doesn't go before or after the edge of the genome
+static inline uint32_t aligner_count_mismatches (ConstBits𐤐 seq_bits, // the entire bit array (restrict-ed!)
+                                                 ConstBits𐤐 genome, 
+                                                 PosType64 gpos,
+                                                 bool is_forward)
+{
+    uint64_t genome_bit_i = (gpos * 2) + (is_forward ? 0 : seq_bits->nbits);  // index of bit in genome that matches first bit in seq_bits 
+
+    const uint64_t *restrict words_1 = seq_bits->words;
+    const uint64_t *restrict words_2 = &genome->words[genome_bit_i >> 6];
+    const uint64_t *after_1 = words_1 + seq_bits->nwords;
+    uint64_t diff=0;
+    int shift_2 = genome_bit_i & 0b111111;
+    uint32_t n_mismatches=0; // number of non-matching bits
+
+    #define calc_n_mismatches(w1,w2) ({   \
+        uint64_t bit_diff = (w1) ^ (w2);  \
+        diff = ((bit_diff >> 1) | bit_diff) & 0x5555555555555555ULL; /* OR the two bits of every base - if either is 1 then count as a diff. */ \
+        __builtin_popcountll (diff); }) /* note: expected to be _mm_popcnt_u64 with SSE4.2 */
+
+    uint64_t next_w2 = *words_2; 
+    if (is_forward)
+        for (const uint64_t *w1=words_1, *w2=words_2; w1 < after_1; w1++, w2++) {
+            uint64_t this_w2 = next_w2;
+            next_w2 = *(w2+1);
+            // note: if last seq_bits word is partial, we still calculate it in its entirety and correct later. However, in case we reach 
+            // the end of genome and have shift_2, we will access the word beyond the end of the genome->words. counting on words being a Buffer to not cause a segfault.
+            uint64_t w2_value = _bits_combined_word (this_w2, next_w2, shift_2);
+            n_mismatches += calc_n_mismatches (*w1, w2_value);
+        }
+
+    else 
+        for (const uint64_t *w1=words_1, *w2=words_2; w1 < after_1; w1++, w2--) {
+            uint64_t this_w2 = next_w2;
+            next_w2 = *(w2-1);
+            uint64_t w2_revcomp = bits_revcomp_word (_bits_combined_word (next_w2, this_w2, shift_2)); 
+            n_mismatches += calc_n_mismatches (*w1, w2_revcomp);
+        }
+
+    // decrease n_mismatches due to the unused part of the last seq_bits word
+    if (seq_bits->nbits & 0b111111)
+        n_mismatches -= __builtin_popcountll (diff & ~bitmask64 (seq_bits->nbits & 0b111111));
+
+    return n_mismatches; 
+    #undef calc_n_mismatches
+}
+
 static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos, 
                                         PosType64 gpos_R1, // if this is for R2: gpos of R1
                                         PosType64 gpos1,   // if splicing: main gpos of sequence
                                         Bits𐤐 seq_bits, uint32_t seq_len, bool fwd, 
-                                        ConstBits𐤐 genome, PosType64 genome_nbases, uint32_t max_snps_for_near_perfect,
+                                        ConstBits𐤐 genome, PosType64 genome_nbases, uint32_t near_perfect_max_mismatches,
                                         BestAlignment *restrict best) // in/out
 {
     // START_TIMER; // this has a small performance impact as it is called in a tight loop - uncomment when needed
 
     // note on 'N' in seq: since 'N' was encoded as 'A' in aligner_seq_to_bitmap(), we might be
-    // slightly underestimating the distance in cases were the genome also happens to have an 'A' there. That's ok. 
+    // slightly underestimating the mismatches in cases were the genome also happens to have an 'A' there. That's ok - piz sees A in the genome too. 
     // note: if rev, the genome sequence compared is still [gpos, gpos+seq_len), just revcomped
-    int32_t distance = bits_hamming_distance (seq_bits, genome, 2 * gpos, fwd);
-    int32_t match_n_bits = (uint32_t)seq_bits->nbits - distance;     
+    int32_t n_matching = seq_len - aligner_count_mismatches (seq_bits, genome, gpos, fwd);
         
     // penalty for remote GPOS in 2nd pair
     uint32_t penalty = (gpos_R1 != NO_GPOS // this is R2
@@ -161,19 +213,19 @@ static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos,
                      && ABS(gpos-gpos_R1) > PAIR_MAX_DISTANCE) // the GPOS is too far from R1 GPOS
         ? NON_PAIR_PENALTY : 0;
     
-    uint32_t score = match_n_bits - penalty; 
+    uint32_t score = n_matching - penalty; 
               
     // 32 bit arithmetic
     if (score > best->score) { 
-        *best = (BestAlignment){ .gpos         = gpos,
-                                 .match_n_bits = match_n_bits,
-                                 .score        = score,
-                                 .is_forward   = fwd,
-                                 .is_perfect   = (match_n_bits == seq_len * 2) };
+        *best = (BestAlignment){ .gpos       = gpos,
+                                 .n_matching = n_matching,
+                                 .score      = score,
+                                 .is_forward = fwd,
+                                 .is_perfect = (n_matching == seq_len) };
         
-        // note: we allow "max_snps_for_near_perfect" snps and we still consider the match good enough and stop looking further    
-        // compared to stopping only if match_n_bits==seq_len, this adds about 1% to the file size, but is significantly faster 
-        if (score >= (seq_len - max_snps_for_near_perfect) * 2) { // we found (almost) the best possible match              
+        // note: we allow "near_perfect_max_mismatches" mismatches and we still consider the match good enough and stop looking further    
+        // compared to stopping only if n_matching==seq_len, this adds about 1% to the file size, but is significantly faster 
+        if (score >= seq_len - near_perfect_max_mismatches) { // we found (almost) the best possible match              
             // COPY_TIMER (aligner_update_best); 
             return true; // perfect or near perfect                                                                                                     
         }                                                                                                                       
@@ -225,7 +277,7 @@ PosType64 aligner_collect_gpos (VBlock𐤐 vb,
     // Locality=3 (fully cache) is best for seg_all_data_lines time (tested). Reason: if this genome 
     // sequence is the best, we will access it again shortly after to calculate mismatches
 
-    // note: in case of REVERSE, bits_hamming_distance accesses the last word first, so we fetch its cache line first
+    // note: in case of REVERSE, aligner_count_mismatches accesses the last word first, so we fetch its cache line first
     __builtin_prefetch (s1_is_fwd ? first_word : last_word, 0/*read-only*/, 3/*fully cached*/);
     
     // case: beginning and end of genome sequence are on different cache lines prefetch one more 64B cache line
@@ -248,8 +300,7 @@ static void aligner_evaluate_hooks (
     // in case of --fast, we check only 1/3 of the bases, and we are content with a match (not searching any further) if it 
     // has at most 10 SNPs. On our test file, this reduced the number of calls to aligner_update_best by about 4X, 
     // at the cost of the compressed file being about 11% larger
-    uint64_t density = (flag.fast ? 3 : 1);
-    uint32_t max_snps_for_near_perfect = (flag.fast ? 10 : 2); // note: this is only approximately SNPs as we actually measure mismatched bits, not bases
+    uint32_t near_perfect_max_mismatches = (flag.fast?NEAR_PERFECT_FAST : flag.best?NEAR_PERFECT_BEST : NEAR_PERFECT_NORM);
     
     // pipeline stage 1: fetching gpos
     #define NOT_FETCHING UINT64_MAX
@@ -270,7 +321,7 @@ static void aligner_evaluate_hooks (
     // Pipeline stage 1: Initiate prefetch of gpos from refhash[hash]. hash is calculated from the kmer starting at the base after the hook.
     // Pipeline stage 2: Initiate prefetch of the cache lines containing the genomic sequence from genome[gpos]
     // Pipeline stage 3: Compare hamming distance of the genome[gpos] sequence (already fetched) and our sequence.
-    for (i=0; i < seq_len; i += density) {          
+    for (i=0; i < seq_len; i++) {          
         seq_prev = seq_curr;
         seq_curr = seq_next;
         seq_next = seq[i+1]; // note: no problem i+1 overflowing - this Buffer memory: in FASTQ/SAM this is vb->txt_data and BAM vb->textual_seq
@@ -289,7 +340,7 @@ static void aligner_evaluate_hooks (
             // pipeline stage 3: calculate outcome: use genome sequence prefetched in stage 2 to calculate hamming distance and evaluate the result
             if (s2_gpos != NO_GPOS &&
                 aligner_update_best (vb, s2_gpos, gpos_R1, gpos1, seq_bits, seq_len, s2_is_fwd, 
-                                     genome, genome_nbases, max_snps_for_near_perfect, best)) // true if near-perfect match
+                                     genome, genome_nbases, near_perfect_max_mismatches, best)) // true if near-perfect match
                 goto done; // near-perfect match, search no longer
 
             // pipeline stage 2: prefetch genome: use gpos fetched in stage 1, to prefetch the genomic sequence at genome[gpos]
@@ -352,9 +403,9 @@ static inline PosType64 aligner_best_match (
     BestAlignment best = { .gpos=NO_GPOS }, best2 = { .gpos=NO_GPOS }/*must be initialized even if not splicing*/;
     aligner_evaluate_hooks (vb, &seq_bits, STRa(seq), genome, genome_nbases, gpos_R1, NO_GPOS, &best);
 
-    int match_percent = percent_match (best.match_n_bits, seq_len); // note: this is matching bits, not matching bases
+    int match_percent = percent_match (best.n_matching, seq_len); // note: this is matching bits, not matching bases
 
-    *is_perfect = best.is_perfect && seq_is_all_acgt; // if !seq_is_all_acgt (=seq has an 'N'), it is never a perfect match even match_n_bits says so, because 'N's are converted to 'A's in the seq bitmap, and might therefore inflate match_n_bits by matching an 'A' in the genome
+    *is_perfect = best.is_perfect && seq_is_all_acgt; // if !seq_is_all_acgt (=seq has an 'N'), it is never a perfect match even n_matching says so, because 'N's are converted to 'A's in the seq bitmap, and might therefore inflate n_matching by matching an 'A' in the genome
     *is_forward = best.is_forward;
     *can_match_as_nonspliced = (match_percent >= MIN_MATCH_PC);                                         
 
@@ -372,7 +423,7 @@ static inline PosType64 aligner_best_match (
 
     // minimum critiera to be worth segging the alignment. note for spliced: this is an initial filtering, verifying that 
     // sum of matching bits (even double-counting overlaps) matches the criteria. aligner_seg_mismatches() will re-test more tightly after junction is known.
-    if (percent_match (best.match_n_bits + best2.match_n_bits, seq_len) < MIN_MATCH_PC)
+    if (percent_match (best.n_matching + best2.n_matching, seq_len) < MIN_MATCH_PC)
         return NO_GPOS;
     else
         return best.gpos;
@@ -593,6 +644,8 @@ static bool aligner_seg_mismatches (VBlock𐤐 vb, STR𐤐(seq),
                                     bool is_forward, bool can_match_as_nonspliced,
                                     uint32_t *restrict junction) // out
 {
+    START_TIMER;
+
     declare_seq_contexts;
 
     Bits𐤐 bitmap = buf_alloc_bits (vb, &bitmap_ctx->local, seq_len, vb->lines.len32 / 16 * segconf.std_seq_len, 
@@ -652,7 +705,7 @@ static bool aligner_seg_mismatches (VBlock𐤐 vb, STR𐤐(seq),
         }
         if (*seq != *r) {
 #ifdef DEBUG 
-            if (flag.debug_aligner) iprintf ("%c", is_forward ? *r : COMPLEM[(int)*r]); 
+            if (flag.debug_aligner) iprintf ("%c", is_forward ? *r : COMPLEM[(uint8_t)*r]); 
 #endif
             bits_clear (bitmap, bit_i); 
             BNXTc (seqmis_ctx[nuke_encode_dir (*r, is_forward)].local) = *seq;
@@ -670,6 +723,7 @@ static bool aligner_seg_mismatches (VBlock𐤐 vb, STR𐤐(seq),
 
     buf_free (vb->scratch);
 
+    COPY_TIMER (aligner_seg_mismatches);
     return is_perfect;
 }
 

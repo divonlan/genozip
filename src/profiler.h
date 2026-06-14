@@ -46,7 +46,7 @@
         sam_seg_QUAL, sam_seg_is_gc_line, sam_seg_aux_all, sam_seg_MD_Z_analyze, sam_seg_bsseeker2_XG_Z_analyze,\
         sam_seg_sag_stuff, sam_cigar_binary_to_textual, squank_seg, bam_seq_to_sam, sam_header_inspect,\
         sam_header_add_contig, contigs_create_index, sam_header_zip_inspect_PG_lines, sam_header_zip_inspect_RG_lines, sam_header_zip_inspect_HD_line, \
-        sam_header_inspect_SQ_lines, cram_inspect_file, \
+        sam_header_inspect_SQ_lines, cram_inspect_file, sam_seg_init_bisulfite, \
         sam_deep_zip_merge, sam_piz_con_item_cb, sam_piz_deep_compress, sam_piz_deep_add_qname, sam_piz_deep_add_seq, sam_piz_deep_add_qual,\
         sam_piz_deep_finalize_ents, sam_piz_deep_grab_deep_ents, fastq_seg_find_deep, \
         scan_index_qnames_preprocessing, sam_piz_sam2fastq_QUAL, sam_piz_sam2bam_QUAL,\
@@ -64,7 +64,7 @@
         txtheader_zip_read_and_compress, txtheader_compress, txtheader_compress_one_fragment, txtheader_piz_read_and_reconstruct,\
         digest, digest_txt_header, ref_make_calculate_digest, refhash_load_digest, ref_load_digest, refhash_make_refhash, \
         dict_io_compress_dictionaries, dict_io_assign_codecs, dict_io_compress_one_fragment, \
-        aligner_seg_seq, aligner_best_match, aligner_get_junction, aligner_update_best, aligner_seq_to_bitmap, aligner_evaluate_hooks, aligner_evaluate_hooks2, \
+        aligner_seg_seq, aligner_best_match, aligner_get_junction, aligner_update_best, aligner_seq_to_bitmap, aligner_evaluate_hooks, aligner_evaluate_hooks2, aligner_seg_mismatches, \
         refhash_revcomp_genome_do, ref_contigs_compress, ref_get_textual_seq,\
         zip_write_global_area, zip_finalize, \
         piz_read_global_area, ref_load_stored_reference, reference_re_digest_genome, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
@@ -86,16 +86,21 @@
         bai_write, bai_calculate_one_vb, bai_get_line, \
         show_bai, \
         tmp1, tmp2, tmp3, tmp4, tmp5, \
-        compress_field[MAX_DICTS], /* must be first after normal fields - measures codec time (consolidated) */ \
+        compress_field[MAX_DICTS], /* ZIP: measures codec compress time */ \
         seg_recon_field[MAX_DICTS] /* ZIP: seg time of each field, PIZ: recon time of each field */ 
 
 typedef struct {
-        struct { int64_t profiled; } nanosecs; 
-        struct { int64_t profiled; } count;
+        struct { uint64_t profiled; } nanosecs; // note: if changing types, update profile_add
+        struct { uint32_t profiled; } count;
         rom next_name, next_subname;
+} ProfilerVb;
+
+typedef struct {
+        struct { uint64_t profiled; } nanosecs; 
+        struct { uint64_t profiled; } count;
         unsigned num_vbs, max_vb_size_mb, num_txt_files;
         float avg_compute_vbs[MAX_NUM_TXT_FILES_IN_ZFILE];  // ZIP/PIZ: average number of compute threads active at any given time during the lifetime of the ZIP/PIZ dispatcher
-} ProfilerRec;
+} ProfilerGlobal;
 
 typedef struct timespec TimeSpecType;
 
@@ -135,7 +140,7 @@ extern void show_time_one (VBlockP vb, rom res, uint64_t delta);
     ({ if (HAS_SHOW_TIME(vb) && !in_assign_codec) COPY_TIMER(res); }) // account only if not running from codec_assign_best_codec, because it accounts for itself
 
 #define COPY_TIMER_COMPRESS_BY_FIELD(ctx) \
-    ({ COPY_TIMER(compress_field[ctx->did_i]); })
+    ({ if (HAS_SHOW_TIME(vb) && ctx) COPY_TIMER(compress_field[ctx->did_i]); })
 
 #define COPY_TIMER_SEG_FIELD(did_i) COPY_TIMER(seg_recon_field[did_i])
 

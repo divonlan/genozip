@@ -64,7 +64,7 @@ void vcf_copy_sample_seg_finalize (VBlockVCFP vb)
     decl_ctx (VCF_COPY_SAMPLE);
 
     // remove VCF_COPY_SAMPLE if no samples were copied
-    if (*B1ST8(ctx->local) == false && str_is_monochar (STRb(ctx->local))) 
+    if (buf_is_zero (&ctx->local))
         ctx->local.len = 0;
 }
 

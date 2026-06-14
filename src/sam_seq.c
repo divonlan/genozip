@@ -405,7 +405,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STR
     uint32_t bitmap_start = bitmap_ctx->next_local;        
 
     ASSERTW (seq_len < 100000 || segconf_running || segconf.is_long_reads, 
-             "%s: Warning: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
+             _WRN "%s: sam_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
 
     // we don't need to lock if the entire ref_consumed of this read was already is_set by previous reads (speed optimization)
     bool no_lock = IS_REF_EXTERNAL || ((vb->chrom_node_index == vb->consec_is_set_chrom) && (pos >= vb->consec_is_set_pos) && (pos + ref_consumed <= vb->consec_is_set_pos + vb->consec_is_set_len));
@@ -1522,8 +1522,10 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     if (l_seq % 2) *BAFTtxt = 0; 
 
     // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
-    static const uint8_t sam2bam_seq_map[256] = { ['=']=0x0, ['A']=0x1, ['C']=0x2, ['M']=0x3, ['G']=0x4, ['R']=0x5, ['S']=0x6, ['V']=0x7, 
-                                                  ['T']=0x8, ['W']=0x9, ['Y']=0xa, ['H']=0xb, ['K']=0xc, ['D']=0xd, ['B']=0xe, ['N']=0xf };
+    static alignas(64) const uint8_t sam2bam_seq_map[256] = { 
+        ['=']=0x0, ['A']=0x1, ['C']=0x2, ['M']=0x3, ['G']=0x4, ['R']=0x5, ['S']=0x6, ['V']=0x7,                                                       
+        ['T']=0x8, ['W']=0x9, ['Y']=0xa, ['H']=0xb, ['K']=0xc, ['D']=0xd, ['B']=0xe, ['N']=0xf 
+    };
 
     uint8_t *in=(uint8_t *)recon, *out=in; 
     uint32_t out_len = (l_seq + 1) / 2;

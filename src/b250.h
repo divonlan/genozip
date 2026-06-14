@@ -15,9 +15,9 @@
 extern WordIndex b250_seg_get_wi (const uint8_t *msb_p);
 #define b250_seg_get_last(ctx) b250_seg_get_wi (BLST8 ((ctx)->b250))
 
-extern void b250_seg_append (VBlock𐤐 vb, Context𐤐 vctx, WordIndex node_index);
-extern void b250_seg_remove_last (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index);
-extern bool b250_zip_generate (VBlock𐤐 vb, Context𐤐 ctx);
+extern void b250_seg_append (VBlockP vb, ContextP vctx, WordIndex node_index);
+extern void b250_seg_remove_last (VBlockP vb, ContextP ctx, WordIndex node_index);
+extern bool b250_zip_generate (VBlockP vb, ContextP ctx);
 
 
 // PIZ

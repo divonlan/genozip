@@ -46,7 +46,7 @@
 
 uint64_t crc64 (uint64_t crc, bytes data, uint64_t data_len) 
 {
-    static const uint64_t crc64_tab[256] = {
+    alignas(64) static const uint64_t crc64_tab[256] = {
         0x0000000000000000, 0x7ad870c830358979, 0xf5b0e190606b12f2, 0x8f689158505e9b8b,
         0xc038e5739841b68f, 0xbae095bba8743ff6, 0x358804e3f82aa47d, 0x4f50742bc81f2d04,
         0xab28ecb46814fe75, 0xd1f09c7c5821770c, 0x5e980d24087fec87, 0x24407dec384a65fe,

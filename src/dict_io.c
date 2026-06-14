@@ -425,19 +425,19 @@ StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
                                                    snip[i]=='0'?"decimal" : snip[i]=='1'?"hex" : "HEX");
                                          i=snip_len; 
                                          break; 
-        case SNIP_SPECIAL              : if (z_file && special_names[dt][snip[1]-32]) 
-                                            SNPRINTF (s, "[%s_SPECIAL_%s]", dt_name(dt), special_names[dt][snip[1]-32]);
+        case SNIP_SPECIAL              : if (z_file && special_names[dt][(uint8_t)snip[1]-32]) 
+                                            SNPRINTF (s, "[%s_SPECIAL_%s]", dt_name(dt), special_names[dt][(uint8_t)snip[1]-32]);
                                          else 
-                                            SNPRINTF (s, "[SPECIAL-%u]", snip[1]-32); 
+                                            SNPRINTF (s, "[SPECIAL-%u]", (uint8_t)snip[1]-32); 
                                          i++; 
                                          break;
         default                        : SNPRINTF (s, "\\x%x", (uint8_t)op);
     }
 
-    #define X_SAM(sp)   (op == SNIP_SPECIAL && (dt==DT_SAM || dt==DT_BAM) && (snip[1] == SAM_SPECIAL_##sp))
-    #define X_VCF(sp)   (op == SNIP_SPECIAL && dt==DT_VCF   && (snip[1] == VCF_SPECIAL_##sp))
-    #define X_GFF(sp)   (op == SNIP_SPECIAL && dt==DT_GFF   && (snip[1] == GFF_SPECIAL_##sp))
-    #define X_FASTQ(sp) (op == SNIP_SPECIAL && dt==DT_FASTQ && (snip[1] == FASTQ_SPECIAL_##sp))
+    #define X_SAM(sp)   (op == SNIP_SPECIAL && (dt==DT_SAM || dt==DT_BAM) && ((uint8_t)snip[1] == SAM_SPECIAL_##sp))
+    #define X_VCF(sp)   (op == SNIP_SPECIAL && dt==DT_VCF   && ((uint8_t)snip[1] == VCF_SPECIAL_##sp))
+    #define X_GFF(sp)   (op == SNIP_SPECIAL && dt==DT_GFF   && ((uint8_t)snip[1] == GFF_SPECIAL_##sp))
+    #define X_FASTQ(sp) (op == SNIP_SPECIAL && dt==DT_FASTQ && ((uint8_t)snip[1] == FASTQ_SPECIAL_##sp))
 
     if (op == SNIP_OTHER_LOOKUP || op == SNIP_OTHER_DELTA || op == SNIP_COPY || op == SNIP_REDIRECTION ||
         X_VCF(LEN_OF) || X_VCF(ARRAY_LEN_OF) || X_VCF(COPY_MATE) || (X_VCF(GQ) && snip_len > 8) ||

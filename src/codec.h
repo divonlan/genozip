@@ -18,11 +18,11 @@
     bool func (VBlockP vb,                                                          \
                ContextP ctx, /* NULL if not compressing a context */                \
                SectionHeaderP header,                                               \
-               rom uncompressed,         /* option 1 - compress contiguous data */  \
-               uint32_t *uncompressed_len,                                          \
+               rom𐤐 uncompressed,         /* option 1 - compress contiguous data */  \
+               uint32_t *restrict uncompressed_len,                                 \
                LocalGetLineCB get_line_cb,  /* option 2 - call back to get lines */ \
-               char *compressed, uint32_t *compressed_len/* in/out */,              \
-               FailType soft_fail, rom name)    
+               char *restrict compressed, uint32_t *restrict compressed_len/* in/out */, \
+               FailType soft_fail, rom𐤐 name)    
 
 typedef COMPRESS (CodecCompress);
 
@@ -30,10 +30,10 @@ typedef COMPRESS (CodecCompress);
     void func (VBlockP vb,                                           \
                ContextP ctx, /* NULL if not compressing a context */ \
                Codec codec, uint8_t param,                           \
-               rom compressed, uint32_t compressed_len,              \
+               rom𐤐 compressed, uint32_t compressed_len,             \
                BufferP uncompressed_buf, uint64_t uncompressed_len,  \
                Codec sub_codec,                                      \
-               rom name)
+               rom𐤐 name)
 
 typedef UNCOMPRESS (CodecUncompress);
 
@@ -160,6 +160,11 @@ extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLine
 // ACGT stuff
 extern void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i, bool has_x);
 extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
+
+// htscodec stuff
+static inline bool is_rans  (Codec c) { return IN_RANGX(c, CODEC_RANB, CODEC_RANw); }
+static inline bool is_arith (Codec c) { return IN_RANGX(c, CODEC_ARTB, CODEC_ARTw); }
+static inline bool is_hts   (Codec c) { return is_rans (c) || is_arith (c); }
 
 // BSC stuff
 extern void codec_bsc_initialize (void);

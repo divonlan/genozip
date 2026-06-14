@@ -116,7 +116,7 @@ static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), rom e
 // X/x=methylated/unmethylated CpG ; Y/y=CHG Z/z=CHH ; numbers=gaps
 void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), unsigned add_bytes)
 {
-    static const char bsbolt_to_bismark[256] = { ['X']='Z', ['x']='z', ['Y']='X', ['y']='x', ['Z']='H', ['z']='h' };    
+    alignas(64) static const char bsbolt_to_bismark[256] = { ['X']='Z', ['x']='z', ['Y']='X', ['y']='x', ['Z']='H', ['z']='h' };    
 
     // in PRIM and DEPN we dont have the methylation call because we didn't seg SEQ vs reference. To do: generate methylation call prediction in this case too/
     if (vb->comp_i != SAM_COMP_MAIN) goto fallback;
@@ -176,7 +176,7 @@ fallback:
 
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSBOLT_XB)
 {
-    static const char bismark_to_bsbolt[256] = { ['Z']='X', ['z']='x', ['X']='Y', ['x']='y', ['H']='Z', ['h']='z' };
+    alignas(64) static const char bismark_to_bsbolt[256] = { ['Z']='X', ['z']='x', ['X']='Y', ['x']='y', ['H']='Z', ['h']='z' };
 
     VBlockSAMP vb = (VBlockSAMP)vb_; 
     char *recon = BAFTtxt, *next = recon, *start = recon;

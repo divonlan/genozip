@@ -159,6 +159,12 @@ static inline void buf_alloc_quick (BufferP buf, uint64_t req_size, rom name, FU
     element_type *array_name = ((element_type *)((buf).data)); \
     const uint64_t array_name##_len UNUSED = (buf).len; // read-only copy of len 
 
+#define ARRAY_alloc𐤐(element_type, array_name, array_len, init_zero, buf, alloc_vb, buf_name) \
+    buf_alloc_exact (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf).vb), (buf), (array_len), element_type, (buf_name)); \
+    if (init_zero) memset ((buf).data, 0, (buf).len * sizeof(element_type)); /* resets the entire buffer, not just newly allocated memory */ \
+    element_type *restrict array_name = ((element_type *)((buf).data)); \
+    const uint64_t array_name##_len UNUSED = (buf).len; // read-only copy of len 
+
 extern void buf_attach_to_shm_do (VBlockP vb, BufferP buf, void *data, uint64_t size, uint64_t start, FUNCLINE, rom name);
 
 #define buf_attach_to_shm(vb, buf, data, size, name)                                     \

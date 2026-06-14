@@ -112,7 +112,7 @@ void vcf_add_line_numbers_seg_initialize (VBlockVCFP vb)
 
 void vcf_seg_line_number_ID (VBlockVCFP vb, STRp(id))
 {
-    uint32_t snip_len = 3 + str_get_uint_textual_len(vb->first_line + vb->line_i);
+    uint32_t snip_len = 3 + str_int_len (vb->first_line + vb->line_i);
 
     if (vb->line_i == 0)
         seg_integer_as_snip_do (VB, CTX(VCF_LINE_NUM), vb->first_line, snip_len + 1); // +1 for \t

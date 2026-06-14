@@ -85,7 +85,9 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl,
                    STRp(tlen), SamTlenType tlen_value, // option 1 and 2
                    bool is_rname_rnext_same)
 {
-    Context *ctx = CTX(SAM_TLEN);
+    START_TIMER;
+    decl_ctx (SAM_TLEN);
+
     unsigned add_bytes = IS_BAM_ZIP ? sizeof (uint32_t) : tlen_len + 1;
 
     if (tlen) { // get tlen_value
@@ -123,6 +125,8 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl,
         seg_integer_as_snip_do (VB, ctx, tlen_value, add_bytes); // likely all 0, so all-the-same
 
     ctx_set_last_value (VB, ctx, (int64_t)tlen_value);
+
+    COPY_TIMER_SEG_FIELD (SAM_TLEN);
 }
 
 //---------

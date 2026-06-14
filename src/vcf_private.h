@@ -286,6 +286,7 @@ extern void vcf_seg_FORMAT_LAA (VBlockVCFP vb, ContextP ctx, STRp(laa));
 // GIAB trio stuff
 extern void vcf_giab_zip_initialize (void);
 extern void vcf_giab_seg_initialize (VBlockVCFP vb);
+extern void vcf_seg_INFO_callable (VBlockVCFP vb, ContextP ctx, STRp(callable));
 extern void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt));
 extern void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, STRp(ips));
 extern void vcf_seg_ADALL_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), ContextP *item_ctxs, const int64_t *values);

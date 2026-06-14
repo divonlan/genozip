@@ -108,19 +108,7 @@ static bool inline str_issame_rev_(STRp(str1), STRp(str2)) // true if the same
 }
 #define str_issame_rev(str1,str2) str_issame_rev_ (str1, str1##_len, str2, str2##_len)
 
-// including lowercase, IUPACs
-extern const char COMPLEM[], UPPER_COMPLEM[]; 
-// only A,C,G,T
-static inline char complem(char b) { switch(b) { case'A':return'T' ; case'C':return'G' ; case'G':return'C' ; case'T':return'A' ; default:return b; }} 
-
-static bool inline str_issame_revcomp_(STRp(str1), STRp(str2)) // true if the same
-{
-    if (str1_len != str2_len) return false;
-    for (uint32_t i=0; i < str1_len; i++)
-        if (str1[i] != COMPLEM[(uint8_t)str2[str1_len-i-1]]) return false;
-    return true;
-}
-#define str_issame_revcomp(str1,str2) str_issame_revcomp_(str1, str1##_len, str2, str2##_len)
+extern bool str_is_zero (STR𐤐(str));
 
 extern bool str_case_compare (rom str1, rom str2, bool *identical); // similar to stricmp that doesn't exist on all platforms
 
@@ -156,9 +144,11 @@ static inline char *str_replace_letter (STRc(str), char before, char after)
     return str;
 }
 
+extern const char COMPLEM_ACGT[]; // complements uppercase A,C,G,T - everything else left intact
+extern const char COMPLEM[];      // also complements lowercase, IUPACs
 extern char *str_revcomp (char *dst_seq, rom src_seq, uint32_t seq_len);
 static inline char *str_revcomp_in_place (STRc(seq)) { return str_revcomp (seq, seq, seq_len); }
-extern char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len);
+extern char *str_revcomp_ACGT (char *dst_seq, rom src_seq, uint32_t seq_len);
 
 // count the number of occurances of a character in a string
 static inline uint32_t str_count_char (rom str, uint32_t len, char c)
@@ -175,10 +165,8 @@ static inline uint32_t str_count_char (rom str, uint32_t len, char c)
 
 static inline uint32_t str_count_mismatches (rom str1, rom str2, uint32_t len)
 {
-    if (!len) return 0;
-
     uint32_t count=0;
-    for (int i=0; i < len; i++)
+    for (uint32_t i=0; i < len; i++)
         if (str1[i] != str2[i]) count++;
 
     return count;
@@ -215,8 +203,6 @@ static inline unsigned homopolymer_len (STRp(seq), unsigned start)
 // count the number of consecutive occurances of a character
 static inline uint64_t str_count_consecutive_char (rom str, uint64_t len, char c)
 {
-    if (!str) return 0;
-    
     uint64_t i=0;
     for (i=0; i < len; i++)
         if (str[i] != c) break;
@@ -317,9 +303,6 @@ static bool inline str_is_numeric(STRp(str))   { return str_is_in_range (STRa(st
 
 extern uint32_t str_pack_bases (uint8_t *restrict packed, STR𐤐(bases), bool revcomp);
 extern uint32_t str_unpack_bases (char *restrict bases, bytes𐤐 packed, uint32_t num_bases);
-
-// textual length of a non-negative integer
-extern uint32_t str_get_uint_textual_len (uint64_t n);
 
 extern StrText1K str_time (void);
 extern StrText str_human_time (unsigned secs, bool compact);
@@ -424,12 +407,6 @@ extern void *memmem (const void *haystack, size_t haystack_len, const void *need
 
 extern rom str_win_error_(uint32_t error);
 extern rom str_win_error (void);
-
-static inline char base32(uint32_t n) { return (n) < 26 ? ('a' + (n))     // 97->122. 5bits: 1->26    <-- differentiated 5bits, so to work well with ALT_KEY
-                                             : (n) < 31 ? ((n)-26 + '[')  // 91->95.  5bits: 27->31
-                                             :            '@';          } // 64.      5bits: 0
-
-extern const uint64_t p10[]; // powers of 10
 
 extern uint64_t crc64 (uint64_t crc, bytes data, uint64_t data_len); // implementation is in crc64.c
 

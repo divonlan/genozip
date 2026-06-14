@@ -85,6 +85,8 @@ StrText vb_name (VBlockP vb)
     StrText s;
     if (vb && vb->pool == POOL_BGZF)
         snprintf (s.s, sizeof (s.s), "BGZF/%u", vb->vblock_i);
+    else if (vb && (IS_TASK(COMP_DICTS) || IS_TASK(READ_DICTS) || IS_TASK(ASSIGN_DICT_CODECS)))
+        snprintf (s.s, sizeof (s.s), "DICT/%u", vb->vblock_i);
     else if (vb && vb->vblock_i)
         snprintf (s.s, sizeof (s.s), "%.10s/%u", comp_name (vb->comp_i), vb->vblock_i);
     else if (vb && segconf_running)
@@ -292,7 +294,7 @@ void sections_show_header (ConstSectionHeaderP header,
 {
     #define DT(x) ((dt) == DT_##x)
 
-    ASSERTW (!vb || IS_ZIP, "sections_show_header: expecting vb=NULL in PIZ", NULL); // because we dump the show_headers_buf to the terminal only in ZIP
+    ASSERTW (!vb || IS_ZIP, _WRN "sections_show_header: expecting vb=NULL in PIZ", NULL); // because we dump the show_headers_buf to the terminal only in ZIP
 
     SectionType st = header->section_type;
     

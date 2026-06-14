@@ -733,6 +733,9 @@ void fastq_segconf_finalize (VBlockP vb)
     if (!flag.reference && !flag.fast && !segconf.nonbio_type) 
         segconf_test_multiseq (VB, FASTQ_NONREF);
 
+    if (!segconf.multiseq)
+        ctx_segconf_set_hard_coded_lcodec (FASTQ_NONREF, CODEC_ACGT);
+
     // note: same logic as in sam_seg_finalize_segconf
     if (segconf_has(OPTION_ZA_Z) && segconf_has(OPTION_ZB_Z) && segconf_has(OPTION_RX_Z) && segconf_has(OPTION_QX_Z) && segconf_has(OPTION_BC_Z)) {
         segconf.has_agent_trimmer = true;
@@ -831,7 +834,8 @@ void fastq_zip_after_segconf (VBlockP vb)
 void fastq_seg_finalize (VBlockP vb)
 {
     // assign the QUAL codec
-    codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false, NULL);
+    if (!FAF)
+        codec_assign_best_qual_codec (vb, FASTQ_QUAL, fastq_zip_qual, false, false, NULL);
     
     if (segconf.has_agent_trimmer) 
         codec_assign_best_qual_codec (vb, OPTION_QX_Z, NULL, true, false, NULL);

@@ -62,6 +62,7 @@ typedef struct Context {
     Did did_i;                 // the index of this ctx within the array vb->contexts. PIZ: if this context is an ALIAS_CTX, did_i contains the destination context did_i
     Did dict_did_i;            // ZIP/PIZ: zctx only: normally ==did_i, but if context is a ALIAS_DICT, did_i of its destination (shared dictionary between otherwise independent contexts)
 
+    #define start_erase_field local_in_z // everything after this is erased by buflist_free_ctx
     uint32_t local_in_z;       // ZIP: index and len into z_data where local compressed data is
                                // PIZ: used as bool: local section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
     uint32_t local_in_z_len;   
@@ -82,7 +83,7 @@ typedef struct Context {
     struct FlagsDict dict_flags;  // ZIP zctx ; PIZ: zctx+vctx . Tramsmiited via SectionFlags.dictionary (v15)
     B250Size b250_size;        // Size type of element in b250 data (PIZ and ZIP after generation) v14
     B250Size pair_b250_size;
-    Codec lcodec;              // ZIP/PIZ: vctx/zctx: codec used to compress local
+    Codec lcodec;              // ZIP/PIZ: vctx/zctx: codec used to compress local (or sub_codec if codec is complex like CODEC_DOMQ)
     union {
     Codec lsubcodec_piz;       // ZIP/PIZ: vctx: piz to decompress with this codec, AFTER decompressing with lcodec
     Codec qual_codec;          // ZIP zctx: QUAL codec selected in codec_assign_best_qual_codec
@@ -363,6 +364,8 @@ typedef struct Context {
     struct { 
     Buffer ston_hash;          // ZIP zctx: hash table for global singletons - each entry is a head of linked-list - index into ston_ents
     Buffer ston_ents;          // ZIP zctx: ents of hash of singletons - of type LocalHashEnt. contains link lists for each hash entry - headed from ston_hash
+    Mutex ctx_mutex;           // ZIP zctx: protects merges
+    Mutex assign_codec_mutex[2]; // ZIP zctx: [0]=b250 codec [1]=local codec 
     uint32_t num_failed_singletons;// zctx: (for stats) Words that we wrote into local in one VB only to discover later that they're not a singleton, and wrote into the global dict too
     Codec lcodec_non_inherited;// ZIP zctx: non-inherited lcodec - used only for submitting stats
     uint8_t lcodec_count, bcodec_count; // ZIP zctx --best: approximate number of VBs in a row that selected this codec

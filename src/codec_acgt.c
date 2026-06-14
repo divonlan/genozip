@@ -30,16 +30,15 @@ void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i,
     nonref_ctx->no_stons    = true;       // we're storing the sequencing in local, so we can't also have singletons
     nonref_ctx->flags.acgt_no_x = !has_x;
 
+    ASSERT (ZCTX(nonref_did_i)->lcodec_hard_coded && ZCTX(nonref_did_i)->lcodec == CODEC_ACGT,
+            "%s: ACGT for %s not set up in segconf finalize", VB_NAME, nonref_ctx->tag_name);
+
     if (has_x) {
         ContextP nonref_x_ctx   = nonref_ctx + 1;
         nonref_x_ctx->ltype     = LT_SUPP;
         nonref_x_ctx->local_dep = DEP_L1;     // NONREF_X.local is created with NONREF.local is compressed
         nonref_x_ctx->lcodec    = CODEC_XCGT; // prevent codec_assign_best from assigning it a different codec
     }
-
-    // note: assuming that this function is called for all VBs if segconf says so
-    if (vb->vblock_i == 1) // do once to avoid unnecessary mutex locks
-        ctx_commit_codec_to_zf_ctx (vb, nonref_ctx, true, false);
 }
 
 // packing of an array A,C,G,T characters into a 2-bit Bits, stored in vb->scratch. 
@@ -65,7 +64,7 @@ static inline void codec_acgt_pack (BitsP packed, rom data, uint64_t data_len)
 COMPRESS (codec_acgt_compress)
 {
     // table to convert SEQ data to ACGT exceptions. The character is XORed with the entry in the table
-    static const uint8_t acgt_exceptions[256] = { 
+    alignas(64) static const uint8_t acgt_exceptions[256] = { 
         ['A']='A',   ['C']='C',   ['G']='G',   ['T']='T',  // -->0 (XORed with self)
         ['a']='a'^1, ['c']='c'^1, ['g']='g'^1, ['t']='t'^1 // -->1 (XORed with self XOR 1)
     };                                                     // all others are XORed with 0 and hence remain unchanged
@@ -104,8 +103,8 @@ COMPRESS (codec_acgt_compress)
 
         // calculate the exception in-place in NONREF.local also overlayed to NONREF_X.local
         if (has_x) 
-            for (uint32_t i=0; i < *uncompressed_len; i++) \
-                ((uint8_t*)uncompressed)[i] = (uint8_t)(uncompressed[i]) ^ acgt_exceptions[(uint8_t)(uncompressed[i])];
+            for (uint8_t *next=(uint8_t *)uncompressed, *after=next + *uncompressed_len; next < after; next++)
+                *next = *next ^ acgt_exceptions[*next];
     }
 
     // option 2 - callback to get each line 
@@ -114,14 +113,18 @@ COMPRESS (codec_acgt_compress)
         
         buf_alloc (vb, &nonref_x_ctx->local, 0, *uncompressed_len, uint8_t, CTX_GROWTH, C_LOCAL);
         for_line {
-
-            STRw0(data_1);
+            STRw0𐤐(data_1);
             get_line_cb (vb, ctx, line_i, pSTRa(data_1), *uncompressed_len - nonref_x_ctx->local.len32, NULL);
 
             PACK (data_1, data_1_len);
 
-            for (uint32_t i=0; i < data_1_len; i++) 
-                BNXT8 (nonref_x_ctx->local) = (uint8_t)(data_1[i]) ^ acgt_exceptions[(uint8_t)(data_1[i])];
+            ASSERT (nonref_x_ctx->local.len + data_1_len <= nonref_x_ctx->local.size, "nonref_x_ctx overflow: data_1_len=%u local=%.*s", 
+                    data_1_len, (int)sizeof(BufDescType)-1, buf_desc (&nonref_x_ctx->local).s);
+            
+            for (uint8_t *restrict next=BAFT8(nonref_x_ctx->local), *after=next + data_1_len; next < after; next++, data_1++) 
+                *next = (uint8_t)*data_1 ^ acgt_exceptions[(uint8_t)*data_1];
+
+            nonref_x_ctx->local.len32 += data_1_len;
         }
     }
     else 
@@ -129,12 +132,21 @@ COMPRESS (codec_acgt_compress)
 
     bits_clear_excess_bits_in_top_word (packed, false); // for good measure (V15)
 
+    // case: no exception basess after all
+    if (buf_is_zero (&nonref_x_ctx->local)) {
+        has_x = false;  
+        header->flags.ctx.acgt_no_x = true; 
+        buf_destroy (nonref_x_ctx->local); // cannot use buf_free for an overlaid buffer 
+    }
+
     // get codec for NONREF_X header->lcodec remains CODEC_XCGT, and we set subcodec to the codec discovered in assign, and set to nonref_ctx->lcode
     Codec z_lcodec;
     if (has_x) {
         z_lcodec = ZCTX(nonref_x_ctx->did_i)->lcodec;
         nonref_x_ctx->lcodec = z_lcodec; // possibly set by a previous VB call to codec_assign_best_codec
+        PAUSE_TIMER(vb); // codec_assign_best_codec account for itself
         nonref_x_ctx->lsubcodec_piz = codec_assign_best_codec (vb, nonref_x_ctx, NULL, SEC_LOCAL);
+        RESUME_TIMER (vb, compressor_acgt);
         if (nonref_x_ctx->lsubcodec_piz == CODEC_UNKNOWN) nonref_x_ctx->lsubcodec_piz = CODEC_NONE; // really small
         
         nonref_x_ctx->lcodec = CODEC_XCGT;
@@ -179,12 +191,13 @@ UNCOMPRESS (codec_xcgt_uncompress)
     codec_args[sub_codec].uncompress (vb, ctx, sub_codec, param, STRa(compressed), uncompressed_buf, uncompressed_len, CODEC_NONE, name);
 
     START_TIMER;
-    ConstBitsP packed = (BitsP)&nonref_ctx->packed;           // data from NONREF context (2-bit per base)
+    ConstBitsP packed = (BitsP)&nonref_ctx->packed;    // data from NONREF context (2-bit per base)
     rom acgt_x = B1ST (const char, *uncompressed_buf); // data from NONREF_X context (possibly NULL)
         
     char *nonref = B1STc (nonref_ctx->local); // note: local was allocated by caller ahead of comp_uncompress -> codec_acgt_uncompress of the NONREF context
 
     decl_acgt_decode;
+    // note: in case of !acgt_x branch predictor would be right always, so very fast
     for (uint32_t i=0; i < uncompressed_len; i++) {
         if      (!acgt_x || acgt_x[i] == 0) *nonref++ = base_by_idx(packed, i);      // case 0: use acgt as is - 'A', 'C', 'G' or 'T'
         else if (           acgt_x[i] == 1) *nonref++ = base_by_idx(packed, i) + 32; // case 1: convert to lower case - 'a', 'c', 'g' or 't'
@@ -212,6 +225,7 @@ UNCOMPRESS (codec_acgt_uncompress)
     codec_args[sub_codec].uncompress (vb, ctx, sub_codec, param, compressed, compressed_len, packed_buf, bitmap_num_bytes, CODEC_NONE, name);
 
     // finalize bitmap structure
+    START_TIMER;
     BitsP packed   = (BitsP)packed_buf;
     packed->nbits  = uncompressed_len * 2;
     packed->nwords = roundup_bits2words64 (packed->nbits);
@@ -230,5 +244,7 @@ UNCOMPRESS (codec_acgt_uncompress)
 
         buf_free (*packed_buf);
     }
+
+    COPY_TIMER (compressor_acgt);
 }
 

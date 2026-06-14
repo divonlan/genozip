@@ -77,7 +77,7 @@ char *optimize_phred_quality_string (STRp(qual), char *out, bool is_bam,
                                      bool keep_underscore) 
 {
 #   define P(x) ((x)+33)
-    static uint8_t qual_bins[256] = {
+    alignas(64) static uint8_t qual_bins[256] = {
         // non Phread ASCII 0-32 - unchanged
         0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32, 
         

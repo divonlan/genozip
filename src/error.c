@@ -388,10 +388,6 @@ void noreturn error_exit (bool show_stack, bool is_error)
         if (primary_command == ZIP && !flag_loading_auxiliary/*z_file is a reference file*/) 
             error_close_and_maybe_delete_file (z_file, is_error);
 
-        // if we're in PIZ - delete the txt_file
-        if (primary_command == PIZ) 
-            error_close_and_maybe_delete_file (txt_file, is_error);
-
         if (is_error) // call after canceling the writing threads 
             file_put_data_abort();
 

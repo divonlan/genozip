@@ -19,7 +19,8 @@
 // functions in aligner.c
 static inline uint64_t aligner_get_kmer (Bits𐤐 seq, uint64_t bit_i, bool is_forward);
 static Bits aligner_seq_to_bitmap (VBlock𐤐 vb, rom𐤐 seq, uint64_t seq_len, uint64_t *restrict bitmap_words, bool𐤐 seq_is_all_acgt);
-static inline int percent_match (uint32_t match_n_bits, uint32_t seq_len);
+static inline int percent_match (uint32_t n_matching, uint32_t seq_len);
+static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos, PosType64 gpos_R1, PosType64 gpos1, Bits𐤐 seq_bits, uint32_t seq_len, bool fwd, ConstBits𐤐 genome, PosType64 genome_nbases, uint32_t near_perfect_max_mismatches, BestAlignment *restrict best);
 
 #define layer_bitmask ((uint64_t[NUM_LAYERS]){ 0x0fffffffULL, 0x07ffffffULL, 0x03ffffffULL, 0x01ffffffULL })  // LSb set for 28,27,26,25 bits
 static inline PosType64 aligner_get_gpos_LAYERED (VBlockP vb, BitsP seq, uint64_t base_i, uint64_t *kmer, bool is_forward)                                              
@@ -33,52 +34,7 @@ static inline PosType64 aligner_get_gpos_LAYERED (VBlockP vb, BitsP seq, uint64_
     // Performance note: 50% of the aligner time is taken by memory latency - looking up from refhash_buf - ~0.28 lookups every base in the sequence.
     PosType64 gpos = (PosType64)BGEN32(*B32(refhash_buf, (*kmer & layer_bitmask[0])));
     return (gpos == NO_HASH_ENT32) ? NO_GPOS : gpos;
-}
-
-static inline bool aligner_update_best_LAYERED (
-    VBlock𐤐 vb, PosType64 gpos, 
-    PosType64 gpos_R1, // if this is for R2: gpos of R1
-    Bits𐤐 seq_bits, uint32_t seq_len, bool fwd, 
-    ConstBits𐤐 genome, PosType64 genome_nbases, uint32_t max_snps_for_near_perfect,
-    BestAlignment *restrict best) // in/out
-{
-    // START_TIMER; // this has a small performance impact as it is called in a tight loop - uncomment when needed
-
-    if (gpos == best->gpos) goto no_update; // a previous hook yielded the same gpos (which is not "near perfect") - no need to test this gpos again
-
-    // note on 'N' in seq: since 'N' was encoded as 'A' in aligner_seq_to_bitmap(), we might be
-    // slightly underestimating the distance in cases were the genome also happens to have an 'A' there. That's ok. 
-    // note: if rev, the genome sequence compared is still [gpos, gpos+seq_len), just revcomped
-    int32_t distance = bits_hamming_distance (seq_bits, genome, 2 * gpos, fwd);
-    int32_t match_n_bits = (uint32_t)seq_bits->nbits - distance;     
-        
-    // penalty for remote GPOS in 2nd pair
-    uint32_t penalty = (gpos_R1 != NO_GPOS // this is R2
-                     && ABS(gpos-gpos_R1) > PAIR_MAX_DISTANCE) // the GPOS is too far from R1 GPOS
-        ? NON_PAIR_PENALTY : 0;
-    
-    uint32_t score = match_n_bits - penalty; 
-              
-    // 32 bit arithmetic
-    if (score > best->score) { 
-        *best = (BestAlignment){ .gpos         = gpos,
-                                 .match_n_bits = match_n_bits,
-                                 .score        = score,
-                                 .is_forward   = fwd,
-                                 .is_perfect   = (match_n_bits == seq_len * 2) };
-        
-        // note: we allow "max_snps_for_near_perfect" snps and we still consider the match good enough and stop looking further    
-        // compared to stopping only if match_n_bits==seq_len, this adds about 1% to the file size, but is significantly faster 
-        if (score >= (seq_len - max_snps_for_near_perfect) * 2) { // we found (almost) the best possible match              
-            // COPY_TIMER (aligner_update_best); 
-            return true; // perfect or near perfect                                                                                                     
-        }                                                                                                                       
-    }        
-
-no_update:
-    // COPY_TIMER (aligner_update_best); 
-    return false; // not perfect (possibly because of penalty) - consider other GPOSs before deciding
-}                                                                                                                               
+}                                                                                                             
 
 static inline PosType64 aligner_best_match_LAYERED (VBlockP vb, STRp(seq), PosType64 gpos_R1,
                                                     ConstBitsP genome, PosType64 genome_nbases,
@@ -107,11 +63,10 @@ static inline PosType64 aligner_best_match_LAYERED (VBlockP vb, STRp(seq), PosTy
     
     uint32_t num_finds = 0;
     
-    uint32_t density = (flag.fast ? 3 : 1);
-    uint32_t max_snps_for_near_perfect = (flag.fast ? 10 : 2); // note: this is only approximately SNPs as we actually measure mismatched bits, not bases
+    uint32_t near_perfect_max_mismatches = (flag.fast?NEAR_PERFECT_FAST : flag.best?NEAR_PERFECT_BEST : NEAR_PERFECT_NORM);
 
     // we search - checking both forward hooks and reverse hooks, we check only the first layer for now
-    for (int i=0; i < seq_len; i += density) {          
+    for (int i=0; i < seq_len; i++) {          
         Direction found = NOT_FOUND;
 
         if (i < seq_len - bases_per_hash && // room for the hash word
@@ -138,8 +93,9 @@ static inline PosType64 aligner_best_match_LAYERED (VBlockP vb, STRp(seq), PosTy
 
             finds[num_finds++] = (struct Finds){ .kmer = kmer, .i = i, .found = found };
             
-            if (aligner_update_best_LAYERED (vb, gpos, gpos_R1, &seq_bits, seq_len, found, 
-                                             genome, genome_nbases, max_snps_for_near_perfect, &best)) {
+            if (gpos != best.gpos &&
+                aligner_update_best (vb, gpos, gpos_R1, NO_GPOS, &seq_bits, seq_len, found, 
+                                     genome, genome_nbases, near_perfect_max_mismatches, &best)) {
                 goto done; // near-perfect match, search no longer
             }
         }
@@ -161,8 +117,9 @@ static inline PosType64 aligner_best_match_LAYERED (VBlockP vb, STRp(seq), PosTy
 
             // check if this gpos results in a better match than the one we already have
             if (__builtin_expect ((gpos >= 0) && (gpos + seq_len_64 < genome_nbases), true) &&
-                aligner_update_best_LAYERED (vb, gpos, gpos_R1, &seq_bits, seq_len, finds[find_i].found, 
-                                             genome, genome_nbases, max_snps_for_near_perfect, &best)) {
+                gpos != best.gpos &&
+                aligner_update_best (vb, gpos, gpos_R1, NO_GPOS, &seq_bits, seq_len, finds[find_i].found, 
+                                     genome, genome_nbases, near_perfect_max_mismatches, &best)) {
                 goto done; // near-perfect match, search no longer       
             }
         }
@@ -173,7 +130,7 @@ done:
     *is_perfect = seq_is_all_acgt && best.is_perfect;
 
     // check that the best match is above a threshold, where mapping against the reference actually improves compression
-    if (percent_match (best.match_n_bits, seq_len) >= MIN_MATCH_PC) 
+    if (percent_match (best.n_matching, seq_len) >= MIN_MATCH_PC) 
         return best.gpos;
     else
         return NO_GPOS;

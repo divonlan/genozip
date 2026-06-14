@@ -242,7 +242,7 @@ void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
             modified = true;        
         }
         
-        WARN_IF (flag.vblock != NULL && modified, "Ignoring '%s %s', using '%s %u' instead. Override with --force.", 
+        WARN_IF (flag.vblock != NULL && modified, _FYI "Ignoring '%s %s', using '%s %u' instead. Override with --force.", 
                 OT("vblock", "B"), flag.vblock, OT("vblock", "B"), (unsigned)(segconf.vb_size / (1 MB)));
     }
 

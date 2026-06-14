@@ -136,8 +136,8 @@ extern WordIndex ctx_create_node_is_new (VBlock𐤐 vb, Did did_i, STR𐤐(snip)
 static inline WordIndex ctx_create_node (VBlock𐤐 vb, Did did_i, STR𐤐(snip)) { return ctx_create_node_is_new (vb, did_i, STRa(snip), NULL); }
 
 extern uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index);
-extern void ctx_decrement_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index);
-extern void ctx_increment_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index);
+extern void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
+extern void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_protect_from_removal (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern bool ctx_segconf_do_ctxs_share_snips (VBlockP vb, Did did_1, Did did_2);
 
@@ -150,10 +150,8 @@ extern void ctx_clone (VBlockP vb);
 extern CtxNode ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_update_zctx_txt_len (VBlockP vb, ContextP vctx, int64_t increment);
-extern void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited);
 extern void ctx_reset_codec_commits (void);
 extern void ctx_segconf_set_hard_coded_lcodec (Did did_i, Codec codec);
-extern void ctx_get_z_codecs (ContextP zctx, Codec *lcodec, Codec *bcodec, uint8_t *lcodec_count, uint8_t *bcodec_count, bool *lcodec_hard_coded);
 
 extern ContextP ctx_get_unmapped_ctx (ContextArrayP ca, DataType dt, DictId dict_id, STRp(tag_name));
 

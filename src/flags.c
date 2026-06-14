@@ -899,7 +899,7 @@ static void flags_warn_if_duplicates (int num_files, rom *filenames)
 
     for (unsigned i=1; i < num_files; i++) 
         ASSERTW (strncmp(&basenames[(i-1) * BASENAME_LEN], &basenames[i * BASENAME_LEN], BASENAME_LEN), 
-                 "Warning: two files with the same name '%s' - if you later use genounzip, these files will overwrite each other", 
+                 _WRN "two files with the same name '%s' - if you later use genounzip, these files will overwrite each other", 
                  &basenames[i * BASENAME_LEN]);
 }
 
@@ -959,8 +959,11 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
         CONFLICT (flag.show_is_exactable, tar_zip_is_tar(),     "--is-exactable",      "--tar");
 
         // see comment in fastq_deep_zip_finalize
-        WARN_IF (flag.no_test && flag.deep, "It is not recommended to use %s in combination with --deep, as --deep relies on testing to catch rare edge cases", 
+        WARN_IF (flag.no_test && flag.deep, _WRN "It is not recommended to use %s in combination with --deep, as --deep relies on testing to catch rare edge cases", 
                  OT("no-test", "X"));
+
+        WARN_IF (flag.is_windows && flag.telemetry && flag.is_wsl,
+                 _FYI "Telemetry does not work when running as a Windows executable on WSL");
     }
 
     if (IS_PIZ) {
@@ -1260,10 +1263,10 @@ void flags_update (unsigned num_files, rom *filenames)
     }
 
     if (zip_is_biopsy) {
-        ASSERTW (!flag.test,         "option %s is ignored when taking a biopsy", OT("test",   "t"));
-        ASSERTW (!flag.show_stats,   "option %s is ignored when taking a biopsy", OT("stats",  "w"));
-        ASSERTW (!flag.out_filename, "option %s is ignored when taking a biopsy", OT("output", "o"));
-        ASSERTW (!flag.md5,          "option %s is ignored when taking a biopsy", OT("md5",    "m"));
+        ASSERTW (!flag.test,         _FYI "Option %s is ignored when taking a biopsy", OT("test",   "t"));
+        ASSERTW (!flag.show_stats,   _FYI "Option %s is ignored when taking a biopsy", OT("stats",  "w"));
+        ASSERTW (!flag.out_filename, _FYI "Option %s is ignored when taking a biopsy", OT("output", "o"));
+        ASSERTW (!flag.md5,          _FYI "Option %s is ignored when taking a biopsy", OT("md5",    "m"));
         flag.test = false;
         flag.out_filename = NULL;
         flag.md5 = false;
@@ -1666,7 +1669,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
         DataType out_dt_by_filename = file_piz_get_dt_of_out_filename();
         StrText1K bn;
 
-        WARN_IF (flag.out_dt != out_dt_by_filename, "genounzip is reconstructing a %s file, is this what you intended? Asking because filename is \"%s\".%s",
+        WARN_IF (flag.out_dt != out_dt_by_filename, _WRN "genounzip is reconstructing a %s file, is this what you intended? Asking because filename is \"%s\".%s",
                  dt_name (flag.out_dt), filename_base (flag.out_filename, false, NULL, bn.s, sizeof(bn)), 
                  (((out_dt_by_filename == DT_SAM || out_dt_by_filename == DT_BAM || out_dt_by_filename == DT_CRAM) && (flag.out_dt == DT_SAM || flag.out_dt == DT_BAM || flag.out_dt == DT_CRAM)) || 
                   ((out_dt_by_filename == DT_VCF || out_dt_by_filename == DT_BCF) && (flag.out_dt == DT_VCF || flag.out_dt == DT_BCF)))
@@ -1726,7 +1729,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
         flag.ext_indexing = false; // we index natively (always, if possible)
 
     if (flag.ext_indexing && (txt_file->redirected || !txt_file->name || flag.no_writer)) {
-        WARN ("option %s is ignored", OT("index", "x"));
+        WARN (_FYI "Option %s is ignored", OT("index", "x"));
         flag.ext_indexing = false; // no file - cannot index
     }
 

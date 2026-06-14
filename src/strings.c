@@ -8,6 +8,9 @@
 
 #include <time.h>
 #include <math.h>
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
 #include "genozip.h"
 #include "strings.h"
 #include "context.h"
@@ -29,8 +32,6 @@ alignas(64) const bool is_fastq_seq[256] = {
     ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, ['N']=true, 
     ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true 
 };
-
-const uint64_t p10[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000ULL, 100000000000ULL, 1000000000000ULL, 10000000000000ULL, 100000000000000ULL, 1000000000000000ULL, 100000000000000000ULL, 100000000000000000ULL };
 
 char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */)
 {
@@ -505,14 +506,6 @@ StrText str_uint_commas_limit (uint64_t n, uint64_t limit)
     else                               snprintf (s.s, sizeof (s.s), "-");
 
     return s;
-}
-
-uint32_t str_get_uint_textual_len (uint64_t n) 
-{ 
-    for (int i=1; i < ARRAY_LEN(p10); i++)
-        if (n < p10[i]) return i;
-
-    ABORT ("n=%"PRIu64" too big", n);
 }
 
 // returns double value and/or format: "3.123" -> "%5.3f" 
@@ -1238,10 +1231,7 @@ rom str_win_error (void)
 }
 
 // C<>G A<>T c<>g a<>t ; IUPACs: R<>Y K<>M B<>V D<>H W<>W S<>S N<>N (+ lowercase); other ASCII 32->126 preserved ; other = 0
-const char COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`tvghefcdijmlknopqysaubwxrz{|}~";
-
-// same as COMPLEM[UPPER_CASE(c)]
-const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$\%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`TVGHEFCDIJMLKNOPQYSAUBWXRZ{|}~";
+alignas(64) const char COMPLEM[256] = "-------------------------------- !\"#$%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`tvghefcdijmlknopqysaubwxrz{|}~";
 
 // reverse-complements a string (possibly in-place)
 char *str_revcomp (char *dst_seq, rom src_seq, uint32_t seq_len)
@@ -1260,19 +1250,28 @@ char *str_revcomp (char *dst_seq, rom src_seq, uint32_t seq_len)
     return dst_seq;
 }
 
+// complements uppercase A,C,G,T only - everything else is left intact
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winitializer-overrides"
+alignas(64) const char COMPLEM_ACGT[256] = { 
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255, // seq 0 256 | tr "\n" ,
+    ['A']='T', ['C']='G', ['G']='C', ['T']='A'
+};
+#pragma clang diagnostic pop
+
 // reverse-complements a string (possibly in-place) - complements A,C,G,T characters and leaves others intact. set dst_seq=src_seq to output in-place.
-char *str_revcomp_actg (char *dst_seq, rom src_seq, uint32_t seq_len)
+char *str_revcomp_ACGT (char *dst_seq, rom src_seq, uint32_t seq_len)
 {
     for (uint32_t i=0; i < seq_len / 2; i++) {
-        char l_base = src_seq[i];
-        char r_base = src_seq[seq_len-1-i];
+        uint8_t l_base = src_seq[i];
+        uint8_t r_base = src_seq[seq_len-1-i];
 
-        dst_seq[i]           = complem(r_base);
-        dst_seq[seq_len-1-i] = complem(l_base);
+        dst_seq[i]           = COMPLEM_ACGT[r_base];
+        dst_seq[seq_len-1-i] = COMPLEM_ACGT[l_base];
     }
 
     if (seq_len % 2) // we have an odd number of bases - now complement the middle one
-        dst_seq[seq_len/2] = complem(src_seq[seq_len/2]);
+        dst_seq[seq_len/2] = COMPLEM_ACGT[(uint8_t)src_seq[seq_len/2]];
 
     return dst_seq;
 }
@@ -1391,35 +1390,39 @@ void *memmem (const void *haystack, size_t haystack_len, // same as in gcc
 uint32_t str_pack_bases (uint8_t *restrict packed, STR𐤐(bases), bool revcomp) // no aliasing!
 {
     uint32_t num_bytes = roundup_bits2bytes (bases_len * 2);
+    uint32_t bases_in_partial_final_byte = bases_len % 4; // 0 if final byte is not partial
 
     if (!revcomp)
-        for (uint32_t byte_i=0; byte_i < num_bytes; byte_i++, bases += 4) 
-            packed[byte_i] = ((uint8_t)(bases[0] == 'C' || bases[0] == 'T') ) // A=00 C=01 G=10 T=11
-                           | ((uint8_t)(bases[0] == 'G' || bases[0] == 'T') << 1)
-                           | ((uint8_t)(bases[1] == 'C' || bases[1] == 'T') << 2)
-                           | ((uint8_t)(bases[1] == 'G' || bases[1] == 'T') << 3)
-                           | ((uint8_t)(bases[2] == 'C' || bases[2] == 'T') << 4)
-                           | ((uint8_t)(bases[2] == 'G' || bases[2] == 'T') << 5)
-                           | ((uint8_t)(bases[3] == 'C' || bases[3] == 'T') << 6)
-                           | ((uint8_t)(bases[3] == 'G' || bases[3] == 'T') << 7);
+        for (uint32_t byte_i=0; byte_i < num_bytes; byte_i++, bases += 4) {
+            uint32_t w = *(unaligned_uint32_t *)bases; // single memory read - possibly reading beyond the end of bases. the garbage bases at the end become garbage bits in the final byte of the packed array
+
+            // bits 1 and 2 of ASCII 'A','C','G','T' are 00, 01, 11, 10 respectively
+            uint8_t b0 = (w >> 1 ) & 3;
+            uint8_t b1 = (w >> 9 ) & 3;
+            uint8_t b2 = (w >> 17) & 3;
+            uint8_t b3 = (w >> 25) & 3;
+
+            packed[byte_i] = b0 | (b1 << 2) | (b2 << 4) | (b3 << 6);            
+        }
 
     else {
-        bases = bases + bases_len - 4; 
-        for (uint32_t byte_i=0; byte_i < num_bytes; byte_i++, bases -= 4) 
-            packed[byte_i] = ((uint8_t)(bases[3] == 'G' || bases[3] == 'A') )
-                           | ((uint8_t)(bases[3] == 'C' || bases[3] == 'A') << 1)
-                           | ((uint8_t)(bases[2] == 'G' || bases[2] == 'A') << 2)
-                           | ((uint8_t)(bases[2] == 'C' || bases[2] == 'A') << 3)
-                           | ((uint8_t)(bases[1] == 'G' || bases[1] == 'A') << 4)
-                           | ((uint8_t)(bases[1] == 'C' || bases[1] == 'A') << 5)
-                           | ((uint8_t)(bases[0] == 'G' || bases[0] == 'A') << 6)
-                           | ((uint8_t)(bases[0] == 'C' || bases[0] == 'A') << 7);
+        bases -= bases_in_partial_final_byte ? (4 - bases_in_partial_final_byte) : 0; // possibly reading before the beginning of bases - the gargabe before becomes garbage bits in the final packed byte - cleared in the end
+         
+        for (int32_t byte_i=num_bytes - 1; byte_i >= 0; byte_i--, bases += 4) {
+            uint32_t w = *(const unaligned_uint32_t *)bases;
+
+            uint8_t b0 = ((w >> 1)  & 3) ^ 2; // ^2 complements: A(00)⇔T(10) ; C(01)⇔G(11)
+            uint8_t b1 = ((w >> 9)  & 3) ^ 2; 
+            uint8_t b2 = ((w >> 17) & 3) ^ 2; 
+            uint8_t b3 = ((w >> 25) & 3) ^ 2; 
+
+            packed[byte_i] = b3 | (b2 << 2) | (b1 << 4) | (b0 << 6);
+        }
     }
     
-    // clear unused bits
-    int used_bits_last_byte = 2 * (bases_len % 4);
-    if (used_bits_last_byte)    
-        packed[num_bytes-1] &= bitmask8 (used_bits_last_byte);
+    // clear garbage bits - due to processing of up to 3 characters after the end (if forward) or before the beginning (if reverse) of bases.
+    if (bases_in_partial_final_byte)    
+        packed[num_bytes-1] &= bitmask8 (2 * bases_in_partial_final_byte);
      
     return num_bytes;
 }
@@ -1427,25 +1430,78 @@ uint32_t str_pack_bases (uint8_t *restrict packed, STR𐤐(bases), bool revcomp)
 // convert a bytes containing a series of 2-bits, a string of A,C,G,T
 uint32_t str_unpack_bases (char *restrict dst, bytes𐤐 packed, uint32_t num_bases)
 {
-    char acgt[4] = { 'A', 'C', 'G', 'T' };
+    char actg[4] = "ACTG"; // not ACGT!
 
-    // first, full bytes (4 bases each)
-    for (uint32_t base_i=0; base_i < ROUNDDOWN4(num_bases); base_i += 4) {
-        uint8_t b = *packed++;
-        *dst++ = acgt[(b & 0b00000011)];
-        *dst++ = acgt[(b & 0b00001100) >> 2];
-        *dst++ = acgt[(b & 0b00110000) >> 4];
-        *dst++ = acgt[(b & 0b11000000) >> 6];
+    uint32_t full_bytes = num_bases / 4;
+
+    for (uint32_t i=0; i < full_bytes; i++, dst += 4) { // 4 bases at a time
+        uint8_t b = packed[i];
+
+        uint32_t base0 = actg[(b >> 0) & 3];
+        uint32_t base1 = actg[(b >> 2) & 3];
+        uint32_t base2 = actg[(b >> 4) & 3];
+        uint32_t base3 = actg[(b >> 6) & 3];
+
+#if defined __LITTLE_ENDIAN__
+        uint32_t word = base0 | (base1 << 8) | (base2 << 16) | (base3 << 24);
+#elif defined __BIG_ENDIAN__
+        uint32_t word = base3 | (base2 << 8) | (base1 << 16) | (base0 << 24);
+#else
+#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
+#endif    
+        *(unaligned_uint32_t *)dst = word; // single write for 4 bases
     }
 
     // final partial byte
-    uint32_t remaining_bases = num_bases % 4;
-    if (remaining_bases) {
-        uint8_t b = *packed++;
-        if (remaining_bases--) *dst++ = acgt[(b & 0b00000011)];
-        if (remaining_bases--) *dst++ = acgt[(b & 0b00001100) >> 2];
-        if (remaining_bases--) *dst++ = acgt[(b & 0b00110000) >> 4];
-    }    
+    uint32_t bytes_consumed = (num_bases + 3) / 4;
 
-    return roundup_bits2bytes (num_bases * 2); // data consumed in bytes
+    uint8_t b = packed[bytes_consumed-1]; // this way, so read the last bytes again if no remainder, instead of the next byte which might be beyond the end of the array
+    
+    switch (num_bases % 4) {
+        case 3: dst[2] = actg[(b >> 4) & 3]; // fall through
+        case 2: dst[1] = actg[(b >> 2) & 3]; // fall through
+        case 1: dst[0] = actg[(b >> 0) & 3];        
+        default: break;
+    }
+
+    return bytes_consumed; // data consumed in bytes
+}
+
+// true if all bytes of str are 0
+// Note: only worth calling if str_len is usually >32, and there is a reasonable chance of true. Otherwise use str_is_monochar.
+bool str_is_zero (STR𐤐(str))
+{
+#if defined(__AVX2__) // 32 bytes at a time
+    uint32_t num_words = str_len / sizeof(__m256i); // 32 byte "words"
+
+    if (num_words) {
+        __m256i *data = (__m256i *)str;
+        for (uint32_t i=0; i < num_words; i++) {
+            __m256i word = _mm256_loadu_si256 (&data[i]); // Load 32 bytes from memory (unaligned)
+            if (!_mm256_testz_si256(word, word)) // _mm256_testz_si256 is true if (word & word)==0, i.e. if word==0
+                return false;
+        }
+
+        // final word (note: there is a 1/32 chance this test is redundant, but this is still less overhead than adding an if statement to avoid this redundancy)
+        __m256i word = _mm256_loadu_si256 ((__m256i *)(str + str_len) - 1); // 32B which partially (or rarely, fully) overlap already tested last word
+        return _mm256_testz_si256(word, word); 
+    }
+
+#else // 8 bytes a time
+    uint32_t num_words = str_len / sizeof(uint64_t);
+
+    if (num_words) {
+        unaligned_uint64_t *data = (unaligned_uint64_t *)str; // note: buf->data is always word aligned
+        for (uint32_t i=0; i < num_words; i++) 
+            if (data[i] != 0) 
+                return false;
+
+        // final word
+        return *(unaligned_uint64_t *)(str + str_len - sizeof(uint64_t)) == 0; // 8B which partially (or rarely, fully) overlap already tested last word
+    }
+#endif
+
+    // num_words==0 - fallback to byte loop
+    else
+        return str_is_monochar_(STRa(str), 0);
 }

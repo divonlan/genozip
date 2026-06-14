@@ -545,6 +545,11 @@ static void zip_compress_one_vb (VBlockP vb)
     // split each line in this VB to its components
     threads_log_by_vb (vb, "zip", "START SEG", 0);
 
+    if (flag.show_codec) {
+        DO_ONCE iprintf ("\n\nThe output of --show-codec: Testing a sample of up %u bytes.\n"
+                         "Results in the format [codec bytes μsec] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
+    }
+
     seg_all_data_lines (vb);
 
     if (flag.biopsy) goto after_compress; // in case of MAIN VB of SAM/BAM gencomp: we end our biopsy journey here
@@ -553,11 +558,6 @@ static void zip_compress_one_vb (VBlockP vb)
     zip_handle_unique_words_ctxs (vb);
 
     zfile_compress_vb_header (vb); // vblock header
-
-    if (flag.show_codec) {
-        DO_ONCE iprintf ("\n\nThe output of --show-codec-test: Testing a sample of up %u bytes on ctx.local of each context.\n"
-                         "Results in the format [codec bytes μsec] are in order of quality - the first was selected.\n", CODEC_ASSIGN_SAMPLE_SIZE);
-    }
 
     bool need_compress = !flag.make_reference && !flag.seg_only;
 
@@ -772,7 +772,7 @@ void zip_one_file (bool is_last_user_txt_file)  // the last user-specified txt f
     
     // case: compressing a local file with --truncate while it was being appended (e.g. while downloading)
     if (txt_file->disk_size < txt_file->disk_so_far && flag.truncate && !txt_file->is_remote && !txt_file->redirected) {
-        WARN ("%s was being appended by an external process while compression was in progress", txt_name);
+        WARN (_FYI "%s was being appended by an external process while compression was in progress", txt_name);
 
         txt_file->disk_size = txt_file->disk_so_far; // increase to reflect additional data read since first calculating disk_size
     }

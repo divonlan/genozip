@@ -56,13 +56,15 @@ void fasta_get_data_line (VBlockP vb, uint32_t line_i, uint32_t *seq_data_start,
 bool is_fasta (STRp(txt_data), bool *need_more/*optional*/)
 {
     // characters that may appear in a FASTA seqience
-    static bool seq_char[256] = { ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, ['X']=true, ['Z']=true,
-                                  ['e']=true, ['f']=true, ['i']=true, ['l']=true, ['p']=true, ['q']=true, ['x']=true, ['z']=true,                                    
-                                  ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, 
-                                  ['N']=true, ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true,
-                                  ['a']=true, ['c']=true, ['d']=true, ['g']=true, ['h']=true, ['k']=true, ['m']=true, 
-                                  ['n']=true, ['r']=true, ['s']=true, ['t']=true, ['v']=true, ['w']=true, ['y']=true, ['u']=true, ['b']=true,
-                                  ['-']=true, ['*']=true };
+    alignas(64) static bool seq_char[256] = { 
+        ['E']=true, ['F']=true, ['I']=true, ['L']=true, ['P']=true, ['Q']=true, ['X']=true, ['Z']=true,
+        ['e']=true, ['f']=true, ['i']=true, ['l']=true, ['p']=true, ['q']=true, ['x']=true, ['z']=true,                                    
+        ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, 
+        ['N']=true, ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true,
+        ['a']=true, ['c']=true, ['d']=true, ['g']=true, ['h']=true, ['k']=true, ['m']=true, 
+        ['n']=true, ['r']=true, ['s']=true, ['t']=true, ['v']=true, ['w']=true, ['y']=true, ['u']=true, ['b']=true,
+        ['-']=true, ['*']=true 
+    };
 
     char dc = DC ? DC : '>'; // if called from GENERIC, DC is not set yet - we test only for '>'
     
@@ -360,7 +362,7 @@ void fasta_seg_initialize (VBlockP vb)
         CTX(FASTA_DESC)->ltype = LT_STRING;
 
     // if this neocleotide FASTA of unrelated contigs, we're better off with ACGT        
-    if (!segconf_running && !segconf.multiseq && segconf.fasta_seq_type == SQT_NUKE)
+    if (!flag.seg_only && ZCTX(FASTA_NONREF)->lcodec == CODEC_ACGT) // set in segconf
         codec_acgt_seg_initialize (VB, FASTA_NONREF, true);
 
     else 
@@ -390,6 +392,9 @@ void fasta_segconf_finalize (VBlockP vb)
     // if we have multiple shortish contigs in segconf data, this might be multiseq - test
     if (num_contigs_this_vb >= 5 && !flag.make_reference && !flag.fast) 
         segconf_test_multiseq (VB, FASTA_NONREF);
+
+    if (!flag.seg_only && !flag.make_reference && !segconf.multiseq && segconf.fasta_seq_type == SQT_NUKE && !Z_DT(GFF))
+        ctx_segconf_set_hard_coded_lcodec (FASTA_NONREF, CODEC_ACGT);
 
     // output FASTA_CONTIG dictionary (allowing genocat --grep and --regions) if requested
     // with --index, or if small enough

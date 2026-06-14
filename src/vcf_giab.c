@@ -21,8 +21,8 @@ void vcf_giab_zip_initialize (void)
 
 void vcf_giab_seg_initialize (VBlockVCFP vb)
 {
-    seg_mux_init (vb, FORMAT_IGT, VCF_SPECIAL_MUX_BY_IS_SAMPLE_0,  false, IGT);
-    seg_mux_init (vb, FORMAT_IPS, VCF_SPECIAL_MUX_BY_IGT_PHASE, false, IPS);
+    seg_mux_init (vb, FORMAT_IGT, VCF_SPECIAL_MUX_BY_IS_SAMPLE_0, false, IGT);
+    seg_mux_init (vb, FORMAT_IPS, VCF_SPECIAL_MUX_BY_IGT_PHASE,   false, IPS);
 }
 
 //--------------------------------------------------------------------------------

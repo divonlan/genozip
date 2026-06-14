@@ -1243,7 +1243,7 @@ batch_backward_compatability()
     cleanup # to do: change loop ^ to double loop, clean up after each version (to remove shm)
 }
     
-batch_real_world_1_adler32() # $1 extra genozip argument
+batch_real_world_1_xxh() # $1 extra genozip argument
 {
     batch_print_header
 
@@ -1295,7 +1295,7 @@ batch_real_world_optimize()
 
     # test genozip and genounzip --test - first 10K lines of the file should be sufficient to detect optimization issues
     echo "compressing first 10k lines with --optimize"
-    $genozip --head=10000 --optimize --show-filename --test --force ${files[*]} || exit 1
+    $genozip --head=10000 --fast --optimize --show-filename --test --force ${files[*]} || exit 1
 
     cd -
 }
@@ -1490,7 +1490,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
             local genozip_file=${TESTDIR}/$f.genozip
         fi
 
-        # note: normally, the test runs on files compressed in batch_real_world_1_adler32 - we compress them here if not
+        # note: normally, the test runs on files compressed in batch_real_world_1_xxh - we compress them here if not
         if [ ! -f $genozip_file ]; then
             $genozip ${TESTDIR}/$f -fX || exit 1
         fi
@@ -1553,10 +1553,16 @@ get_sam_type() # $1 = filename
     if [[ "${head:0:3}" == "$first_chars" ]]; then echo "SAM";    return; fi 
 
     local bhead="$(head -c26 "$1" | tail -c3)"
-    local size=$(stat -c%s "$1")
+
+    # get file size in bytes
+    if [ -n "$is_mac" ]; then 
+        local size=$(stat -f%z "$1") 
+    else 
+        local size=$(stat -c%s "$1")
+    fi
 
     if [[ "$bhead" == "BAM" ]]; then
-        txt_size=`zcat $1 | wc -c`
+        txt_size=`$zcat $1 | wc -c`
         if (( txt_size < size )); then echo "BAM_Z0"; return; fi # BGZF with non-compressed blocks. Note: just testing for "BAM" is not enough, bc if BAM header is small, then the txt_header BGZF block might be z0 will the rest of the file is compressed.
     fi
 
@@ -1585,8 +1591,8 @@ batch_test_bai()
     rm -f $TESTDIR/*.test-bai/*genounzip* # not in cleanup so we can inspect after the test
 
     # two special cases: 
-    deep.left-right-trimming.bam: a Deep file 
-    special.large.bam a file that bai-generate-test-data.sh compresses with -B35: beyond the 32MB threashold at which writer_flush starts to fragment
+    # deep.left-right-trimming.bam: a Deep file 
+    # special.large.bam a file that bai-generate-test-data.sh compresses with -B35: beyond the 32MB threashold at which writer_flush starts to fragment
     local files=( deep.left-right-trimming.bam \
                   special.large.bam \
                   `cd $TESTDIR; ls -1 test.*bam | egrep -v "test.Bismark_SE.bam|test.Bismark_pe.bam|test.NovaSeq.bam|test.bgi-CL.bam|test.header-only-no-SQ.bam|test.human3-collated.bam|test.longranger-wgs.bam|test.nanoseq.pre.bam|test.pacbio-minimap2-rna.bam|test.pacbio.ccs.10k.bam|test.pacbio.ccs.giab.bam|test.pacbio.ccs.kinetic.bam|test.pacbio.ccs.normal-tumor.normal.bam|test.pacbio.ccs.oak.bam|test.pacbio.ccs.sq-dq-iq.bam|test.pacbio.ccs.virus.bam|test.pacbio.subreads.bam|test.pacbio.subreads2.bam|test.pacbio.subreads3.bam|test.transcriptome.bam|test.ubam.bam|test.parse-illumina.bam|test.parse-ultima.sam"` ) # samtools index fails (no SQ, not sorted, or not BGZF)
@@ -1596,7 +1602,7 @@ batch_test_bai()
         test_header "Testing BAI of $bam"
 
         # to remove all generated ranges for all files: make -C $GENOZIP_HOME/private/test clean-test-index
-        bai-generate-test-data.sh $bam || exit 1 # negligible time if already generated
+        bash bai-generate-test-data.sh $bam || exit 1 # negligible time if already generated (call bash explicitly so it works on mac)
 
         local dir=$TESTDIR/$bam.test-bai
         rm -f $dir/*genounzip*
@@ -2751,7 +2757,7 @@ batch_deep() # note: use --debug-deep for detailed tracking
     $genozip $T.two.fq.gz $T.bam $T.one.fq.gz -fE $GRCh38 -o $output -3t || exit 1
     
     test_header "deep: deep.bismark.sra2: exact gz-recompression (bam + 2 fastqs)"
-    $genounzip $output --bgzf=exact-strict -o $OUTDIR/
+    $genounzip $output --bgzf=exact-strict -o $OUTDIR/ || exit 1
 
     test_header "deep: deep.crop-100: SAM has cropped one base at the end of every read (101 bases in FQ vs 100 in SAM)"
     local T=$TESTDIR/deep.crop-100
@@ -3060,7 +3066,7 @@ hs37d5_v15=$REFDIR/hs37d5.v15.ref.genozip
 T2T1_1=$REFDIR/chm13_1.1.v15.ref.genozip
 mm10=$REFDIR/mm10.v15.ref.genozip
 chinese_spring=$REFDIR/Chinese_Spring.tiny.ref.genozip
-koala=$REFDIR/koala.v12.ref.genozip # also tests backcomp with v12 license
+koala=$TESTDIR/12.0.42/koala.ref.genozip # also tests backcomp with v12 license
 mouse_human=$REFDIR/mouse-human.small.ref.genozip
 zmd5=$SCRIPTSDIR/zmd5
 
@@ -3231,11 +3237,11 @@ case $GENOZIP_TEST in
 43)  batch_reference_genocat           ;;
 44)  batch_many_small_files            ;;
 45)  batch_real_world_small_vbs        ;; 
-46)  batch_real_world_1_adler32        ;; 
+46)  batch_real_world_1_xxh            ;; 
 47)  batch_real_world_genounzip_single_process ;; 
 48)  batch_real_world_genounzip_compare_file   ;; 
-49)  batch_real_world_1_adler32 "--best -f"    ;; 
-50)  batch_real_world_1_adler32 "--fast --force-gencomp" ;; 
+49)  batch_real_world_1_xxh "--best -f";; 
+50)  batch_real_world_1_xxh "--fast --force-gencomp" ;; 
 51)  batch_real_world_optimize         ;;
 52)  batch_real_world_with_ref_md5     ;; 
 53)  batch_real_world_with_ref_md5 "--best --no-cache --force-gencomp" ;; 

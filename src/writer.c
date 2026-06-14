@@ -901,11 +901,6 @@ void writer_create_plan (CompIType comp_i)
         if (is_genocat) exit_ok;
     }
     
-#if defined _WIN32 || defined APPLE
-    ASSERTW ((uint64_t)z_file->max_conc_writing_vbs * segconf.vb_size < MEMORY_WARNING_THREASHOLD,
-             "\nWARNING: This file's output will be re-ordered in-memory, which will consume %"PRIu64" MB.\n"
-             "Alternatively, use the --unsorted option to avoid in-memory sorting", (segconf.vb_size * z_file->max_conc_writing_vbs) >> 20);
-#endif
     COPY_TIMER_EVB (writer_create_plan);
 }
 
@@ -1216,7 +1211,12 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
         switch (p->flavor) {
 
             case PLAN_TXTHEADER:   
-                writer_flush_vb (dispatcher, v->vb, true, false); // write the txt header in its entirety
+                // case strict: SAM header might be just part of the first BGZF block - delay its bgzf-compression to after the first VB
+                if (IS_PIZ_EXACT) 
+                    buf_copy (wvb, &wvb->txt_data, &v->vb->txt_data, char, 0, 0, "txt_data");
+                else
+                    writer_flush_vb (dispatcher, v->vb, true, false); // write the txt header in its entirety
+                
                 writer_release_vb (v);
                 break;
 

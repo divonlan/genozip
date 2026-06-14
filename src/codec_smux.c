@@ -218,10 +218,8 @@ COMPRESS (codec_smux_compress)
         ctx_update_zctx_txt_len (vb, ctxs[b], count_base[b]);
     }
 
-    // second pass - move each qual base to its correct A,C,G,T or N context.
-{START_TIMER;   
+    // second pass - move each qual base to its correct A,C,G,T or N context. 
     for_line {   
-        
         get_line_cb (vb, ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
         if (!qual_len) continue;
 
@@ -246,7 +244,7 @@ COMPRESS (codec_smux_compress)
             for (int32_t i=qual_len-1; i >= 0; i--) 
                 *next[nuke_encode_comp(seq[i])]++ = qual[i]; 
     }
-COPY_TIMER(tmp1);}
+
     for (int b=0; b < 5; b++) 
         ASSERT (next[b] == BAFTc(ctxs[b]->local), "%s: error writing into %s.local (b=%d): expecting bytes=%u == len=%u", 
                 VB_NAME, ctxs[b]->tag_name, b, BNUM(ctxs[b]->local, next[b]), ctxs[b]->local.len32);

@@ -896,6 +896,12 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
     mutex_initialize (file->custom_merge_mutex);
     mutex_initialize (file->test_abbrev_mutex);
     
+    // note: we create all codec muteces in advance and not in ctx_initialize_ctx, because .local might be compressed before any merge occurred (which initializes the zctx)
+    for (ContextP zctx=&file->ca.contexts[0]; zctx < &file->ca.contexts[MAX_DICTS]; zctx++) {
+        mutex_initialize (zctx->assign_codec_mutex[0]);
+        mutex_initialize (zctx->assign_codec_mutex[1]);
+    }
+
     if (!flag.zip_no_z_file) {
 
         if (flag.force && !file->is_in_tar) 
@@ -1005,10 +1011,12 @@ void file_close (FileP *file_p)
 
     else if (file->file && file->supertype == Z_FILE) {
 
-        // ZIP note: we need to destory all even if unused, because they were initialized in file_initialize_z_file_data
         if (IS_ZIP)
-            for (Did did_i=0; did_i < (IS_ZIP ? MAX_DICTS : file->ca.num_contexts); did_i++) 
-                mutex_destroy (file->ctx_mutex[did_i]); 
+            for (ContextP zctx=&file->ca.contexts[0]; zctx < &file->ca.contexts[MAX_DICTS]; zctx++) {
+                mutex_destroy (zctx->ctx_mutex); 
+                mutex_destroy (zctx->assign_codec_mutex[0]); 
+                mutex_destroy (zctx->assign_codec_mutex[1]); 
+            }
 
         if (file->is_in_tar && file->mode != READ)
             tar_close_file (&file->file);
@@ -1050,9 +1058,9 @@ void file_remove (rom filename, bool fail_quietly)
 
 #ifndef _WIN32
     int ret = remove (filename); 
-    ASSERTW (!ret || fail_quietly, "Warning: failed to remove %s: %s", filename, strerror (errno));
+    ASSERTW (!ret || fail_quietly, _WRN "failed to remove %s: %s", filename, strerror (errno));
 #else
-    ASSERTW (DeleteFile (filename) || fail_quietly, "Warning: failed to remove %s: %s", filename, str_win_error());
+    ASSERTW (DeleteFile (filename) || fail_quietly, _WRN "failed to remove %s: %s", filename, str_win_error());
 #endif
 }
 
@@ -1061,7 +1069,7 @@ bool file_rename (rom old_name, rom new_name, bool fail_quietly)
     chmod (old_name, S_IRUSR | S_IWUSR); // make sure its +w so we don't get permission denied (ignore errors)
 
     int ret = rename (old_name, new_name); 
-    ASSERTW (!ret || fail_quietly, "Warning: failed to rename %s to %s: %s", old_name, new_name, strerror (errno));
+    ASSERTW (!ret || fail_quietly, _WRN "failed to rename %s to %s: %s", old_name, new_name, strerror (errno));
 
     return !ret; // true if successful
 }
@@ -1170,8 +1178,8 @@ bool file_seek (FileP file, int64_t offset,
 
     if (fail_type != HARD_FAIL) {
         if (!flag.to_stdout && fail_type==WARNING_FAIL) {
-            ASSERTW (!ret, errno == EINVAL ? "Warning: Error while reading file %s (fseeko64 (whence=%d offset=%"PRId64")): it is too small%s" 
-                                           : "Warning: fseeko64 failed on file %s (whence=%d offset=%"PRId64"): %s", 
+            ASSERTW (!ret, errno == EINVAL ? _WRN "Error while reading file %s (fseeko64 (whence=%d offset=%"PRId64")): it is too small%s" 
+                                           : _WRN "fseeko64 failed on file %s (whence=%d offset=%"PRId64"): %s", 
                      file_printname (file), whence, offset, errno == EINVAL ? "" : strerror (errno));
         }
     } 
@@ -1301,7 +1309,7 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
         uint64_t this_written = fwrite ((rom)data + written, 1, this_len, file);
 
         if (this_written != this_len) {
-            WARN ("Failed to write %s: wrote only %"PRIu64" bytes of the expected %"PRIu64" (file removed)", tmp_filename, (uint64_t)written, len);
+            WARN (_WRN "Failed to write %s: wrote only %"PRIu64" bytes of the expected %"PRIu64" (file removed)", tmp_filename, (uint64_t)written, len);
             put_data_tmp_filenames[my_file_i] = NULL; // no need to lock mutex
             remove (tmp_filename);
             return false;
@@ -1363,10 +1371,10 @@ PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
     file_put_data (fn.s, STRa(line), 0);
 
     if (IS_PIZ)
-        WARN ("\n%s line=%s line_in_file(1-based)=%"PRId64". Dumped %s (dumping first occurance only)", 
+        WARN ("\n"_FYI"%s line=%s line_in_file(1-based)=%"PRId64". Dumped %s (dumping first occurance only)", 
                 msg, line_name(vb).s, writer_get_txt_line_i (vb, vb->line_i), fn.s);
     else
-        WARN ("\n%s line=%s vb_size=%u MB. Dumped %s", msg, line_name(vb).s, (int)(segconf.vb_size >> 20), fn.s);
+        WARN ("\n"_FYI"%s line=%s vb_size=%u MB. Dumped %s", msg, line_name(vb).s, (int)(segconf.vb_size >> 20), fn.s);
 
     return fn;
 }

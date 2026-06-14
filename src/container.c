@@ -441,7 +441,7 @@ static inline ContextP container_get_debug_lines_ctx (VBlockP vb)
     return NULL; // no per-line verification
 }
 
-ValueType container_reconstruct (VBlock𐤐 vb, Context𐤐 ctx, ConstContainer𐤐 con, STR𐤐(prefixes))
+ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, STR𐤐(prefixes))
 {
     TimeSpecType profiler_timer = {}; 
     bool is_toplevel = con->is_toplevel; // copy to automatic. note: it is possible that we are top of stack but not a toplevel container - eg when reconstructing for SAG loading
@@ -500,11 +500,11 @@ ValueType container_reconstruct (VBlock𐤐 vb, Context𐤐 ctx, ConstContainer�
     uint32_t num_items = con_nitems(*con);
     ContextP item_ctxs[num_items];
     
-    // we can cache did_i up to 254. dues historical reasons the field is only 8 bit. that's enough in most cases anyway.
-    for (unsigned i=0; i < num_items; i++) 
-        item_ctxs[i] = !con->items[i].dict_id.num      ? NULL 
-                     : con->items[i].did_i_small < 255 ? CTX(con->items[i].did_i_small)
-                     :                                   ECTX (con->items[i].dict_id);
+    // we can cache did_i up to 254. due to historical reasons the field is only 8 bit. that's enough in most cases anyway.
+    for (uint32_t i=0; i < num_items; i++) 
+        item_ctxs[i] = con->items[i].did_i_small != 255 ? CTX(con->items[i].did_i_small)
+                     : !con->items[i].dict_id.num       ? NULL 
+                     :                                    ECTX (con->items[i].dict_id);
 
     // for containers, new_value is the sum of all its items, all repeats last_value (either int or float)
     ValueType new_value = {};
@@ -557,7 +557,7 @@ ValueType container_reconstruct (VBlock𐤐 vb, Context𐤐 ctx, ConstContainer�
                      vb->peek_stack_level ? "peeking " : "",
                      VB_NAME, rep_i, con->repeats-1, ctx->tag_name);
 
-        for (unsigned item_i=0; item_i < num_items; item_i++) {
+        for (uint32_t item_i=0; item_i < num_items; item_i++) {
             const ContainerItem *item = &con->items[item_i];
             ContextP item_ctx = item_ctxs[item_i];
             vb->curr_item = item_ctx ? item_ctx->did_i : DID_NONE; // for ASSPIZ
@@ -727,7 +727,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
     uint16_t cache_item_len;
 
     // case: if this container exists in the cache - use the cached one
-    if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *B16 (ctx->con_len, word_index)))) {
+    if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *B16(ctx->con_len, word_index)))) {
         ContainerP con_p = (ContainerP)Bc(ctx->con_cache, *B32 (ctx->con_index, word_index));
         
         if (out_prefixes) {
@@ -967,10 +967,10 @@ void con_verify_items (ConstContainerP con, ContextP ctx, rom con_name)
 // Translators reconstructing last_value as a little endian binary
 #define SET_n(type,mn,mx) \
     type n = (type)ctx->last_value.i; \
-    ASSPIZ (ctx->last_value.i>=(int64_t)(mn) && ctx->last_value.i<=(int64_t)(mx),\
-            "Error: Failed to convert %s to %s because of bad %s data: %s.last_value=%"PRId64" is out of range for type \"%s\"=[%"PRId64"-%"PRId64"] ctx.store_type=%s ctx.ltype=%s. Common reasons for a bug here: reconstruction an incorrect number, not returning HAS_NEW_VALUE, or not having STORE_INT.",\
+    ASSPIZ (IN_RANGX(ctx->last_value.i, (int64_t)(mn), (int64_t)(mx)),\
+            "Failed to convert %s to %s because of bad %s data: %s.last_value=%"PRId64" ∉ [%"PRId64", %"PRId64"] (%s) store_type=%s ltype=%s. Common reasons for a bug here: reconstruction an incorrect number, not returning HAS_NEW_VALUE, or not having STORE_INT.",\
             z_dt_name(), dt_name (flag.out_dt), z_dt_name(), \
-            ctx->tag_name, ctx->last_value.i, #type, (int64_t)(mn), (int64_t)(mx), store_type_name(ctx->flags.store), lt_name(ctx->ltype))
+            ctx->tag_name, ctx->last_value.i, (int64_t)(mn), (int64_t)(mx), #type, store_type_name(ctx->flags.store), lt_name(ctx->ltype))
 
 TRANSLATOR_FUNC (container_translate_I8)       { SET_n (int8_t,   INT8_MIN,  INT8_MAX  );               RECONSTRUCT1(n);       return 0; }
 TRANSLATOR_FUNC (container_translate_U8)       { SET_n (uint8_t,  0,         UINT8_MAX );               RECONSTRUCT1((char)n); return 0; }

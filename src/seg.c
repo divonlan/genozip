@@ -36,7 +36,7 @@ StrText1K seg_error (VBlockP vb)
     return s;
 }
 
-WordIndex seg_by_ctx_ex (VBlock𐤐 vb, STR𐤐(snip), Context𐤐 ctx, uint32_t add_bytes,
+WordIndex seg_by_ctx_ex (VBlockP vb, STR𐤐(snip), ContextP ctx, uint32_t add_bytes,
                          bool *restrict is_new) // optional out
 {
     ASSERTNOTNULL (ctx);

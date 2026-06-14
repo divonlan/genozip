@@ -28,16 +28,17 @@ uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
     size = MIN_(size, MAX_(16000000, segconf.vb_size));
 
     // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
-    // minimum ~64K to prevent horrible miscalculations in edge cases that result in dramatic slow down
-    static uint32_t hash_sizes[] = { 65521, 92681, 131071, 
-                                     185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
-                                     11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
-                                     94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
-    #define NUM_HASH_REGULAR 25
+    // minimum ~16K to prevent horrible miscalculations in edge cases that result in dramatic slow down
+    static uint32_t hash_sizes[] = { 
+        16381, 23167, 32749, 46337, 65521, 92681, 131071, 
+        185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
+        11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
+        94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
     #define NUM_HASH_HUGE ARRAY_LEN(hash_sizes)
+    #define NUM_HASH_REGULAR (NUM_HASH_HUGE - 6)
     #define NUM_HASH_SIZES (allow_huge ? NUM_HASH_HUGE : NUM_HASH_REGULAR)
 
-    for (int i=0; i < NUM_HASH_SIZES; i++)
+    int i=0; for (;i < NUM_HASH_SIZES; i++)
         if (size < (uint64_t)hash_sizes[i]) return hash_sizes[i];
 
     return hash_sizes[NUM_HASH_SIZES-1]; // the maximal size

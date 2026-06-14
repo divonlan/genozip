@@ -72,8 +72,10 @@ static bool codec_homp_qual_data_is_a_fit_for_homp (VBlockP vb, ContextP qual_ct
                     char mirror_qual = qual[i + hp_len - 1 - h];
 
                     if (this_qual != mirror_qual || (prev_qual == TOP_QUAL && this_qual != TOP_QUAL)) {
-                        printf ("HOMP: %s: found non-compliant '%c' homopolymer: line_i=%u seq_i=%u hp_len=%u\nSEQ =%.*s\nQUAL=%.*s\n", 
-                                VB_NAME, seq[i], line_i, i, hp_len, STRf(seq), seq_len, qual);
+                        if (flag.show_qual)
+                            iprintf ("HOMP: %s: found non-compliant '%c' homopolymer: line_i=%u seq_i=%u hp_len=%u\nSEQ =%.*s\nQUAL=%.*s\n", 
+                                     VB_NAME, seq[i], line_i, i, hp_len, STRf(seq), seq_len, qual);
+                        
                         return false; // found proof of non-homp
                     }
 
@@ -87,8 +89,8 @@ static bool codec_homp_qual_data_is_a_fit_for_homp (VBlockP vb, ContextP qual_ct
     }
     
     if (flag.show_qual) {
-        if (n_hp_examined) printf ("HOMP: %s: examined %u homopolymers and all are compliant with HOMP\n", VB_NAME, n_hp_examined);
-        else               printf ("HOMP: %s: no homopolymers found\n", VB_NAME);
+        if (n_hp_examined) iprintf ("HOMP: %s: examined %u homopolymers and all are compliant with HOMP\n", VB_NAME, n_hp_examined);
+        else               iprintf ("HOMP: %s: no homopolymers found\n", VB_NAME);
     }
 
     return n_hp_examined > 0; // fail if no HPs

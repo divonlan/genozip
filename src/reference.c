@@ -73,6 +73,17 @@ alignas(64) const uint8_t _acgt_encode_comp[256] = {
     ['d']=0, ['h']=0, ['v']=1, ['n']=0  
 }; 
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winitializer-overrides"
+alignas(64) const uint8_t _nuke_encode[256] = {
+    [0 ... 255] = 4, ['A']=0, ['C']=1, ['G']=2, ['T']=3
+};
+
+alignas(64) const uint8_t _nuke_encode_comp[256] = {
+    [0 ... 255] = 4, ['A']=3, ['C']=2, ['G']=1, ['T']=0
+};
+#pragma clang diagnostic pop
+
 // get / set functions 
 rom ref_get_filename (void)               { return gref.filename;                    }
 rom ref_get_fasta_name (void)             { return gref.ref_fasta_name;              }
@@ -106,12 +117,12 @@ void ref_set_access_mode (ReferenceAccessMode genome_mode, ReferenceAccessMode r
 
     // genome access 
     ASSERTW (madvise (genome_start_page, gref.genome_buf.size, genome_mode == REF_ACCESS_RANDOM ? MADV_RANDOM : MADV_SEQUENTIAL) == 0,
-             "madvise of genome (%p, %"PRIu64")s failed: %s", genome_start_page, gref.genome_buf.size, strerror (errno));
+             _WRN "madvise of genome (%p, %"PRIu64")s failed: %s", genome_start_page, gref.genome_buf.size, strerror (errno));
 
     // refhash access        
     if (refhash_exists()) 
         ASSERTW (madvise (refhash_start_page, refhash_buf.size, refhash_mode == REF_ACCESS_RANDOM ? MADV_RANDOM : MADV_SEQUENTIAL) == 0,
-                 "madvise of refhash (%p, %"PRIu64") failed: %s", refhash_start_page, refhash_buf.size, strerror (errno)); 
+                 _WRN "madvise of refhash (%p, %"PRIu64") failed: %s", refhash_start_page, refhash_buf.size, strerror (errno)); 
 #else // Windows
 #endif
 }
@@ -1370,13 +1381,13 @@ void ref_set_reference (rom filename, ReferenceType ref_type, bool is_explicit)
         if (!env || !env[0]) return; 
 
         bool is_dir = file_is_dir (env);
-        WARN_IF (IS_ZIP && is_dir, "Ignoring $%s=%s because it is a directory. "_TIP"Use --reference or set $GENOZIP_REFERENCE to a file", GENOZIP_REFERENCE, env);
+        WARN_IF (IS_ZIP && is_dir, _FYI "Ignoring $%s=%s because it is a directory. "_TIP"Use --reference or set $GENOZIP_REFERENCE to a file", GENOZIP_REFERENCE, env);
 
         if (is_dir) return; // nothing to set (note: in PIZ, this will be called again with a file name after getting it from the genozip_header)        
         
         filename     = env;
         filename_len = strlen (env);
-        WARN ("Using reference file \"%.*s\" set in $%s. "_TIP"Use --reference to override", 
+        WARN (_FYI "Using reference file \"%.*s\" set in $%s. "_TIP"Use --reference to override", 
               STRf(filename), GENOZIP_REFERENCE);
     }
 
@@ -1485,7 +1496,7 @@ void ref_display_ref (void)
                 for (PosType64 pos=display_last_pos, next_iupac_pos=display_last_pos; pos >= display_first_pos; pos--) {
                     char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (r, pos, true, &next_iupac_pos) : 0;
                     char base = iupac ? iupac : ref_base_by_pos (r, pos);
-                    fputc (COMPLEM[(int)base], stdout);
+                    fputc (COMPLEM[(uint8_t)base], stdout);
                 }        
             }
 
@@ -1741,7 +1752,7 @@ char *ref_dis_subrange (ConstRangeP r, PosType64 start_pos, PosType64 len, char 
         PosType64 next_iupac_pos, pos, end_pos = MAX_(start_pos - (len - 1) + 1, r->first_pos);  // -1 to leave room for \0
         for (pos=start_pos, next_iupac_pos=start_pos ; pos >= end_pos; pos--) {
             char iupac = (pos==next_iupac_pos) ? ref_iupacs_get (r, pos, true, &next_iupac_pos) : 0;
-            seq[start_pos - pos] = iupac ? iupac : COMPLEM[(int)ref_base_by_pos (r, pos)];
+            seq[start_pos - pos] = iupac ? iupac : COMPLEM[(uint8_t)ref_base_by_pos (r, pos)];
         }
         seq[start_pos - pos] = 0;
     }

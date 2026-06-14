@@ -217,7 +217,7 @@ void buflist_remove_buf (BufferP buf, FUNCLINE)
     ASSERTISALLOCED (vb->buffer_list);
 
     if (!vb_is_valid (vb)) { // this is bug 576
-        WARN ("Unexpected, but unharmful: cannot remove buf=%p from buffer list, because buf->vb=%p refers to a VB that no longer exists", buf, vb);
+        WARN (_FYI "Unexpected, but unharmful: cannot remove buf=%p from buffer list, because buf->vb=%p refers to a VB that no longer exists", buf, vb);
         WARN ("%s allocated in %s:%u", buf->name, buf->func, buf->code_line); // separate line in case it segfaults if buf is corrupt
         return;
     }
@@ -426,7 +426,7 @@ void buflist_free_ctx (VBlockP vb, ContextP ctx)
     buflist_sort (vb, true); // need buffers to be sorted to erase the space between them
 
     // find first buffer than belongs to ctx in vb->buffer_list
-    char *start_erase = (char *)ctx; 
+    char *start_erase = (char *)&ctx->start_erase_field; // note: careful not to delete did_i because profiler_add would not work properly
 
     BufListEnt *first_ent = MAX_(buflist_find_buf (vb, &ctx->FIRST_BUFFER_IN_Context, SOFT_FAIL), // binary search
                                  B1ST(BufListEnt, vb->buffer_list)); // if binary search returns NULL

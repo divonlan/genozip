@@ -72,9 +72,9 @@ void codec_tmpl_segconf_finalize (VBlockP vb, Did did_i, LocalGetLineCB get_line
     // We can use TMPL if over 30% of positions have a dominant score (=a score appearing in over 40% of lines)
     if (percent (n_have_majority_score, template_len) < 30) {
         // fallback to BSC
-        zctx->lcodec = zctx->qual_codec = (flag.fast ? CODEC_ARTB : CODEC_BSC);
-        zctx->lcodec_hard_coded = true;
-        zctx->tmpl_calculated   = false;
+        zctx->tmpl_calculated = false;
+        zctx->qual_codec = (flag.fast ? CODEC_ARTB : CODEC_BSC);
+        ctx_segconf_set_hard_coded_lcodec (did_i, zctx->qual_codec);
         return;
     }
 

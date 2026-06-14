@@ -750,14 +750,17 @@ static void codec_domq_reconstruct_divr (VBlockP vb, ContextP divrqual_ctx, Cont
     START_TIMER;
 
     if (VER2(15,76)) {  
-        bytes denormalize = codec_domq_piz_get_denorm (vb, domqruns_ctx, dom_i, no_dom);
+        bytes𐤐 denormalize = codec_domq_piz_get_denorm (vb, domqruns_ctx, dom_i, no_dom);
 
         ASSPIZ (divrqual_ctx->next_local + len <= divrqual_ctx->local.len32, "when reconstructing %u qual scores: %s.local exhausted: next_local=%u len=%u", 
                 len, divrqual_ctx->tag_name, divrqual_ctx->next_local, divrqual_ctx->local.len32);
  
-        rom divr = Bc(divrqual_ctx->local, divrqual_ctx->next_local);
+        rom𐤐 divr = Bc(divrqual_ctx->local, divrqual_ctx->next_local);
+        char *restrict next = BAFTtxt;
         for (uint32_t i=0; i < len; i++)
-            RECONSTRUCT1 (denormalize[(int)divr[i]]); 
+            *next++ = denormalize[(int)divr[i]];
+            
+        Ltxt += len;
         
         divrqual_ctx->next_local += len;
     }

@@ -230,12 +230,16 @@ void zfile_uncompress_section (VBlockP vb,
             uncompressed_data->len = data_uncompressed_len;
         }
 
+        START_TIMER;
+        
         comp_uncompress (vb, ctx, h->codec, 
                          h->section_type == SEC_LOCAL ? h->sub_codec : 0, 
                          codec_param,
                          (char*)h + compressed_offset, data_compressed_len, 
                          uncompressed_data, data_uncompressed_len,
                          dict_id.num ? dis_dict_id(dict_id).s : st_name(expected_section_type));
+
+        COPY_TIMER_COMPRESS_BY_FIELD (ctx);
 
         //--verify-codec: verify that adler32 of the uncompressed data is equal that of the original uncompressed data
         if (flag.verify_codec && uncompressed_data && data_uncompressed_len && 
@@ -716,7 +720,7 @@ static rom zfile_read_genozip_header_get_ref_filename (rom header_fn)
 
 static void zfile_read_genozip_header_set_reference (ConstSectionHeaderGenozipHeaderP h, rom ref_filename)
 {
-    WARN ("Using reference file %s. "_TIP"Use --reference or $%s to override", ref_filename, GENOZIP_REFERENCE);
+    WARN (_FYI "Using reference file %s. "_TIP"Use --reference or $%s to override", ref_filename, GENOZIP_REFERENCE);
     ref_set_reference (ref_filename, REF_EXTERNAL, false);
 }
 
@@ -854,7 +858,7 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
 
     SectionFooterGenozipHeader footer;
     int ret = fread (&footer, sizeof (footer), 1, GET_FP(z_file));
-    ASSERTW (ret == 1, "Skipping empty file %s", z_name);
+    ASSERTW (ret == 1, _FYI "Skipping empty file %s", z_name);
     if (!ret) return 0; // failed
     
     // case: there is no genozip header. this can happen if the file was truncated (eg because compression did not complete)
@@ -1210,7 +1214,7 @@ DataType zfile_piz_get_file_dt (rom z_filename)
 
         SectionFooterGenozipHeader footer;
         int ret = fread (&footer, sizeof (footer), 1, GET_FP(file));
-        ASSERTW (ret == 1, "Skipping empty file %s", z_name);    
+        ASSERTW (ret == 1, _FYI "Skipping empty file %s", z_name);    
         if (!ret) goto done; // empty file / cannot read
         
         // case: this is not a valid genozip v2+ file
@@ -1225,7 +1229,7 @@ DataType zfile_piz_get_file_dt (rom z_filename)
         int bytes = fread ((char*)&h, 1, sizeof(SectionHeaderGenozipHeader), GET_FP(file));
         if (bytes < sizeof(SectionHeaderGenozipHeader)) goto done;
 
-        ASSERTW (BGEN32 (h.magic) == GENOZIP_MAGIC, "Error reading %s: corrupt data", z_name);
+        ASSERTW (BGEN32 (h.magic) == GENOZIP_MAGIC, _ERR "Error reading %s: corrupt data", z_name);
         if (BGEN32 (h.magic) != GENOZIP_MAGIC) goto done;
 
         dt = (DataType)BGEN16 (h.data_type);

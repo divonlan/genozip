@@ -998,7 +998,7 @@ MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐 dl, STRp
     BitsP bitmap = (BitsP)&bitmap_ctx->local;
 
     ASSERTW (seq_len < 100000 || segconf_running || segconf.is_long_reads, 
-             "%s: Warning: fastq_bamass_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
+             _WRN "%s: fastq_bamass_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
 
     RefLock lock = IS_REF_EXTERNAL ? REFLOCK_NONE : ref_lock (vb->gpos, vb->ref_consumed);
 

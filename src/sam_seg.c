@@ -291,7 +291,7 @@ void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header)
     
     unsigned est_sam_factor_mult = round (MAX_(segconf.est_sam_factor, 1) * (double)SAM_FACTOR_MULT);
     if (est_sam_factor_mult > 255) {
-        WARN ("est_sam_factor_mult=%u, this might affect genocat translation to SAM. %s", est_sam_factor_mult, report_support_if_unexpected());
+        WARN (_FYI "est_sam_factor_mult=%u, this might affect genocat translation to SAM. %s", est_sam_factor_mult, report_support_if_unexpected());
         est_sam_factor_mult = 0; // fallback to PIZ default
     }
     header->sam.segconf_sam_factor      = est_sam_factor_mult;
@@ -462,7 +462,7 @@ void sam_seg_initialize (VBlockP vb_)
     else
         ctx_consolidate_stats (VB, OPTION_SA_Z, OPTION_SA_RNAME, OPTION_SA_POS, OPTION_SA_STRAND, OPTION_SA_CIGAR, OPTION_SA_MAPQ, OPTION_SA_NM, OPTION_SA_MAIN, DID_EOL);
 
-    if (!(segconf.pacbio_subreads && flag.best) && !segconf.multiseq)
+    if (!(segconf.pacbio_subreads && flag.best) && !segconf.multiseq && !segconf.running)
         codec_acgt_seg_initialize (VB, SAM_NONREF, true);
 
     sam_seg_QNAME_initialize (vb);
@@ -799,6 +799,9 @@ void sam_segconf_finalize (VBlockP vb_)
     if (segconf.pacbio_subreads)
         ctx_segconf_set_hard_coded_lcodec (OPTION_ip_ARR, CODEC_ARTB); // as good as LZMA on ip:B:C and hugely faster - hard-code to prevent assigning LZMA  
 
+    if (!(segconf.pacbio_subreads && flag.best) && !segconf.multiseq)
+        ctx_segconf_set_hard_coded_lcodec (SAM_NONREF, CODEC_ACGT);
+
     segconf.sam_use_sn_mux = segconf.pacbio_subreads && segconf.sam_is_unmapped && segconf_qf_id (QNAME1) == QF_PACBIO_rng;
 
     segconf.MAPQ_use_xq = MP(DRAGEN) && (segconf_has(OPTION_xq_i)/*15.0.61*/ || segconf_has(OPTION_XQ_i)/*15.0.69*/);
@@ -919,8 +922,8 @@ void sam_segconf_finalize (VBlockP vb_)
         codec_longr_segconf_calculate_bins (VB, CTX(SAM_QUAL + 1), sam_zip_qual);
 
     if (TECH(ELEMENT)) { // perhaps this should be NORMQ with sub BSC?
-        ZCTX(SAM_QUAL)->lcodec = ZCTX(FASTQ_QUAL)->qual_codec = (flag.fast ? CODEC_ARTB : CODEC_BSC);
-        ZCTX(SAM_QUAL)->lcodec_hard_coded = true;
+        ZCTX(SAM_QUAL)->qual_codec = (flag.fast ? CODEC_ARTB : CODEC_BSC);
+        ctx_segconf_set_hard_coded_lcodec (SAM_QUAL, ZCTX(SAM_QUAL)->qual_codec);
     }
 
     // RG method - QNAME - if successful, we expect all RGs to have been added to dict in sam_header_zip_inspect_RG_lines, and on the SPECIAL segged in this VB 
@@ -1021,9 +1024,11 @@ void sam_seg_finalize (VBlockP vb_)
         OPTION_TX_NEGATIVE, OPTION_TX_LOOKBACK, OPTION_TX_SAM_POS,
         OPTION_AN_NEGATIVE, OPTION_AN_LOOKBACK, OPTION_AN_SAM_POS };  // nodes added in sam_seg_TX_AN_initialize
 
-    for (int i = 0; i < ARRAY_LEN(delete_me); i++)
-        if (!CTX(delete_me[i])->b250.len && !CTX(delete_me[i])->local.len)
-            buflist_free_ctx (VB, CTX(delete_me[i]));
+    for (int i = 0; i < ARRAY_LEN(delete_me); i++) {
+        decl_ctx (delete_me[i]);
+        if (!ctx->b250.len && !ctx->local.len)
+            buflist_free_ctx (VB, ctx);
+    }
 
     // Primary VB - ingest VB data into z_file->sa_*
     if (IS_PRIM(vb))
@@ -1613,6 +1618,7 @@ WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp (chrom),
                          bool against_sa_group_ok, // if true, vb->chrom_node_index must already be set
                          unsigned add_bytes)
 {
+    START_TIMER;
     bool normal_seg = false;
 
     if (segconf_running)
@@ -1667,11 +1673,13 @@ WordIndex sam_seg_RNAME (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp (chrom),
     if (!normal_seg && node_index != WORD_INDEX_NONE) // note: node_index==-1 when RNAME="*"
         ctx_protect_from_removal (VB, CTX(SAM_RNAME), node_index);
 
+    COPY_TIMER_SEG_FIELD (SAM_RNAME);
     return node_index;
 }
 
 WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp (chrom), unsigned add_bytes)
 {
+    START_TIMER;
     decl_ctx (SAM_RNEXT);
 
     bool normal_seg = false;
@@ -1718,6 +1726,7 @@ WordIndex sam_seg_RNEXT (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp (chrom), uns
     if (!normal_seg && node_index != WORD_INDEX_NONE) // note: node_index==-1 when RNEXT="*"
         ctx_protect_from_removal (VB, ctx, node_index);
 
+    COPY_TIMER_SEG_FIELD (SAM_RNEXT);
     return node_index;
 }
 
@@ -1738,6 +1747,8 @@ bool sam_seg_test_biopsy_line (VBlockP vb, STRp (line))
 
 void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
 {
+    START_TIMER;
+
     // the converted reference to which this read was mapped (C->T conversion or G->A conversion)
     // note: we calculate it always to avoid needless adding entropy in the snip
     vb->bisulfite_strand =  !segconf.sam_bisulfite    ? 0 
@@ -1760,6 +1771,8 @@ void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
         
     else if (MP(BSBOLT))
         sam_seg_bsbolt_XB_Z_analyze (vb, dl);
+
+    COPY_TIMER (sam_seg_init_bisulfite);
 }
 
 rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bool *has_13)

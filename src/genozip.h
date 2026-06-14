@@ -395,6 +395,7 @@ typedef enum { VB_ID_EVB=-1, VB_ID_WRITER=-2, VB_ID_SEGCONF=-3, VB_ID_SCAN_VB=-4
 // tasks
 typedef packed_enum { TASK_NONE, /*dispatcher tasks →*/ TASK_ZIP, TASK_PIZ, TASK_PIZ_REF, TASK_LOAD_EXT_REF, TASK_LOAD_STORED_REF, TASK_MAKE_REF_COMP, TASK_COMPRESS_REF, TASK_LOAD_REFHASH, TASK_MRH_DECIDE_OCCUPIER, TASK_MRH_OCCUPY, TASK_MRH_COMPRESS, TASK_UNCOMP_RECON_PLAN, TASK_COMP_TXT_HEADER, TASK_READ_TXT_HEADER, TASK_BAMASS_READ, TASK_BAMASS_LINK, TASK_ASSIGN_DICT_CODECS, TASK_COMP_DICTS, TASK_READ_DICTS_REF, TASK_READ_DICTS, TASK_BGZF,  /*non-dispatcher tasks →*/ TASK_EVB, TASK_WVB, TASK_SEGCONF, TASK_COMP_DEPN_BUF, TASK_FASTA_FILTER_GREP, TASK_SCAN_FOR_DEPN, NUM_TASKS } Task;
 #define TASK_NAMES { "none",                         "zip",    "piz",    "piz_ref",    "load_ext_ref",    "load_stored_ref",    "make_ref_compress",    "compress_ref",    "load_refhash",    "mrh_decide_occupier",    "mrh_occupy",    "mrh_compress",    "uncomp_recon_plan",    "comp_txt_header",    "read_txt_header",    "bamass_read",    "bamass_link",    "assign_dict_codecs",    "comp_dicts",    "read_dicts_ref",    "read_dicts",    "bgzf", /*non-dispatcher tasks →*/     "evb",    "wvb",    "segconf",    "comp_depn_buf",    "fasta_filter_grep",    "scan_for_depn" }
+#define IS_TASK(t) (vb->compute_task == TASK_##t)
 
 extern VBlockP evb; // External VB
 
@@ -482,6 +483,7 @@ static inline uint64_t fibonacci (uint64_t n, int n_bits) { return ((n * 1140071
 #define STR0(x)  rom x=NULL;   uint32_t x##_len=0
 #define STRw(x)  char *x;      uint32_t x##_len    // writeable
 #define STRw0(x) char *x=NULL; uint32_t x##_len=0  // writeable, initialized
+#define STRw0𐤐(x) char *restrict x=NULL; uint32_t x##_len=0  
 #define sSTRl(name,len) static char name[len]; static uint32_t name##_len = (len)
 #define STRl(name,len) char name[len]; uint32_t name##_len
 #define mSTR(name,multi) rom name##s[multi]; uint32_t name##_len##s[multi]
@@ -649,23 +651,25 @@ typedef packed_enum { BGZF_NOT_INITIALIZED    = -100,
 void func (VBlockP vb,                                              \
            ContextP ctx, /* NULL if not compressing a context */    \
            LineIType vb_line_i,                                     \
-           char **line_data, uint32_t *line_data_len,               \
+           char *restrict *line_data,                               \
+           uint32_t *restrict line_data_len,                        \
            uint32_t maximum_size, /* might be less than the size available if we're sampling in codec_assign_best_codec() */ \
-           bool *is_rev)          // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
+           bool *restrict is_rev) // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
 
 #define COMPRESSOR_CALLBACK_DT(func)                                \
 void func (VBlockP vb_,                                             \
            ContextP ctx, /* NULL if not compressing a context */    \
            LineIType vb_line_i,                                     \
-           char **line_data, uint32_t *line_data_len,               \
+           char *restrict *line_data,                               \
+           uint32_t *restrict line_data_len,                        \
            uint32_t maximum_size, /* might be less than the size available if we're sampling in codec_assign_best_codec() */ \
-           bool *is_rev)          // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
+           bool *restrict is_rev)  // QUAL and SEQ callbacks - must be returned in SAM/BAM and set to 0 elsewhere
 
 #define CALLBACK_NO_SIZE_LIMIT 0xffffffff // for maximum_size
 
 typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 
-#define SAFE_ASSIGNx(addr,char_val,x) /* we are careful to evaluate addr, char_val only once, lest they contain eg ++ */ \
+#define SAFE_ASSIGNx(addr,char_val,x) /* we are carefupl to evaluate addr, char_val only once, lest they contain eg ++ */ \
     char *__addr##x = (char*)(addr); \
     char __save##x  = *__addr##x; \
     *__addr##x = (char_val)
@@ -720,9 +724,10 @@ extern void noreturn error_assert_failed (FUNCLINE, rom format, ...);
 extern void noreturn error_restart (rom add_cmd_option, rom format, ...);
 extern void warn (rom format, ...);
 
-#define _TIP "💡 "
-#define _FYI "ℹ️ "
-#define _ERR "❌ "
+#define _ERR "❌ " // Error - usually causing termination
+#define _WRN "⚠  " // Warning - the user did something legal but potentially harmful
+#define _FYI "ℹ️ " // FYI - something happened that the user might want to be aware of
+#define _TIP "💡 " // Tip - advice to user
 
 #define ASSINP(condition, format, ...)       ({ if (__builtin_expect (!(condition), 0)) error_assertinp_failed ((format), ##__VA_ARGS__ ); })
 #define ASSINP0(condition, string)           ASSINP (condition, string "%s", "")

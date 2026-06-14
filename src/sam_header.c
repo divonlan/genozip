@@ -292,11 +292,9 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
         if (!sam_deep_tip.len || !strstr (B1STc(sam_deep_tip), fq)) { // avoid dups
             if (!sam_deep_tip.len) 
                 bufprintf (evb, &sam_deep_tip, _TIP "Use --deep to losslessly co-compress BAM and FASTQ, saving about 40%%, compared to compressing FASTQ and BAM separately. E.g.:\n"
-                           "%s --reference %s --deep %s\n"
-                           "%s",
-                           arch_get_argv0(), ref_get_filename() ? ref_get_filename() : "reference-genome.fa.gz", txt_name, WEBSITE_DEEP);
+                           "%s --reference %s --deep %s ",
+                           arch_get_argv0(), ref_get_filename() ? ref_get_filename() : "reference-genome.fa.gz", txt_name);
 
-            buf_add_moreC (evb, &sam_deep_tip, " ", NULL);
             buf_append_string (evb, &sam_deep_tip, fq);
         }
         SAFE_RESTORE;
@@ -304,8 +302,11 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
         hdr = fq + fq_len;
     }
 
-    if (sam_deep_tip.len) 
+    if (sam_deep_tip.len) {
+        buf_add_moreC (evb, &sam_deep_tip, "\n", NULL);
+        buf_append_string (evb, &sam_deep_tip, WEBSITE_DEEP);
         buf_add_moreC (evb, &sam_deep_tip, "\n\0", NULL);
+    }
 
     SAFE_RESTORE;
 }

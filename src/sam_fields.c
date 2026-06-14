@@ -104,6 +104,8 @@ StrText1K sam_dis_FLAG (SamFlags f)
 
 void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes)
 {    
+    START_TIMER;
+
     // note: for simplicity, we only mux in MAIN.
     // note: we can only mux FLAG by buddy, not mate, bc sam_piz_special_DEMUX_BY_MATE needs FLAG to determine mate
     // note: in collated files, we're better off without this.
@@ -169,6 +171,8 @@ void sam_seg_FLAG (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes)
 
     if (dl->FLAG.secondary)     vb->secondary_count++;
     if (dl->FLAG.supplementary) vb->supplementary_count++; 
+
+    COPY_TIMER_SEG_FIELD (SAM_FLAG);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_MATE_FLAG)
@@ -819,6 +823,8 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_SEQ_LEN)
 // We seg against a previous mate line's MQ if one exists, but not if this is a single-MAPQ-value file
 void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes)
 {
+    START_TIMER;
+
     if (segconf_running && dl->MAPQ) {
         if (!segconf.MAPQ_value) 
             segconf.MAPQ_value = dl->MAPQ;
@@ -877,6 +883,8 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes)
 
     if (do_mux)
         seg_by_did (VB, STRa(vb->mux_MAPQ.snip), SAM_MAPQ, 0); // de-multiplexer
+
+    COPY_TIMER_SEG_FIELD (SAM_MAPQ);
 }
 
 // since 15.0.61. until then MAPQ used DEMUX_BY_MATE_PRIM

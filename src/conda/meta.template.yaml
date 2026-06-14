@@ -31,7 +31,7 @@ requirements:
     - {{ posix }}sed               # [win]
     - {{ posix }}coreutils         # [win]   
     - {{ posix }}zip               # [win]     
-    - nasm                         # [not (osx and arm64)]
+    - nasm                         # [x86_64]
     - {{ compiler('c') }}          # [unix]
     - {{ compiler('cxx') }}        # [unix]
     - {{ stdlib("c") }}            # [unix]
@@ -44,9 +44,9 @@ requirements:
 #    - pthreads-win32               # [win]
         
   run:
+    - _x86_64-microarch-level >=3  # [x86_64]    
 #    - {{ native }}gcc-libs         # [win]
 #    - pthreads-win32               # [win]
-    - libwinpthread                # [win]
     - curl
 
 test:

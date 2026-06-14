@@ -11,7 +11,7 @@
 #include "file.h"
 #include "context.h"
 
-static ProfilerRec profile = {};    // data for this z_file 
+static ProfilerGlobal profile = {};    // data for this z_file 
 static TimeSpecType profiler_timer; // wallclock
 static Mutex profile_mutex = {};
 
@@ -30,12 +30,12 @@ void profiler_add (VBlock𐤐 vb)
         profile.max_vb_size_mb = MAX_(profile.max_vb_size_mb, segconf.vb_size >> 20);
     }
 
-    int num_profiled = &profile.nanosecs.compress_field[0] - (int64_t *)&profile.nanosecs;
+    int num_profiled = sizeof (typeof (struct { char profiled; })) - MAX_DICTS * 2; // all except compress_field and seg_recon_field
     
     for (int i=0; i < num_profiled; i++) 
-        if (((uint64_t *)&vb->profile.count)[i]) {
+        if (((uint32_t *)&vb->profile.count)[i]) {
             ((uint64_t *)&profile.nanosecs)[i] += ((uint64_t *)&vb->profile.nanosecs)[i];
-            ((uint64_t *)&profile.count)[i]    += ((uint64_t *)&vb->profile.count)[i];
+            ((uint64_t *)&profile.count)[i]    += ((uint32_t *)&vb->profile.count)[i];
         }
 
     // add compressor data by zctx, while collected by vctx
@@ -43,7 +43,7 @@ void profiler_add (VBlock𐤐 vb)
         Context𐤐 zctx = NULL;
 
         if (vb->profile.count.compress_field[vctx->did_i]) {
-            zctx = IS_ZIP ? ctx_get_zctx_from_vctx (vctx, false, true) : ZCTX(vctx->did_i);
+            zctx = IS_ZIP ? ctx_get_zctx_from_vctx (vctx, false, false) : ZCTX(vctx->did_i);
             if (!zctx) continue; // should never happen
 
             profile.count   .compress_field[zctx->did_i] += vb->profile.count   .compress_field[vctx->did_i];
@@ -51,7 +51,7 @@ void profiler_add (VBlock𐤐 vb)
         }
 
         if (vb->profile.count.seg_recon_field[vctx->did_i]) {
-            if (!zctx) zctx = IS_ZIP ? ctx_get_zctx_from_vctx (vctx, false, true) : ZCTX(vctx->did_i);
+            if (!zctx) zctx = IS_ZIP ? ctx_get_zctx_from_vctx (vctx, false, false) : ZCTX(vctx->did_i);
             if (!zctx) continue;
 
             profile.count   .seg_recon_field[zctx->did_i] += vb->profile.count   .seg_recon_field[vctx->did_i];
@@ -230,11 +230,13 @@ void profiler_add_evb_and_print_report (void)
         PRINT (aligner_update_best, 5);
         PRINT (aligner_seq_to_bitmap, 5);
         PRINT (aligner_get_junction, 5);
-        if (!Z_DT(VCF) && !flag.bam_assist) PRINT (ref_get_textual_seq, 4);
+        PRINT (aligner_seg_mismatches, 4);
+        if (!Z_DT(VCF) && !flag.bam_assist) PRINT (ref_get_textual_seq, 5);
         PRINT (fastq_seg_DESC, 2);
         PRINT (fastq_seg_saux, 2);
         if (!flag.bam_assist) PRINT (bam_seq_to_sam, 2);
         PRINT (sam_seg_QUAL, 2);
+        PRINT (sam_seg_init_bisulfite, 2);
         PRINT (sam_seg_is_gc_line, 2);
         PRINT (sam_seg_MD_Z_analyze, 2);
         PRINT (sam_cigar_binary_to_textual, 2);
@@ -273,8 +275,8 @@ void profiler_add_evb_and_print_report (void)
         PRINT (ctx_merge_in_vb_ctx, 1);
         PRINT (wait_for_merge, 2);
         PRINT (sam_deep_zip_merge, 2);
+        PRINT (codec_assign_best_codec, 1);
         PRINT (zip_compress_ctxs, 1);
-        PRINT (codec_assign_best_codec, 2);
         PRINT (b250_zip_generate, 2);
         PRINT (zip_generate_local, 2);
         
@@ -446,24 +448,29 @@ void profiler_add_evb_and_print_report (void)
     // PIZ and also ZIP if paired FASTQ
     if (profile.nanosecs.zfile_uncompress_section) {
         iprint0 ("BREAKDOWN OF zfile_uncompress_section by codec (all threads)\n");
-        PRINT (zfile_uncompress_section, 1);
         PRINT (zfile_uncompress_ref_section, 1);
-        PRINT (compressor_bz2,   2);
-        PRINT (compressor_lzma,  2);
-        PRINT (compressor_bsc,   2);
-        PRINT (compressor_rans,  2);
-        PRINT (compressor_arith, 2);
-        PRINT (compressor_domq,  2);
-        PRINT (compressor_normq, 2);
-        PRINT (compressor_acgt,  2);
-        PRINT (compressor_pbwt,  2);
-        PRINT (compressor_longr, 2);
-        PRINT (compressor_homp,  2);
-        PRINT (compressor_pacb,  2);
-        PRINT (compressor_smux,  2);
-        PRINT (compressor_tmpl,  2);
-        PRINT (compressor_t0,    2);
-        PRINT (compressor_oq,    2);
+        PRINT (zfile_uncompress_section, 1);
+        
+        if (IS_PIZ) {
+            for_zctx 
+                PRINT_CTX("uncompress", compress_field[zctx->did_i], zctx, 2);
+            PRINT (compressor_bz2,   2);
+            PRINT (compressor_lzma,  2);
+            PRINT (compressor_bsc,   2);
+            PRINT (compressor_rans,  2);
+            PRINT (compressor_arith, 2);
+            PRINT (compressor_domq,  2);
+            PRINT (compressor_normq, 2);
+            PRINT (compressor_acgt,  2);
+            PRINT (compressor_pbwt,  2);
+            PRINT (compressor_longr, 2);
+            PRINT (compressor_homp,  2);
+            PRINT (compressor_pacb,  2);
+            PRINT (compressor_smux,  2);
+            PRINT (compressor_tmpl,  2);
+            PRINT (compressor_t0,    2);
+            PRINT (compressor_oq,    2);
+        }
     }
 
     // ZIP and PIZ compute thread

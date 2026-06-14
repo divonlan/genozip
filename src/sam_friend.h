@@ -82,7 +82,7 @@ typedef union BamCigarOp {
         uint32_t n  : 28;
     };
     uint32_t value;
-} BamCigarOp;
+} __attribute__((aligned(1))) BamCigarOp; // unaligned, because appears as such in BAM data
 
 typedef packed_enum {
     BC_M=0, BC_I=1, BC_D=2, BC_N=3, BC_S=4, BC_H=5, BC_P=6, BC_E=7, BC_X=8, BC_NONE=15, BC_INVALID=255
@@ -97,13 +97,13 @@ extern const char cigar_op_to_char[16]; // BAM to SAM cigar op
 #define CIG(bin_cgar) (BamCigarOpP)STRb(bin_cgar)            
 
 #define MAX_CIGAR_LEN_IN_DICT    7 // longer CIGARs are stored in local
-extern void bam_seq_to_sam (VBlockP vb, bytes bam_seq, uint32_t seq_len, bool start_mid_byte, bool test_final_nibble, BufferP out, bool is_from_zip_cb);
-extern bool sam_cigar_textual_to_binary (VBlockP vb, STRp(cigar), BufferP binary_cigar, rom buf_name);
-extern void sam_cigar_binary_to_textual (VBlockP vb, ConstBamCigarOpP cigar, uint16_t n_cigar_op, bool reverse, BufferP textual_cigar);
+extern void bam_seq_to_sam (VBlockP vb, bytes𐤐 bam_seq, uint32_t seq_len, bool start_mid_byte, bool test_final_nibble, BufferP out, bool is_from_zip_cb);
+extern bool sam_cigar_textual_to_binary (VBlockP vb, STR𐤐(cigar), BufferP binary_cigar, rom buf_name);
+extern void sam_cigar_binary_to_textual (VBlockP vb, const BamCigarOp *restrict cigar, uint16_t n_cigar_op, bool reverse, BufferP textual_cigar);
 extern uint32_t sam_cigar_get_ref_consumed (STRp(cigar), bool is_bam, bool min_is_one);
 extern void sam_seg_SEQ_initialize (VBlockP vb);
 extern StrText16K dis_binary_cigar (VBlockP vb, const BamCigarOp *cigar, uint32_t cigar_len/*in ops*/, Buffer *working_buf); 
-extern void sam_prepare_deep_cigar (VBlockP vb, ConstBamCigarOpP cigar, uint32_t cigar_len, bool reverse);
+extern void sam_prepare_deep_cigar (VBlockP vb, const BamCigarOp *restrict cigar, uint32_t cigar_len, bool reverse);
 extern void sam_piz_produce_trivial_solo_huffmans (void);
 extern uint64_t sam_deep_calc_hash_bits (void);
 extern WordIndex sam_get_contig_by_name (STRp(contig_name));

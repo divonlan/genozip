@@ -80,12 +80,15 @@ void seg_by_ARRAY_LEN_OF (VBlockP vb, ContextP ctx, STRp(value), STRp(other_arra
     char sep = snip[snip_len-1]; // array separator
 
     if (str_get_int (STRa(value), &n_items) &&
-        n_items == 1 + str_count_char (STRa(other_array), sep))
+        n_items == 1 + str_count_char (STRa(other_array), sep)) {
 
         seg_by_ctx (vb, STRa(snip), ctx, value_len);
+        ctx_set_last_value (vb, ctx, n_items);
+    }
 
     else
         seg_integer_or_not (vb, ctx, STRa(value), value_len);
+
 }
 
 SPECIAL_RECONSTRUCTOR (piz_special_ARRAY_LEN_OF)

@@ -28,8 +28,6 @@
 
 #define EXCESSIVE_DICT_SIZE (512 MB) // warn if dict size goes beyond 512M
 
-#define ZMUTEX(zctx) z_file->ctx_mutex[(zctx)->did_i] // ZIP only
-
 // inserts dict_id->did_i to the map, if one of the two entries is available
 static inline void set_d2d_map (ContextArrayP ca, DictId dict_id, Did did_i)
 {
@@ -319,7 +317,7 @@ static WordIndex ctx_commit_node (VBlockP vb, ContextP zctx, ContextP vctx, STRp
 
 // Seg: inserts snip into the hash, nodes and dictionary, if it was not already there, and returns its node index.
 // Does NOT add the word index to b250.
-WordIndex ctx_create_node_do (VBlock𐤐 vb, Context𐤐 vctx, STR𐤐(snip), bool *restrict is_new/*optional out*/)
+WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STR𐤐(snip), bool *restrict is_new/*optional out*/)
 {
     ASSERTNOTNULL (vctx);
     ASSERT (vctx->dict_id.num, "vctx has no dict_id (did_i=%u)", (unsigned)(vctx - vb->ca.contexts));
@@ -432,7 +430,7 @@ uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 }
 
 // Seg only: if after ctx_create_node_do we don't add the snip to b250, we need to reduce its count
-void ctx_decrement_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index)
+void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 {
     ASSSEG (node_index < (WordIndex)ctx->counts.len32, "node_index=%d out of range %s.count.len=%"PRIu64, 
             node_index, ctx->tag_name, ctx->counts.len);
@@ -452,7 +450,7 @@ void ctx_decrement_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index)
 }
 
 // Seg only: if we add a b250 without evaluating (if node_index is known)
-void ctx_increment_count (VBlock𐤐 vb, Context𐤐 ctx, WordIndex node_index)
+void ctx_increment_count (VBlockP vb, ContextP ctx, WordIndex node_index)
 {
     ASSSEG (node_index < ctx->counts.len, "%s: node_index=%d out of range %s.counts.len=%"PRIu64, LN_NAME, node_index, ctx->tag_name, ctx->counts.len);
 
@@ -493,9 +491,9 @@ void ctx_clone (VBlockP vb)
             ContextP dict_ctx = ZCTX(zctx->dict_did_i); // dict_did_i is equial to either did_i or, if its an alias, to the destination did_i
 
             // case: this context doesn't really exist (happens when incrementing num_contexts when adding RNAME in ctx_populate_zf_ctx_from_contigs)
-            if (!ZMUTEX(dict_ctx).initialized) goto did_i_cloned;
+            if (!dict_ctx->ctx_mutex.initialized) goto did_i_cloned;
 
-            if (!mutex_trylock (ZMUTEX(dict_ctx)))
+            if (!mutex_trylock (dict_ctx->ctx_mutex))
                 continue;
 
             if (dict_ctx->dict.len) {  // there's something already in this dict
@@ -529,7 +527,7 @@ void ctx_clone (VBlockP vb)
                 buf_overlay (vb, &vctx->ol_chrom2ref_map, &zctx->chrom2ref_map, "ol_chrom2ref_map");
             }
 
-            mutex_unlock (ZMUTEX(dict_ctx));
+            mutex_unlock (dict_ctx->ctx_mutex);
 
             // stuff that doesn't require mutex
         
@@ -591,7 +589,7 @@ static void ctx_initialize_ctx (ContextArrayP ca, Did did_i, DictId dict_id, STR
             ctx->counts_section = ctx->no_stons = true;
 
         if (z_file && ca == &z_file->ca) { // z_file context
-            mutex_initialize (ZMUTEX(ctx));
+            mutex_initialize (ctx->ctx_mutex);
             buf_set_shared (&ctx->dict);
             buf_set_shared (&ctx->nodes);
 
@@ -703,7 +701,7 @@ static ContextP ctx_add_new_zf_ctx_do (STRp (tag_name), DictId dict_id, Did st_d
     memcpy ((char*)zctx->tag_name, tag_name, tag_name_len);
     // note: lcodec is NOT copied here, see comment in codec_assign_best_codec
 
-    mutex_initialize (ZMUTEX(zctx));
+    mutex_initialize (zctx->ctx_mutex);
 
     // only when the new entry is finalized, do we increment num_contexts, atmoically, this is because
     // other threads might access it without a mutex when searching for a dict_id
@@ -764,78 +762,33 @@ ContextP ctx_get_zctx_from_vctx (ConstContextP vctx,
          :                       NULL;
 }
 
-#define atomic_lcodec            load_relaxed (zctx->lcodec)
-#define atomic_bcodec            load_relaxed (zctx->bcodec)
-#define atomic_lcodec_count      load_relaxed (zctx->lcodec_count)
-#define atomic_bcodec_count      load_relaxed (zctx->bcodec_count)
-#define atomic_lcodec_hard_coded load_relaxed (zctx->lcodec_hard_coded)
-
-// update zctx with codec as it is assigned - don't wait for merge, to increase the chance that subsequent
-// VBs can get this codec and don't need to test for themselves.
-void ctx_commit_codec_to_zf_ctx (VBlockP vb, ContextP vctx, bool is_lcodec, bool is_lcodec_inherited)
-{
-    // case: context might not exist yet in z_file, because no VB with it has merged yet - in which case we create it.
-    ContextP zctx = ctx_get_zctx_from_vctx (vctx, true, false);
-
-    mutex_lock (ZMUTEX(zctx)); // mutex to concurrently set count and codec
-
-    // use atomic to avoid sanitize-threads complaining about concurrent access from ctx_get_z_codecs
-    if (is_lcodec) {
-        if (atomic_lcodec == vctx->lcodec) {
-            if (atomic_lcodec_count < 255) // protect from circling back to 0
-                increment_relaxed (zctx->lcodec_count); // counts number of VBs in a row that set this codec
-        }
-        else if (is_lcodec_inherited) {
-            store_relaxed (zctx->lcodec_count, 0); 
-            store_relaxed (zctx->lcodec, vctx->lcodec); 
-        }
-        else 
-            zctx->lcodec_non_inherited = vctx->lcodec; 
-    }
-    else {
-        if (atomic_bcodec == vctx->bcodec) {
-            if (atomic_bcodec_count < 255) 
-                increment_relaxed (zctx->bcodec_count);
-        }
-        else {
-            store_relaxed (zctx->bcodec_count, 0); 
-            store_relaxed (zctx->bcodec, vctx->bcodec); 
-        }
-    }           
-
-    mutex_unlock (ZMUTEX(zctx));
-}
-
 void ctx_reset_codec_commits (void)
 {
+    ASSERTMAINTHREAD; // must be called by main thread when no compute threads are running
+
     for_zctx {
-        if (zctx->lcodec && !zctx->lcodec_non_inherited) 
-            zctx->lcodec_non_inherited = zctx->lcodec; // for stats
+        if (zctx->lcodec && !zctx->lcodec_non_inherited) // saved for stats 
+            zctx->lcodec_non_inherited = zctx->lcodec; 
         
-        zctx->lcodec = zctx->bcodec = CODEC_UNKNOWN; 
-        zctx->lcodec_count = zctx->bcodec_count = 0;
+        zctx->bcodec = CODEC_UNKNOWN; 
+        zctx->bcodec_count = 0;
+
+        // we can't reset hard-coded codecs, because for FASTQ R2 and BAM PRIM/DEPN swe don't re-run segconf
+        if (!zctx->lcodec_hard_coded) {
+            zctx->lcodec = CODEC_UNKNOWN; 
+            zctx->lcodec_count = 0;
+        }
     }
 }
 
 void ctx_segconf_set_hard_coded_lcodec (Did did_i, Codec codec)
 {
-    ASSERT0 (did_i < DTFZ(num_fields), "function can only be called for pre-defined did's");
+    decl_zctx (did_i);
+    ASSERT (did_i < DTFZ(num_fields), "function can only be called for pre-defined did's. ctx[%u]=%s", did_i, zctx->tag_name);
     ASSERT0 (segconf_running, "function can only be called during segconf");
     
-    ContextP zctx = ZCTX(did_i);
     zctx->lcodec = codec;
     zctx->lcodec_hard_coded = true; 
-}
-
-void ctx_get_z_codecs (ContextP zctx,
-                       Codec *lcodec, Codec *bcodec, uint8_t *lcodec_count, uint8_t *bcodec_count, bool *lcodec_hard_coded)
-{
-    // note: we don't want to lock the mutex here, as it would could b250/local compression to wait on merge
-    *lcodec            = atomic_lcodec;
-    *bcodec            = atomic_bcodec;
-    *lcodec_count      = atomic_lcodec_count;
-    *bcodec_count      = atomic_bcodec_count;
-    *lcodec_hard_coded = atomic_lcodec_hard_coded;
 }
 
 // called by compute threads during merge, with zctx locked
@@ -926,9 +879,9 @@ void ctx_update_zctx_txt_len (VBlockP vb, ContextP vctx, int64_t increment/*posi
 
     // case: already merged - update zctx->txt_len
     if (vctx->dict_merged) {
-        mutex_lock (ZMUTEX(zctx));
+        mutex_lock (zctx->ctx_mutex);
         zctx->txt_len = (int64_t)zctx->txt_len + increment;
-        mutex_unlock (ZMUTEX(zctx));
+        mutex_unlock (zctx->ctx_mutex);
     }
 
     // case: not merged yet - update vctx->txt_len which will be added to zctx->txt_len at merge
@@ -989,7 +942,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
     ContextP zctx_alias = ctx_get_zctx_from_vctx (vctx, true, false);  // if ALIAS_DICT: the "alias"   column in *_DICT_ID_ALIASES
 
     if ((vb->vblock_i != 1 && load_acquire (zctx->vb_1_pending_merges)) || // let vb_i=1 merge first and sorts dictionaries, other VBs can go in arbitrary order. 
-        !mutex_trylock (ZMUTEX(zctx))) // also implies locking all its aliases including zctx_alias
+        !mutex_trylock (zctx->ctx_mutex)) // also implies locking all its aliases including zctx_alias
         return false; 
 
     //iprintf ( ("Merging dict_id=%.8s into z_file vb_i=%u vb_did_i=%u z_did_i=%u\n", dis_dict_id (vctx->dict_id).s, vb->vblock_i, did_i, z_did_i);
@@ -1063,7 +1016,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
 
         add_count (B64(zctx->counts, word_index), count);
 
-        // note: chrom2ref_map is protected by ZMUTEX(zctx) (zctx is CHROM as we followed alias)
+        // note: chrom2ref_map is protected by zctx->ctx_mutex (zctx is CHROM as we followed alias)
         // we add nodes encountered first in aliases to chrom2ref_map, bc when the snip appears later in CHROM
         // it won't be new and hence won't be added 
         if (chrom_2ref_seg_needed) { 
@@ -1082,7 +1035,7 @@ static inline bool ctx_merge_in_one_vctx (VBlockP vb, ContextP vctx, ContextP *z
     // warn if dict size is excessive
     if (zctx->dict.len > EXCESSIVE_DICT_SIZE && !zctx->dict_len_excessive) {
         zctx->dict_len_excessive = true; // warn only once (per context)
-        WARN ("WARNING: excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. %s\n"
+        WARN (_WRN "Excessive zctx dictionary size - causing slow compression and decompression and reduced compression ratio. %s\n"
               "%s %s data_type=%s ctx=%s vb=%s vb_size=%"PRIu64" zctx->dict.len=%"PRIu64" %s. First 1000 bytes: ", 
               report_support(),
               cond_str (VB_DT(BAM) || VB_DT(SAM), "sam_mapper=", segconf_sam_mapper_name()), 
@@ -1113,7 +1066,7 @@ finish:
 
     ctx_drop_all_the_same (vb, zctx, vctx); // drop b250 if warranted
 
-    mutex_unlock (ZMUTEX(zctx));
+    mutex_unlock (zctx->ctx_mutex);
 
     if (vb->vblock_i == 1) { 
         ASSERT (vb_1_pending_merges, "Unexpectedly %s.vb_1_pending_merges=%d != 0", zctx->tag_name, zctx->vb_1_pending_merges);
@@ -1489,7 +1442,7 @@ void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local /* true = local, fals
     bool success = local ? buf_dump_to_file (dump_fn, &ctx->local, lt_width(ctx), false, true, true, false)
                          : buf_dump_to_file (dump_fn, &ctx->b250, 1, false, true, true, false);
 
-    ASSERTW (success, "Warning: ctx_dump_binary failed to output file %s: %s", dump_fn, strerror (errno));
+    ASSERTW (success, _WRN "ctx_dump_binary failed to output file %s: %s", dump_fn, strerror (errno));
 }
 
 // ZIP: rewrite unused (i.e count=0) zctx dict words as "" (we don't delete them completely, so word_index's in b250 sections remain correct)

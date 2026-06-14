@@ -210,7 +210,6 @@ typedef struct File {
     Buffer bound_txt_names;            // ZIP: Stats data: a concatenation of all bound txt_names that contributed to this genozip file
     Buffer aliases;                    // ZIP/PIZ
     struct timespec start_time;        // Z_FILE: For stats: time z_file object was created in memory 
-    Mutex ctx_mutex[MAX_DICTS];        // Z_FILE ZIP: Context z_file (only) is protected by a mutex 
     Mutex custom_merge_mutex;          // Z_FILE: ZIP: used to merge deep, but in the future could be used for other custom merges
     Mutex test_abbrev_mutex;           // Z_FILE: ZIP: used to test if CIGAR_SA is abbreviated
     Buffer R1_txt_data_lens;           // Z_FILE: ZIP: FASTQ GZ: info regarding R1 VBs: txt_data.len32 of each VB 
@@ -342,8 +341,8 @@ extern bool file_buf_locate (FileP file, ConstBufferP buf);
 #define txt_name file_printname(txt_file)
 #define z_name   file_printname(z_file)
 
-#define CLOSE(fd,name,quiet) ({ ASSERTW (!close (fd) || (quiet),  "Warning in %s:%u: Failed to close %s: %s",  __FUNCLINE, (name), strerror(errno));})
-#define FCLOSE(fp,name) ({ if (fp) { ASSERTW (!fclose (fp), "Warning in %s:%u: Failed to fclose %s: %s", __FUNCLINE, (name), strerror(errno)); fp = NULL; } })
+#define CLOSE(fd,name,quiet) ({ ASSERTW (!close (fd) || (quiet), _WRN "%s:%u: Failed to close %s: %s",  __FUNCLINE, (name), strerror(errno));})
+#define FCLOSE(fp,name) ({ if (fp) { ASSERTW (!fclose (fp), _WRN "%s:%u: Failed to fclose %s: %s", __FUNCLINE, (name), strerror(errno)); fp = NULL; } })
  
  // ---------------------------
 // tests for compression types

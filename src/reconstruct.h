@@ -154,22 +154,8 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
        (ctx)->next_local += (recon_len);                \
        next; })
 
-#define RECONSTRUCT_NEXT_REV(ctx,recon_len) /* reconstructs reverse string */       \
-    ({ ASSPIZ ((ctx)->next_local + (recon_len) <= (ctx)->local.len32, NEXT_ERRFMT, "RECONSTRUCT_NEXT_REV", (ctx)->tag_name, (ctx)->next_local, (recon_len), (ctx)->local.len32); \
-       if (reconstruct) {                                                           \
-           str_reverse (BAFTtxt, Bc((ctx)->local, (ctx)->next_local), (recon_len)); \
-           Ltxt += (recon_len);                                         \
-       }                                                                            \
-       (ctx)->next_local += (recon_len); })
-
-#define RECONSTRUCT_INT(n)            buf_add_int_as_text (&vb->txt_data, (n)) /* note: don't add nul-terminator, as sometimes we expect reconstruction to be exact, and memory after could be already occupied - eg sam_piz_prim_add_QNAME */ 
+#define RECONSTRUCT_INT(n)            buf_add_int_as_text (&vb->txt_data, (n))
 #define RECONSTRUCT_HEX(n, uppercase) buf_add_hex_as_text (&vb->txt_data, (n), (uppercase)) 
-
-#define RECONSTRUCT_FROM_DICT(did_i,add_tab)    \
-    ({ WordIndex wi = LOAD_SNIP (did_i);        \
-       RECONSTRUCT_snip;                        \
-       if (add_tab) RECONSTRUCT1 ('\t');        \
-       wi;                               })
 
 // binary reconstructions (output little-endian)
 #define RECONSTRUCT_BIN32(n) ({ uint32_t lten = (uint32_t)(n); lten = LTEN32(lten); RECONSTRUCT (&lten, sizeof (uint32_t)); })

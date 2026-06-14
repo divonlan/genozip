@@ -120,10 +120,10 @@ static inline void no_integrity (ConstBufferP buf, FUNCLINE, rom buf_func)
 {
     flag.quiet = false;
 
-    ASSERTW (BUNDERFLOW(buf) == UNDERFLOW_TRAP, "called from %s:%u to %s %s%s: Error in %s: buffer has corrupt underflow trap: %s",
+    ASSERTW (BUNDERFLOW(buf) == UNDERFLOW_TRAP, _ERR "called from %s:%u to %s %s%s: Error in %s: buffer has corrupt underflow trap: %s",
              func, code_line, buf_func, version_str().s, license_get_number().s, buf_desc(buf).s, str_to_printable_(buf->memory, 8).s);
 
-    ASSERTW (BOVERFLOW(buf) == OVERFLOW_TRAP, "called from %s:%u to %s %s%s: Error in %s: buffer has corrupt overflow trap: %s",
+    ASSERTW (BOVERFLOW(buf) == OVERFLOW_TRAP, _ERR "called from %s:%u to %s %s%s: Error in %s: buffer has corrupt overflow trap: %s",
             func, code_line, buf_func, version_str().s, license_get_number().s, buf_desc(buf).s, str_to_printable_(buf->memory + buf->size + sizeof(uint64_t), 8).s);
     
     bool corruption_detected = buflist_test_overflows (buf->vb, buf_func);
@@ -215,7 +215,7 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
 #define REQUEST_TOO_BIG_THREADSHOLD (3 GB)
     if (requested_size > REQUEST_TOO_BIG_THREADSHOLD && !buf->can_be_big) // use WARN instead of ASSERTW to have a place for breakpoint
-        WARN ("Warning: buf_alloc called from %s:%u %s for \"%s\" requested %s. This is suspiciously high and might indicate a bug %s. z_dt=%s vb->vblock_i=%u buf=%s line_i=%d vb_size=%s RAM=%3.1lf GB txt_file->disk_size=%s",
+        WARN (_WRN "buf_alloc called from %s:%u %s for \"%s\" requested %s. This is suspiciously high and might indicate a bug %s. z_dt=%s vb->vblock_i=%u buf=%s line_i=%d vb_size=%s RAM=%3.1lf GB txt_file->disk_size=%s",
               func, code_line, version_str().s, name, str_size (requested_size).s, report_support(), z_dt_name(), vb->vblock_i, buf_desc (buf).s, vb->line_i, str_size (segconf.vb_size).s, arch_get_physical_mem_size(), txt_file ? str_size (txt_file->disk_size).s : "N/A");
 
     ASSERT (buf->type == BUF_REGULAR || buf->type == BUF_UNALLOCATED, "called from %s:%u: cannot buf_alloc a buffer of type %s. details: %s", 
@@ -475,7 +475,7 @@ void buf_free_do (BufferP buf, FUNCLINE)
         
             buf_lock_if (buf, buf->spinlock);
 
-            ASSERT (!buf->spinlock || buf->spinlock->link_count == 1, "Cannot buf_free and overlaid buffer: use buf_destroy: %s", buf_desc (buf).s);
+            ASSERT (!buf->spinlock || buf->spinlock->link_count == 1, "Cannot buf_free an overlaid buffer: use buf_destroy: %s", buf_desc (buf).s);
 
             buf_verify_integrity (buf, func, code_line, "buf_free_do");
 
@@ -764,7 +764,7 @@ void *buf_low_level_realloc (void *p, size_t size, rom name, FUNCLINE)
     void *new = HeapReAlloc (heap, 0, p, size);
 #endif
 
-    ASSERTW (new, "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", 
+    ASSERTW (new, _ERR "Out of memory in %s:%u: realloc failed (name=%s size=%"PRIu64" bytes). %s", 
              func, code_line, name, (uint64_t)size, IS_ZIP ? oom_tip().s : "");
 
     if (flag.debug_memory && size >= flag.debug_memory) {

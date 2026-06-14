@@ -26,16 +26,16 @@ extern rom seg_get_next_item (VBlockP vb, rom str, int *str_len, GetNextAllow ne
                               rom item_name);
 extern rom seg_get_next_line (VBlockP vb, rom str, int *str_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, rom item_name);
 
-extern WordIndex seg_by_ctx_ex (VBlock𐤐 vb, STR𐤐(snip), Context𐤐 ctx, uint32_t add_bytes, bool *restrict is_new);
-static inline WordIndex seg_by_ctx (VBlock𐤐 vb, STR𐤐(snip), Context𐤐 ctx, unsigned add_bytes)                 { return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, NULL); }
+extern WordIndex seg_by_ctx_ex (VBlockP vb, STR𐤐(snip), ContextP ctx, uint32_t add_bytes, bool *restrict is_new);
+static inline WordIndex seg_by_ctx (VBlockP vb, STR𐤐(snip), ContextP ctx, unsigned add_bytes)                 { return seg_by_ctx_ex (vb, STRa(snip), ctx, add_bytes, NULL); }
 static inline WordIndex seg_by_dict_id (VBlock𐤐 vb, STR𐤐(snip), DictId dict_id, unsigned add_bytes)           { return seg_by_ctx_ex (vb, STRa(snip), ctx_get_ctx (vb, dict_id), add_bytes, NULL); }
 static inline WordIndex seg_by_did_i_ex (VBlock𐤐 vb, STR𐤐(snip), Did did_i, unsigned add_bytes, bool *is_new) { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, is_new); }
 static inline WordIndex seg_by_did (VBlock𐤐 vb, STR𐤐(snip), Did did_i, unsigned add_bytes)                    { return seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), add_bytes, NULL); }
-static inline void seg_special0 (VBlock𐤐 vb, uint8_t special, Context𐤐 ctx, unsigned add_bytes)                  { seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special }, 2, ctx, add_bytes); }
-static inline void seg_special1 (VBlock𐤐 vb, uint8_t special, char c1, Context𐤐 ctx, unsigned add_bytes)         { seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special, c1 }, 3, ctx, add_bytes); }
-static inline void seg_special2 (VBlock𐤐 vb, uint8_t special, char c1, char c2, Context𐤐 ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special, c1, c2 }, 4, ctx, add_bytes); }
-static inline void seg_special3 (VBlock𐤐 vb, uint8_t special, char c1, char c2, char c3, Context𐤐 ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special, c1, c2, c3 }, 5, ctx, add_bytes); }
-static inline void seg_special4 (VBlock𐤐 vb, uint8_t special, char c1, char c2, char c3, char c4, Context𐤐 ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special, c1, c2, c3, c4 }, 6, ctx, add_bytes); }
+static inline void seg_special0 (VBlockP vb, uint8_t special, ContextP ctx, unsigned add_bytes)                  { seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special }, 2, ctx, add_bytes); }
+static inline void seg_special1 (VBlockP vb, uint8_t special, char c1, ContextP ctx, unsigned add_bytes)         { seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special, c1 }, 3, ctx, add_bytes); }
+static inline void seg_special2 (VBlockP vb, uint8_t special, char c1, char c2, ContextP ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special, c1, c2 }, 4, ctx, add_bytes); }
+static inline void seg_special3 (VBlockP vb, uint8_t special, char c1, char c2, char c3, ContextP ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special, c1, c2, c3 }, 5, ctx, add_bytes); }
+static inline void seg_special4 (VBlockP vb, uint8_t special, char c1, char c2, char c3, char c4, ContextP ctx, unsigned add_bytes){ seg_by_ctx (vb, (char[]){ SNIP_SPECIAL, (char)special, c1, c2, c3, c4 }, 6, ctx, add_bytes); }
 static inline void seg_init_all_the_same (VBlock𐤐 vb, Did did_i, STRp(snip)) /*use in seg_initialize*/        { seg_by_ctx_ex (vb, STRa(snip), CTX(did_i), 0, NULL); }
 static inline void seg_all_the_same (VBlockP vb, ContextP ctx, uint32_t add_bytes)                            { ctx_increment_count (vb, ctx, 0); ctx->txt_len += add_bytes; }
 

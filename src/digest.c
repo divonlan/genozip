@@ -167,14 +167,14 @@ void digest_piz_verify_one_txt_file (unsigned txt_file_i/* 0-based */)
         
         else if (flag.test) {
             progress_finalize_component ("FAILED!");
-            ABORT ("Error: %s of original file=%s is different than decompressed file=%s (txt_file=%s txt_file_i=%u)\n",
+            ABORT ("%s of original file=%s is different than decompressed file=%s (txt_file=%s txt_file_i=%u)\n",
                    digest_name(), digest_display (z_file->digest).s, digest_display (decompressed_file_digest).s, txt_name, txt_file_i);
         }
 
         // if decompressed incorrectly - warn, but still give user access to the decompressed file
         else { 
             piz_digest_failed = true; // inspected by main_genounzip
-            WARN ("File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s (txt_file=%s txt_file_i=%u)", 
+            WARN (_ERR "File integrity error: %s of decompressed file %s is %s, but %s of the original %s file was %s (txt_file=%s txt_file_i=%u)", 
                   digest_name(), txt_file->name, digest_display (decompressed_file_digest).s, digest_name(), 
                   dt_name_faf(), digest_display (z_file->digest).s, txt_name, txt_file_i);
         }
@@ -328,7 +328,7 @@ Digest digest_txt_header (BufferP txt_data, Digest piz_expected_digest, CompITyp
 
         if (!digest_recon_is_equal (digest, piz_expected_digest)) {
             
-            WARN ("%s of reconstructed %s header (%s) differs from %s file (%s)\n"
+            WARN (_ERR "%s of reconstructed %s header (%s) differs from %s file (%s)\n"
                   "Bad reconstructed header has been dumped to: %s\n"
                   "To see the same data in the original file:\n"
                   "genozip --biopsy 0 %s%s",

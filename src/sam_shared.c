@@ -11,7 +11,7 @@
 const uint8_t aux_width[256] = { ['i']=4, ['I']=4, ['s']=2, ['S']=2, ['c']=1, ['C']=1, ['A']=1, ['f']=4 };
 
 // table of valid cigar_op as defined in https://samtools.github.io/hts-specs/SAMv1.pdf
-const uint8_t cigar_lookup_sam[256] = { // note: bit 4 (0x10) is set for all valid values
+alignas(64) const uint8_t cigar_lookup_sam[256] = { // note: bit 4 (0x10) is set for all valid values
     ['0'...'9']=0x11,                   // digits
     ['H']=0x10, ['P']=0x10,             // consume neither
     ['I']=0x12, ['S']=0x12, ['*']=0x12, // consume query (seq) only. Note: '*' is when CIGAR is "151*" - alignment with no CIGAR but a SEQ
@@ -19,7 +19,7 @@ const uint8_t cigar_lookup_sam[256] = { // note: bit 4 (0x10) is set for all val
     ['M']=0x16, ['=']=0x16, ['X']=0x16  // consume both query and reference
 };
 
-const uint8_t cigar_lookup_bam[16] = {  // note: bit 4 (0x10) is set for all valid values
+alignas(16) const uint8_t cigar_lookup_bam[16] = {  // note: bit 4 (0x10) is set for all valid values
     [5/*H*/]=0x10, [6/*P*/]=0x10,       // consume neither
     [1/*I*/]=0x12, [4/*S*/]=0x12,       // consume query (seq) only.
     [2/*D*/]=0x14, [3/*N*/]=0x14,       // consume reference only

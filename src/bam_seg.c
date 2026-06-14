@@ -225,6 +225,8 @@ uint32_t bam_split_aux (VBlockSAMP vb, rom alignment, rom aux, rom after_aux, ro
 
 void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, BaiBinType bin /* used only in bam */, bool is_bam)
 {
+    START_TIMER;
+
     PosType32 this_pos = dl->POS;
     PosType32 last_pos = dl->FLAG.unmapped ? this_pos : (this_pos + vb->ref_consumed - 1); // note: it is possible to have RNAME/POS set and FLAG.unmapped. The SAM spec calls this "placed unmapped"; 
     BaiBinType reg2bin = bai_reg2bin (this_pos, last_pos); // zero-based, half-closed half-open [start,end)
@@ -240,6 +242,8 @@ void bam_seg_BIN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, BaiBinType bin /* used o
         seg_integer_as_snip (vb, SAM_BAM_BIN, bin, is_bam);
         CTX(SAM_BAM_BIN)->flags.store = STORE_INT;
     }
+
+    COPY_TIMER_SEG_FIELD (SAM_BAM_BIN);
 }
 
 static inline void bam_seg_ref_id (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int32_t ref_id, int32_t compare_to_ref_i)
@@ -284,12 +288,11 @@ static inline void bam_set_missing_qual_type (VBlockSAMP vb, bytes qual, uint32_
     if (l_seq <= 1) return;
 
     uint8_t filler = qual[1]; // SAM spec - needs to be 0xff. Genozip also supports - as created by pysam - 0x00.
-    ASSERT (filler == 0 || filler == 0xff, "%s: Non-compliant QUAL field. l_seq=%u filler=%u (only 0 and 0xff are accepted)",
+    ASSINP (filler == 0 || filler == 0xff, "%s: Non-compliant QUAL field. l_seq=%u filler=%u (only 0 and 0xff are accepted)",
             LN_NAME, l_seq, filler);
 
-    for (uint32_t i=2; i < l_seq; i++)
-        ASSERT (qual[i] == filler, "%s: Non-compliant QUAL field. l_seq=%u filler=%u qual[%u]=%u",
-                LN_NAME, l_seq, filler, i, qual[i]);
+    ASSINP (str_is_monochar ((rom)qual+1, l_seq-1), "%s: Non-compliant QUAL field. l_seq=%u filler=%u: not all filler",
+            LN_NAME, l_seq, filler);
     
     // note: in older versions of pysam, missing QUAL was 0xff followed by 0s (SAM specficiation requires all bytes to be 0xff)
     if (!filler) {

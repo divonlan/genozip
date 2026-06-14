@@ -965,7 +965,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     stats_consolidate_non_ctx (sbl, sbl_buf.len32, "RandomAccessIndex", 2, ST_NAME (SEC_RANDOM_ACCESS), ST_NAME (SEC_REF_RAND_ACC));
     
     ASSERTW (all_txt_len == txt_size || flag.make_reference, // all_txt_len=0 in make-ref as there are no contexts
-             "Expecting all_txt_len=Σ(ctx.txt_len)=%"PRId64" == txt_size%s=%"PRId64" (diff=%"PRId64")", 
+             _WRN "Expecting all_txt_len=Σ(ctx.txt_len)=%"PRId64" == txt_size%s=%"PRId64" (diff=%"PRId64")", 
              all_txt_len, (segconf.zip_txt_modified ? "(as modified)" : ""), txt_size, (int64_t)txt_size - all_txt_len);
 
     // consolidated stats for --stats    

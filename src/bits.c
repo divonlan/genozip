@@ -17,28 +17,6 @@
 #include "bits.h"
 #include "buffer.h"
 
-#define assert(x) ASSERT ((x), "%s", #x)
-
-#ifndef __GNUC__
-
-// See http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
-static uint64_t __inline windows_popcount (uint64_t w)
-{
-    w = w - ((w >> 1) & (uint64_t)~(uint64_t)0/3);
-    w = (w & (uint64_t)~(uint64_t)0/15*3) + ((w >> 2) & (uint64_t)~(uint64_t)0/15*3);
-    w = (w + (w >> 4)) & (uint64_t)~(uint64_t)0/255*15;
-    w = (uint64_t)(w * ((uint64_t)~(uint64_t)0/255)) >> (sizeof(uint64_t) - 1) * 8;
-}
-
-#define POPCOUNT(x) windows_popcount(x)
-#else
-#define POPCOUNT(x) (unsigned)__builtin_popcountll(x)
-#endif
-
-//
-// Common internal functions
-//
-
 // Used in debugging
 #ifdef DEBUG
 
@@ -83,37 +61,19 @@ static void validate_bits (ConstBitsP bits, rom file, int lineno)
 // Reverse a word
 static inline uint64_t _reverse_word (uint64_t word)
 {
-    static const uint64_t reverse_table[256] = {
-        0x00, 0x80, 0x40, 0xC0, 0x20, 0xA0, 0x60, 0xE0, 0x10, 0x90, 0x50, 0xD0, 0x30, 0xB0, 0x70, 0xF0,
-        0x08, 0x88, 0x48, 0xC8, 0x28, 0xA8, 0x68, 0xE8, 0x18, 0x98, 0x58, 0xD8, 0x38, 0xB8, 0x78, 0xF8,
-        0x04, 0x84, 0x44, 0xC4, 0x24, 0xA4, 0x64, 0xE4, 0x14, 0x94, 0x54, 0xD4, 0x34, 0xB4, 0x74, 0xF4,
-        0x0C, 0x8C, 0x4C, 0xCC, 0x2C, 0xAC, 0x6C, 0xEC, 0x1C, 0x9C, 0x5C, 0xDC, 0x3C, 0xBC, 0x7C, 0xFC,
-        0x02, 0x82, 0x42, 0xC2, 0x22, 0xA2, 0x62, 0xE2, 0x12, 0x92, 0x52, 0xD2, 0x32, 0xB2, 0x72, 0xF2,
-        0x0A, 0x8A, 0x4A, 0xCA, 0x2A, 0xAA, 0x6A, 0xEA, 0x1A, 0x9A, 0x5A, 0xDA, 0x3A, 0xBA, 0x7A, 0xFA,
-        0x06, 0x86, 0x46, 0xC6, 0x26, 0xA6, 0x66, 0xE6, 0x16, 0x96, 0x56, 0xD6, 0x36, 0xB6, 0x76, 0xF6,
-        0x0E, 0x8E, 0x4E, 0xCE, 0x2E, 0xAE, 0x6E, 0xEE, 0x1E, 0x9E, 0x5E, 0xDE, 0x3E, 0xBE, 0x7E, 0xFE,
-        0x01, 0x81, 0x41, 0xC1, 0x21, 0xA1, 0x61, 0xE1, 0x11, 0x91, 0x51, 0xD1, 0x31, 0xB1, 0x71, 0xF1,
-        0x09, 0x89, 0x49, 0xC9, 0x29, 0xA9, 0x69, 0xE9, 0x19, 0x99, 0x59, 0xD9, 0x39, 0xB9, 0x79, 0xF9,
-        0x05, 0x85, 0x45, 0xC5, 0x25, 0xA5, 0x65, 0xE5, 0x15, 0x95, 0x55, 0xD5, 0x35, 0xB5, 0x75, 0xF5,
-        0x0D, 0x8D, 0x4D, 0xCD, 0x2D, 0xAD, 0x6D, 0xED, 0x1D, 0x9D, 0x5D, 0xDD, 0x3D, 0xBD, 0x7D, 0xFD,
-        0x03, 0x83, 0x43, 0xC3, 0x23, 0xA3, 0x63, 0xE3, 0x13, 0x93, 0x53, 0xD3, 0x33, 0xB3, 0x73, 0xF3,
-        0x0B, 0x8B, 0x4B, 0xCB, 0x2B, 0xAB, 0x6B, 0xEB, 0x1B, 0x9B, 0x5B, 0xDB, 0x3B, 0xBB, 0x7B, 0xFB,
-        0x07, 0x87, 0x47, 0xC7, 0x27, 0xA7, 0x67, 0xE7, 0x17, 0x97, 0x57, 0xD7, 0x37, 0xB7, 0x77, 0xF7,
-        0x0F, 0x8F, 0x4F, 0xCF, 0x2F, 0xAF, 0x6F, 0xEF, 0x1F, 0x9F, 0x5F, 0xDF, 0x3F, 0xBF, 0x7F, 0xFF,
-    };
+#if defined(__clang__) && defined(__aarch64__) // 4-5 clock cycles on ARM (bitreverse64 does not exist natively on x86)
+    word = __builtin_bitreverse64 (word); // reverse bit order
 
-    uint64_t reverse = (reverse_table[(word)       & 0xff] << 56) |
-                       (reverse_table[(word >>  8) & 0xff] << 48) |
-                       (reverse_table[(word >> 16) & 0xff] << 40) |
-                       (reverse_table[(word >> 24) & 0xff] << 32) |
-                       (reverse_table[(word >> 32) & 0xff] << 24) |
-                       (reverse_table[(word >> 40) & 0xff] << 16) |
-                       (reverse_table[(word >> 48) & 0xff] << 8)  |
-                       (reverse_table[(word >> 56) & 0xff]);
-
-    return reverse;
+#else // 5 clock cycles on Intel, 8-10 on ARM
+    word = ((word >> 1) & 0x5555555555555555ULL) | ((word & 0x5555555555555555ULL) << 1); // Swap adjacent bits
+    word = ((word >> 2) & 0x3333333333333333ULL) | ((word & 0x3333333333333333ULL) << 2); // Swap adjacent pairs
+    word = ((word >> 4) & 0x0F0F0F0F0F0F0F0FULL) | ((word & 0x0F0F0F0F0F0F0F0FULL) << 4); // Swap nibbles 
+    word = __builtin_bswap64 (word); // reverse the 8 bytes of the word 
+#endif
+ 
+    return word; // reverses bit values - effectively A(00)⇔T(11) C(01)⇔G(10)
 }
-
+    
 // Wrap around
 static inline uint64_t _get_word_cyclic (ConstBitsP bits, uint64_t start)
 {
@@ -187,7 +147,7 @@ void bits_set_region (BitsP bits, uint64_t start, uint64_t len)
         bits->words[first_word] |= ~bitmask64(foffset);     // set first word
         
         for (uint64_t i=first_word + 1; i < last_word; i++) // set whole words
-            bits->words[i] = WORD_MAX;
+            bits->words[i] = UINT64_MAX;
 
         bits->words[last_word] |= bitmask64(loffset+1);     // set last word
     }
@@ -226,18 +186,6 @@ void bits_clear_region_do (BitsP bits, uint64_t start, uint64_t len, FUNCLINE)
 }
 
 //
-// Get a word at a time
-//
-
-uint64_t bits_get_wordn (ConstBitsP bits, uint64_t start, int n /* up to 64 */)
-{
-  ASSERT (start + n <= bits->nbits, "expecting start=%"PRIu64" + n=%d <= bits->nbits=%"PRIu64, 
-          start, n, bits->nbits);
-           
-  return (uint64_t)(_get_word(bits, start) & bitmask64(n));
-}
-
-//
 // Number of bits set
 //
 
@@ -248,11 +196,11 @@ bool bits_is_fully_set (ConstBitsP bits)
 
     // all words but last one
     for (uint64_t i=0; i < bits->nwords-1; i++)
-        if (bits->words[i] != 0xffffffffffffffffULL) return false;
+        if (bits->words[i] != UINT64_MAX) return false;
 
     // last word might be partial
     word_offset_t bits_active = bits_in_top_word (bits->nbits);    
-    word_offset_t num_of_bits_set = POPCOUNT (bits->words[bits->nwords-1] & bitmask64 (bits_active));
+    word_offset_t num_of_bits_set = __builtin_popcountll (bits->words[bits->nwords-1] & bitmask64 (bits_active));
 
     return num_of_bits_set == bits_active;
 }
@@ -279,11 +227,11 @@ uint64_t bits_num_set_bits (ConstBitsP bits)
     // all words but last one
     for (uint64_t i=0; i < bits->nwords-1; i++)
         if (bits->words[i])
-            num_of_bits_set += POPCOUNT (bits->words[i]);
+            num_of_bits_set += __builtin_popcountll (bits->words[i]);
 
     // last word might be partial
     word_offset_t bits_active = bits_in_top_word (bits->nbits);    
-    num_of_bits_set += POPCOUNT (bits->words[bits->nwords-1] & bitmask64 (bits_active));
+    num_of_bits_set += __builtin_popcountll (bits->words[bits->nwords-1] & bitmask64 (bits_active));
     
     return num_of_bits_set;
 }
@@ -303,20 +251,20 @@ uint64_t bits_num_set_bits_region (ConstBitsP bits, uint64_t start, uint64_t len
 
     if (first_word == last_word) {
         uint64_t mask = bitmask64(length) << foffset;
-        num_of_bits_set += POPCOUNT (bits->words[first_word] & mask);
+        num_of_bits_set += __builtin_popcountll (bits->words[first_word] & mask);
     }
     else {
         word_offset_t loffset  = bitset64_idx(start+length-1);
     
         // first word
-        num_of_bits_set += POPCOUNT (bits->words[first_word] & ~bitmask64(foffset));
+        num_of_bits_set += __builtin_popcountll (bits->words[first_word] & ~bitmask64(foffset));
 
         // whole words
         for (uint64_t i = first_word + 1; i < last_word; i++)
-            num_of_bits_set += POPCOUNT (bits->words[i]);
+            num_of_bits_set += __builtin_popcountll (bits->words[i]);
 
         // last word
-        num_of_bits_set += POPCOUNT (bits->words[last_word] & bitmask64(loffset+1));
+        num_of_bits_set += __builtin_popcountll (bits->words[last_word] & bitmask64(loffset+1));
     }
 
     return num_of_bits_set;
@@ -369,7 +317,7 @@ bool FUNC(ConstBitsP bits, uint64_t offset, uint64_t *result) \
 #define _prev_bit_func_def(FUNC,GET) \
 bool FUNC(ConstBitsP bits, uint64_t offset, uint64_t *result) \
 { \
-    assert(offset <= bits->nbits); \
+    ASSERT (offset <= bits->nbits, "expecting offset=%"PRIu64" <= nbits=%"PRIu64, offset, bits->nbits); \
     if (bits->nbits == 0 || offset == 0) { return false; } \
     \
     /* Find prev word that is greater than zero */ \
@@ -379,7 +327,7 @@ bool FUNC(ConstBitsP bits, uint64_t offset, uint64_t *result) \
     if (w > 0) { *result = (i+1) * WORD_SIZE - leading_zeros(w) - 1; return true; } \
     \
     /* i is unsigned so have to use break when i == 0 */ \
-    for (--i; i != BIT_INDEX_MAX; i--) { \
+    for (--i; i != UINT64_MAX; i--) { \
         w = GET(bits->words[i]); \
         if (w > 0) { \
             *result = (i+1) * WORD_SIZE - leading_zeros(w) - 1; \
@@ -508,7 +456,7 @@ void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx
     uint64_t num_of_full_words = length / WORD_SIZE;
     uint64_t i;
 
-    word_offset_t bits_in_last_word = length % WORD_SIZE; //bits_in_top_word(length); // divon: fixed this bug in the original library
+    word_offset_t bits_in_last_word = length % WORD_SIZE; 
 
     // if possible, work left to right (should work faster due to CPU pre-fetching etc)
     if (dst != src || srcindx > dstindx) {
@@ -545,9 +493,9 @@ void bits_copy_do (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx
         }
     }
 
-    // note: only zero top word if copy reaches it WHY IS THIS NEEDED?
+    // zero top word if copy reaches it
     if (dstindx + length == dst->nbits)
-        bits_clear_excess_bits_in_top_word(dst, true);
+        bits_clear_excess_bits_in_top_word (dst, true);
 
     DEBUG_VALIDATE(dst);
 }
@@ -565,7 +513,7 @@ void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint
                              .nbits  = nbits };
 } 
 
-// convert a bitsay to a byte array of values 0-1
+// convert a bit array to a byte array of values 0-1
 void bits_bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit, uint32_t num_bits)
 {
     ASSERT (src_bit + num_bits <= src_bits->nbits, "Expecting src_bit=%"PRIu64" + num_bits=%u) <= nbits=%"PRIu64,
@@ -683,15 +631,15 @@ void bits_truncate (BitsP bits, uint64_t new_num_of_bits)
     bits_clear_excess_bits_in_top_word (bits, true);
 }
 
+#ifndef __LITTLE_ENDIAN__
 void LTEN_bits (BitsP bits)
 {
-#ifndef __LITTLE_ENDIAN__
     int64_t num_words = (bits->nbits >> 6) + ((bits->nbits & 0x3f) != 0);
     
     for (uint64_t i=0; i < num_words; i++)
         bits->words[i] = LTEN64 (bits->words[i]);
-#endif
 }
+#endif
 
 // xor the entire dst bit array, with a subset of xor_with
 void bits_xor_with (BitsP dst, ConstBitsP xor_with, uint64_t xor_with_bit)
@@ -714,3 +662,38 @@ void bits_xor_with (BitsP dst, ConstBitsP xor_with, uint64_t xor_with_bit)
     DEBUG_VALIDATE(dst);
 }
 
+// calculate the number of bits that are different between a bit array (in its entirety)
+// and a forward or reverse-complemented region of another bit array
+// note: static inline because in the tight loop of aligner
+uint32_t bits_hamming_distance (ConstBits𐤐 bits_1, // the entire bit array (restrict-ed!)
+                                ConstBits𐤐 bits_2, 
+                                uint64_t index_2)  // index first bit in bits_2 
+{
+    const uint64_t *restrict words_1 = bits_1->words;
+    const uint64_t *restrict words_2 = &bits_2->words[index_2 >> 6];
+    const uint64_t *after_1 = words_1 + bits_1->nwords;
+    uint64_t diff=0;
+    int shift_2 = index_2 & 0b111111;
+    uint32_t distance=0; // number of non-matching bits
+
+    // if bits_1 goes beyond the end of bits_2 we can't calculate distance
+    if (index_2 + bits_1->nbits > bits_2->nbits)
+        return bits_1->nbits; // maximum distance = complete misfit
+
+    uint64_t next_w2 = *words_2; 
+    for (const uint64_t *w1=words_1, *w2=words_2; w1 < after_1; w1++, w2++) {
+        uint64_t this_w2 = next_w2;
+        next_w2 = *(w2+1);
+        // note: if last bits_1 word is partial, we still calculate it in its entirety and correct later. However, in case we reach 
+        // the end of bits_2 and have shift_2, we will access the word beyond the end of the bits_2->words. counting on words being a Buffer to not cause a segfault.
+        uint64_t w2_value = _bits_combined_word (this_w2, next_w2, shift_2);
+        diff = *w1 ^ w2_value; 
+        distance += __builtin_popcountll (diff); // note: expected to be _mm_popcnt_u64 with SSE4.2
+    }
+
+    // remove distance due to the unused part of the last bits_1 word
+    if (bits_1->nbits & 0b111111)
+        distance -= __builtin_popcountll (diff & ~bitmask64 (bits_1->nbits & 0b111111));
+
+    return distance; 
+}

@@ -17,6 +17,10 @@
 #include "mgzip.h"
 #include "sorter.h"
 
+#define BEST_LOCK_IN_THREASHOLD 4 // --best: number of VBs that agree on the codec, after which we lock it in --best
+#define DATA_LEN_HTS_OK (1 KB)    // --best: if data is smaller than this, switching between RANs and ARITH codecs is still considered consistent
+#define RETEST_VB_I 10            // (not --fast/--best): retest in this vblock_i, in case early test was not representative
+
 // --------------------------------------
 // memory functions that serve the codecs
 // --------------------------------------
@@ -192,7 +196,40 @@ static SORTER (codec_assign_sorter)
 // Note: in --best mode, we lock-in a codec only after at least (BEST_LOCK_IN_THREASHOLD) VBs in a row selected it (counting restarts if a VB
 // selected a different codec)
 
-#define BEST_LOCK_IN_THREASHOLD 30 // this number has a significant impact on compression and time, it was chosen after trial & error for --best
+static inline bool vb_1_not_representative (VBlockP vb, ContextP ctx, bool is_local, bool is_b250)
+{
+    if (!is_local && !is_b250) return false;
+
+    uint8_t bits = DTP(vb_1_not_representative);
+
+    return ((bits & 0b001) && dict_id_is_field  (ctx->dict_id)) || 
+           ((bits & 0b010) && dict_id_is_type_1 (ctx->dict_id)) || 
+           ((bits & 0b100) && dict_id_is_type_2 (ctx->dict_id));
+}
+
+// update zctx with codec as it is assigned - don't wait for merge, to increase the chance that subsequent
+// VBs can get this codec and don't need to test for themselves.
+// note: must be called with zctx->assign_codec_mutex[] locked
+static void codec_commit_to_zf_ctx (uint32_t data_len, Codec v_codec, Codec *z_codec, uint8_t *z_codec_count)
+{
+    // not best: just commit the z_codec without discretion
+    if (!flag.best)
+        *z_codec = v_codec; 
+
+    // case: --best: codec remains (at least within codec family) - increment counter
+    else if (v_codec == *z_codec || 
+        (is_rans (v_codec) && is_rans (*z_codec)) || 
+        (is_arith (v_codec) && is_arith (*z_codec)) || 
+        (data_len < DATA_LEN_HTS_OK && is_hts (v_codec) && is_hts (*z_codec))) // if data size for this field in this VB is tiny, accept as consistent even if flipping between rans and arith
+        
+        *z_codec_count = MIN_(255, 1+(int)*z_codec_count);    
+   
+    // codec family changed - update z_codec and reset counter
+    else { 
+        *z_codec_count = 0; 
+        *z_codec = v_codec; 
+    }
+}
 
 Codec codec_assign_best_codec (VBlockP vb, 
                                ContextP ctx, /* for b250, local, dict */ 
@@ -206,40 +243,37 @@ Codec codec_assign_best_codec (VBlockP vb,
     Codec non_ctx_codec = CODEC_UNKNOWN; // used for non-b250, non-local sections
     bool data_override = ctx && data;    // caller provided data for us to use *instead* of ctx's own local/b250/dict buffer
     
-    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx, false, false) : NULL; // note: if is_dict, ctx==zctx
+    ContextP zctx = ctx ? ctx_get_zctx_from_vctx (ctx, true, false) : NULL; // note: if is_dict, ctx==zctx
     
-    Codec z_lcodec=CODEC_UNKNOWN, z_bcodec=CODEC_UNKNOWN;
-    uint8_t z_lcodec_count=0, z_bcodec_count=0;
-    bool z_lcodec_hard_coded=0;
-    if (zctx) ctx_get_z_codecs (zctx, &z_lcodec, &z_bcodec, &z_lcodec_count, &z_bcodec_count, &z_lcodec_hard_coded);
+    // if another thread is busy testing, it will be faster to wait for their results than re-test ourselves
+    if (is_local || is_b250)
+        mutex_lock (zctx->assign_codec_mutex[is_local]);
 
-    Codec *selected_codec = is_local ? &ctx->lcodec  : 
-                            is_b250  ? &ctx->bcodec  :
-                                       &non_ctx_codec;
-
-    Codec zselected_codec = is_local ? z_lcodec      : 
-                            is_b250  ? z_bcodec      :
-                                       CODEC_UNKNOWN ;
-
-    uint8_t zselected_codec_count = !zctx ? 0 : is_local ? z_lcodec_count : is_b250 ? z_bcodec_count : 0;
+    // THREAD SAFETY: 
+    // - zctx->{lcodec,bcodec,lcodec_count,bcodec_count}: access protected by zctx->assign_codec_mutex[]
+    // - zctx->lcodec_hard_coded immutable after segconf
+    Codec *restrict selected_codec = is_local?&ctx->lcodec       : is_b250?&ctx->bcodec       : &non_ctx_codec;
+    Codec zselected_codec          = is_local?zctx->lcodec       : is_b250?zctx->bcodec       : CODEC_UNKNOWN ;
+    uint8_t zselected_codec_count  = is_local?zctx->lcodec_count : is_b250?zctx->bcodec_count : 0;
 
     // case: codec is hard_coded and should not be reassigned
-    bool hard_coded = is_local && ((ctx ? ctx->lcodec_hard_coded : false) || (zctx ? z_lcodec_hard_coded : false));
+    bool hard_coded = is_local && ((ctx ? ctx->lcodec_hard_coded : false) || (zctx ? zctx->lcodec_hard_coded : false));
 
     // we don't change assigned non-simple codecs
     if (!codec_args[*selected_codec].is_simple) 
-        return *selected_codec;
+        goto return_selected;
 
     // if --best, we accept a codec that's been selected by 5 previous VBs in a row
     else if (flag.best && zselected_codec != CODEC_UNKNOWN && zselected_codec_count >= BEST_LOCK_IN_THREASHOLD)
         *selected_codec = zselected_codec;
 
     // if --best, we invalidate (=re-test) a codec previously seleceted if its not yet been selected by (BEST_LOCK_IN_THREASHOLD) VBs in row
-    else if (flag.best && !hard_coded && (*selected_codec != zselected_codec || zselected_codec_count < BEST_LOCK_IN_THREASHOLD))
+    else if (flag.best && !hard_coded && zselected_codec_count < BEST_LOCK_IN_THREASHOLD)
         *selected_codec = CODEC_UNKNOWN;
 
-    // in normal mode, reasign at vb_i=10 ("mid file")
-    else if (!flag.best && !flag.fast && !hard_coded && vb->vblock_i == 10)
+    // in normal mode, reasign in the 10th VB for fields for which the initial assignment might be unrepresentative
+    else if (vb->vblock_i == RETEST_VB_I && !flag.best && !flag.fast && !hard_coded &&  
+             vb_1_not_representative (vb, ctx, is_local, is_b250))
         *selected_codec = CODEC_UNKNOWN;
 
     // if not reassigning, we inherit from z_file if its set by a previous VB
@@ -247,7 +281,7 @@ Codec codec_assign_best_codec (VBlockP vb,
         *selected_codec = zselected_codec;
 
     if (*selected_codec != CODEC_UNKNOWN) 
-        return *selected_codec; // if already assigned - no need to test
+        goto return_selected; // if already assigned - no need to test
 
     CodecTest tests[] = { { CODEC_NONE }, 
                           { CODEC_RANB }, { CODEC_RANW }, { CODEC_RANb }, { CODEC_RANw }, 
@@ -303,17 +337,6 @@ Codec codec_assign_best_codec (VBlockP vb,
     // sort codec by our selection criteria
     qsort (tests, num_tests, sizeof (CodecTest), codec_assign_sorter);
 
-    if (flag_is_set (show_codec, zctx ? zctx->dict_id : DICT_ID_NONE)) {
-        iprintf ("%-8s %-12s %-5s %6.1fX   *[%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]\n", 
-                 VB_NAME, ctx ? ctx->tag_name : &st_name (st)[4], ctx ? &st_name (st)[4] : "SECT",
-                 (float)data->len / tests[0].size,
-                 codec_name (tests[0].codec), (int)tests[0].size, (int)tests[0].clock,
-                 codec_name (tests[1].codec), (int)tests[1].size, (int)tests[1].clock,
-                 codec_name (tests[2].codec), (int)tests[2].size, (int)tests[2].clock,
-                 codec_name (tests[3].codec), (int)tests[3].size, (int)tests[3].clock);
-        fflush (info_stream);
-    }
-
     // --best: if we already have an assigned codec and this codec came in 2nd but has the
     // compression as the first, then keep it - so we don't constantly oscillate between two very similar codecs (eg. ARTb and ARTB)
     if (flag.best && zselected_codec != CODEC_UNKNOWN && zselected_codec == tests[1].codec && tests[0].size == tests[1].size)
@@ -324,12 +347,32 @@ Codec codec_assign_best_codec (VBlockP vb,
         *selected_codec = tests[0].codec;
 
     // save the assignment for future VBs, but not in --best, where each VB tests on its own.
-    // note: for local (except in --fast), we don't commit for vb=1 bc less representative of data 
+    // note: for local (except in --fast), we don't commit for vb=1 if vb_1_not_representative  
     // (ok for --best as we count (BEST_LOCK_IN_THREASHOLD) anyway))
-    if ((is_b250 || (is_local && (flag.best || flag.fast || vb->vblock_i > 1 || vb->is_last_vb_in_txt_file))) && 
-        (vb->txt_data.len > segconf.vb_size / 2 || TXT_IS_VB_SIZE_BY_MGZIP) && // don't let smaller-than-usual VBs (e.g. SAM PRIM/DEPN or final VB of the file) set the codec for everyone (rule doesn't apply to FASTQs with an MGZIP codec that dictates a variable-length VBs)
-        *selected_codec != CODEC_UNKNOWN && zctx)
-        ctx_commit_codec_to_zf_ctx (vb, ctx, is_local, true);
+    if (vb->txt_data.len > MIN_(4 MB, segconf.vb_size / 2) && // don't let tiny VBs (e.g. SAM PRIM/DEPN or final VB of the file) set the codec for everyone
+        *selected_codec != CODEC_UNKNOWN && zctx) {
+
+        if (is_b250)
+            codec_commit_to_zf_ctx (save_data_len, ctx->bcodec, &zctx->bcodec, &zctx->bcodec_count);
+
+        else if (is_local && (flag.best || 
+                              flag.fast || 
+                              vb->vblock_i > vb_1_not_representative (vb, ctx, is_local, is_b250) || 
+                              vb->is_last_vb_in_txt_file))
+            codec_commit_to_zf_ctx (save_data_len, ctx->lcodec, &zctx->lcodec, &zctx->lcodec_count);
+    }
+
+    if (flag_is_set (show_codec, zctx ? zctx->dict_id : DICT_ID_NONE)) {
+        iprintf ("%-8s %-12s %-5s %6.1fX   *[%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]%s\n", 
+                 VB_NAME, ctx ? ctx->tag_name : &st_name (st)[4], ctx ? &st_name (st)[4] : "SECT",
+                 (float)data->len / tests[0].size,
+                 codec_name (tests[0].codec), (int)tests[0].size, (int)tests[0].clock,
+                 codec_name (tests[1].codec), (int)tests[1].size, (int)tests[1].clock,
+                 codec_name (tests[2].codec), (int)tests[2].size, (int)tests[2].clock,
+                 codec_name (tests[3].codec), (int)tests[3].size, (int)tests[3].clock,
+                 ((is_local && flag.best && zctx->lcodec_count >= BEST_LOCK_IN_THREASHOLD) || (is_b250 && flag.best && zctx->bcodec_count >= BEST_LOCK_IN_THREASHOLD)) ? " --best-LOCK-IN" : "");
+        fflush (info_stream);
+    }
 
 done:
     // restore
@@ -337,8 +380,11 @@ done:
     vb->section_list.len  = save_section_list; 
     vb->z_data_test.param = false; // no longer testing
 
-    COPY_TIMER (codec_assign_best_codec);
+return_selected:    
+    if (is_local || is_b250)
+        mutex_unlock (zctx->assign_codec_mutex[is_local]);
 
+    COPY_TIMER (codec_assign_best_codec);
     return *selected_codec;
 }
 
@@ -349,19 +395,20 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
                                    bool *codec_requires_seq)
 {
     decl_ctx (did_i);
+    decl_zctx (did_i); // shortcut to zctx, because did_i is predefined
     ASSERT (did_i < DTF(num_fields), "%s is not predefined", ctx->tag_name); // because of ZCTX()
 
-    Codec qual_codec = load_acquire (ZCTX(did_i)->qual_codec);
+    mutex_lock (zctx->assign_codec_mutex[true]); 
 
     // case: a previous VB already determined that the did_i doesn't need one of the complex codec
-    if (qual_codec == CODEC_NONE) {
+    if (zctx->qual_codec == CODEC_NONE) {
         ctx->ltype = LT_BLOB;  
-        return;
+        goto done;
     }
 
-    Codec forced_codec = qual_codec                                        ? qual_codec 
-                       : (did_i == SAM_QUAL && flag.force_qual_codec)      ? flag.force_qual_codec // note: SAM_QUAL==FASTQ_QUAL
-                       :                                                     0;
+    Codec forced_codec = zctx->qual_codec                             ? zctx->qual_codec 
+                       : (did_i == SAM_QUAL && flag.force_qual_codec) ? flag.force_qual_codec // note: SAM_QUAL==FASTQ_QUAL
+                       :                                                0;
 
     if (forced_codec)  
         switch (forced_codec) {
@@ -394,15 +441,17 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
     else
         ctx->ltype = LT_BLOB;  // codec to be assigned by codec_assign_best_codec
     
-    if (!qual_codec)
-        store_release (ZCTX(did_i)->qual_codec, ctx->ltype == LT_BLOB ? CODEC_NONE : ctx->lcodec);
+    zctx->qual_codec = (ctx->ltype == LT_BLOB ? CODEC_NONE : ctx->lcodec);
 
     #define LCODEC(x) (ctx->lcodec == CODEC_##x)
     if (codec_requires_seq && (LCODEC(PACB) || LCODEC(LONGR) || LCODEC(HOMP) || LCODEC(SMUX))) 
         *codec_requires_seq = true;
 
-    if (!qual_codec && (flag_is_set (show_codec, (DictId)_SAM_QUAL) || flag.show_qual) && ctx->lcodec) // printing aligned to the output of codec_assign_best_codec
+    if (!forced_codec && (flag_is_set (show_codec, (DictId)_SAM_QUAL) || flag.show_qual) && ctx->lcodec) // printing aligned to the output of codec_assign_best_codec
         iprintf ("%-8s %-12s %-5s           *[%s]\n", VB_NAME, ctx->tag_name, "LOCAL", codec_name(CTX(did_i)->lcodec));
+
+done:
+    mutex_unlock (zctx->assign_codec_mutex[true]); 
 }
 
 // complex codec est size - result may be recompressed with RAN, ART

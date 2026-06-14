@@ -13,6 +13,8 @@
 
 PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, WordIndex prev_line_chrom, unsigned add_bytes)
 {
+    START_TIMER;
+
     ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
     PosType32 pos = dl->POS;
     PosType32 prev_line_pos = vb->line_i ? (dl-1)->POS : 0;
@@ -65,6 +67,7 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, WordIndex prev_line
 
     if (segconf_running) segconf_test_sorted (VB, prev_line_chrom, pos, prev_line_pos);
 
+    COPY_TIMER_SEG_FIELD (SAM_POS);
     return pos;
 }
 
@@ -75,6 +78,8 @@ static inline int sam_PNEXT_get_mux_channel (VBlockSAMP vb, bool rnext_is_equal)
 
 void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pnext_str)/* option 1 */, PosType32 pnext/* option 2 */, unsigned add_bytes)
 {
+    START_TIMER;
+
     if (pnext_str) 
         ASSSEG (str_get_int_range32 (STRa(pnext_str), 0, MAX_POS_SAM, &pnext),
                 "PNEXT=\"%.*s\" ∉ [0,%d] (pnext_str=%p)", pnext_str_len, pnext_str, (int)MAX_POS_SAM, pnext_str);
@@ -110,6 +115,8 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pnext_str)/* opti
     
     ctx_set_last_value (VB, CTX(SAM_PNEXT), (int64_t)pnext);
     dl->PNEXT = pnext;
+
+    COPY_TIMER_SEG_FIELD (SAM_PNEXT);
 }
 
 // v14: De-multiplex PNEXT

@@ -106,9 +106,9 @@ void sam_seg_bsseeker2_XG_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(
 
     // copy (straight or revcomp), but remove underscores
     if (dl->FLAG.rev_comp) {
-        str_revcomp_actg (Bc(ctx->XG, 0), &XG[XG_len-2], 2); 
-        str_revcomp_actg (Bc(ctx->XG, 2), &XG[3], XG_len-6); 
-        str_revcomp_actg (Bc(ctx->XG, XG_len-4), XG, 2); 
+        str_revcomp_ACGT (Bc(ctx->XG, 0), &XG[XG_len-2], 2); 
+        str_revcomp_ACGT (Bc(ctx->XG, 2), &XG[3], XG_len-6); 
+        str_revcomp_ACGT (Bc(ctx->XG, XG_len-4), XG, 2); 
     }        
     else {
         memcpy (Bc(ctx->XG, 0), XG, 2); 
@@ -225,7 +225,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XG)
     RECONSTRUCT1 (REF (idx + recon_len + 1));
 
     if (last_flags.rev_comp)
-        str_revcomp_actg (recon-3, recon-3, recon_len + 6);
+        str_revcomp_ACGT (recon-3, recon-3, recon_len + 6);
 
     done: return NO_NEW_VALUE;
 }
@@ -365,7 +365,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSSEEKER2_XM)
         XM_UPDATE_OP
 
         #define XG_FWD(x) xg[(x)+2] 
-        #define XG_REV(x) complem((int)xg[1+(xg_len-4)-(x)])
+        #define XG_REV(x) COMPLEM_ACGT[(uint8_t)xg[1+(xg_len-4)-(x)]]
                 
         char xm = rev_comp ? XM_predict_rev (op.op, XG_REV(xg_i), XG_REV(xg_i-1), XG_REV(xg_i-2), *seq)
                            : XM_predict_fwd (op.op, XG_FWD(xg_i), XG_FWD(xg_i+1), XG_FWD(xg_i+2), *seq);

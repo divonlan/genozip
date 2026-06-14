@@ -454,7 +454,7 @@ static void main_genozip (rom txt_filename,
     if (!txt_file) {
         // case for skipping not already handled in file_open_txt_read_test_valid_dt
         if (!was_most_recent_file_skipped()) 
-            WARN ("Cannot compress file %s because its size is 0 - skipping it", txt_filename);
+            WARN (_FYI "Cannot compress file %s because its size is 0 - skipping it", txt_filename);
 
         return;
     }
@@ -642,7 +642,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
             closedir(dir);    
         } 
         else
-            WARN ("Skipping directory %s. %s", fn, IS_ZIP ? "Use --subdirs to compress directories." : "");
+            WARN ("Skipping directory %s. %s", fn, IS_ZIP ? _TIP "Use --subdirs to compress directories." : "");
 
 
         // remove the directory from the list of files to compress
@@ -884,7 +884,7 @@ int main (int argc, char *argv[])
         ASSINP0 (next_input_file || !IS_PIZ || (flag.show_ref_iupacs && is_genocat), 
                  "filename(s) required (redirecting from stdin is not possible)");
 
-        ASSERTW (next_input_file || !flag.replace, "%s: ignoring %s option", global_cmd, OT("replace", "^")); 
+        ASSERTW (next_input_file || !flag.replace, _FYI "%s: Ignoring %s option", global_cmd, OT("replace", "^")); 
 
         bool is_last_txt_file = (file_i==input_files_len-1);
         bool is_last_z_file = (z_file_i==num_z_files-1);

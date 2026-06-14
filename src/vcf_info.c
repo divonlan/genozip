@@ -593,7 +593,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
             }
     }
 
-    seg_set_last_txt (VB, ctx, STRa(value));
+    seg_set_last_txt (VB, ctx, STRa(value)); // also sets encountered
 
     COPY_TIMER_SEG_FIELD (ctx->did_i);
 }

@@ -398,7 +398,7 @@ void vcf_segconf_finalize (VBlockP vb_)
                 ZCTX(parent_ctx->did_i)->seg_to_local = STORE_FLOAT; // note: zctx expected to exist, as it was created from the header
 #ifdef DEBUG
             else 
-                WARN ("parent_ctx=%s doesn't exist in zctx", parent_ctx->tag_name);
+                WARN (_WRN "parent_ctx=%s doesn't exist in zctx", parent_ctx->tag_name);
 #endif
         }
 }

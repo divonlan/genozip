@@ -58,7 +58,7 @@ static RefCacheState ref_cache_set_ready (void)
     if (gref.cache != NO_SHM) 
         ASSERT (!shmdt (old_attachment), "shmdt failed: %s", strerror (errno));
     else
-        WARN ("shmat (read-only) failed: %s. shm remains RW. No harm.", strerror (errno)); 
+        WARN (_WRN "shmat (read-only) failed: %s. shm remains RW. No harm.", strerror (errno)); 
 
 #else
     gref.cache = MapViewOfFile (gref.cache_shm, FILE_MAP_READ, 0, 0, 0);
@@ -427,13 +427,13 @@ static CACHE_ITERATOR_CB(do_remove)
     name = response.s;
 #else
     bool success = (shmctl (shmid, IPC_RMID, NULL) != -1); 
-    ASSERTW (success, "shmctl failed: %s", strerror (errno));
+    ASSERTW (success, _WRN "shmctl failed: %s", strerror (errno));
 
     name = cache->ref_basename;
 #endif
 
     if (IS_RM_CACHE || flag.show_cache)
-        WARN ("Unloaded reference cache \"%s\"", name);
+        WARN (_FYI "Unloaded reference cache \"%s\"", name);
 
     return success;
 }
@@ -498,7 +498,7 @@ static CACHE_ITERATOR_CB (do_list)
 void ref_cache_ls (void)
 {
     if (!ref_cache_iterator (do_list, false))
-        WARN ("No in-memory cached reference files found", NULL);
+        WARN (_FYI "No in-memory cached reference files found", NULL);
 }
 
 // note: buffers attached to this cache become invalid after shm is detached. best to free/destroy them before.

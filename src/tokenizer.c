@@ -20,8 +20,8 @@
 // Up to MAX_TOKENS subfields are permitted - if there are more, then all the trailing part is just
 // consider part of the last component.
 // each subfield is stored in its own dictionary
-const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, ['=']=true, [' ']=true, ['\t']=true, [1]=true };
-const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, ['=']=true, };
+alignas(64) const char sep_with_space[256]    = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, ['=']=true, [' ']=true, ['\t']=true, [1]=true };
+alignas(64) const char sep_without_space[256] = { [':']=true, [';']=true, ['/']=true, ['|']=true, ['_']=true, ['#']=true, ['=']=true, };
 
 //--------------------------------------------
 // Default compound segger

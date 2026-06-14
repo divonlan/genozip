@@ -84,7 +84,7 @@ static void arch_add_to_windows_path (void)
 
     ret = RegSetValueExW (key, L"Path", 0, REG_EXPAND_SZ, (BYTE *)value, value_size + (genozip_path_len + 1)*2); // ignore errors
     if (ret == ERROR_SUCCESS)
-        WARN ("%ls has been add to your Path. It will take effect after the next Windows restart.", genozip_path);
+        WARN (_FYI "%ls has been add to your Path. It will take effect after the next Windows restart.", genozip_path);
 } 
 #endif
 
@@ -93,11 +93,11 @@ void arch_set_locale (void)
 #ifdef _WIN32 // see bug 679
     // ASSERTWD (SetThreadLocale (LOCALE_USER_DEFAULT),
     ASSERTWD (SetThreadLocale (LOCALE_INVARIANT), // same as En_US
-              "Warning: failed SetThreadLocale: %s", str_win_error());
+              _WRN "failed SetThreadLocale: %s", str_win_error());
 #else 
-    ASSERTWD (setlocale (LC_CTYPE,   flag.is_windows ? ".UTF-8" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_CTYPE", NULL);   // accept and print UTF-8 text (to do: doesn't work for Windows)
+    ASSERTWD (setlocale (LC_CTYPE,   flag.is_windows ? ".UTF-8" : "en_US.UTF-8"), _WRN "failed to setlocale of LC_CTYPE", NULL);   // accept and print UTF-8 text (to do: doesn't work for Windows)
 #endif
-    ASSERTWD (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), "Warning: failed to setlocale of LC_NUMERIC", NULL); // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
+    ASSERTWD (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), _WRN "failed to setlocale of LC_NUMERIC", NULL); // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
 }
 
 static bool arch_is_wsl (void)
@@ -122,6 +122,10 @@ static bool arch_is_wsl (void)
 void arch_initialize (rom my_argv0)
 {
     argv0 = my_argv0;
+
+#if defined _M_X64 || defined _M_IA64
+    ASSERT0 (__builtin_cpu_supports("avx2"), "Genozip, running on Intel/AMD CPUs, requires AVX2 support");
+#endif
 
     rom slash = strrchr (argv0, '/');
     if (!slash && flag.is_windows) slash = strrchr (argv0, '\\');

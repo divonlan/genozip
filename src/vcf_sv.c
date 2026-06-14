@@ -365,6 +365,9 @@ static bool is_same_seq (STRp(homseq),
     // }
 
     // return true;
+
+    // note: define UPPER_COMPLEM in strings.c as:
+    // alignas(64) const char UPPER_COMPLEM[256] = "-------------------------------- !\"#$%&'()*+,-./0123456789:;<=>?@TVGHEFCDIJMLKNOPQYSAUBWXRZ[\\]^_`TVGHEFCDIJMLKNOPQYSAUBWXRZ{|}~"; // same as COMPLEM[UPPER_CASE(c)]
 }
 
 void vcf_seg_HOMSEQ (VBlockVCFP vb, ContextP ctx, STRp(homseq))

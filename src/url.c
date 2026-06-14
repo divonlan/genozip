@@ -82,7 +82,7 @@ static StreamP url_open (StreamP parent_stream, rom url, rom user, rom password,
                  && wget_available();                // note: wget is not supported for Windows (see wget_available)
         
     if (flag.telemetry && flag.debug)
-        iprintf ("Launching URL stream with %s\n", use_wget ? "wget" : "curl");
+        iprintf (_FYI "Launching URL stream with %s\n", use_wget ? "wget" : "curl");
 
     if (use_wget)
         stream = stream_create (

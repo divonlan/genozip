@@ -22,7 +22,7 @@ void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), PosType32 pos, BitsP 
 {
     BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
 
-    bool bitmap_matches_MD = vb->md_verified && !bits_hamming_distance (M_is_ref, sqbitmap, sqbitmap_start, true);
+    bool bitmap_matches_MD = vb->md_verified && !bits_hamming_distance (M_is_ref, sqbitmap, sqbitmap_start);
 
     if (flag.show_wrong_md && vb->md_verified && !bitmap_matches_MD) {
 

@@ -229,6 +229,8 @@ static inline bool buf_issame (BufferP a, BufferP b, unsigned width)
     return a->len == b->len && !memcmp (a->data, b->data, a->len * width);
 }
 
+static inline bool buf_is_zero (ConstBufferP buf) { return str_is_zero (STRb(*buf)); }
+
 #define buf_set(buf_p,value) ({ if ((buf_p)->data) memset ((buf_p)->data, value, (buf_p)->size); })
 #define buf_zero(buf_p) buf_set(buf_p, 0)
 

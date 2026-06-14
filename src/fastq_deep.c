@@ -119,7 +119,7 @@ void fastq_deep_zip_finalize (void)
     else if (unconsumed_i) {
         ZipZDeep *ent = &deep_ents[unconsumed_ent_i[0]];
 
-        WARN ("WARNING: detected %"PRIu64" %s alignments (other than supplementary, secondary and consensus alignments) which "
+        WARN (_WRN "detected %"PRIu64" %s alignments (other than supplementary, secondary and consensus alignments) which "
               "are absent in the FAST%c file(s). Genozip requires that the FAST%c files included in --deep cover all alignments "
               "in the %s file, or otherwise, in rare cases, the resulting compressed file might be corrupted. If such corruption occurs, "
               "the testing that will follow now will detect it. If the testing completes successfully, then there is no problem. "

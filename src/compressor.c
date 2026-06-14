@@ -40,7 +40,7 @@ uint32_t comp_compress (VBlockP vb,
     ASSERT (!data_uncompressed_len || uncompressed_data || callback, "data_uncompressed_len!=0 but neither uncompressed_data nor callback are provided: st=%s ctx=%s", 
             st_name (h->section_type), ctx ? ctx->tag_name : "NONE");
 
-    ASSERTW (data_uncompressed_len < 1 GB, "%s: Excessive uncompressed_data_len=%u: %s. %s", 
+    ASSERTW (data_uncompressed_len < 1 GB, _WRN "%s: Excessive uncompressed_data_len=%u: %s. %s", 
              VB_NAME, data_uncompressed_len, name, report_support()); // compressing a buffer over 1GB is likely an indication of not handling some edge case well
 
     bool is_encrypted = false;
@@ -228,6 +228,7 @@ void comp_uncompress (VBlockP vb,
 
         vb->codec_using_codec_bufs = codec;
         codec_args[codec].uncompress (vb, ctx, codec, param, STRa(compressed), uncompressed_data, uncompressed_len, sub_codec, name);
+
         codec_free_all (vb); // just in case
         vb->codec_using_codec_bufs = CODEC_UNKNOWN;
 

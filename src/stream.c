@@ -382,7 +382,7 @@ int stream_wait_for_exit (StreamP stream,
     // wait for child, so that the terminal doesn't print the prompt until the child is done
     WaitForSingleObject (stream->pid, INFINITE);
     
-    ASSERTW (GetExitCodeProcess (stream->pid, &stream->exit_status), "Warning: GetExitCodeProcess() failed: %s", stream_windows_error());
+    ASSERTW (GetExitCodeProcess (stream->pid, &stream->exit_status), _WRN "GetExitCodeProcess() failed: %s", stream_windows_error());
     CloseHandle (stream->pid);
 
 #else
@@ -393,7 +393,7 @@ int stream_wait_for_exit (StreamP stream,
     
     stream->exit_status = WIFEXITED (exit_status) ? WEXITSTATUS (exit_status) : exit_status;
 
-    ASSERTW (killed || WIFEXITED (exit_status), "Child process pid=%d exited abnormally (i.e. not via exit()). I waited for it %u milliseconds",          
+    ASSERTW (killed || WIFEXITED (exit_status), _ERR "Child process pid=%d exited abnormally (i.e. not via exit()). I waited for it %u milliseconds",          
              stream->pid, (unsigned)(CHECK_TIMER / 1000000ULL));
 
     // in Windows, the main process fails to CreateProcess it exits. In Unix, it is the child process that 

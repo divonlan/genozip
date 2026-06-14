@@ -127,7 +127,7 @@ typedef struct {
     \
     RangeP range;                 /* ZIP: used for compressing the reference ranges and also refhash (make-ref or internal). SAM PIZ: used for reconstructing SEQ */ \
     \
-    ProfilerRec profile; \
+    ProfilerVb profile; \
     \
     /* bgzf - for handling bgzf-compressed files */ \
     void *gz_deflate_mem;         /* memory allocation for gz compressor libraries */ \

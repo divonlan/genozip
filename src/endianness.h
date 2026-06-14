@@ -147,29 +147,17 @@
 #define BGEN64F(x) ({ union { double f; uint64_t i; } u = {.f = (x)}; u.i = BGEN64(u.i); u.f; })
 
 // getting and putting unaligned Little Endian words
-#ifdef GENOZIP_ALLOW_UNALIGNED_ACCESS
-    #define GET_UINT16(p)  LTEN16 (*((unaligned_uint16_t *)(p)))
-    #define GET_UINT32(p)  LTEN32 (*((unaligned_uint32_t *)(p)))
-    #define GET_UINT64(p)  LTEN64 (*((unaligned_uint64_t *)(p)))
-    #define GET_FLOAT32(p) LTEN32F(*((unaligned_float    *)(p)))
+#define GET_UINT16(p)  LTEN16 (*((unaligned_uint16_t *)(p)))
+#define GET_UINT32(p)  LTEN32 (*((unaligned_uint32_t *)(p)))
+#define GET_UINT64(p)  LTEN64 (*((unaligned_uint64_t *)(p)))
+#define GET_FLOAT32(p) LTEN32F(*((unaligned_float    *)(p)))
 
-    #define PUT_UINT16(p,n) *((unaligned_uint16_t *)(p)) = LTEN16((uint16_t)n)
-    #define PUT_UINT32(p,n) *((unaligned_uint32_t *)(p)) = LTEN32((uint32_t)n)
-    #define PUT_UINT64(p,n) *((unaligned_uint64_t *)(p)) = LTEN64((uint64_t)n)
-#else
-    #define GET_UINT16(p)  LTEN16 (({ uint16_t n; memcpy (&n, p, 2); n; }))
-    #define GET_UINT32(p)  LTEN32 (({ uint32_t n; memcpy (&n, p, 4); n; }))
-    #define GET_UINT64(p)  LTEN64 (({ uint64_t n; memcpy (&n, p, 8); n; }))
-    #define GET_FLOAT32(p) LTEN32F(({ float    n; memcpy (&n, p, 4); n; }))
-
-    // storing a Little Endian integer in an unaligned memory location
-    #define PUT_UINT16(p,n) (({ uint16_t _N=LTEN16((uint16_t)n); memcpy (p, &_N, 2); }))
-    #define PUT_UINT32(p,n) (({ uint32_t _N=LTEN32((uint32_t)n); memcpy (p, &_N, 4); }))
-    #define PUT_UINT64(p,n) (({ uint64_t _N=LTEN64((uint64_t)n); memcpy (p, &_N, 8); }))      
-#endif
+#define PUT_UINT16(p,n) *((unaligned_uint16_t *)(p)) = LTEN16((uint16_t)n)
+#define PUT_UINT32(p,n) *((unaligned_uint32_t *)(p)) = LTEN32((uint32_t)n)
+#define PUT_UINT64(p,n) *((unaligned_uint64_t *)(p)) = LTEN64((uint64_t)n)
 
 #define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
-#define GET_UINT24(p)  ((uint32_t)(((uint8_t*)(p))[0] | (((uint8_t*)(p))[1] << 8))| (((uint8_t*)(p))[2] << 16))
+#define GET_UINT24(p)  ({ uint8_t *_p=(uint8_t *)p; (uint32_t)GET_UINT16(_p) | ((uint32_t)(_p[2] << 16)); })
 
 #define PUT_UINT8(p,n)  ({ ((uint8_t*)(p))[0] = (n); })
-#define PUT_UINT24(p,n) ({ uint32_t _N=(n); uint8_t *_P=(uint8_t *)(p); _P[0]=_N; _P[1]=_N>>8; _P[2]=_N>>16; })
+#define PUT_UINT24(p,n) ({ uint8_t *_p=(uint8_t *)(p); uint32_t _n=(n); PUT_UINT16(_p,_n); _p[2]=_n>>16; })
