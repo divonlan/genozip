@@ -176,9 +176,11 @@ extern void buf_add (BufferP buf, STRp(data));
 })
 
 #define buf_append_buf(dst_vb,dst_buf,src_buf,type,name) ({ \
-    buf_alloc ((dst_vb) ? (VBlockP)(dst_vb) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \
-    memcpy ((char *)BAFT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
-    (dst_buf)->len += (src_buf)->len; })
+    if ((src_buf)->len) { \
+        buf_alloc ((dst_vb) ? (VBlockP)(dst_vb) : (dst_buf)->vb, (dst_buf), (src_buf)->len, 0, type, CTX_GROWTH, (name)); \
+        memcpy ((char *)BAFT(type, *(dst_buf)), (src_buf)->data, (src_buf)->len * sizeof (type));   \
+        (dst_buf)->len += (src_buf)->len; \
+    } })
 
 #define buf_insert(vb, buf, type, insert_at, new_data, new_data_len, name) \
     buf_insert_do ((VBlockP)(vb), &(buf), sizeof(type), (insert_at), (new_data), (new_data_len), (name), __FUNCLINE)

@@ -86,7 +86,7 @@ extern uint64_t ref_get_max_gpos (void);
 extern void ref_get_is_set_bytemap (VBlockP vb, PosType64 gpos, uint32_t num_bases, bool rev_comp, BufferP is_set, rom buf_name);
 extern void ref_set_genome_is_used (PosType64 gpos, uint32_t len);
 extern DigestAlg ref_get_genome_digest_alg (void);
-extern rom ref_get_textual_seq (VBlock𐤐 vb, PosType64 gpos, STRc𐤐(ref), bool revcomp);
+extern rom ref_get_textual_seq (VBlockP vb, PosType64 gpos, STRc𐤐(ref), bool revcomp);
 extern Digest reference_re_digest_genome (DigestAlg alg, bool full_genome_digest);
 
 // ZIPping a reference

@@ -72,7 +72,7 @@ static void bamass_zip_display_reasons (void)
              str_size (bamass_alns.len).s);
 }
 
-static void inline bamass_alloc_vb_ents (VBlockFASTQP vb, uint32_t n_cigar_op)
+static inline void bamass_alloc_vb_ents (VBlockFASTQP vb, uint32_t n_cigar_op)
 {
     uint32_t est_n_lines  = segconf.line_len ? (vb->txt_data.len / segconf.line_len) : 10000;
 
@@ -87,7 +87,7 @@ static void inline bamass_alloc_vb_ents (VBlockFASTQP vb, uint32_t n_cigar_op)
     buf_alloc (vb, &vb_bamass_alns, nico_max_comp_len (FASTQ_CIGAR, n_cigar_op) + 8, 0, uint8_t, 1.15, NULL); 
 }
 
-static void inline bamass_alloc_z_ents (void)
+static inline void bamass_alloc_z_ents (void)
 {
     uint64_t est_num_alns = sam_deep_calc_hash_bits(); // note: est_num_alns is a bit of an over-estimate as not all lines are usable
 
@@ -681,7 +681,7 @@ void fastq_bamass_seg_initialize (VBlockFASTQP vb)
 
 void fastq_bamass_seg_finalize (VBlockFASTQP vb)
 {
-    bits_truncate ((BitsP)&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to perfect mathcing of reference
+    bits_truncate (&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to perfect mathcing of reference
 }
 
 void fastq_bamass_zip_comp_cb (VBlockFASTQP vb, ContextP ctx, SectionType st, uint32_t comp_len)
@@ -911,7 +911,7 @@ void fastq_bamass_zip_finalize (bool is_last_fastq)
     }
 }
 
-DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, DeepHash *deep_hash, STRp(seq),  
+DeepStatsZip fastq_seg_find_bamass (VBlockFASTQP vb, ZipDataLineFASTQ𐤐 dl, DeepHash *deep_hash, STRp(seq),  
                                     BamAssEnt **matching_ent) // out
 {
     START_TIMER;
@@ -995,7 +995,7 @@ MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐 dl, STRp
     declare_seq_contexts;   
     START_TIMER;
 
-    BitsP bitmap = (BitsP)&bitmap_ctx->local;
+    BitsP bitmap = &bitmap_ctx->local;
 
     ASSERTW (seq_len < 100000 || segconf_running || segconf.is_long_reads, 
              _WRN "%s: fastq_bamass_seg_SEQ: seq_len=%u is suspiciously high and might indicate a bug", LN_NAME, seq_len);
@@ -1258,7 +1258,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
 
             else 
                 for (uint32_t i=0; i < op->n; i++) {
-                    uint32_t matches = bits_get_run ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local, op->n - i);
+                    uint32_t matches = bits_get_run (&bitmap_ctx->local, bitmap_ctx->next_local, op->n - i);
 
                     bool has_mismatch = (i + matches < op->n);
                     recon += matches;

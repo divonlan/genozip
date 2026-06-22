@@ -3,6 +3,12 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.86 23/6/2026
+- Bug fixes
+- Minor compression improvement for BQSR-generationed BAM files
+- removed little used options: --recover, --idxstats, --coverage
+- diagnostics: --no-BDBI
+
 15.0.85 14/6/2026
 - Changed default x86 CPU capabilities from nehalem to haswell, gaining ~10% speed improvement. As a result, support of very old (pre-2013) x86 CPUs is discontinued.
 - Fixed important bug introduced in 15.0.84

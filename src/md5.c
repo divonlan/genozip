@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   aes.c
+//   md5.c
 //   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
@@ -61,7 +61,7 @@ static UNUSED void md5_display_state (const Md5State *x) // for debugging
     iteration++;
 }
 
-static const void *md5_transform (Md5StateP state, const void *data, uintmax_t size)
+static const void *md5_transform (Md5StateP state, const void *data, uint64_t size)
 {
     const uint32_t *ptr = (uint32_t *)data;
 
@@ -253,6 +253,9 @@ Digest md5_finalize (Md5StateP state)
 // note: data must be aligned to the 32bit boundary (its accessed as uint32_t*)
 Digest md5_do (const void *data, uint64_t len)
 {
+#ifdef _DEBUG
+    ASSERT ((uintptr_t)data % sizeof(uint32_t) == 0, "data=%p needs to be 32b-aligned", data);
+#endif
     Md5State state;
     md5_initialize (&state, false);
     

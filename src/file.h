@@ -49,7 +49,11 @@ typedef struct File {
     };                                 
     // ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
 
-    void *file;
+    union { // use a union and not casting to avoid breaking strict-aliasing rules
+        void *file;
+        FILE *os_file;
+        void *bz_file;                 // note: BZFILE is defined as void
+    };
     char *name;                        // allocated by file_open_z(), freed by file_close()
     rom basename;                      // basename of name
     FileMode mode;
@@ -233,7 +237,8 @@ typedef struct File {
     uint64_t sam_num_aligned_perfect;  // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
     uint64_t sam_num_aligned;          // Z_FILE: ZIP: SAM/BAM: number of alignments successfully found by aligner. for stats 
     uint64_t sam_num_verbatim;         // Z_FILE: ZIP: SAM/BAM: number of alignments segged verbatim
-    uint64_t sam_num_by_prim;          // Z_FILE: ZIP: SAM/BAM: number of alignments segged against prim / saggy
+    uint64_t sam_num_by_prim;          // Z_FILE: ZIP: SAM/BAM: number of alignments segged against prim
+    uint64_t sam_num_by_saggy;         // Z_FILE: ZIP: SAM/BAM: number of alignments segged against saggy
     uint64_t sam_num_tlen_pred;        // Z_FILE: ZIP: SAM/BAM: number of alignments with TLEN successfully predicteds
     uint64_t fq_num_aligned;           // Z_FILE: ZIP: SAM/BAM/FASTQ: number of alignments successfully found by aligner. for stats 
     uint64_t fq_num_aligned_perfect;   // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
@@ -271,8 +276,8 @@ typedef struct File {
     char unk_flav_qnames[NUM_QTYPES][NUM_COLLECTED_WORDS][UNK_QNANE_LEN+1]; // first 6 qnames if flavor is unknown
     uint8_t n_1st_flav_qnames[NUM_QTYPES];              // some of the first qnames in the file
   
-    #define NUM_UNK_ID_CTXS 10
-    #define UNK_ID_LEN 32
+    #define NUM_UNK_ID_CTXS 4
+    #define UNK_ID_LEN 31
     char unk_ids_tag_name[NUM_UNK_ID_CTXS][MAX_TAG_LEN];
     char unk_ids[NUM_UNK_ID_CTXS][NUM_COLLECTED_WORDS][UNK_ID_LEN+1];
 

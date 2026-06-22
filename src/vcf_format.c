@@ -19,7 +19,7 @@ bool vcf_is_GT_only (VBlockVCFP vb)
 
     return fm_buf->len == 0 ||
               (fm_buf->len == 1 && 
-               con_nitems (*B(FormatContainer, *fm_buf, 0)) == 1 + segconf.vcf_sample_copy &&   
+               con_nitems (B(FormatContainer, *fm_buf, 0)) == 1 + segconf.vcf_sample_copy &&   
                B(FormatContainer, *fm_buf, 0)->items[0 + segconf.vcf_sample_copy].dict_id.num == _FORMAT_GT);
 }
 
@@ -85,7 +85,7 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(fmt))
     ASSVCF (n_sf_names + segconf.vcf_sample_copy <= MAX_FORMAT_FIELDS, // tests only for fitting in the container, context overflow tested elsewhere
             "FORMAT field has %u subfields, the maximum allowed is %u: \"%.*s\"", n_sf_names, MAX_FORMAT_FIELDS - segconf.vcf_sample_copy, STRf(fmt));
 
-    con_set_nitems (format_mapper, n_sf_names + segconf.vcf_sample_copy);
+    con_set_nitems (&format_mapper, n_sf_names + segconf.vcf_sample_copy);
 
     ContextPBlock ctxs;
 
@@ -142,9 +142,9 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(fmt))
     }    
 
     FormatContainer𐤐 con = B(FormatContainer, samples_ctx->format_mapper_buf, node_index);
-    if (is_new || !con_nitems (*con)) { // assign if not already assigned (con->nitem=0 if format_mapper was already segged in another VB (so it is in ol_nodes), but not yet this VB) 
+    if (is_new || !con_nitems (con)) { // assign if not already assigned (con->nitem=0 if format_mapper was already segged in another VB (so it is in ol_nodes), but not yet this VB) 
         *con = format_mapper; 
-        memcpy (B(ContextPBlock, samples_ctx->format_contexts, node_index), ctxs, sizeof (ctxs));
+        memcpy ((char *)B(ContextPBlock, samples_ctx->format_contexts, node_index), (char *)ctxs, sizeof (ctxs));
     }
 
     COPY_TIMER_SEG_FIELD (VCF_FORMAT);

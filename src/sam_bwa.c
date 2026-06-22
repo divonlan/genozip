@@ -205,7 +205,7 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
     if (!CTX(OPTION_XA_Z)->is_initialized)
         sam_seg_BWA_XA_initialize (vb);
 
-    static const Container(6) container_XA = {
+    static const Container_6 container_XA = {
         .repeats      = 1,  // faster seg if this happens to be correct 
         .nitems_lo    = 6, 
         .repsep       = {';'}, // including last item
@@ -226,7 +226,7 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
                                  (MP(GEM3) && segconf.sam_bisulfite) ? sam_seg_gem3_XA_strand_cb : sam_seg_BWA_XA_strand_cb, 
                                  sam_seg_BWA_XA_pos_cb, sam_seg_0A_cigar_cb, 0 };
 
-    int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_XA_Z), (ContainerP)&container_XA, STRa(xa), 
+    int32_t repeats = seg_array_of_struct (VB, CTX(OPTION_XA_Z), &container_XA, STRa(xa), 
                                            use_lb ? callbacks : callbacks_no_lb, 
                                            segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                            add_bytes);
@@ -234,7 +234,7 @@ void sam_seg_BWA_XA_Z (VBlockSAMP vb, STRp(xa), unsigned add_bytes)
     // case: we failed to seg as a container - flush lookbacks (rare condition, and complicated to rollback given the round-robin and unlimited repeats)
     if (use_lb && repeats == -1) {
         SET_XA (yes, no); // this file's XA:Z is not bwa format after all 
-        lookback_flush (VB, (ContainerP)&container_XA);
+        lookback_flush (VB, &container_XA);
     }
 }
 
@@ -388,7 +388,7 @@ void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int64_t 
     if (has(AS_i) && ABS(xs) < 10000) {
 
         int channel_i = sam_XS_get_mux_channel (dl->MAPQ);
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_XS_i, (MultiplexerP)&vb->mux_XS, channel_i);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_XS_i, &vb->mux_XS, channel_i);
 
         if (channel_i == 3 ||
             segconf.AS_is_2ref_consumed) { // when AS:i is inflated x2 we observe that XS:i is not very near AS:i or AS:i/2 - we're better of segging in local

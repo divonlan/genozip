@@ -11,7 +11,7 @@
 
 static Did tw_dids[NUM_SVABA_TWs] = SVABA_TW_DIDS;
 
-static Container(2) id_con = {
+static Container_2 id_con = {
     .nitems_lo = 2,
     .repeats   = 1,
     .items = { { .dict_id.num = DICT_ID_MAKEF_3("I0D"), .separator[0] = ':' },
@@ -22,7 +22,7 @@ sSTRl(con_id_snip, con_snip_sizeof(2));
 void vcf_svaba_zip_initialize (void)
 {
     DO_ONCE {
-        container_prepare_snip ((ContainerP)&id_con, 0, 0, qSTRa(con_id_snip));
+        container_prepare_snip (&id_con, 0, 0, qSTRa(con_id_snip));
     }
 
     // re-initialize for every file, as SV type might change
@@ -33,7 +33,7 @@ void vcf_svaba_seg_initialize (VBlockVCFP vb)
 {
     vcf_sv_seg_initialize (vb, tw_dids, NUM_SVABA_TWs);
 
-    ctx_consolidate_stats_(VB, CTX(VCF_ID), (ContainerP)&id_con);      
+    ctx_consolidate_stats_(VB, CTX(VCF_ID), &id_con);      
 
     segconf.MATEID_method = MATE_12;
 }

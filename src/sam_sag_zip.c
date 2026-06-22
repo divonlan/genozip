@@ -113,8 +113,8 @@ void sam_set_sag_type (void)
              (flag.best || flag.force_gencomp) &&  // too slow for normal mode
              !txt_file->redirected && !txt_file->is_remote) { // conditions for using sam_sag_by_flag_scan_for_depn
         sam_sag_by_flag_scan_for_depn ();
-        segconf.sag_type = !z_file->sag_depn_index.len ? SAG_NONE
-                         : segconf_has(OPTION_SA_Z)    ? SAG_BY_SA  // scan can detect SA:Z not previously detected by segconf
+        segconf.sag_type = segconf_has(OPTION_SA_Z)    ? SAG_BY_SA  // scan can detect SA:Z not previously detected by segconf
+                         : !z_file->sag_depn_index.len ? SAG_NONE
                          :                               SAG_BY_FLAG;
     }
 
@@ -533,7 +533,7 @@ static bool sam_seg_depn_is_subseq_of_prim (VBlockSAMP vb, bytes depn_textual_se
                                             bool xstrand, // depn_seq is opposite strand vs primary
                                             const Sag *g, bool is_bam)
 {
-    Bits *prim_seq = (BitsP)&z_file->sag_seq; // ACGT format
+    Bits *prim_seq = &z_file->sag_seq; // ACGT format
     uint64_t start_p = g->seq + vb->hard_clip[0];
 
     if (!xstrand)

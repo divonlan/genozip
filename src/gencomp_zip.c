@@ -28,7 +28,7 @@
 #define END_OF_LIST (MAX_QUEUE_SIZE+1)
 
 typedef struct {
-    BufferP gc_txts;         // Buffer array - each buffer is either on the "ready-to-dispatch queue" or on the "unused buffers' stack"
+    BufferP gc_txts;         // Buffer array - each buffer is either on the "ready-to-dispatch queue" or on the "unused buffers' stack". Note: We use Buffer's "qbits" field.
     uint16_t queue_size;     // number of buffers allocated on queue
     volatile uint16_t queue_len;  // number of buffers ready for dispatching (NOT including buffers offloaded to disk)
     uint16_t next_to_leave;  // Head of queue (FIFO): doubly-linked list of buffers 
@@ -36,22 +36,9 @@ typedef struct {
     uint16_t next_unused;    // Top of stack: Unused gc_txts buffers stack (LIFO): linked-list of buffers
 } QueueStruct;
 
-// overlays Buffer.param of queue[gct].gc_txts[buf_i]
-typedef struct {
-    uint32_t num_lines : 27; // VB size is limited to 1GB and VCF spec mandates at least 16 characters per line (8 mandatory fields), SAM mandates 22 (11 fields)
-    uint32_t comp_i    : 2;
-    uint32_t unused    : 3;
-    uint16_t next;           // queue: towards head ; stack: down stack
-    uint16_t prev;           // queue: towards tail ; stack: always END_OF_LIST
-} QBits;
-
-typedef union {
-    QBits bits;
-    int64_t value;
-} QBitsType;
-#define GetQBit(buf_i,field) ((QBitsType){ .value = queueP[gct].gc_txts[buf_i].param }.bits.field)
-#define SetQBit(buf_i,field) ((QBitsType*)&queueP[gct].gc_txts[buf_i].param)->bits.field
-#define SetQBits(buf_i)      ((QBitsType*)&queueP[gct].gc_txts[buf_i].param)->bits
+#define GetQBit(buf_i,field) queueP[gct].gc_txts[buf_i].qbits.field
+#define SetQBit(buf_i,field) queueP[gct].gc_txts[buf_i].qbits.field
+#define SetQBits(buf_i)      queueP[gct].gc_txts[buf_i].qbits
 
 typedef struct {
     uint32_t comp_len;
@@ -459,10 +446,11 @@ static bool gencomp_flush (CompIType comp_i, bool is_final_flush) // final flush
         if (queueP[gct].last_added != END_OF_LIST)
             SetQBit (queueP[gct].last_added, prev) = buf_i;
 
-        SetQBits(buf_i) = (QBits){ .next      = queueP[gct].last_added,
-                                   .prev      = END_OF_LIST,
-                                   .num_lines = componentsP[comp_i].txt_data.count,
-                                   .comp_i    = comp_i } ;
+        SetQBits(buf_i) = (struct QBits){ 
+            .next      = queueP[gct].last_added,
+            .prev      = END_OF_LIST,
+            .num_lines = componentsP[comp_i].txt_data.count,
+            .comp_i    = comp_i } ;
         
         queueP[gct].last_added = buf_i;
         queueP[gct].queue_len++;
@@ -537,8 +525,10 @@ static int32_t gencomp_rotate_prescription (void)
     DepnVBPrescriptionP pres = &BNXT (DepnVBPrescription, reread_depn_vb_prescriptions);
 
     // removes the memory from the buffer and replenishes it with new memory
-    buf_extract_data (reread_current_prescription, (char **)&pres->uncomp, 0, &pres->num_lines, &pres->uncomp_memory);
-
+    char *data;
+    buf_extract_data (reread_current_prescription, &data, 0, &pres->num_lines, &pres->uncomp_memory);
+    
+    pres->uncomp = (RereadLine *)data;
     pres->txt_len = reread_current_prescription.count; // counts txt_data length represented by the lines in reread_current_prescription
     reread_current_prescription.count = 0; 
 

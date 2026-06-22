@@ -47,6 +47,14 @@ typedef struct Buffer {        // 72 bytes
                  uint32_t current_bb_i;          }; // index into vb->gz_blocks of first bgzf block of current line
         struct { uint32_t next_index, next_line; }; // used by z_file->gencomp_vb_lines for building recon plan
         CompIType prev_comp_i;                      // used by vb->vb_plan
+        
+        struct QBits { // used by gencomp: queue[gct].gc_txts[buf_i]
+            uint32_t num_lines : 27; // VB size is limited to 1GB and BAM has a theorical minium of 38 bytes per line, and SAM 22.
+            uint32_t comp_i    : 2;
+            uint32_t unused    : 3;
+            uint16_t next;           // queue: towards head ; stack: down stack
+            uint16_t prev;           // queue: towards tail ; stack: always END_OF_LIST
+        } qbits;
     };
     union {
         uint64_t len;          // used by the buffer user according to its internal logic. not modified by malloc/realloc, zeroed by buf_free (in Bits - nwords)
@@ -145,23 +153,23 @@ static inline void buf_alloc_quick (BufferP buf, uint64_t req_size, rom name, FU
 // note: the entire buffer is zeroed, not just the added bytes
 #define buf_alloc_exact_zero(alloc_vb, buf, exact_len, type, name) ({   \
     buf_alloc_exact (alloc_vb, buf, exact_len, type, name); \
-    memset ((buf).data, 0, (exact_len) * sizeof(type)); })
+    if ((buf).data) memset ((buf).data, 0, (exact_len) * sizeof(type)); }) // if protects against undefined behaviour (per C spec) if data=NULL and len=0
 
 // note: the entire buffer is set to 255, not just the added bytes
 #define buf_alloc_exact_255(alloc_vb, buf, exact_len, type, name) ({   \
     buf_alloc_exact (alloc_vb, buf, exact_len, type, name); \
-    memset ((buf).data, 255, (exact_len) * sizeof(type)); })
+    if ((buf).data) memset ((buf).data, 255, (exact_len) * sizeof(type)); })
 
 // allocates exactly the requested amount and sets let, and declares ARRAY
 #define ARRAY_alloc(element_type, array_name, array_len, init_zero, buf, alloc_vb, buf_name) \
     buf_alloc_exact (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf).vb), (buf), (array_len), element_type, (buf_name)); \
-    if (init_zero) memset ((buf).data, 0, (buf).len * sizeof(element_type)); /* resets the entire buffer, not just newly allocated memory */ \
+    if (init_zero && (buf).data) memset ((buf).data, 0, (buf).len * sizeof(element_type)); /* resets the entire buffer, not just newly allocated memory */ \
     element_type *array_name = ((element_type *)((buf).data)); \
     const uint64_t array_name##_len UNUSED = (buf).len; // read-only copy of len 
 
 #define ARRAY_alloc𐤐(element_type, array_name, array_len, init_zero, buf, alloc_vb, buf_name) \
     buf_alloc_exact (((alloc_vb) ? ((VBlockP)alloc_vb) : (buf).vb), (buf), (array_len), element_type, (buf_name)); \
-    if (init_zero) memset ((buf).data, 0, (buf).len * sizeof(element_type)); /* resets the entire buffer, not just newly allocated memory */ \
+    if (init_zero && (buf).data) memset ((buf).data, 0, (buf).len * sizeof(element_type)); /* resets the entire buffer, not just newly allocated memory */ \
     element_type *restrict array_name = ((element_type *)((buf).data)); \
     const uint64_t array_name##_len UNUSED = (buf).len; // read-only copy of len 
 

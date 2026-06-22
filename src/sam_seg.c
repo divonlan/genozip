@@ -22,6 +22,7 @@
 #include "threads.h"
 #include "dyn_int.h"
 #include "huffman.h"
+#include "tip.h"
 
 STRl(copy_GX_snip, 30);
 STRl(copy_sn_snip, 30);
@@ -223,6 +224,15 @@ void sam_zip_init_vb (VBlockP vb_)
     sam_sag_zip_init_vb (vb);
 }
 
+// compute thread: called after compressing a B250 or LOCAL section
+void sam_zip_comp_cb (VBlockP vb, ContextP ctx, SectionType st, uint32_t comp_len)
+{
+    if (ctx->did_i == OPTION_BD_BI && ctx->lcodec == CODEC_LZMA) {
+        DO_ONCE
+            TIP0 ("Compression is slow due to BQSR's BD and BI fields. Use --no-lzma or --fast for faster (but a bit lesser) compression");
+    }
+}
+
 // called compute thread after compress, order of VBs is arbitrary
 void sam_zip_after_compress (VBlockP vb)
 {
@@ -241,7 +251,8 @@ void sam_zip_after_compute (VBlockP vb_)
     z_file->sam_num_aligned         += vb->num_aligned;
     z_file->sam_num_seq_by_aln      += vb->num_seq_by_aln;
     z_file->sam_num_verbatim        += vb->num_verbatim;
-    z_file->sam_num_by_prim         += vb->num_vs_prim;
+    z_file->sam_num_by_prim         += vb->num_by_prim;
+    z_file->sam_num_by_saggy        += vb->num_by_saggy;
     z_file->sam_num_tlen_pred       += vb->num_tlen_pred;
     z_file->secondary_count         += vb->secondary_count;
     z_file->supplementary_count     += vb->supplementary_count;
@@ -455,7 +466,7 @@ void sam_seg_initialize (VBlockP vb_)
     ctx_consolidate_stats (VB, SAM_QNAME, SAM_BUDDY, SAM_QNAMESA, SAM_FQ_AUX, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_BD_BI, OPTION_BI_Z, OPTION_BD_Z, DID_EOL);
     ctx_consolidate_stats (VB, OPTION_GX_GN, OPTION_GX_Z, OPTION_GN_Z, OPTION_gx_Z, OPTION_gn_Z, DID_EOL);
-    ctx_consolidate_stats_(VB, CTX(OPTION_MM_Z), (ContainerP)&segconf.MM_con);
+    ctx_consolidate_stats_(VB, CTX(OPTION_MM_Z), &segconf.MM_con);
 
     if (segconf_has(OPTION_HI_i) && !segconf_has(OPTION_SA_Z) && !MP(NOVOALIGN))
         ctx_consolidate_stats (VB, OPTION_HI_i, OPTION_SA_Z, DID_EOL);
@@ -558,7 +569,7 @@ static void sam_seg_toplevel (VBlockP vb)
     uint8_t deep_cb = flag.deep && (vb->comp_i != SAM_COMP_DEPN) ? CI1_ITEM_CB : 0; // note: DEPN alignments don't participate in Deep
 
     // top level snip - reconstruction as SAM
-    Container(14) top_level_sam = {
+    Container_14 top_level_sam = {
         .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .callback     = true,
@@ -579,10 +590,10 @@ static void sam_seg_toplevel (VBlockP vb)
                    { .dict_id = { _SAM_AUX      }                                 },
                    { .dict_id = { _SAM_EOL      }                                 }}};
                    
-    container_seg (vb, CTX(SAM_TOPLEVEL), (ContainerP)&top_level_sam, 0, 0, 0);
+    container_seg (vb, CTX(SAM_TOPLEVEL), &top_level_sam, 0, 0, 0);
 
     // Deep: top level snip - reconstruction as SAM when genocat --R1 --R2 --R --fq - reconstruct only what's needed for FASTQ 
-    Container(11) top_level_deep_fq = {
+    Container_11 top_level_deep_fq = {
         .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .callback     = true,
@@ -600,13 +611,13 @@ static void sam_seg_toplevel (VBlockP vb)
                    { .dict_id = { qual_dict_id  }, .separator = { '\t', deep_cb } },
                    { .dict_id = { _SAM_FQ_AUX   }, .separator = { CI0_INVISIBLE } }}}; // consumes OPTION_MC_Z (needed for mate CIGAR), OPTION_SA_Z (need for saggy RNAME, POS, CIGAR, NM, MAPQ)
                    
-    container_seg (vb, CTX(SAM_TOP2NONE), (ContainerP)&top_level_deep_fq, 0, 0, 0);
+    container_seg (vb, CTX(SAM_TOP2NONE), &top_level_deep_fq, 0, 0, 0);
 
     // top level snip - reconstruction as BAM
     // strategy: we start by reconstructing the variable-length fields first (after a prefix that sets them in place)
     // - read_name, cigar, seq and qual - and then go back and fill in the fixed-location fields
     // Translation (a feature of Container): items reconstruct their data and then call a translation function to translate it to the desired format
-    Container(14) top_level_bam = {
+    Container_14 top_level_bam = {
         .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .callback     = true,
@@ -634,7 +645,7 @@ static void sam_seg_toplevel (VBlockP vb)
                                            CON_PX_SEP,                      // end of (empty) container-wide prefix
                                            ' ', ' ', ' ', ' ', CON_PX_SEP}; // first item prefix - 4 spaces (place holder for block_size)
 
-    container_seg (vb, CTX(SAM_TOP2BAM), (ContainerP)&top_level_bam, bam_line_prefix, sizeof (bam_line_prefix),
+    container_seg (vb, CTX(SAM_TOP2BAM), &top_level_bam, bam_line_prefix, sizeof (bam_line_prefix),
                    IS_BAM_ZIP ? sizeof (uint32_t) * vb->lines.len : 0); // if BAM, account for block_size
 }
 
@@ -648,7 +659,7 @@ void sam_segconf_set_by_MP (void)
 
     segconf.has_bwa_meth = MP(BWA) && stats_is_in_programs ("bwa-meth"); // https://github.com/brentp/bwa-meth
 
-    segconf.has_bqsr = stats_is_in_programs ("ApplyBQSR");
+    segconf.has_BQSR = stats_is_in_programs ("ApplyBQSR"); // is also set based on BD and BI fields
 
     segconf.has_RSEM = stats_is_in_programs ("RSEM") || stats_is_in_programs ("rsem");
 
@@ -786,6 +797,12 @@ void sam_segconf_finalize (VBlockP vb_)
 
     if (MP(STAR)) segconf.sag_has_AS = true;
 
+    if (segconf_has(OPTION_BD_Z) && segconf_has(OPTION_BI_Z))
+        segconf.has_BQSR = true; // also set based on SAM header
+
+    if (flag.no_BDBI)
+        segconf.has_BQSR = false; // disables 
+        
     // set optimizations
     if (flag.optimize) 
         sam_segconf_finalize_optimizations();
@@ -976,7 +993,7 @@ void sam_seg_finalize (VBlockP vb_)
 
     if (vb->lines.len) {
         CTX(SAM_SQBITMAP)->local_always = true; // We always include the SQBITMAP local section, except if no lines
-        bits_truncate ((BitsP)&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to MAPPING_PERFECT
+        bits_truncate (&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to MAPPING_PERFECT
     }
 
     bool codec_requires_seq = false; // does any qual-like field use a codec that requires SEQ
@@ -1008,7 +1025,7 @@ void sam_seg_finalize (VBlockP vb_)
 
     if (segconf.has_10xGen && CTX(OPTION_CQ_Z)->local.len32)
         codec_assign_best_qual_codec (VB, OPTION_CQ_Z, sam_zip_CQ, true, false, NULL);
-
+        
     // determine if sam_piz_sam2bam_SEQ ought to store vb->textual_seq (saves piz time if not)
     CTX(SAM_SQBITMAP)->flags.no_textual_seq = !(codec_requires_seq         || // one of the QUAL-like field uses a codec that requires SEQ
                                                 MP(BSSEEKER2)              ||
@@ -1412,7 +1429,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
         if (con.items[vb->n_auxs].separator[0] & 0x80)                                 // is a flag
             con.items[vb->n_auxs].separator[0] &= ~(CI0_NATIVE_NEXT & ~(uint8_t)0x80); // last Aux field has no tab
         con.items[vb->n_auxs].separator[1] = 0;
-        container_seg (vb, CTX(SAM_AUX), (ContainerP)&con, prefixes, prefixes_len, (is_bam ? 3 : 5) * vb->n_auxs); // account for : SAM: "MX:i:" BAM: "MXi"
+        container_seg (vb, CTX(SAM_AUX), &con, prefixes, prefixes_len, (is_bam ? 3 : 5) * vb->n_auxs); // account for : SAM: "MX:i:" BAM: "MXi"
     }
 
     else
@@ -1456,11 +1473,11 @@ static inline BuddyType sam_seg_mate (VBlockSAMP vb, SamFlags f, STRp (qname), u
 
     uint32_t mate_hash = qname_calc_hash (QNAME1, COMP_NONE, STRa(qname), !f.is_last, true, CRC32, NULL) & MAXB(CTX(SAM_QNAME)->qname_hash.prm8[0]);
     LineIType candidate = LINE_BY_HASH(mate_hash);
-    SamFlags *mate_f = &DATA_LINE(candidate)->FLAG; // invalid pointer if no mate
+    SamFlags *mate_f;
 
     // case: mate is found
     if (has_same_qname (vb, STRa (qname), candidate, segconf.flav_prop[QNAME1].is_mated) && 
-        !sam_is_depn (*mate_f) && 
+        !sam_is_depn (*(mate_f = &DATA_LINE(candidate)->FLAG)) && 
         mate_f->is_last != f.is_last) {
         
         vb->mate_line_i = candidate;

@@ -19,9 +19,9 @@
 
 static int64_t zriter_tell (void)
 {
-    int64_t offset = ftello64 ((FILE *)z_file->file);
+    int64_t offset = ftello64 (z_file->os_file);
     ASSERT (offset >= 0 , "ftello64 failed for %s (FILE*=%p remote=%s redirected=%s): %s", 
-            z_file->name, z_file->file, TF(z_file->is_remote), TF(z_file->redirected), strerror (errno));
+            z_file->name, z_file->os_file, TF(z_file->is_remote), TF(z_file->redirected), strerror (errno));
 
     // in a z_file that is being tarred, update the offset to the beginning of the file data in the tar file
     offset -= tar_file_offset(); // 0 if not using tar
@@ -33,7 +33,7 @@ void zriter_flush (void)
 {
     if (flag.zip_no_z_file) return;
 
-    ASSERT (!fflush ((FILE*)z_file->file), 
+    ASSERT (!fflush (z_file->os_file), 
             "fflush to %s on a %s filesystem failed: %s", z_name, arch_get_z_filesystem().s, strerror (errno));
 }
 
@@ -44,7 +44,7 @@ static void zriter_write_do (BufferP data, BufferP section_list, int64_t offset_
         file_seek (z_file, offset_in_z_file, SEEK_SET, WRITE, HARD_FAIL); 
     }
     
-    int64_t bytes_written = fwrite (data->data, 1, data->len, (FILE *)z_file->file); // use fwrite - let libc manage write buffers for us
+    int64_t bytes_written = fwrite (data->data, 1, data->len, z_file->os_file); // use fwrite - let libc manage write buffers for us
 
     // error if failed to write to file
     ASSERT (bytes_written == data->len, "wrote only %"PRId64" of the expected %"PRId64" bytes to %s on a %s filesystem: %s", 
@@ -82,7 +82,7 @@ void zriter_write (BufferP data,
     if (!data->len || flag.zip_no_z_file) return; // nothing to do
 
     ASSERTNOTNULL (z_file);
-    ASSERTNOTNULL (z_file->file);
+    ASSERTNOTNULL (z_file->os_file);
     ASSERTNOTNULL (data->data);
 
     zriter_write_do (data, section_list, offset_in_z_file);

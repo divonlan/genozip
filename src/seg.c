@@ -20,6 +20,7 @@
 #include "dispatcher.h"
 #include "b250.h"
 #include "dyn_int.h"
+#include "multiplexer.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 // part of ASSSEG
@@ -89,24 +90,24 @@ static bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
 
 // NOTE: this does not save recon_size - if the processing may change recon_size it must be saved and rolled back separately
 void seg_create_rollback_point (VBlockP vb, 
-                                ConstContainerP con,    // option 1 - all the items in a container
+                                ContainerP con,    // option 1 - all the items in a container
                                 unsigned num_ctxs, ...) // option 2 - explict list of Dids
 {
-    if (con) num_ctxs = con_nitems (*con);
+    if (con.h) num_ctxs = con_nitems (con);
 
     va_list args;
     va_start (args, num_ctxs);
 
     ASSERT (num_ctxs <= MAX_ROLLBACK_CTXS, "num_ctxs=%u > MAX_ROLLBACK_CTXS=%u ctx[0]=%s", 
-            num_ctxs, MAX_ROLLBACK_CTXS, (con ? ctx_get_ctx(vb, con->items[0].dict_id) : CTX(va_arg (args, int)))->tag_name);
+            num_ctxs, MAX_ROLLBACK_CTXS, (con.h ? ctx_get_ctx(vb, con.h->items[0].dict_id) : CTX(va_arg (args, int)))->tag_name);
 
     vb->rback_id++; // new rollback point
     vb->num_rollback_ctxs = 0;
 
     for (uint32_t i=0; i < num_ctxs; i++) {
-        if (con && !con->items[i].dict_id.num) continue;
+        if (con.h && !con.h->items[i].dict_id.num) continue;
 
-        vb->rollback_dids[vb->num_rollback_ctxs] = con ? ctx_get_ctx (vb, con->items[i].dict_id)->did_i : va_arg (args, int); // note: 'Did' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
+        vb->rollback_dids[vb->num_rollback_ctxs] = con.h ? ctx_get_ctx (vb, con.h->items[i].dict_id)->did_i : va_arg (args, int); // note: 'Did' {aka 'short unsigned int'} is promoted to 'int' when passed through '...'
 
         if (ctx_set_rollback (vb, CTX(vb->rollback_dids[vb->num_rollback_ctxs]), false)) // added
             vb->num_rollback_ctxs++;
@@ -324,10 +325,10 @@ void seg_prepare_array_dict_id_special_snip (int num_dict_ids, DictId *dict_ids,
 void seg_mux_display (MultiplexerP mux)
 {
     iprintf ("ctx=%s num_channels=%u snip_len=%u snip=%.100s", 
-             mux->ctx->tag_name, mux->num_channels, mux->snip_len, MUX_SNIP(mux));
+             mux.m->ctx->tag_name, mux.m->num_channels, mux.m->snip_len, MUX_SNIP(mux));
 
-    for (unsigned i=0; i < MIN_(mux->num_channels, 1024); i++)
-        iprintf ("[%u] dict_id=%s channel_ctx=%p\n", i, dis_dict_id (mux->dict_ids[i]).s, MUX_CHANNEL_CTX(mux)[i]);
+    for (unsigned i=0; i < MIN_(mux.m->num_channels, 1024); i++)
+        iprintf ("[%u] dict_id=%s\n", i, dis_dict_id (mux.m->dict_ids[i]).s);
 }
 
 void seg_mux_init_(VBlockP vb, Did did_i, unsigned num_channels, uint8_t special_code, 
@@ -341,57 +342,55 @@ void seg_mux_init_(VBlockP vb, Did did_i, unsigned num_channels, uint8_t special
     DictId dict_id_template = (DictId){ .id = { id[0], 0, id[1], id[2], id[3], id[4], id[5], id[6] } };
     unsigned id_len = 1 + strnlen ((rom)ctx->dict_id.id, 7);
 
-    mux->ctx          = ctx;
-    mux->num_channels = num_channels;
-    mux->no_stons     = no_stons;
-    mux->special_code = special_code;
+    mux.m->ctx          = ctx;
+    mux.m->num_channels = num_channels;
+    mux.m->no_stons     = no_stons;
+    mux.m->special_code = special_code;
     
     // caller gave st_did_i, but st_did_i might itself consolidate 
     if (ctx->st_did_i == DID_NONE) ctx->is_stats_parent = true;
 
     // calculate dict_ids, eg: PL -> PlL, PmL, PnL, PoL
     for (int i=0; i < num_channels; i++) {
-        mux->dict_ids[i] = dict_id_template;
-        mux->dict_ids[i].id[1] = ((uint16_t)'0' + (uint16_t)i) & 0xff;
-        if (id_len <= 5) str_int (i, (char*)&mux->dict_ids[i].id[id_len]); // add numerical digits for ease of debugging if we have room
+        mux.m->dict_ids[i] = dict_id_template;
+        mux.m->dict_ids[i].id[1] = ((uint16_t)'0' + (uint16_t)i) & 0xff;
+        if (id_len <= 5) str_int (i, (char*)&mux.m->dict_ids[i].id[id_len]); // add numerical digits for ease of debugging if we have room
     }
 
     // prepare snip - a string consisting of num_channels x { special_code or \t , base64(dict_id.id) }
-    mux->snip_len = MUX_SIZEOF_SNIP(mux);
-    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, mux->dict_ids, MUX_SNIP(mux), &mux->snip_len);
+    mux.m->snip_len = MUX_SIZEOF_SNIP(mux);
+    seg_prepare_multi_dict_id_special_snip (special_code, num_channels, mux.m->dict_ids, MUX_SNIP(mux), &mux.m->snip_len);
 
     // note: snips prepared with seg_prepare_multi_dict_id_special_snip can add 
     // an optional 3 chars + SNIP_SPECIAL in order to display the dicts in --show-snip 
-    memcpy (&MUX_SNIP(mux)[mux->snip_len], ((char[]){'\t', 'M','U','X', '0', SNIP_SPECIAL }), 6); // for --show-snip
-    mux->snip_len += 6;
+    memcpy (&MUX_SNIP(mux)[mux.m->snip_len], ((char[]){'\t', 'M','U','X', '0', SNIP_SPECIAL }), 6); // for --show-snip
+    mux.m->snip_len += 6;
 
     // seg_mux_display (mux);
 }
 
 ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux, uint32_t channel_i)
 {
-    ASSERT (mux->ctx, "%s: mux of %s is not initialized", LN_NAME, CTX(did_i)->tag_name);
+    ContextP ctx = mux.m->ctx;
+    ASSERT (ctx, "%s: mux of %s is not initialized", LN_NAME, CTX(did_i)->tag_name);
     
-    ASSERT (channel_i < mux->num_channels, "channel_i=%u out of range, multiplexer of \"%s\" has only %u channels",
-            channel_i, mux->ctx->tag_name, mux->num_channels);
+    ASSERT (channel_i < mux.m->num_channels, "channel_i=%u out of range, multiplexer of \"%s\" has only %u channels",
+            channel_i, mux.m->ctx->tag_name, mux.m->num_channels);
 
-    ContextP channel_ctx = ctx_get_ctx (vb, mux->dict_ids[channel_i]);
+    ContextP channel_ctx = ctx_get_ctx (vb, mux.m->dict_ids[channel_i]);
 
     if (!channel_ctx->is_initialized) { // note: context may exist (cloned from z_ctx) but not yet initialized
-
-        MUX_CHANNEL_CTX(mux)[channel_i] = channel_ctx;
-
         channel_ctx->is_initialized = true;
-        channel_ctx->flags.store    = mux->ctx->flags.store;
-        channel_ctx->no_stons       = mux->no_stons; // not inherited from parent
-        channel_ctx->st_did_i       = (mux->ctx->st_did_i == DID_NONE) ? mux->ctx->did_i : mux->ctx->st_did_i;
-        channel_ctx->flags.ctx_specific_flag = mux->ctx->flags.ctx_specific_flag; // inherit - needed for "same_line"        
+        channel_ctx->flags.store    = ctx->flags.store;
+        channel_ctx->no_stons       = mux.m->no_stons; // not inherited from parent
+        channel_ctx->st_did_i       = (ctx->st_did_i == DID_NONE) ? ctx->did_i : ctx->st_did_i;
+        channel_ctx->flags.ctx_specific_flag = ctx->flags.ctx_specific_flag; // inherit - needed for "same_line"        
 
         if (channel_ctx->ltype == LT_SINGLETON) { // individual channel might have been already set in seg_initialize to something else 
-            if (IS_LT_DYN (mux->ctx->ltype))
+            if (IS_LT_DYN (ctx->ltype))
                 dyn_int_init_ctx (vb, channel_ctx, 0);
             else
-                channel_ctx->ltype = mux->ctx->ltype; 
+                channel_ctx->ltype = ctx->ltype; 
         }
     }
 
@@ -730,7 +729,7 @@ WordIndex seg_array_(VBlockP vb, ContextP container_ctx, Did stats_conslidation_
                      uint8_t con_rep_special, uint32_t expected_num_repeats, // optional: if expected_num_repeats is correct, then use con_rep_special
                      int add_bytes)             // account for this much (possibly 0)
 {
-    Container(1) *con;
+    Container_1 *con;
     ContextP arr_ctx;
     int additional_bytes = add_bytes ? (add_bytes - value_len) : 0;
 
@@ -739,13 +738,13 @@ WordIndex seg_array_(VBlockP vb, ContextP container_ctx, Did stats_conslidation_
         if (!arr_dict_id.num)        
             arr_dict_id = sub_dict_id (container_ctx->dict_id, '0');
         
-        buf_alloc_zero (vb, &container_ctx->con_cache, 0, 1, Container(1), 1, C_CON_CACHE);
+        buf_alloc_zero (vb, &container_ctx->con_cache, 0, 1, Container_1, 1, C_CON_CACHE);
 
         con = (typeof(con))B1STc(container_ctx->con_cache);
         *con = (typeof(*con)){ .nitems_lo = 1, 
-                                .drop_final_repsep = true,
-                                .repsep    = { sep },
-                                .items[0].dict_id = arr_dict_id }; // only one item
+                               .drop_final_repsep = true,
+                               .repsep    = { sep },
+                               .items[0].dict_id = arr_dict_id }; // only one item
 
         arr_ctx = ctx_get_ctx (vb, arr_dict_id);
     
@@ -830,7 +829,7 @@ WordIndex seg_array_(VBlockP vb, ContextP container_ctx, Did stats_conslidation_
         value++;
     }
 
-    return container_seg (vb, container_ctx, (ContainerP)con, 0, 0, 
+    return container_seg (vb, container_ctx, con, 0, 0, 
                           add_bytes ? (n_items - con->drop_final_repsep + additional_bytes) : 0); // acount for separators and additional bytes
 }
 
@@ -839,7 +838,7 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
                             uint8_t con_rep_special, uint32_t expected_num_repeats, // optional: if expected_num_repeats is correct, then use con_rep_special
                             unsigned add_bytes)
 {
-    Container(1) *con;
+    Container_1 *con;
     ContextP arr_ctx;
 
     if (!arr_len) {
@@ -851,14 +850,14 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
     if (!container_ctx->con_cache.len32) {
         DictId arr_dict_id = sub_dict_id (container_ctx->dict_id, '0');
         
-        buf_alloc (vb, &container_ctx->con_cache, 0, 1, Container(1), 1, C_CON_CACHE);
+        buf_alloc (vb, &container_ctx->con_cache, 0, 1, Container_1, 1, C_CON_CACHE);
 
         con = (typeof(con))B1STc(container_ctx->con_cache);
         *con = (typeof(*con)){ .nitems_lo = 1, 
                                .repsep[0] = sep,
                                .items[0].dict_id = arr_dict_id }; // only one item
 
-        ctx_consolidate_stats_(vb, container_ctx, (ContainerP)con);
+        ctx_consolidate_stats_(vb, container_ctx, con);
 
         container_ctx->con_rep_special = con_rep_special;
     }
@@ -879,7 +878,7 @@ void seg_array_by_callback (VBlockP vb, ContextP container_ctx, STRp(arr), char 
     }
 
     con->repeats = (con_rep_special && expected_num_repeats == n_items) ? CON_REPEATS_IS_SPECIAL : n_items;
-    container_seg (vb, container_ctx, (ContainerP)con, 0, 0, add_bytes - sum_lens); // account for separators and additional bytes
+    container_seg (vb, container_ctx, con, 0, 0, add_bytes - sum_lens); // account for separators and additional bytes
 }
 
 // segs an 2-dimentional array (e.g. "0|0|0,1|2|3") of integers so that it is stored in local (possibly transposed). 
@@ -971,7 +970,7 @@ void seg_integer_matrix (VBlockP vb, ContextP container_ctx, Did stats_conslidat
             con.items[c] = con_item;
 
         *B(WordIndex, container_ctx->con_index, cache_index) = 
-            container_seg (vb, container_ctx, (ContainerP)&con, NULL, 0, account_in_container_ctx);
+            container_seg (vb, container_ctx, &con, NULL, 0, account_in_container_ctx);
     }
 
     // case: we already know the node index of the container with this many repeats
@@ -1024,12 +1023,12 @@ bool seg_add_to_local_fixed_len_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_
     return true;
 }
 
-bool seg_struct (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, STR𐤐(snip), 
+bool seg_struct (VBlockP vb, ContextP ctx, ContainerP con, STR𐤐(snip), 
                  const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
                  unsigned add_bytes,
                  bool account_in_subfields)    // true if to account in subfields, false if in parent
 {
-    ASSERT0 (con->repeats==1 && !con->repsep[0], "expecting con.repeats==1 and no repsep");
+    ASSERT0 (con.h->repeats==1 && !con.h->repsep[0], "expecting con.repeats==1 and no repsep");
 
     if (!ctx->is_stats_parent) 
         ctx_consolidate_stats_(vb, ctx, con);
@@ -1038,11 +1037,11 @@ bool seg_struct (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, STR𐤐(snip)
 
     str_split_by_container (snip, snip_len, con, NULL, 0, item, NULL);
     
-    if (n_items != con_nitems(*con)) 
+    if (n_items != con_nitems (con)) 
         goto badly_formatted;
 
     for (uint32_t i=0; i < n_items; i++) {
-        ContextP item_ctx = ctx_get_ctx (vb, con->items[i].dict_id);
+        ContextP item_ctx = ctx_get_ctx (vb, con.h->items[i].dict_id);
 
         if (callbacks && callbacks[i]) {
             if (!callbacks[i] (vb, item_ctx, STRi(item,i), 0))
@@ -1099,7 +1098,7 @@ badly_formatted:
 // NOTE: con->repeats should ideally be set to the most common value. if correct, segging will be a bit faster
 //       If this value is the same expected_num_repeats, then .repeats should be set to CON_REPEATS_IS_SPECIAL
 int32_t seg_array_of_struct_(VBlockP vb, ContextP ctx, 
-                             ConstContainer𐤐 con, STRp(prefixes), 
+                             ContainerP con, STRp(prefixes), 
                              STRp(snip), 
                              const SegCallback *callbacks, // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
                              uint8_t con_rep_special, uint32_t expected_num_repeats, // optional: if expected_num_repeats is correct, then use con_rep_special
@@ -1112,10 +1111,10 @@ int32_t seg_array_of_struct_(VBlockP vb, ContextP ctx,
     seg_create_rollback_point (vb, con, 0);
 
     // get repeats
-    str_split (snip, snip_len, 0, con->repsep[0], repeat, false);
+    str_split (snip, snip_len, 0, con.h->repsep[0], repeat, false);
 
-    // if we don't have con->drop_final_repsep, the last "repeat" should be zero length and removed
-    if (!con->drop_final_repsep) {
+    // if we don't have con.h->drop_final_repsep, the last "repeat" should be zero length and removed
+    if (!con.h->drop_final_repsep) {
         if (repeat_lens[n_repeats-1]) goto badly_formatted; 
         n_repeats--;
     }
@@ -1126,12 +1125,12 @@ int32_t seg_array_of_struct_(VBlockP vb, ContextP ctx,
     uint32_t repeats_value = (con_rep_special && expected_num_repeats == n_repeats) ? CON_REPEATS_IS_SPECIAL : n_repeats;
 
     // if number of caller's guess of of repeats differs from actual number of repeats, we need to make a copy of the container
-    Container(MAX_FIELDS) con_copy; // note: allocate maximum because clang doesn't allow a variable here (gcc does) - no harm, we only touch the memory actually needed
-    if (repeats_value != con->repeats) { 
-        memcpy (&con_copy, con, con_sizeof (*con));
+    Container_MAX_FIELDS con_copy; // note: allocate maximum because clang doesn't allow a variable here (gcc does) - no harm, we only touch the memory actually needed
+    if (repeats_value != con.h->repeats) { 
+        memcpy (&con_copy, con.h, con_sizeof (con));
         con_copy.repeats = repeats_value;
 
-        con = (ContainerP)&con_copy;
+        con.cMAX_FIELDS = &con_copy;
     }
 
     ASSSEG (n_repeats <= CONTAINER_MAX_REPEATS, "exceeded maximum repeats allowed (%u) while parsing %s",
@@ -1143,11 +1142,11 @@ int32_t seg_array_of_struct_(VBlockP vb, ContextP ctx,
         // get items in each repeat 
         str_split_by_container (repeats[r], repeat_lens[r], con, prefixes, prefixes_len, item, NULL);
         
-        if (n_items != con_nitems(*con)) 
+        if (n_items != con_nitems(con)) 
             goto badly_formatted;
 
         for (uint32_t i=0; i < n_items; i++) {
-            ContextP item_ctx = ctx_get_ctx (vb, con->items[i].dict_id);
+            ContextP item_ctx = ctx_get_ctx (vb, con.h->items[i].dict_id);
             
             if (callbacks && callbacks[i]) {
                 if (!callbacks[i] (vb, item_ctx, STRi(item,i), r))
@@ -1192,7 +1191,7 @@ badly_formatted:
 
 void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx, 
                                    char outer_sep,
-                                   ConstContainer𐤐 inner_con, // container of array of struct
+                                   ContainerP inner_con, // container of array of struct
                                    STRp(snip), const SegCallback *callbacks) // optional - either NULL, or contains a seg callback for each item (any callback may be NULL)
 {
     str_split (snip, snip_len, 0, outer_sep, inner, false);
@@ -1200,7 +1199,7 @@ void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx,
     bytes d = ctx->dict_id.id;
     DictId inner_dict_id = { .id = { d[0], d[1], '-', d[2], d[3], d[4], d[5], d[6] } };
 
-    Container(1) outer_con = { 
+    Container_1 outer_con = { 
         .drop_final_repsep = true,  
         .repeats           = n_inners, 
         .nitems_lo         = 1,
@@ -1208,7 +1207,7 @@ void seg_array_of_array_of_struct (VBlockP vb, ContextP ctx,
         .items             = { { .dict_id = inner_dict_id } }
     };
 
-    container_seg (vb, ctx, (ContainerP)&outer_con, 0, 0, n_inners-1); // account for outer_sep
+    container_seg (vb, ctx, &outer_con, 0, 0, n_inners-1); // account for outer_sep
 
     ContextP inner_ctx = ctx_get_ctx (vb, inner_dict_id);
 
@@ -1225,7 +1224,7 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
                        bool normal_seg_if_fail,
                        unsigned add_bytes)
 {
-    ASSERT (con->repeats == 1, "repeats=%u, but currently only supports repeats=1", con->repeats);
+    ASSERT (con.h->repeats == 1, "repeats=%u, but currently only supports repeats=1", con.h->repeats);
 
     str_split_by_container (value, value_len, con, 0, 0, item, NULL);
 
@@ -1241,7 +1240,7 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 
     int accounted_for = 0;
     for (int i=0; i < n_items; i++) {
-        ContextP item_ctx = ctx_get_ctx (vb, con->items[i].dict_id);
+        ContextP item_ctx = ctx_get_ctx (vb, con.h->items[i].dict_id);
         
         if (item_seg)
             item_seg (vb, item_ctx, STRi(item, i), 0);
@@ -1321,9 +1320,10 @@ void seg_maybe_copy (VBlockP vb, ContextP ctx, Did other_did, STRp(value), STRp(
 }
 
 void seg_diff (VBlockP vb, ContextP ctx, 
-               ContextP base_ctx,  // diff vs same or other context, or DIFF_SEQ_VS_1ST_SNIP_IN_DICT
-               STRp(value), 
-               bool entire_snip_if_same, 
+               SegDiffMode mode,
+               ContextP base_ctx,  // NULL unless vs_OTHER
+               STR𐤐(value), 
+               bool entire_snip_if_same, // must be false if vs_OTHER
                unsigned add_bytes)
 {
 #ifdef DEBUG
@@ -1331,15 +1331,20 @@ void seg_diff (VBlockP vb, ContextP ctx,
 
     // entire_snip_if_same is for self-diffing - we might be better off just segging the snip again without a diff than
     // an empty diff (lower b250 entropy)
-    ASSERT (ctx == base_ctx || base_ctx == DIFF_SEQ_VS_1ST_SNIP_IN_DICT || !entire_snip_if_same, "unexpected entire_snip_if_same in %s", ctx->tag_name);
+    ASSERT (mode != vs_OTHER || !entire_snip_if_same, "unexpected entire_snip_if_same in %s", ctx->tag_name);
 
-    ASSERT (base_ctx != DIFF_SEQ_VS_1ST_SNIP_IN_DICT || ctx->ol_dict.len, "%s.dict is empty", ctx->tag_name);
+    ASSERT (mode != vs_ACGTN_DICT || ctx->ol_dict.len, "%s.dict is empty", ctx->tag_name);
 #endif
 
-    char *base = base_ctx ? last_txtx (vb, base_ctx) // caller's responsibility to make sure there's a correct value in here, consistent with flags.same_line
-                          : B1STc(ctx->ol_dict);
+    rom𐤐 base = 
+        (mode == vs_OTHER) ? last_txtx (vb, base_ctx) // caller's responsibility to make sure there's a correct value in here, consistent with flags.same_line
+      : (mode == vs_LAST)  ? last_txtx (vb, ctx)
+      : /* vs_ACGTN_DICT */  B1STc(ctx->ol_dict);
 
-    uint32_t base_len = base_ctx ? base_ctx->last_txt.len : B1ST(CtxNode, ctx->ol_nodes)->snip_len;
+    uint32_t base_len = 
+        (mode == vs_OTHER) ? base_ctx->last_txt.len
+      : (mode == vs_LAST)  ? ctx->last_txt.len
+      : /* vs_ACGTN_DICT */  B1ST(CtxNode, ctx->ol_nodes)->snip_len;
     
     if (base_len < value_len || !value_len) goto fallback;
         
@@ -1351,10 +1356,10 @@ void seg_diff (VBlockP vb, ContextP ctx,
 
     buf_alloc_zero (vb, &ctx->local, value_len, MAX_(1, vb->lines.len32 / 16) * value_len, uint8_t, CTX_GROWTH, C_LOCAL);
 
-    char *diff = BAFTc(ctx->local); 
+    char *restrict diff = BAFTc(ctx->local); 
 
     // diff against the beginning of last_txt (which may be longer that value)
-    if (base_ctx != DIFF_SEQ_VS_1ST_SNIP_IN_DICT) {
+    if (mode != vs_ACGTN_DICT) {
         for (uint32_t i=0; i < value_len; i++) 
             // up to v13:  diff[i] = last[i] ^ ((uint8_t *)value)[i];
             if (base[i] != value[i]) 
@@ -1376,15 +1381,15 @@ void seg_diff (VBlockP vb, ContextP ctx,
     ctx->local.len32 += value_len;
 
 skip_diff:
-    if (base_ctx == DIFF_SEQ_VS_1ST_SNIP_IN_DICT) { // 15.0.83
+    if (mode == vs_ACGTN_DICT) { // 15.0.83
         SNIPi2 (SNIP_DIFF, '*', exact ? -(int32_t)value_len : (int32_t)value_len); // negative marks "exact"
         seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
     }
-    else if (ctx == base_ctx) {
+    else if (mode == vs_LAST) {
         SNIPi1 (SNIP_DIFF, exact ? -(int32_t)value_len : (int32_t)value_len); // negative marks "exact"
         seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
     }
-    else {
+    else { // vs_OTHER
         STRlic(snip, 48);
         seg_prepare_snip_other (SNIP_DIFF, base_ctx->dict_id, true, exact ? -(int32_t)value_len : (int32_t)value_len, snip);
         seg_by_ctx (vb, STRa(snip), ctx, add_bytes);
@@ -1642,6 +1647,8 @@ uint32_t seg_all_data_lines (VBlockP vb)
         if (!remaining_txt_len ||                    // we're done
             (segconf_running && vb->line_i == MAX_SEGCONF_LINES)) { // segconf: limit lines (even if VB is large e.g. due to reading full MGZIP block)
             vb->lines.len32 = vb->line_i; // update to actual number of lines
+
+            if (segconf_running) Ltxt -= remaining_txt_len; // shrink segconf VB to the size actually segged, for correct calculations in segconf_finalize (e.g. of segconf.est_sam_factor)
             break;
         }
 

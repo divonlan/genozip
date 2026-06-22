@@ -18,7 +18,7 @@ void fastq_10xGen_segconf_finalize (VBlockP vb)
     if (IS_NONBIO(10xGen) && segconf.std_seq_len == 28 && 
         percent (vb->num_aligned, vb->lines.len) <= 10) { // expected for non-biological file: aligner hardly worked
         
-        static const Container(2) con = {
+        static const Container_2 con = {
             .nitems_lo = 2,
             .repeats   = 1,
             .items = {
@@ -28,7 +28,7 @@ void fastq_10xGen_segconf_finalize (VBlockP vb)
         };
 
         segconf.nonbio_con_snip_len = sizeof (segconf.nonbio_con_snip);
-        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(segconf.nonbio_con_snip));
+        container_prepare_snip (&con, 0, 0, qSTRa(segconf.nonbio_con_snip));
     }
 
     // case: not 10xGenomics after all

@@ -33,7 +33,7 @@ static inline void fastq_seg_one_aux (VBlockFASTQP vb, STRp(tag_name), STRp(valu
             COND(TECH(NANOPORE), seg_maybe_copy (VB, ctx, FASTQ_QNAME, STRa(value), STRi(copy_qname, QNAME1)));
         
         case _FASTQ_AUX_start_time     : 
-            COND(TECH(NANOPORE), seg_diff (VB, ctx, ctx, STRa(value), false, value_len));
+            COND(TECH(NANOPORE), seg_diff (VB, ctx, vs_LAST, NULL, STRa(value), false, value_len));
         
         default : fallback             : 
             seg_integer_or_not (VB, ctx, STRa(value), value_len); // also sets last_value    
@@ -64,7 +64,7 @@ static inline void fastq_seg_aux_container (VBlockFASTQP vb, STR𐤐s(tag), uint
         prefixes[prefixes_len++] = CON_PX_SEP;
     }
 
-    container_seg (vb, CTX(FASTQ_AUX), (ContainerP)&con, prefixes, prefixes_len, 
+    container_seg (vb, CTX(FASTQ_AUX), &con, prefixes, prefixes_len, 
                    total_tag_len + n_tags/*leading and internal ' '*/); 
 }
 

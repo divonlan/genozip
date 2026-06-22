@@ -77,6 +77,9 @@ typedef packed_enum { TRIM_IS_M, TRIM_IS_S, TRIM_IS_MS/*extends existing M or S*
 typedef packed_enum         { MATE_NONE, MATE_01, MATE_12, MATE_PBSV } MateIDMethodType;
 #define MATEID_METHOD_NAMES { "NONE",    "01",    "12",    "PBSV"    }
 
+#define MAX_CB_ITEMS 3
+TypeContainer(MAX_CB_ITEMS);
+
 // seg configuration set prior to starting to seg a file during segconfig_calculate or txtheader_zip_read_and_compress
 // Notes:
 // - gcc_struct causes mingw struct to be the same as Linux. Specifically, bit-fields with a different type DO NOT start a new aligned field.
@@ -128,7 +131,7 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t sam_is_unmapped        : 1; // false if there is at least one read in segconf with (!FLAG.unmapped, RNAME, POS, CIGAR)
     SagType sag_type                : 3; // Type of sag
     uint64_t is_biobambam2_sort     : 1; // PG records indicate running biobambam tag-creating programs    
-    uint64_t has_bqsr               : 1; // PG records indicate running GATK ApplyBQSR
+    uint64_t has_BQSR               : 1; // PG records indicate running GATK ApplyBQSR
     uint64_t NM_is_integer          : 1; // true if NM is integer, false if it binary
     uint64_t has_TLEN_non_zero      : 1;
     uint64_t has_DP_before_PL       : 1;
@@ -202,11 +205,10 @@ typedef struct __attribute__((gcc_struct)) {
     char BC_sep, RX_sep, CR_CB_seperator;
     
     // each container and its snip are accessed together - store them in proximity (frequent)
-    #define MAX_CB_ITEMS 3
-    Container(MAX_CB_ITEMS) CB_con; STRl(CB_con_snip, con_snip_sizeof(MAX_CB_ITEMS));     
-    Container(1) CY_con;            STRl(CY_con_snip, con_snip_sizeof(1)); 
-    Container(1) QT_con;            STRl(QT_con_snip, con_snip_sizeof(1));
-    Container(2) MM_con;            STRl(MM_con_snip, con_snip_sizeof(2));     
+    Container_MAX_CB_ITEMS CB_con; STRl(CB_con_snip, con_snip_sizeof(MAX_CB_ITEMS));     
+    Container_1 CY_con;            STRl(CY_con_snip, con_snip_sizeof(1)); 
+    Container_1 QT_con;            STRl(QT_con_snip, con_snip_sizeof(1));
+    Container_2 MM_con;            STRl(MM_con_snip, con_snip_sizeof(2));     
 
     // FASTQ / FASTA (frequent) (packed)
     char aux_sep;                        // separator between name and value in aux fields (either '=' or ':')
@@ -412,6 +414,7 @@ typedef struct __attribute__((gcc_struct)) {
 extern SegConf segconf; // ZIP: set based on segging a sample of a few first lines of the file
                         // PIZ: select fields are transferred through SectionHeaderGenozipHeader
 
+// note: read-modifty-write operation: can only be used in main thread!
 static inline void segconf_set_has (Did did_i)
 {
     bitset_set ((uint64_t *)segconf.has_bits, did_i); // only place in the code where we override the "const" of has_bits
@@ -455,4 +458,4 @@ extern void segconf_piz_initialize (void);
 
 #define segconf_running __builtin_expect (segconf.running, false)
 
-static bool inline tech_is_unknown (void) { return TECH(UNKNOWN) || TECH(CONS) || TECH(NCBI); }
+static inline bool tech_is_unknown (void) { return TECH(UNKNOWN) || TECH(CONS) || TECH(NCBI); }

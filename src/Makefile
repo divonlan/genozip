@@ -41,7 +41,7 @@ endif
 
 ifdef BUILD_PREFIX # conda 
 	ifdef Windows
-		CC ?= gcc # in Windows, override conda's default Visual C with gcc 
+		CC ?= gcc 
 		CXX ?= g++
 		LDFLAGS  += -L$(PREFIX)/Library/lib
 		CFLAGS   += -I$(PREFIX)/Library/include 
@@ -80,8 +80,8 @@ ifdef linux_x86
 	AS := nasm
 	x86_64 := 1
 	ASFLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
-	# DEBUGFLAGS += -fsanitize=undefined
-	# DEBUGFLAGS += -fsanitize=thread -Dsanitize_thread=1
+	# DEBUGFLAGS += -fsanitize=undefined 
+	DEBUGFLAGS += -fsanitize=thread -Dsanitize_thread=1
 	
 	# Notes on Address Sanitizer:
 	# 1. not compatable with valgrind - comment out if using valgrind 
@@ -109,17 +109,17 @@ ifndef AS
 endif
 
 LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions
+CFLAGS     += -Wall -Wstrict-aliasing=2 -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions
 CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc 
 OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
-ifdef x86_64 # tests show that this⇩ configuration is actually faster than -march=haswell or -march=native
-# Uncomment for older machines
+ifdef x86_64 
+# Switch these comments on these CFLAG/CXXFLAG definitions to build for older machines
 # 	CFLAGS   += -march=nehalem -msse4.1 -msse4.2
-# 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
+# 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
 	CFLAGS   += -march=haswell 
-	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
+	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
 endif
 
 # need old gcc linked to an old sysroot(=glibc) for older Linux machines
@@ -160,7 +160,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  sam_star.c sam_abra2.c sam_minimap2.c sam_modify.c sam_recon_plan_piz.c sam_parse.c					\
 		  gencomp_zip.c gencomp_piz.c																			\
 		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c fastq_aux.c    \
-		  fastq_parse.c fastq_10xGen.c deep.c																					\
+		  fastq_parse.c fastq_10xGen.c deep.c																	\
 		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c base64.c							\
 		  buffer.c buf_struct.c buf_list.c random_access.c sections.c sections_show.c mgzip.c mgzip_sections.c  \
 		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c codec_tmpl.c		\
@@ -378,7 +378,13 @@ autocomplete-debug.sh : autocomplete_gen.sh flags.c
 	@./autocomplete_gen.sh debug
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
+# no calculating dependencies for these targets
+NO_DEPS_TARGETS := clean clean-debug clean-opt clean-installers clean-dev clean-test \
+                   increment-version dict_id_gen.h
+
+ifeq ($(filter $(NO_DEPS_TARGETS),$(MAKECMDGOALS)),)
 -include $(DEPS)
+endif
 
 $(OBJDIR):
 	@echo Making directory $@ and its subdirs
@@ -459,8 +465,7 @@ GENDICT_OBJS := $(addprefix $(OBJDIR)/,$(GENDICT_SRCS:.c=.o))
 # Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
 # Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
 ifndef BUILD_PREFIX # avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate and check in to github
-OB := \( # an escaped open-bracket sent as-is to egrep
-dict_id_gen.h : $(shell egrep -w "GENDICT|SPECIAL $(OB)" *.h | cut -d: -f1 | uniq) dict_id_gen.sh
+dict_id_gen.h : bed.h fasta.h fastq.h generic.h genozip.h gff.h locs.h me23.h reference.h sam.h vcf.h dict_id_gen.sh
 	@echo Generating $@
 	@bash --noprofile --norc ./dict_id_gen.sh $(CC)
 
@@ -538,12 +543,15 @@ clean-installers:
 
 clean-debug:
 	@echo Cleaning up debug
-	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o
-	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) $(OBJDIR)/*.opt-o 
+	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o $(DISTOBJ) 
+
+clean-opt:
+	@echo Cleaning up opt
+	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) $(DISTOBJ) $(OBJDIR)/*.opt-o 
 
 clean:  # careful not to delete license.o
 	@echo Cleaning up optimized
-	@rm -f $(EXECUTABLES) $(OBJS) $(DISTOBJ) $(DEPS) $(OBJDIR)/*.o $(OBJDIR)/*.d
+	@rm -f $(EXECUTABLES) $(OBJS) $(DISTOBJ) $(DEPS) $(OBJDIR)/*.o $(OBJDIR)/*.d 
 
 initialize-build-distribution: # clean Linux, Windows
 	@$(SH_VERIFY_ALL_STAGED)
@@ -552,12 +560,8 @@ initialize-build-distribution: # clean Linux, Windows
 	       $(OBJDIR_LINUX)/*/*.o $(OBJDIR_LINUX)/*/*.d $(OBJDIR_WINDOWS)/*/*.o $(OBJDIR_WINDOWS)/*/*.d \
 	       $(INSTALLERS)/*
 	
-clean-opt:
-	@echo Cleaning up opt 
-	@rm -f $(OPT_OBJS) $(EXECUTABLES) $(OPT_EXECUTABLES)/*.opt-o
-
 clean-test:
-	@rm -f $(TEST_DIR)/*.genozip $(TEST_DIR)/*.bad $(TEST_DIR)/*.local $(TEST_DIR)/*.b250 $(TEST_DIR)/tmp/* $(TEST_DIR)/*.DEPN $(TEST_DIR)/back-compat/*/*.bad
+	rm -f $(TEST_DIR)/*.genozip $(TEST_DIR)/*.bad $(TEST_DIR)/*.local $(TEST_DIR)/*.b250 $(TEST_DIR)/tmp/* $(TEST_DIR)/*.DEPN $(TEST_DIR)/back-compat/*/*.bad
 
 clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@echo Cleaning up
@@ -567,7 +571,7 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/,$(SRC_DIRS))
 	@touch $(OBJDIR)/.gitkeep
 
-.PHONY: clean clean-debug clean-optimized clean-installers initialize-build-distribution \
+.PHONY: clean clean-debug clean-opt clean-installers initialize-build-distribution clean-dev clean-test \
 		distribution finalize-distribution dict_id_gen$(EXE) \
 		objdir.linux objdir.windows objdir.mac  \
 		push-build increment-version $(INSTALLERS)/LICENSE.html \
@@ -589,9 +593,6 @@ genozip-latest:
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
 # and re-compile so that genozip --version gets updated
-# IMPORTANT: the first number in the version indicates the genozip file format version and goes into
-# the genozip file header SectionHeaderTxtHeader.genozip_version
-#increment-version: $(C_SRCS) $(CONDA_DEVS) $(CONDA_DOCS) $(INCLUDES) # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	@echo "Incrementing version.h"
 	@bash $(SCRIPTS)/increment-version.sh

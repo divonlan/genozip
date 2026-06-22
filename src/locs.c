@@ -47,7 +47,7 @@ void locs_seg_initialize (VBlockP vb)
 
 void locs_seg_finalize (VBlockP vb)
 {
-    Container(2) top_level_locs = { 
+    Container_2 top_level_locs = { 
         .repeats      = vb->lines.len,
         .is_toplevel  = true,
         .nitems_lo    = 2,
@@ -55,7 +55,7 @@ void locs_seg_finalize (VBlockP vb)
                           { .dict_id = { _LOCS_Y  }, .separator = { CI0_TRANS_NOR }, LOCS2LOCS_LTEN_F32 } }
     };
 
-    container_seg (vb, CTX(LOCS_TOPLEVEL), (ContainerP)&top_level_locs, 0, 0, 0);
+    container_seg (vb, CTX(LOCS_TOPLEVEL), &top_level_locs, 0, 0, 0);
 }
 
 rom locs_seg_txt_line (VBlockP vb, rom field_start_line, uint32_t remaining_txt_len, bool *has_special_eol)

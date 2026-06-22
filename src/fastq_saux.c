@@ -133,7 +133,7 @@ void fastq_seg_saux (VBlockFASTQP vb, STRp(saux))
         fastq_seg_one_saux (vb, con.items[f].dict_id, value_offset, STRi(field,f));
     }
 
-    container_seg (VB, CTX(FASTQ_AUX), (ContainerP)&con, prefixes, prefixes_len, n_fields * 5); // account for tags eg 'ML:B:'
+    container_seg (VB, CTX(FASTQ_AUX), &con, prefixes, prefixes_len, n_fields * 5); // account for tags eg 'ML:B:'
 
     COPY_TIMER (fastq_seg_saux);
 }

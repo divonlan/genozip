@@ -31,7 +31,7 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 po
     declare_seq_contexts;
     RefLock lock = REFLOCK_NONE;
 
-    BitsP bitmap = (BitsP)line_sqbitmap;
+    BitsP bitmap = line_sqbitmap;
     uint32_t bit_i=0;
 
     if (vb->cigar_missing) goto fail;
@@ -258,7 +258,7 @@ static void sam_seg_bisulfite_M (VBlockSAMP vb,
         
             // mismatch vs unconverted
             if (base != unconverted_ref_base) { 
-                bits_clear ((BitsP)&vb->unconverted_bitmap, vb->unconverted_bitmap.nbits - 1);
+                bits_clear (&vb->unconverted_bitmap, vb->unconverted_bitmap.nbits - 1);
                 vb->mismatch_bases_by_SEQ++; // used by NM:i and MD:Z
             }
         }
@@ -401,7 +401,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STR
     if (flag.analyze_ins) 
         sam_seg_analyze_monochar_inserts (vb, STRa(seq));
 
-    BitsP bitmap = (BitsP)&bitmap_ctx->local;
+    BitsP bitmap = &bitmap_ctx->local;
     uint32_t bitmap_start = bitmap_ctx->next_local;        
 
     ASSERTW (seq_len < 100000 || segconf_running || segconf.is_long_reads, 
@@ -595,8 +595,6 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STR
         if (next_ref == pos_index + ref_consumed && n) break;
     }
 
-    ref_unlock (&lock); // does nothing if REFLOCK_NONE
-
     // an error here can indicate that CIGAR is inconsistent with sequence
     ASSERT (i == seq_len, "%s: expecting i(%u) == seq_len(%u) pos=%d range=[%.*s %"PRId64"-%"PRId64"] (possibly reason: inconsistency between seq_len and CIGAR=\"%s\")", 
             LN_NAME, i, seq_len, pos, STRf(range->chrom_name), range->first_pos, range->last_pos, (vb->last_cigar ? vb->last_cigar : ""));
@@ -624,10 +622,12 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STR
         }
     }
 
+    ref_unlock (&lock); // does nothing if REFLOCK_NONE
+
     // verify - does MD:Z correctly reflect matches and mismatches of M/X/=
     bool use_un = segconf.MD_NM_by_unconverted && vb->bisulfite_strand;
     sam_MD_Z_verify_due_to_seq (vb, STRa(seq), pos, 
-                                use_un ? (BitsP)&vb->unconverted_bitmap : bitmap, 
+                                use_un ? &vb->unconverted_bitmap : bitmap, 
                                 use_un ? 0                              : bitmap_start);
 
     // note: change of logic in v14: up to v13, we use to align every recursion level, it seems that this was a bug
@@ -765,7 +765,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_seq), unsig
     // in case of DEPN line with SEQ confirmed by sam_seg_depn_is_subseq_of_prim to be a subset of the sag sequence, 
     else if (IS_DEPN(vb) && vb->sag) { // depn 
         vs_prim = true;
-        vb->num_vs_prim++;
+        vb->num_by_prim++;
     }
     
     // case: DEPN line (or STAR line - see sam_seg_buddy) vs same-VB prim
@@ -781,7 +781,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_seq), unsig
         }
         
         vs_prim = true;
-        vb->num_vs_prim++;
+        vb->num_by_saggy++;
     }
     
     else vs_sequence: 
@@ -975,7 +975,7 @@ static inline rom sam_reconstruct_SEQ_get_textual_ref (VBlockSAMP vb, bool v14, 
     // note: in an edge case, when all is_set bits are zero, the range might not even be written to the file
     bool uses_ref_data = vb->ref_consumed && 
                             (v14 || // v14: we always have is_set for all the ref data (mismatches use it for SEQMIS)
-                             bits_num_set_bits_region ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local, vb->ref_and_seq_consumed) > 0);
+                             bits_num_set_bits_region (&bitmap_ctx->local, bitmap_ctx->next_local, vb->ref_and_seq_consumed) > 0);
 
     vb->range = uses_ref_data ? (RangeP)ref_piz_get_range (VB, SOFT_FAIL) : NULL; 
     if (!vb->range) return NULL; 
@@ -1164,7 +1164,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                 for (int i=0; i < op->n; i++) {                        
                     // use faster method to find consecutive matches (possible if !bisulfite)
                     if (!bisulfite) {
-                        uint32_t matches = bits_get_run ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local, op->n - i);
+                        uint32_t matches = bits_get_run (&bitmap_ctx->local, bitmap_ctx->next_local, op->n - i);
                         if (matches) {
                             bool has_mismatch = (i + matches < op->n);
                             recon += matches;
@@ -1188,7 +1188,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
                             
                             if (MD_NM_by_unconverted) {
                                 vb->mismatch_bases_by_SEQ++; // this is actually a mismatch vs the unconverted reference
-                                bits_clear ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local-1); // adjust sqbitmap for use for reconstructing MD:Z
+                                bits_clear (&bitmap_ctx->local, bitmap_ctx->next_local-1); // adjust sqbitmap for use for reconstructing MD:Z
                             }
 
                             if (predict_meth_call)
@@ -1218,7 +1218,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
 
                             if (MD_NM_by_unconverted) {
                                 vb->mismatch_bases_by_SEQ--; // this is actually a match vs the unconverted reference, undo the mismatch counter
-                                bits_set ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local-1); // adjust sqbitmap for use for reconstructing MD:Z                        
+                                bits_set (&bitmap_ctx->local, bitmap_ctx->next_local-1); // adjust sqbitmap for use for reconstructing MD:Z                        
                             }
                         }
                     }
@@ -1458,7 +1458,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
 
     // case: PRIM component - copy from SA Group 
     else if (IS_PRIM(vb) && !vb->preprocessing) 
-        reconstruct_SEQ_copy_sag_prim (vb, ctx, (BitsP)&z_file->sag_seq, STRa(vb->sag->seq), false, reconstruct, false);
+        reconstruct_SEQ_copy_sag_prim (vb, ctx, &z_file->sag_seq, STRa(vb->sag->seq), false, reconstruct, false);
 
     else if (snip[SEQ_SNIP_ALIGNER_USER] == '1' || snip[SEQ_FORCE_VERBATIM] == '1')
         goto vs_seq__aligner__verbatim;
@@ -1469,7 +1469,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SEQ)
         ASSPIZ (grp->seq_len > vb->hard_clip[0] + vb->hard_clip[1], "grp_i=%u aln_i=%"PRIu64" grp->seq_len=%u <= hard_clip[LEFT]=%u + hard_clip[RIGHT]=%u", 
                 ZGRP_I(grp), ZALN_I(vb->sa_aln), grp->seq_len, vb->hard_clip[0], vb->hard_clip[1]);
 
-        reconstruct_SEQ_copy_sag_prim (vb, ctx, (BitsP)&z_file->sag_seq, STRa(grp->seq), 
+        reconstruct_SEQ_copy_sag_prim (vb, ctx, &z_file->sag_seq, STRa(grp->seq), 
                                        (last_flags.rev_comp != grp->revcomp), reconstruct, snip[SEQ_SNIP_NO_ANALYZE_DEPN_SEQ]-'0');
     }
 

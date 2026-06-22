@@ -102,7 +102,7 @@ static int32_t bam_unconsumed_scan_backwards (rom bam_data, uint64_t bam_data_le
         // final test option 1: test l_seq vs seq_len implied by cigar
         if (aln->l_seq && n_cigar_op) {
             uint32_t seq_len_by_cigar=0;
-            uint32_t *cigar = (uint32_t *)((uint8_t *)(aln+1) + aln->l_read_name);
+            unaligned_uint32_t *cigar = (uint32_t *)((uint8_t *)(aln+1) + aln->l_read_name);
             for (uint16_t cigar_op_i=0; cigar_op_i < n_cigar_op; cigar_op_i++) {
                 uint8_t cigar_op = *(uint8_t *)&cigar[cigar_op_i] & 0xf; // LSB by Little Endian - take 4 LSb
                 uint32_t op_len = cigar[cigar_op_i] >> 4;
@@ -403,7 +403,7 @@ static uint32_t bam_segconf_get_translated_sam_line_len (VBlockSAMP vb, ZipDataL
             sam_line_len += 2 + value_len; // added eg ":c" and commas
 
             switch (array_subtype) {
-                // TO DO: support calculation of Big Endian - numbers need to be flipped before taking the length
+                // TO DO: support calculation of Big Endian - numbers need to be flipped before taking the length (bug 1117)
                 case 'f' : sam_line_len += value_len * ASSUMED_FLOAT_LEN; break; 
                 case 'I' : for (int i=0; i < value_len; i++) sam_line_len += str_int_len (GET_UINT32 (value + i * sizeof(uint32_t))); break;
                 case 'i' : for (int i=0; i < value_len; i++) sam_line_len += str_int_len ((int32_t)GET_UINT32 (value + i * sizeof(int32_t))); break;

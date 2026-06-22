@@ -31,6 +31,6 @@ typedef struct VBlockFASTA {
     // --make-reference stats for refhash
     uint32_t hooks_in_genome;       // number of hooks in genome (not counting hooks on the boundary between make-ref 1 Mbps sranges - 0.0017% of hooks)
     uint32_t hooks_in_hash_table;   // number of hooks whose GPOS is in the hash table (the rest were dropped due to hash collisions - more than one hook wishes to occupy the same hash entry)
-} VBlockFASTA, *VBlockFASTAP;
+} VBlockFASTA, *restrict VBlockFASTAP;
 
 #define VB_FASTA ((VBlockFASTAP)vb)

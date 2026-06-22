@@ -89,36 +89,44 @@ typedef struct ContainerItem { // 12 bytes
     char repsep[2];                    /* repeat separator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
-#define Container(n) typeof (struct { CONTAINER_FIELDS((n)) }) // note: n must be constant: clang doesn't allow variable-length arrays in struct
-typedef struct ContainerTemplate { CONTAINER_FIELDS(0) } ContainerTemplate;
+// Note: when using TypeContainer with a constant macro (e.g. MAX_FIELDS): add the container type to genozip.h:ContainerP 
+// Note: n must be constant: clang doesn't allow variable-length arrays in struct
+// Note: the non-typedef struct is needed to be able to define a union in genozip.h
+#define TypeContainer(n) struct Container_##n { CONTAINER_FIELDS((n)) }; typedef struct Container_##n Container_##n 
+    TypeContainer(0);  TypeContainer(1);  TypeContainer(2);  TypeContainer(3);  TypeContainer(4);  
+    TypeContainer(5);  TypeContainer(6);  TypeContainer(7);  TypeContainer(8);  TypeContainer(9); 
+    TypeContainer(10); TypeContainer(11); TypeContainer(12); TypeContainer(13); TypeContainer(14); 
+    TypeContainer(15); TypeContainer(16); TypeContainer(MAX_FIELDS);
 
 #pragma pack()
-#define con_nitems(con) ((con).nitems_hi * 256 + (con).nitems_lo)
-#define con_set_nitems(con, n) { ASSERT (n <= CONTAINER_MAX_DICTS, "Container nitems=%u too large, max is %u", (unsigned)(n), CONTAINER_MAX_DICTS);\
-                                 (con).nitems_hi = (n) >> 8; (con).nitems_lo = ((n) & 0xff); }
+static inline uint32_t con_nitems (ContainerP con) { return con.h->nitems_hi * 256 + con.h->nitems_lo; }
+static inline void con_set_nitems (ContainerP con, uint32_t n) { 
+    ASSERT (n <= CONTAINER_MAX_DICTS, "Container nitems=%u too large, max is %u", n, CONTAINER_MAX_DICTS);
+    con.h->nitems_hi = (n) >> 8; con.h->nitems_lo = ((n) & 0xff); 
+}
+
 #define con_inc_nitems(con) con_set_nitems ((con), con_nitems (con) + 1)
 #define con_dec_nitems(con) con_set_nitems ((con), con_nitems (con) - 1)
-#define con_sizeof_(n_items) (sizeof(ContainerTemplate) + (n_items) * sizeof(ContainerItem))
+#define con_sizeof_(n_items) (sizeof(Container_0) + (n_items) * sizeof(ContainerItem))
 #define con_sizeof(con) con_sizeof_(con_nitems(con))
 #define con_snip_sizeof(n_items) (1 + base64_size(con_sizeof_(n_items)))
 
-#define con_initialize(con_p, n_items)          \
-    memset ((con_p), 0, con_sizeof_(n_items));  \
-    (con_p)->nitems_hi = (n_items) >> 8;        \
-    (con_p)->nitems_lo = (n_items) & 0xff;      \
-    (con_p)->repeats   = 1
+extern void con_initialize (ContainerP con, uint32_t n_items);
 
 #define InitializedContainer(con, n_items)      \
     ASSERT ((n_items) <= MAX_FIELDS, "Containter too large: %s=%u", #n_items, (n_items)); \
-    Container(MAX_FIELDS) con; /* allocate maximum on stack, but initialize only as needed. reason: clang doesn't allow VLA in struct (though gcc does) */ \
-    con_initialize (&con, (n_items))
+    Container_MAX_FIELDS con; /* allocate maximum on stack, but initialize only as needed. reason: clang doesn't allow VLA in struct (though gcc does) */ \
+    con_initialize (&con, (n_items)) // if this errors, perhaps n_items is not defined as an F() in ContainerP
 
 #define for_con(con) \
-    for (ContainerItem *item=(ContainerItemP)&(con)->items[0], *after=(ContainerItemP)&(con)->items[con_nitems(*(con))]; item < after; item++)
+    for (ContainerItem *item=(ContainerItemP)&con.h->items[0], *after=(ContainerItemP)&con.h->items[con_nitems(con)]; item < after; item++)
+
+#define for_con𐤐(con) \
+    for (ContainerItem *item=&(con).h->items[0], *after=&(con).h->items[con_nitems(con)]; item < after; item++)
 
 #define for_con2(con) \
-    for (uint32_t item_i=0, _n_items=con_nitems(*(con)); item_i < _n_items;)  \
-        for (ContainerItem *item=(ContainerItemP)&(con)->items[0]; item < &(con)->items[_n_items]; item++, item_i++)
+    for (uint32_t item_i=0, _n_items=con_nitems(con); item_i < _n_items;)  \
+        for (ContainerItem *item=&(con).h->items[0]; item < &(con).h->items[_n_items]; item++, item_i++)
 
 static inline bool container_has (ContainerP con, DictId dict_id)
 {
@@ -137,21 +145,21 @@ extern bool curr_container_has (VBlockP vb, DictId item_dict_id);
 //     a prefix for each item (may be empty) + CON_PX_SEP
 //     a suffix for each repeat + CON_PX_SEP
 // empty prefixes of trailing items may be omitted
-extern void container_prepare_snip (ConstContainer𐤐 con, STR𐤐(prefixes), qSTR𐤐(snip));
-extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, STR𐤐(prefixes), unsigned add_bytes, bool *restrict is_new);
+extern void container_prepare_snip (ContainerP con, STR𐤐(prefixes), qSTR𐤐(snip));
+extern WordIndex container_seg_do (VBlockP vb, ContextP ctx, ContainerP con, STR𐤐(prefixes), unsigned add_bytes, bool *restrict is_new);
 #define container_seg(vb, ctx, con, prefixes, prefixes_len, add_bytes) container_seg_do ((VBlockP)(vb), (ctx), (con), (prefixes), (prefixes_len), (add_bytes), NULL)
 #define container_seg_by_dict_id(vb,dict_id,con,add_bytes) container_seg (vb, ctx_get_ctx (vb, dict_id), con, NULL, 0, add_bytes)
 
-extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, STR𐤐(prefixes));
+extern ValueType container_reconstruct (VBlockP vb, ContextP ctx, ContainerP con, STR𐤐(prefixes));
 extern ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), pSTRp(out_prefixes));
 extern uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep);
 extern bool container_peek_has_item (VBlockP vb, ContextP container_ctx, DictId item_dict_id, bool consume);
 
 typedef struct { uint64_t dnum; int16_t idx; } ContainerPeekItem;
-extern void container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, ConstContainerP *con_p, bool consume);
+extern void container_peek_get_idxs (VBlockP vb, ContextP ctx, Did n_items, ContainerPeekItem *items, ContainerP *con_p, bool consume);
 
-extern StrText16K container_to_json (ConstContainerP con, STRp (prefixes));
-extern void con_verify_items (ConstContainerP con, ContextP ctx, rom con_name);
+extern StrText16K container_to_json (ContainerP con, STRp (prefixes));
+extern void con_verify_items (ContainerP con, ContextP ctx, rom con_name);
 
 CONTAINER_FILTER_FUNC (default_piz_filter);
 

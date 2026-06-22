@@ -249,7 +249,7 @@ static uint8_t codec_domq_calc_norm_table (VBlockP vb, ContextP qual_ctx, Contex
 // called from seg_finalize: calculates and normalization and denormalization tables + segs the latter
 // QUAL of each line (or in the case of xcons, each segment) is normalized separately
 // a normalization table is created for each dom (dom being the most common quality score in the line)
-static uint8_t codec_domq_prepare_normalize (VBlockP vb, ContextP ctx, LocalGetLineCB get_line_cb, ContextP qual_ctx, ContextP domqruns_ctx)
+static uint8_t codec_domq_prepare_normalize (VBlockP vb, LocalGetLineCB get_line_cb, ContextP qual_ctx, ContextP domqruns_ctx)
 {
     uint32_t histogram[NUM_Qs][NUM_Qs] = {}; // a histogram summarizing quality scores - for each dom
     uint32_t lines_with_dom[NUM_Qs] = {};    // number of lines for each dom
@@ -260,10 +260,10 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, ContextP ctx, LocalGetL
 
     if (get_line_cb) 
         for_buf2 (DomqLine, ql, line_i, ql_buf) 
-            get_line_cb (vb, ctx, line_i, (char**)pSTRa(ql->qual), CALLBACK_NO_SIZE_LIMIT, NULL);
+            get_line_cb (vb, qual_ctx, line_i, pSTRa(ql->qual), CALLBACK_NO_SIZE_LIMIT, NULL);
 
     else
-        *B1ST (DomqLine, ql_buf) = (DomqLine){ .qual = B1ST8(qual_ctx->local), .qual_len = qual_ctx->local.len32 };
+        *B1ST (DomqLine, ql_buf) = (DomqLine){ .qual = B1STc(qual_ctx->local), .qual_len = qual_ctx->local.len32 };
 
     // xcons: split each qual line to (up to) 3 segments. 
     if (segconf.xcons_std_seq_len) 
@@ -287,7 +287,7 @@ static uint8_t codec_domq_prepare_normalize (VBlockP vb, ContextP ctx, LocalGetL
             ql->dom = dom_to_cdom[ql->dom]; // ql->dom is now cdom
 
     if (flag.show_qual) 
-        show_denormalize (vb, ctx, (uint8_t*)denormalize, lines_with_dom, cdom_to_dom, NUM_Qs, num_cdoms);
+        show_denormalize (vb, qual_ctx, (uint8_t*)denormalize, lines_with_dom, cdom_to_dom, NUM_Qs, num_cdoms);
 
     return num_norm_qs; 
 }
@@ -313,7 +313,7 @@ bool codec_domq_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_c
         domqruns_ctx->local_dep = qualmplx_ctx->local_dep = divrqual_ctx->local_dep = DEP_L2;  
 
         // normalize quality scores in preparation for compression. note: we do it here in seg, as we need to seg the denormalization table
-        codec_domq_prepare_normalize (vb, qual_ctx, get_line_cb, qual_ctx, domqruns_ctx);
+        codec_domq_prepare_normalize (vb, get_line_cb, qual_ctx, domqruns_ctx);
 
         return true;
     }
@@ -354,11 +354,11 @@ static void codec_domq_normalize_qual (VBlockP vb, ContextP qual_ctx, ContextP d
         // in case of QUAL="*" (missing qual) it is a static pointer in memory which we cannot change in place. We replace to a static pointer to '\0'.
         // (since qual_len=1, the single value definitely got mapped to 0)
         if (IS_SPACE(ql->qual))
-            ql->qual = (uint8_t *)""; // pointer to hard coded string
+            ql->qual = ""; // pointer to hard coded string
 
         else 
             for (uint32_t base_i=0; base_i < ql->qual_len; base_i++) 
-                ql->qual[base_i] = normalize[ql->dom * NUM_Qs + ql->qual[base_i]-FIRST_Q];
+                ql->qual[base_i] = (char)normalize[ql->dom * NUM_Qs + (uint8_t)ql->qual[base_i]-FIRST_Q];
     }
 
     if (flag.show_qual) 
@@ -446,7 +446,7 @@ COMPRESS (codec_domq_compress)
             BNXTc (qualmplx_ctx->local) = ql->dom; // this is dom_i - i.e. the line in the denormalization table
 
             for (uint32_t i=0; i < ql->qual_len; i++) {    
-                if (__builtin_expect (ql->qual[i] == 0, true)) // dom
+                if (ql->qual[i] == 0) // dom
                     runlen++;
                 
                 else {

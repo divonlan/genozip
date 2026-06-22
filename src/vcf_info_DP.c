@@ -187,7 +187,7 @@ static bool vcf_seg_INFO_DP4_delta (VBlockP vb, ContextP ctx, STRp(value), uint3
 // Expecting first two values to be roughly similar, as the two last bases roughly similar
 void vcf_seg_INFO_DP4 (VBlockVCFP vb, ContextP ctx, STRp(dp4))
 {
-    static const Container(4) container_DP4 = {
+    static const Container_4 container_DP4 = {
         .repeats      = 1, 
         .nitems_lo    = 4, 
         .items        = { { .dict_id.num = _INFO_DP4_RF, .separator = "," }, 
@@ -197,5 +197,5 @@ void vcf_seg_INFO_DP4 (VBlockVCFP vb, ContextP ctx, STRp(dp4))
 
     static SegCallback callbacks[4] = { 0, vcf_seg_INFO_DP4_delta, 0, vcf_seg_INFO_DP4_delta }; 
 
-    seg_struct (VB, ctx, (ContainerP)&container_DP4, STRa(dp4), callbacks, dp4_len, true);
+    seg_struct (VB, ctx, &container_DP4, STRa(dp4), callbacks, dp4_len, true);
 }

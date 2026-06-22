@@ -25,12 +25,12 @@ void vcf_mastermind_zip_initialize (void)
     hgvsg_did_hgvs = ctx_add_new_zf_ctx_at_init ("HGVSG_HGVS", 10, hgvsg_dict_id_hgvs)->did_i;
     
     DO_ONCE {
-        Container(2) con = { .repeats   = 1,
+        Container_2 con = { .repeats   = 1,
                              .nitems_lo = 2,
                              .items     = { { .dict_id = hgvsg_dict_id_accession, .separator[0] = ':' },
                                             { .dict_id = hgvsg_dict_id_hgvs                           } } };
 
-        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(hgvsg_con_snip));
+        container_prepare_snip (&con, 0, 0, qSTRa(hgvsg_con_snip));
 
         seg_prepare_snip_other (SNIP_COPY, _VCF_CHROM, false, 0, copy_chrom_snip);
         seg_prepare_snip_other (SNIP_COPY, _INFO_GENE, false, 0, copy_gene_snip);
@@ -85,7 +85,7 @@ static bool vcf_seg_INFO_MMID3_gene (VBlockP vb, ContextP ctx, STRp(mmid3_gene),
 // Example: MMID3=OR4F5:G136S
 void vcf_seg_INFO_MMID3 (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    static Container(2) con = { 
+    static Container_2 con = { 
         .repsep[0] = ',',
         .repeats   = 1,  // faster seg if this happens to be correct
         .drop_final_repsep = true,
@@ -96,7 +96,7 @@ void vcf_seg_INFO_MMID3 (VBlockVCFP vb, ContextP ctx, STRp(value))
 
     SegCallback callbacks[2] = { vcf_seg_INFO_MMID3_gene, 0 };
 
-    seg_array_of_struct (VB, ctx, (ContainerP)&con, STRa(value), callbacks, NULL, value_len);
+    seg_array_of_struct (VB, ctx, &con, STRa(value), callbacks, NULL, value_len);
 }
 
 // <ID=MMURI3,Number=1,Type=String,Description="Mastermind search URI for articles including other DNA-level variants resulting in the same amino acid change">

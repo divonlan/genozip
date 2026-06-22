@@ -1,4 +1,8 @@
-#!/usr/bin/bash 
+#!/bin/bash
+# ^ works for Linux, Mac, Windows (MSYS2), but /bin/bash on mac is a very old version, rerun:
+if [[ "$BASH_VERSION" < 4.0 && "$(uname -s)" == "Darwin" ]]; then
+    exec /opt/homebrew/bin/bash "$0" "$@"
+fi
 
 # ------------------------------------------------------------------
 #   dict_id_gen.sh

@@ -177,7 +177,7 @@ static bool zip_generate_local (VBlockP vb, ContextP ctx)
     
     switch (ctx->ltype) {
         case LT_BITMAP    : 
-            LTEN_bits ((BitsP)&ctx->local);    
+            LTEN_bits (&ctx->local);    
             ctx->local.prm8[0] = ((uint8_t)64 - (uint8_t)(ctx->local.nbits % 64)) % (uint8_t)64;
             ctx->local_param   = true;
             break;
@@ -259,7 +259,7 @@ static void zip_compress_all_contexts_b250 (VBlockP vb)
         int ctx_i = global_max_threads > 1 ? ((clock()+1) * (vb->vblock_i+1)) % (vb->ca.num_contexts - i) : 0; // force predictability with single thread 
         
         ContextP ctx = ctxs[ctx_i];
-        memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (vb->ca.num_contexts - i - ctx_i - 1) * sizeof (ContextP));
+        memmove ((char *)&ctxs[ctx_i], (char *)&ctxs[ctx_i+1], (vb->ca.num_contexts - i - ctx_i - 1) * sizeof (ContextP));
 
         if (!ctx->b250.len || ctx->b250_compressed) continue;
 
@@ -306,7 +306,7 @@ static void zip_compress_all_contexts_local (VBlockP vb)
             // pick a context at "random" and remove it from the list (not random if single thread)
             int ctx_i = global_max_threads > 1 ? (65531 * (vb->vblock_i+1)) % num_ctxs : 0; 
             ContextP ctx = ctxs[ctx_i];
-            memmove (&ctxs[ctx_i], &ctxs[ctx_i+1], (num_ctxs - (ctx_i+1)) * sizeof (ContextP));
+            memmove ((char *)&ctxs[ctx_i], (char *)&ctxs[ctx_i+1], (num_ctxs - (ctx_i+1)) * sizeof (ContextP));
             num_ctxs--;
 
             ctx->local_compressed = true; // so we don't compress it again
@@ -854,7 +854,7 @@ finish:
         ctx_reset_codec_commits(); 
 
     // no need to waste time freeing memory of the last file, the process termination will do that
-    flag.let_OS_cleanup_on_exit = is_last_user_txt_file && z_file->z_closes_after_me && !arch_is_valgrind(); 
+    flag.let_OS_cleanup_on_exit = is_last_user_txt_file && z_file->z_closes_after_me && !flag.is_valgrind; 
 
     { START_TIMER;
     DT_FUNC (txt_file, zip_finalize)(is_last_user_txt_file);

@@ -30,7 +30,8 @@ bool sam_zip_is_valid_SA (rom sa, uint32_t char_limit, bool is_bam)
     uint32_t sa_len;
     if (is_bam) {
         rom nul = memchr (sa, 0, char_limit); // search for end of string
-        if (!nul) return false;
+        if (!nul) 
+            return false;
 
         sa_len = nul - sa;
     }
@@ -39,16 +40,16 @@ bool sam_zip_is_valid_SA (rom sa, uint32_t char_limit, bool is_bam)
         sa_len = strcspn (sa, "\t\n\r");
         SAFE_RESTORE;
 
-        if (sa_len == char_limit) return false;
+        if (sa_len == char_limit)
+            return false;
     }
 
     str_split (sa, sa_len, 0, ';', aln, false);
 
-    for (int i=0; i < n_alns; i++) {
-        str_split (alns[i], aln_lens[i], NUM_SA_ITEMS, ',', item, true);
-        if (n_items != NUM_SA_ITEMS) return false;
-    }
-
+    for (int i=0; i < n_alns-1; i++)  // -1 bc last item is empty (artifcat of the string ending with ;)
+        if (str_count_char (STRi(aln,i), ',') != NUM_SA_ITEMS-1) 
+            return false;
+  
     return true;
 }
 
@@ -227,9 +228,10 @@ static bool sam_segconf_SA_cigar_cb (VBlockP vb, ContextP ctx, STRp (cigar), uin
     return sam_seg_0A_cigar_cb (vb, ctx, STRa(cigar), repeat);
 }
 
+TypeContainer(NUM_SA_ITEMS);
 void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sa), unsigned add_bytes)
 {
-    static const Container(NUM_SA_ITEMS) container_SA = { 
+    static const Container_NUM_SA_ITEMS container_SA = { 
         .nitems_lo = NUM_SA_ITEMS,   
         .repeats   = 1,  // faster seg if this happens to be correct
         .repsep    = { ';' }, // including on last repeat    
@@ -267,7 +269,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sa), unsigned add_
                 [SA_MAPQ]  = sam_seg_0A_mapq_cb 
             };
 
-            seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), (ContainerP)&container_SA, STRa(sa), callbacks, 
+            seg_array_of_struct (VB, CTX(OPTION_SA_MAIN), &container_SA, STRa(sa), callbacks, 
                                  segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                  add_bytes); 
         }
@@ -292,7 +294,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sa), unsigned add_
         }
 
         SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-        int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, (ContainerP)&container_SA, STRa(sa), callbacks,  // 0 if SA is malformed 
+        int32_t num_alns = 1/*primary aln*/ + seg_array_of_struct (VB, ctx, &container_SA, STRa(sa), callbacks,  // 0 if SA is malformed 
                                                                    segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                                                    add_bytes); 
 
@@ -320,7 +322,7 @@ void sam_seg_SA_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sa), unsigned add_
 
         else {
             SegCallback callbacks[NUM_SA_ITEMS] = { [SA_RNAME]=chrom_seg_cb, [SA_POS]=seg_pos_field_cb, [SA_CIGAR]=sam_seg_0A_cigar_cb, [SA_MAPQ]=sam_seg_0A_mapq_cb };            
-            seg_array_of_struct (VB, ctx, (ContainerP)&container_SA, STRa(sa), callbacks, 
+            seg_array_of_struct (VB, ctx, &container_SA, STRa(sa), callbacks, 
                                  segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                                  add_bytes); 
         }

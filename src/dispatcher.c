@@ -254,7 +254,7 @@ void dispatcher_resume (Dispatcher d, uint32_t target_progress, CompIType comp_i
 {
     ASSERTNOTNULL (d);
     d->input_exhausted = false;
-    d->filename        = txtheader_get_txt_filename_from_section (comp_i);
+    d->filename        = txtheader_get_txt_filename_from_section (comp_i, false);
     d->progress        = 0;
     d->target_progress = target_progress;
     curr = d;

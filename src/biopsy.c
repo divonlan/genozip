@@ -165,7 +165,7 @@ void biopsy_bytes_init (rom optarg)
     flag.biopsy_bytes.len   = items[1];
 }
 
-void noreturn biopsy_bytes (rom filename)
+noreturn void biopsy_bytes (rom filename)
 {
     ASSERTISNULL (txt_file);
     txt_file = file_open_txt_read (filename);

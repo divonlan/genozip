@@ -9,7 +9,6 @@
 #pragma once
 
 #include "sections.h"
-#include "multiplexer.h"
 
 // SAM and FASTQ share the same Dids and DictIds
 #define FASTQ_CONTIG        SAM_RNAME
@@ -153,7 +152,7 @@ extern rom fastq_assseg_line (VBlockP vb);
 extern void fastq_seg_gpos_R2 (VBlockP vb, PosType64 gpos_R1, PosType64 gpos_R2, bool is_forward_R2);
 extern void fastq_seg_interleaved_gpos (VBlockP vb, PosType64 gpos_R1/*only if we are R2*/, PosType64 gpos);
 extern void fastq_update_qual_len (VBlockP vb, uint32_t line_i, uint32_t new_len);
-extern Multiplexer2P fastq_get_illum_v_mux (VBlockP vb);
+extern struct Multiplexer2 *fastq_get_illum_v_mux (VBlockP vb);
 
 // PIZ Stuff
 extern bool fastq_piz_initialize (CompIType comp_i);

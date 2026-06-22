@@ -447,7 +447,7 @@ static GzStatus mgzip_block_verify_header (FileP file, // option 1
                                            bool discovering, GzipFlags expected_flg, STR8p(prefix))
 {
     if (file) {
-        fp = (FILE *)file->file;
+        fp = file->os_file;
         h = B1ST8 (file->gz_data);
         h_len = file->gz_data.len32;
     }
@@ -514,18 +514,18 @@ bool bgzf_read_and_uncomp_final_block (rom filename, qSTRp(uncomp))
             mgzip_block_verify_header (NULL, fp, comp+i, comp_len-i, true, (GzipFlags){ .extra=1 }, _8(BGZF_PREFIX)) == GZ_SUCCESS) {
             fclose (fp);
 
-            struct libdeflate_decompressor *gz_inflate_mem = libdeflate_alloc_decompressor (evb, __FUNCLINE);
+            struct libdeflate_decompressor *libdef_decomp_mem = libdeflate_alloc_decompressor (evb, __FUNCLINE);
 
             size_t uncomp_len_size_t; 
 
             enum libdeflate_result ret = libdeflate_deflate_decompress (
-                gz_inflate_mem, 
+                libdef_decomp_mem, 
                 comp+i + BGZF_HEADER_LEN, comp_len-i - BGZF_HEADER_LEN - GZIP_FOOTER_LEN, // compressed
                 uncomp, *uncomp_len, &uncomp_len_size_t);  // uncompressed
 
             *uncomp_len = uncomp_len_size_t;
 
-            libdeflate_free_decompressor (&gz_inflate_mem, __FUNCLINE);
+            libdeflate_free_decompressor (&libdef_decomp_mem, __FUNCLINE);
 
             return (ret == LIBDEFLATE_SUCCESS);
         }
@@ -626,7 +626,7 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
     if (discovering && params.valid_3_blocks_isize)
         params.max_bsize *= 3; // read 3 blocks - txtfile_discover_specific_gz will use this data to verify they all have the same isize
 
-    FILE *fp = (FILE *)file->file;
+    FILE *fp = file->os_file;
     file->gz_data.comp_len = file->gz_data.uncomp_len = 0; // init
 
     // top up gz_data to max_comp_size (or less if EOF)
@@ -666,7 +666,7 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
                 // and if we don't stop, we will read he entire file
                 if (ratio < 0.95 && !discovering)
                     RESTART ("--no-bgzf", "Failed to identify next gz-block's gz header, marking the close of this block. file=%s codec=%s offset=%"PRId64" file_size=%"PRIu64, 
-                             file->basename, codec_name (codec), (int64_t)ftello64 ((FILE *)file->file) - file->gz_data.len, file->disk_size);
+                             file->basename, codec_name (codec), (int64_t)ftello64 (file->os_file) - file->gz_data.len, file->disk_size);
                             
                 // final while condition: loop back to extend the block, if the ratio doesn't make sense, but not if bsize is too small to judge ratio
                 bsize > 2 KB && 
@@ -700,7 +700,7 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
         // data is not e.g. IL1M somewhere in the middle of the file...
         if (!feof (fp)) 
             RESTART ("--no-bgzf", "Encountered a GZIP block that unexpectedly is not %s in %s offset=%"PRIu64" file_size=%"PRIu64, 
-                     codec_name (codec), file->basename, (uint64_t)ftello64 ((FILE *)file->file) - file->gz_data.len, file->disk_size);
+                     codec_name (codec), file->basename, (uint64_t)ftello64 (file->os_file) - file->gz_data.len, file->disk_size);
 
         // case: final data in file is not a full gz block and truncation allowed: 
         // account and then ignore the data that will not be gz-decompressed 
@@ -730,7 +730,7 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
 
 static GzStatus bgzf_mgzf_set_block_lens (FileP file, uint32_t bsize, bool discovering)
 { 
-    FILE *fp = (FILE *)file->file;
+    FILE *fp = file->os_file;
 
     if (file->gz_data.len32 >= bsize) {
         file->gz_data.comp_len   = bsize;
@@ -798,7 +798,7 @@ static GzStatus mgzf_read_block_do (FileP file, // txt_file is not yet assigned 
 {
     #define MGZF_CHUCK_SIZE ((uint32_t)(16 MB)) // max amount we read from disk at a time  
     
-    FILE *fp = (FILE *)file->file;
+    FILE *fp = file->os_file;
     file->gz_data.comp_len = file->gz_data.uncomp_len = 0; // init
     uint32_t bsize = 0;
 
@@ -843,7 +843,7 @@ static GzStatus mgzf_read_block_do (FileP file, // txt_file is not yet assigned 
 static GzStatus bgzf_read_block_do (FileP file, // txt_file is not yet assigned when called from txtfile_discover_specific_gz
                                     bool discovering)
 {
-    FILE *fp = (FILE *)file->file;
+    FILE *fp = file->os_file;
     file->gz_data.comp_len = file->gz_data.uncomp_len = 0; // init
 
     // top-up if needed 
@@ -921,7 +921,7 @@ GzStatus mgzip_read_block_with_bsize (FileP file, bool discovering, Codec codec)
     }
 
     if (!discovering)
-        file->no_more_blocks = (file->gz_data.comp_len == file->gz_data.len32 && feof ((FILE*)file->file));
+        file->no_more_blocks = (file->gz_data.comp_len == file->gz_data.len32 && feof (file->os_file));
 
     COPY_TIMER_EVB (mgzip_read_block_with_bsize);
     return ret;
@@ -933,7 +933,7 @@ GzStatus mgzip_read_block_with_bsize (FileP file, bool discovering, Codec codec)
 void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
 {
     if (bb->is_uncompressed) return; // already uncompressed - nothing to do 
-    ASSERTNOTNULL (vb->gz_inflate_mem);
+    ASSERTNOTNULL (vb->libdef_decomp_mem);
 
     int header_len = mgzip_header_len[codec]; // note: EOF block's header length maybe different, eg in MGZF
 
@@ -959,7 +959,7 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
     }
 
     enum libdeflate_result ret = bb->txt_size  
-        ? libdeflate_deflate_decompress (vb->gz_inflate_mem, 
+        ? libdeflate_deflate_decompress (vb->libdef_decomp_mem, 
                                          h + header_len, bb->gz_size - header_len - GZIP_FOOTER_LEN, // compressed
                                          Btxt (bb->txt_index), bb->txt_size, NULL)  // uncompressed
         : LIBDEFLATE_SUCCESS; // don't uncompress if empty block: 1. not needed 2. header size of EOF block might differ (as in MGZF) so arithmetic will be wrong
@@ -1022,8 +1022,8 @@ void mgzip_uncompress_vb (VBlockP vb, Codec codec)
     START_TIMER;
     ASSERTNOTEMPTY (vb->gz_blocks);
 
-    ASSERTISNULL (vb->gz_inflate_mem);
-    vb->gz_inflate_mem = libdeflate_alloc_decompressor(vb, __FUNCLINE);
+    ASSERTISNULL (vb->libdef_decomp_mem);
+    vb->libdef_decomp_mem = libdeflate_alloc_decompressor(vb, __FUNCLINE);
 
     uint32_t total_vb_isizes = 0;
     for_buf (GzBlockZip, bb, vb->gz_blocks) {
@@ -1035,7 +1035,7 @@ void mgzip_uncompress_vb (VBlockP vb, Codec codec)
     ASSERT (total_vb_isizes >= Ltxt, "%s: Expecting total_vb_isizes=%u >= Ltxt=%u. codec=%s", 
             VB_NAME, total_vb_isizes, Ltxt, codec_name (txt_file->effective_codec));
 
-    libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gz_inflate_mem, __FUNCLINE); // also sets gz_inflate_mem to NULL
+    libdeflate_free_decompressor (&vb->libdef_decomp_mem, __FUNCLINE); // also sets libdef_decomp_mem to NULL
 
     buf_destroy (vb->comp_txt_data); // now that we are finished decompressing we can release the memory (we won't need this buffer for a while so better destroy)
 
@@ -1059,7 +1059,7 @@ static inline void bgzf_uncompress_one_prescribed_block (VBlockP vb, STRp(bgzf_b
                  VB_NAME, bb_i, bgzf_block_len, uncomp_block_len);
 
     enum libdeflate_result ret = 
-        libdeflate_deflate_decompress (vb->gz_inflate_mem, 
+        libdeflate_deflate_decompress (vb->libdef_decomp_mem, 
                                        h+1, bgzf_block_len - BGZF_HEADER_LEN - GZIP_FOOTER_LEN, // compressed
                                        STRa(uncomp_block), NULL);  // uncompressed
 
@@ -1102,8 +1102,8 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *fp)
     uint64_t last_offset = -1LL;
     char uncomp_block[BGZF_MAX_BLOCK_SIZE];
 
-    ASSERTISNULL (vb->gz_inflate_mem);
-    vb->gz_inflate_mem = libdeflate_alloc_decompressor(vb, __FUNCLINE);
+    ASSERTISNULL (vb->libdef_decomp_mem);
+    vb->libdef_decomp_mem = libdeflate_alloc_decompressor(vb, __FUNCLINE);
 
     for_buf (RereadLine, line, vb->reread_prescription) {
         
@@ -1135,7 +1135,7 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *fp)
         }
     }
 
-    libdeflate_free_decompressor ((struct libdeflate_decompressor **)&vb->gz_inflate_mem, __FUNCLINE); // also sets gz_inflate_mem to NULL
+    libdeflate_free_decompressor (&vb->libdef_decomp_mem, __FUNCLINE); // also sets libdef_decomp_mem to NULL
 }
 
 void bgzf_libdeflate_1_7_initialize (void)
@@ -1555,7 +1555,7 @@ static bool show_gz_uncompress_gz_block (rom filename, size_t *block_txt_len, si
 {
     enum libdeflate_result ret;
     
-    while ((ret = libdeflate_gzip_decompress_ex (evb->gz_inflate_mem, show_gz_next, show_gz_remaining, STRb(evb->txt_data), block_gz_len, block_txt_len))
+    while ((ret = libdeflate_gzip_decompress_ex (evb->libdef_decomp_mem, show_gz_next, show_gz_remaining, STRb(evb->txt_data), block_gz_len, block_txt_len))
             == LIBDEFLATE_INSUFFICIENT_SPACE)
             // double the size of txt_data if not enough txt space
             buf_alloc_exact (evb, evb->txt_data, evb->txt_data.len * 2, char, NULL); 
@@ -1592,7 +1592,7 @@ void show_gz (rom filename)
     // file_get_file (evb, filename, &evb->z_data, "z_data", 100 MB, VERIFY_NONE, false);
 
     // uncompress first gz block of gz_data
-    evb->gz_inflate_mem = libdeflate_alloc_decompressor (evb, __FUNCLINE);
+    evb->libdef_decomp_mem = libdeflate_alloc_decompressor (evb, __FUNCLINE);
     buf_alloc_exact (evb, evb->txt_data, 5 * evb->z_data.size, char, "txt_data");
     int size_width=0;
 
@@ -1749,7 +1749,7 @@ void show_gz (rom filename)
 done:
     buf_free (evb->z_data);
     buf_free (evb->txt_data);
-    libdeflate_free_decompressor ((struct libdeflate_decompressor **)&evb->gz_inflate_mem, __FUNCLINE);
+    libdeflate_free_decompressor (&evb->libdef_decomp_mem, __FUNCLINE);
 }
 
 

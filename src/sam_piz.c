@@ -610,20 +610,20 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_POS)
 // fix prefix eg MX:i: -> MXs
 TRANSLATOR_FUNC (sam_piz_sam2bam_AUX_SELF)
 {
-    ContainerP con = (ContainerP)recon;
+    ContainerP con = { .h = (Container_0 *)recon };
 
     // if this translator is called due to SAM->FASTQEXT, cancel translation for the AUX container and its items
     if (OUT_DT(FASTQ)) {
-        con->no_translation = true; // turn off translation for this container and its items
+        con.h->no_translation = true; // turn off translation for this container and its items
         return 0; 
     }
 
     if (recon_len == -1) return 0; // no Aux data in this alignment
 
-    char *prefixes_before = &recon[con_sizeof (*con)] + 2; // +2 to skip the empty prefixes of container wide, and item[0]
+    char *prefixes_before = (char *)con.h + con_sizeof (con) + 2; // +2 to skip the empty prefixes of container wide, and item[0] ; access through con.h and not recon to keep strict aliasing rule
     char *prefixes_after = prefixes_before;
 
-    uint32_t num_items = con_nitems (*con);
+    uint32_t num_items = con_nitems (con);
 
     for (unsigned i=1; i < num_items; i++, prefixes_before+=6, prefixes_after+=4) {
         prefixes_after[0] = prefixes_before[0]; // tag[0] 
@@ -634,7 +634,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_AUX_SELF)
         // a SAM 'i' translate to one of several BAM types using the translator code
         // that may be 0->6 (NONE to SAM2BAM_LTEN_U32)
         if (prefixes_after[2] == 'i') 
-            prefixes_after[2] = "\0cCsSiI"[con->items[i].translator];
+            prefixes_after[2] = "\0cCsSiI"[con.h->items[i].translator];
     }
 
     return -2 * (num_items-1); // change in prefixes_len
@@ -672,21 +672,21 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_FLOAT)
 // remove the comma from the prefix that contains the type, eg "i,"->"i"
 TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF_1) // single context, multi repeat array
 {
-    ContainerP con = (ContainerP)recon;
-    char *prefixes = &recon[con_sizeof (*con)];
+    ContainerP con = { .h = (Container_0 *)recon };
+    char *prefixes = (char *)con.h + con_sizeof (con); // access through con.h and not recon to keep strict aliasing rule
 
     // remove the ',' from the prefix, and terminate with CON_PX_SEP_SHOW_REPEATS - this will cause
     // the number of repeats (in LTEN32) to be outputed after the prefix
     prefixes[1] = CON_PX_SEP_SHOW_REPEATS; // prefixes is now { type, CON_PX_SEP_SHOW_REPEATS }
     
-    return con->repeats ? -1 : 0; // change in prefixes length (no change in length if repeats=0, because no comman in SAM eg "ML:B:C" - empty array)
+    return con.h->repeats ? -1 : 0; // change in prefixes length (no change in length if repeats=0, because no comman in SAM eg "ML:B:C" - empty array)
 }
 
 // remove the comma from the prefix that contains the type, eg "i,"->"i"
 TRANSLATOR_FUNC (sam_piz_sam2bam_ARRAY_SELF_M) // multiple context, single repeat array (15.0.35)
 {
-    ContainerP con = (ContainerP)recon;
-    char *prefixes = &recon[con_sizeof (*con)];
+    ContainerP con = { .h = (Container_0 *)recon };
+    char *prefixes = (char *)con.h + con_sizeof (con); 
 
     // remove the ',' from the prefix, and terminate with CON_PX_SEP_SHOW_N_ITEMS - this will cause
     // the number of items (in LTEN32) to be outputed after the prefix
@@ -818,7 +818,7 @@ bool sam_piz_filter_up_to_v13_stuff (VBlockP vb, DictId dict_id, int item, bool 
 CONTAINER_FILTER_FUNC (sam_piz_filter)
 {
     #define CONTAINER_IS(name) (dict_id.num == _##name)
-    #define ITEM_IS(name)      (con->items[item].dict_id.num == _##name)
+    #define ITEM_IS(name)      (con.h->items[item].dict_id.num == _##name)
 
     bool v13_ret_value;
     if (!VER(14) && sam_piz_filter_up_to_v13_stuff (vb, dict_id, item, &v13_ret_value))
@@ -1093,7 +1093,7 @@ bool sam_is_last_flags_rev_comp (VBlockP vb)
 
 bool sam_piz_line_has_aux_field (VBlockSAMP vb, DictId dict_id)
 {
-    ASSPIZ0 (vb->aux_con, "this function can only be called while reconstructing the AUX container");
+    ASSPIZ0 (vb->aux_con.h, "this function can only be called while reconstructing the AUX container");
 
     for_con (vb->aux_con)
         if (item->dict_id.num == dict_id.num) return true;
@@ -1107,7 +1107,7 @@ ValueType sam_piz_peek_OPTION (VBlockSAMP vb, ContextP option_ctx, pSTRp(txt)/*o
     bool option_exists = false;
     bool consume = vb->preprocessing; // consume if loading Sag, peek only if reconstructing
 
-    if (!vb->aux_con) { // called before AUX is reconstructed
+    if (!vb->aux_con.h) { // called before AUX is reconstructed
         ContainerPeekItem idx = { option_ctx->dict_id.num, -1 };
         container_peek_get_idxs (VB, CTX(SAM_AUX), 1, &idx, &vb->aux_con, consume);
 

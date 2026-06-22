@@ -92,7 +92,7 @@ void vcf_zip_add_line_numbers_init_vb (VBlockVCFP vb)
 void vcf_add_line_numbers_seg_initialize (VBlockVCFP vb)
 {
     // container just for adding a prefix to the delta-encoded line number (the container is all_the_same)
-    static const Container(1) line_number_container = {
+    static const Container_1 line_number_container = {
         .repeats   = 1,
         .nitems_lo = 1,
         .items     = { { .dict_id = { _VCF_LINE_NUM } } }
@@ -103,7 +103,7 @@ void vcf_add_line_numbers_seg_initialize (VBlockVCFP vb)
                             CON_PX_SEP, // end of (empty) container-wide prefix
                             'L', 'N', '=', CON_PX_SEP };  // NOTE: if changing prefix, update LN_PREFIX_LEN
 
-    container_seg (vb, CTX(VCF_ID), (ContainerP)&line_number_container, prefix, sizeof prefix, 0); 
+    container_seg (vb, CTX(VCF_ID), &line_number_container, prefix, sizeof prefix, 0); 
     ctx_decrement_count (VB, CTX(VCF_ID), 0);
     
     ctx_set_no_stons (VB, VCF_ID, VCF_LINE_NUM, DID_EOL);

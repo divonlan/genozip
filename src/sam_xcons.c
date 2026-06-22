@@ -97,7 +97,7 @@ void sam_seg_xcons_YY (VBlockSAMP vb, int64_t yy, unsigned add_bytes)
 {
     int channel_i = ctx_has_value_in_line_(VB, CTX(OPTION_XX_i)) && !CTX(OPTION_XX_i)->last_value.i;
 
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_YY_i, (MultiplexerP)&vb->mux_YY, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_YY_i, &vb->mux_YY, channel_i);
 
     seg_integer (VB, channel_ctx, yy, false, add_bytes);
     ctx_set_last_value (VB, CTX(OPTION_YY_i), yy);
@@ -186,15 +186,15 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_xcons_XD)
 
 // find a segment of length xo within the qual line, for which qual scores differ the most 
 // vs. the left and right flanking segments
-static int sam_xcons_split_qual_line_by_xo (VBlockSAMP vb, STR8c(qual), DomqLine *segments, int64_t xo)
+static int sam_xcons_split_qual_line_by_xo (VBlockSAMP vb, STRc(qual), DomqLine *segments, int64_t xo)
 {
     // initialize hisograms
     uint32_t xo_histo[128] = {}, flank_histo[128] = {}; // actually only using 32...127    
     for (uint32_t i=0; i < xo; i++)
-        xo_histo[qual[i]]++;
+        xo_histo[(uint8_t)qual[i]]++;
 
     for (uint32_t i=xo; i < qual_len; i++)
-        flank_histo[qual[i]]++;
+        flank_histo[(uint8_t)qual[i]]++;
 
     int uniq_xo=0, uniq_flank=0;
 

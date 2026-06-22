@@ -101,7 +101,7 @@ static void digest_update_do (VBlockP vb, DigestState *state, rom data, uint64_t
 
     if (flag.show_digest) {
         iprintf ("vb=%10s %s update %s (len=%"PRIu64" so_far=%"PRIu64") 32chars=\"%s\": before=%s after=%s\n", 
-                 VB_NAME, DIGEST_NAME, msg, data_len, state->bytes_digested, 
+                 VB_NAME, DIGEST_NAME, msg, data_len, (uint64_t)state->bytes_digested, 
                  str_to_printable_(data, MIN_(32, data_len)).s, 
                  digest_display_ex (digest_snapshot (&before, NULL),  DD_NORMAL).s, 
                  digest_display_ex (digest_snapshot (state, NULL), DD_NORMAL).s);
@@ -206,8 +206,11 @@ static void digest_piz_verify_one_vb (VBlockP vb,
                 snprintf (recon_size_warn, sizeof (recon_size_warn), "Expecting: VB_HEADER.recon_size=%u == txt_data.len=%"PRIu64"%s\n", 
                           vb->recon_size, vb->txt_data.len, (z_sam_gencomp ? " (note these sizes exclude gencomp data)" : ""));  
 
-            warn ("reconstructed vblock=%s/%u (vb_line_i=0 -> txt_line_i(1-based)=%"PRId64" num_lines=%u), (%s=%s) differs from the %s file (%s=%s). File compressed with version=%s uncompressed with=%s\n%s",
-                  comp_name (vb->comp_i), vb->vblock_i, writer_get_txt_line_i (vb, 0), vb->lines.len32,
+            int64_t txt_line_i = writer_get_txt_line_i (vb, 0);
+
+            warn ("reconstructed vblock=%s/%u (txt_line_i(1-based%s)=%"PRId64" num_lines=%u), (%s=%s) differs from the %s file (%s=%s). File compressed with version=%s uncompressed with=%s\n%s",
+                  comp_name (vb->comp_i), vb->vblock_i, 
+                  OUT_DT(BAM) ? ",excluding-header" : "", txt_line_i, vb->lines.len32,
                   DIGEST_NAME, digest_display (piz_digest).s, 
                   segconf.zip_txt_modified ? "modified" : "original",
                   DIGEST_NAME, digest_display (vb->expected_digest).s, 
@@ -221,7 +224,9 @@ static void digest_piz_verify_one_vb (VBlockP vb,
                       vb->vb_position_txt_file, vb->txt_data.len32, vb->recon_size, 
                       piz_advise_biopsy (vb).s, report_support_if_unexpected());
 
-                if (flag.test) exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping
+                // note: we don't exit in --test: we'll continue to test the next VBs for errors (no point if MD5 as it is cummulative to all subsequent blocks will error for sure)
+                if (flag.test || IS_MD5) 
+                    exit_on_error (false); // must be inside the atomic test, otherwise another thread will exit before we completed dumping
             }
         }
 
@@ -454,7 +459,7 @@ rom digest_name (void) { return DIGEST_NAME; }
 
 rom digest_alg_name (DigestAlg alg) 
 { 
-    switch (alg) {
+    switch ((int)alg) {
         case DIGEST_ADLER   : return "Adler32";
         case DIGEST_MD5     : return "MD5";
         case DIGEST_XXH3    : return "XXH3";

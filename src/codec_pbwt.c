@@ -107,7 +107,7 @@ static PbwtState codec_pbwt_initialize_state (VBlockP vb, BufferP runs, BufferP 
 // update the permutation for the next row: we re-sort it to make indices containing the same allele grouped
 // first '0', then '1' etc - but the order within each of these allele groups remains as in the current row's premutation 
 // (this is why we traverse the permuted line rather than the ht_matrix line)
-static void inline codec_pbwt_calculate_permutation (PbwtState *state, const Allele *line, uint32_t line_len, bool is_first_line)
+static inline void codec_pbwt_calculate_permutation (PbwtState *state, const Allele *line, uint32_t line_len, bool is_first_line)
 {
     // populate permutation index - by re-ordering according to previous line's alleles
     if (!is_first_line) {
@@ -178,7 +178,7 @@ void codec_pbwt_seg_init (VBlockP vb)
 
 // updates FGRC - our list of foreground run alleles. Each entry represents "count" consecutive runs of this same "fg_allele"
 // returns true if a background run needs to be added to account for a missing background run between two foreground runs of different alleles
-static bool inline codec_pbwt_udpate_fgrc (PbwtState *state, Allele allele_of_completed_run)
+static inline bool codec_pbwt_udpate_fgrc (PbwtState *state, Allele allele_of_completed_run)
 {
     // case: new run a foreground allele as previous run was a background - update foreground run count
     if (allele_of_completed_run == '0') {
@@ -210,7 +210,7 @@ static bool inline codec_pbwt_udpate_fgrc (PbwtState *state, Allele allele_of_co
 }
 
 // add data to the run-length encoding (may be called with the full ht matrix or just pieces of it)
-static void inline codec_pbwt_run_len_encode (PbwtState *state, uint32_t line_len, bool backwards) 
+static inline void codec_pbwt_run_len_encode (PbwtState *state, uint32_t line_len, bool backwards) 
 { 
     for (uint32_t ht_i=0; ht_i < line_len; ) {		
 

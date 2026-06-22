@@ -15,7 +15,7 @@
 #define _RAW_MQ  DICT_ID_MAKE1_7("R1AW_MQ")    
 #define _RAW_DP2 DICT_ID_MAKE1_8("R2AW_DP2")  
 
-static const Container(3) RAW_MQandDP_con = {
+static const Container_3 RAW_MQandDP_con = {
     .nitems_lo = 3, 
     .repeats   = 1, 
     .items     = { { .dict_id={ _RAW_DP }, .separator = { CI0_INVISIBLE } },
@@ -29,7 +29,7 @@ sSTRl(copy_RAW_DP_int, 30);
 void vcf_gatk_zip_initialize (void)
 {
     DO_ONCE {
-        container_prepare_snip ((ContainerP)&RAW_MQandDP_con, 0, 0, qSTRa(RAW_MQandDP_snip));
+        container_prepare_snip (&RAW_MQandDP_con, 0, 0, qSTRa(RAW_MQandDP_snip));
 
         seg_prepare_snip_other (SNIP_OTHER_DELTA, _RAW_DP, true, 0, copy_RAW_DP_int);   
     }
@@ -53,7 +53,7 @@ void vcf_gatk_seg_initialize (VBlockVCFP vb)
         ctx_set_dyn_int (VB, ctx_get_ctx (vb, _RAW_DP)->did_i, ctx_get_ctx (vb, _RAW_MQ)->did_i, DID_EOL);
         ctx_get_ctx (vb, _RAW_DP)->flags.same_line = true; // INFO/DP may be before after RAW_MQandDP
 
-        ctx_consolidate_stats_(VB, CTX(INFO_RAW_MQandDP), (ContainerP)&RAW_MQandDP_con);
+        ctx_consolidate_stats_(VB, CTX(INFO_RAW_MQandDP), &RAW_MQandDP_con);
     }
 }
 

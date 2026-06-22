@@ -22,6 +22,7 @@
 
 static VBlockP real_evb;
 static VBlockP scan_vb;
+static bool found_SA_Z;
 
 #define vb_depn_index  vb->scratch // QNAME hash of all sec and supp alignments in this VB
 #define z_qname_index  evb->z_data // QNAME hash of all mapped alignments in this file
@@ -96,14 +97,17 @@ static rom scan_index_one_line (VBlockSAMP vb, rom alignment, uint32_t remaining
 
 static void scan_read_one_vb (VBlockP vb)
 {
+    if (load_relaxed (found_SA_Z))
+        goto abort_scan;
+
     txtfile_read_vblock (vb);
 
-    if (Ltxt) {
+    if (Ltxt && !load_relaxed (found_SA_Z)) {
         vb->preprocessing = true;
         vb->dispatch = READY_TO_COMPUTE;
     }
 
-    else 
+    else abort_scan:
         vb->dispatch = DATA_EXHAUSTED;
 }
 
@@ -168,10 +172,11 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
     rom next  = B1STtxt;
     rom after = BAFTtxt;
 
-    #define SET_HAS_SA \
-        ({ segconf_set_has (OPTION_SA_Z); /* likely, bot not 100% sure, that an SAZ string indicates an SA:Z optional field */ \
-           DO_ONCE if (flag.show_scan) \
-               iprintf ("Scan: SA:Z found in vb=%u", vb->vblock_i); })
+    #define SET_HAS_SA                          \
+        ({ store_relaxed (found_SA_Z, true);    \
+           DO_ONCE if (flag.show_scan)          \
+               warn (_FYI "SAG_BY_FLAG scan: SA:Z found in vb=%u. Aborting scan", vb->vblock_i);  \
+           goto done; })
 
     // in case of force-gencomp, we also try to detect SA_Z in the first 16 VBs
     if (flag.force_gencomp && !segconf_has(OPTION_SA_Z)) {
@@ -193,13 +198,19 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
         }
     }
 
+    if (load_relaxed (found_SA_Z)) goto done; // abort point if another thread found an SA:Z
+
     while (next < after)
         next = scan_index_one_line (VB_SAM, next, after - next);
 
+    if (load_relaxed (found_SA_Z)) goto done; 
     scan_sort_unique_depn_index (&vb_depn_index);
+
+    if (load_relaxed (found_SA_Z)) goto done; 
     scan_sort_unique_qname_index (&VB_SAM->qname_count);
 
     // tell dispatcher this thread is done and can be joined.
+done:
     vb_set_is_processed (vb); 
     
     COPY_TIMER (scan_index_qnames_preprocessing);
@@ -207,8 +218,10 @@ static void scan_index_qnames_preprocessing (VBlockP vb)
 
 static void scan_append_index (VBlockP vb)
 {
-    buf_append_buf (real_evb, &z_file->sag_depn_index, &vb_depn_index, uint32_t, NULL);
-    buf_append_buf (evb, &z_qname_index, &VB_SAM->qname_count, QnameIndexEnt, "z_qname_index");
+    if (!load_relaxed (found_SA_Z)) {
+        buf_append_buf (real_evb, &z_file->sag_depn_index, &vb_depn_index, uint32_t, NULL);
+        buf_append_buf (evb, &z_qname_index, &VB_SAM->qname_count, QnameIndexEnt, "z_qname_index");
+    }
 }
 
 // remove depn for which qnames_hash instances (prim and depn) are contained in a single VB
@@ -259,6 +272,8 @@ void sam_sag_by_flag_scan_for_depn (void)
     txtfile_read_header (true); // reads into evb->txt_data and evb->lines.len
     buf_free (evb->txt_data);   // discard the header
     
+    found_SA_Z = false;
+
     dispatcher_fan_out_task (TASK_SCAN_FOR_DEPN, 
                              save_txt_file->basename,  // not txt_file-> bc it will be closed in a sec, while the progress component will continue to the main zip fan_out 
                              0, JOIN_IN_ORDER, flag.xthreads, 0, 5000,
@@ -268,21 +283,31 @@ void sam_sag_by_flag_scan_for_depn (void)
 
     RESTORE_FLAG (biopsy);
     RESTORE_FLAG (biopsy_line);
-
+    
     progress_erase(); // erase "Preprocessing..."
-    
-    // most of the sort/uniq work was already done by the compute threads, so this final pass should be fast
-    // TO DO: replace sort with combine sorted arrays 
-    { START_TIMER;  
-    scan_sort_unique_depn_index (&z_file->sag_depn_index); 
-    COPY_TIMER_EVB (sam_sag_by_flag_scan_sag_depn_index); }
-    
-    { START_TIMER;  
-    scan_sort_unique_qname_index (&z_qname_index);   
-    COPY_TIMER_EVB (sam_sag_by_flag_scan_sort_qname_index); }
 
-    // keep only depns that have a qname that appears in 2 or VBs. If all qnames are in a single VB, we will use saggy.
-    scan_remove_single_vb_depns();
+    // SA:Z was found in file - this is not SAG_BY_FLAG after all
+    if (found_SA_Z) {
+        segconf_set_has (OPTION_SA_Z); 
+
+        buf_destroy (z_file->sag_depn_index);
+        buf_destroy (z_qname_index);
+    }
+
+    else {
+        // most of the sort/uniq work was already done by the compute threads, so this final pass should be fast
+        // TO DO: replace sort with combine sorted arrays 
+        { START_TIMER;  
+        scan_sort_unique_depn_index (&z_file->sag_depn_index); 
+        COPY_TIMER_EVB (sam_sag_by_flag_scan_sag_depn_index); }
+        
+        { START_TIMER;  
+        scan_sort_unique_qname_index (&z_qname_index);   
+        COPY_TIMER_EVB (sam_sag_by_flag_scan_sort_qname_index); }
+
+        // keep only depns that have a qname that appears in 2 or VBs. If all qnames are in a single VB, we will use saggy.
+        scan_remove_single_vb_depns();
+    }
 
     file_close (&txt_file);
 

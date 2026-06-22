@@ -40,7 +40,7 @@ void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, STR
     bool is_phased = (ctx_encountered (VB, FORMAT_IGT) && igt_len == 3 && igt[1] == '|');
 
     ContextP channel_ctx = 
-        seg_mux_get_channel_ctx (VB, FORMAT_IPS, (MultiplexerP)&vb->mux_IPS, is_phased);
+        seg_mux_get_channel_ctx (VB, FORMAT_IPS, &vb->mux_IPS, is_phased);
 
     seg_by_ctx (VB, STRa(ips), channel_ctx, ips_len); // note: for channel_i=0 - expeceted to be '.'
 
@@ -72,7 +72,7 @@ void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt))
     }
 
     ContextP channel_ctx = 
-        seg_mux_get_channel_ctx (VB, FORMAT_IGT, (MultiplexerP)&vb->mux_IGT, (vb->sample_i > 0));
+        seg_mux_get_channel_ctx (VB, FORMAT_IGT, &vb->mux_IGT, (vb->sample_i > 0));
 
     if (vb->sample_i == 0) {
         Allele ht0 = CTX(FORMAT_GT)->gt.ht[0];

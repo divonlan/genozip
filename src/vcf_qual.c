@@ -200,7 +200,7 @@ void vcf_piz_insert_QUAL_by_GP (VBlockVCFP vb)
 static inline void vcf_seg_QUAL_by_RGQ (VBlockVCFP vb, ContextP ctx, STRp(qual))
 {
     bool has_rgq = CTX(FORMAT_RGQ)->line_has_RGQ;
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_QUAL, (MultiplexerP)&vb->mux_QUAL, has_rgq);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_QUAL, &vb->mux_QUAL, has_rgq);
     
     if (!has_rgq && vcf_num_samples > 1) // too many unique QUAL values when there are many samples
         seg_add_to_local_string (VB, channel_ctx, STRa(qual), LOOKUP_SIMPLE, qual_len+1);

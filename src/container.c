@@ -20,31 +20,39 @@
 #include "endianness.h"
 #include "libdeflate_1.19/libdeflate.h"
 
+void con_initialize (ContainerP con, uint32_t n_items)
+{
+    memset (con.h, 0, con_sizeof_(n_items)); 
+    con.h->nitems_hi = (n_items) >> 8;       
+    con.h->nitems_lo = (n_items) & 0xff;     
+    con.h->repeats   = 1;
+}
+
 //----------------------
 // Segmentation
 //----------------------
 
-void container_prepare_snip (ConstContainer𐤐 con, STR𐤐(prefixes), 
+void container_prepare_snip (ContainerP con, STR𐤐(prefixes), 
                              qSTR𐤐(snip)) // in / out
 {
     ASSERT (prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is beyond maximum of %u",
             prefixes_len, CONTAINER_MAX_PREFIXES_LEN);
 
     // make sure we have enough memory
-    unsigned con_size = con_sizeof (*con);
+    unsigned con_size = con_sizeof (con);
     unsigned snip_len_needed = 1 + base64_size(con_size) + prefixes_len;
     ASSERT (*snip_len >= snip_len_needed, "snip_len=%u too short, need at least %u", *snip_len, snip_len_needed);
 
     snip[0] = SNIP_CONTAINER;
 
 #ifdef __BIG_ENDIAN__
-    Container(MAX_FIELDS) modified_con; // note: allocate maximum because clang doesn't allow a variable here (gcc does) - no harm, we only touch the memory actually needed
-    memcpy (&modified_con, con, con_size);
-    modified_con.repeats = LTEN24 (con->repeats); // note: up to 15.0.83 repeats was encoded as big endian
+    Container_MAX_FIELDS modified_con; // note: allocate maximum because clang doesn't allow a variable here (gcc does) - no harm, we only touch the memory actually needed
+    memcpy (&modified_con, con.h, con_size);
+    modified_con.repeats = LTEN24 (con.h->repeats); // note: up to 15.0.83 repeats was encoded as big endian
     
     unsigned b64_len = base64_encode ((uint8_t*)&modified_con, con_size, &snip[1]);
 #else
-    unsigned b64_len = base64_encode ((uint8_t*)con, con_size, &snip[1]);
+    unsigned b64_len = base64_encode ((uint8_t*)con.h, con_size, &snip[1]);
 #endif
 
     ASSERT (b64_len <= base64_size(con_size), "b64_len=%u larger than base64_size(%u)=%u",
@@ -56,7 +64,7 @@ void container_prepare_snip (ConstContainer𐤐 con, STR𐤐(prefixes),
 }
 
 // WARNING: don't pass in con an address of a static container, it is not thread safe! container_prepare_snip temporarily BGEN fields of the container.
-WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, 
+WordIndex container_seg_do (VBlockP vb, ContextP ctx, ContainerP con, 
                             // prefixes may be NULL or may be contain a container-wide prefix and per-item prefixes.
                             // The "container-wide prefix" is reconstructed once, at the beginning of the Container.
                             // The per-item prefixes are reconstructed once per repeat, before their respective items. 
@@ -69,22 +77,22 @@ WordIndex container_seg_do (VBlockP vb, ContextP ctx, ConstContainer𐤐 con,
                             bool *restrict is_new) // optional out
 {
 #ifdef DEBUG
-    if (con) con_verify_items (con, ctx, "container_seg_do");
+    if (con.h) con_verify_items (con, ctx, "container_seg_do");
 #endif
 
     ctx->no_stons = true; // we need the word index to for container caching
 
     // con=NULL means MISSING Container (see container_reconstruct)
-    if (!con) return seg_by_ctx (VB, NULL, 0, ctx, 0); 
+    if (!con.h) return seg_by_ctx (VB, NULL, 0, ctx, 0); 
     
-    STRli(snip, con_snip_sizeof (con_nitems(*con)) + prefixes_len);
+    STRli(snip, con_snip_sizeof (con_nitems(con)) + prefixes_len);
 
     container_prepare_snip (con, STRa(prefixes), qSTRa(snip));
 
     if (vb->show_containers) { 
         iprintf ("%s Ctx=%u:%s Repeats=%u RepSep=%u,%u Items=", 
-                 LN_NAME, ctx->did_i, ctx->tag_name, con->repeats, con->repsep[0], con->repsep[1]);
-        for_con (con) 
+                 LN_NAME, ctx->did_i, ctx->tag_name, con.h->repeats, con.h->repsep[0], con.h->repsep[1]);
+        for_con𐤐 (con) 
             if (item->dict_id.num) 
                 iprintf ("%s(%u) ", dis_dict_id (item->dict_id).s, ctx->did_i); 
         
@@ -139,7 +147,7 @@ uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
     // case: container - get number of repeats from containter struct. note: containers are always
     // segged with no_stons so they are never in local (see container_seg_do)
     if (*snip == SNIP_CONTAINER)
-        return container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0)->repeats;
+        return container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0).h->repeats;
 
     // lookup snip: count repsep in local string
     else if (str_is_1char (snip, SNIP_LOOKUP)) {
@@ -156,9 +164,9 @@ uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
 // contains the item dict_id
 bool curr_container_has (VBlockP vb, DictId item_dict_id)
 {
-    ConstContainerP con = vb->con_stack[vb->con_stack_len-1].con;
+    ContainerP con = vb->con_stack[vb->con_stack_len-1].con;
 
-    if (con)
+    if (con.h)
         for_con (con)
             if (item->dict_id.num == item_dict_id.num)
                 return true;
@@ -191,12 +199,12 @@ bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, boo
 // (-1 if item is not in container). 
 void container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items, 
                               ContainerPeekItem *req_items, // caller must initialize all items' idx=-1
-                              ConstContainerP *con_p, // if non-NULL, use this container
+                              ContainerP *con_p, // if non-NULL, use this container
                               bool consume)
 {
     ASSISLOADED(ctx);
 
-    if (*con_p)
+    if (con_p->h)
         {} // use this container
 
     else if (ctx_encountered (vb, ctx->did_i)) 
@@ -248,7 +256,7 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
    }
 }
 
-static inline uint32_t container_reconstruct_prefix (VBlock𐤐 vb, ConstContainer𐤐 con, 𐤐STR𐤐(prefixes),
+static inline uint32_t container_reconstruct_prefix (VBlockP vb, ContainerP con, 𐤐STR𐤐(prefixes),
                                                      bool skip, DictId con_dict_id, DictId item_dict_id, bool show)
 {
     ASSPIZ (*prefixes_len <= CONTAINER_MAX_PREFIXES_LEN, "prefixes_len=%u is too big", *prefixes_len);
@@ -272,10 +280,10 @@ static inline uint32_t container_reconstruct_prefix (VBlock𐤐 vb, ConstContain
 
         // if the separator is CON_PX_SEP_SHOW_REPEATS, output the number of repeats. This is for BAM 'B' array 'count' field.
         if (**prefixes == CON_PX_SEP_SHOW_REPEATS)
-            RECONSTRUCT_BIN32 (con->repeats);
+            RECONSTRUCT_BIN32 (con.h->repeats);
 
         else if (**prefixes == CON_PX_SEP_SHOW_N_ITEMS)
-            RECONSTRUCT_BIN32 (con_nitems(*con) - 1);
+            RECONSTRUCT_BIN32 (con_nitems(con) - 1);
     }
 
     (*prefixes)++; // skip separator
@@ -334,7 +342,7 @@ CONTAINER_FILTER_FUNC (default_piz_filter)
 #define IS_CI0_SET(flag) (CI0_ITEM_HAS_FLAG (item) && ((uint8_t)item->separator[0] & ~(uint8_t)0x80 & flag))
 
 // reconstructs the item separator, returning the number of characters reconstructed
-static inline unsigned container_reconstruct_item_seperator (VBlock𐤐 vb, const ContainerItem *restrict item, char *restrict reconstruction_start, bool translating)
+static inline unsigned container_reconstruct_item_seperator (VBlockP vb, const ContainerItem *restrict item, char *restrict reconstruction_start, bool translating)
 {
     // callback before separator reconstruction
     if (item->separator[1] == CI1_ITEM_CB && 
@@ -441,10 +449,10 @@ static inline ContextP container_get_debug_lines_ctx (VBlockP vb)
     return NULL; // no per-line verification
 }
 
-ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 con, STR𐤐(prefixes))
+ValueType container_reconstruct (VBlockP vb, ContextP ctx, ContainerP con, STR𐤐(prefixes))
 {
     TimeSpecType profiler_timer = {}; 
-    bool is_toplevel = con->is_toplevel; // copy to automatic. note: it is possible that we are top of stack but not a toplevel container - eg when reconstructing for SAG loading
+    bool is_toplevel = con.h->is_toplevel; // copy to automatic. note: it is possible that we are top of stack but not a toplevel container - eg when reconstructing for SAG loading
     vb->curr_item = DID_NONE;
 
     ASSPIZ (vb->con_stack_len < MAX_CON_STACK, "Container stack overflow: %s->%s", container_stack (vb).s, ctx->tag_name);
@@ -461,16 +469,16 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
             clock_gettime (CLOCK_REALTIME, &profiler_timer);
 
         if (!VER(12)) // up to v11 TOPLEVEL didn't have filter_items, however now PIZ relies on it, so we set it here
-            ((ContainerP)con)->filter_items = true;
+            con.h->filter_items = true;
     }
 
-    uint32_t save_repeats = con->repeats;
+    uint32_t save_repeats = con.h->repeats;
 
     // get repeats if not explicit
-    if (con->repeats == CON_REPEATS_IS_SEQ_LEN) 
-        ((ContainerP)con)->repeats = vb->seq_len;
+    if (con.h->repeats == CON_REPEATS_IS_SEQ_LEN) 
+        con.h->repeats = vb->seq_len;
 
-    else if (con->repeats == CON_REPEATS_IS_SPECIAL) {
+    else if (con.h->repeats == CON_REPEATS_IS_SPECIAL) {
         ASSPIZ0 (ctx->con_rep_special, "ctx->con_rep_special not set");
         StoreType save_store = ctx->flags.store;
         ctx->flags.store = STORE_INT;
@@ -478,12 +486,12 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
         reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_SPECIAL, ctx->con_rep_special, 0 }, 2, false, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip
         
         ctx->flags.store = save_store;
-        ((ContainerP)con)->repeats = ctx->last_value.i;
+        con.h->repeats = ctx->last_value.i;
     }
 
     int32_t last_item_reconstructed = -1; 
 
-    bool translating = vb->translation.trans_containers && !con->no_translation;
+    bool translating = vb->translation.trans_containers && !con.h->no_translation;
 
     bool show_non_item = vb->show_containers && flag_is_set (show_containers, ctx->dict_id);
 
@@ -497,21 +505,21 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
     // container wide prefix - it will be missing if Container has no prefixes, or empty if it has only items prefixes
     container_reconstruct_prefix (vb, con, pSTRa(prefixes), false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
 
-    uint32_t num_items = con_nitems(*con);
+    uint32_t num_items = con_nitems(con);
     ContextP item_ctxs[num_items];
     
     // we can cache did_i up to 254. due to historical reasons the field is only 8 bit. that's enough in most cases anyway.
     for (uint32_t i=0; i < num_items; i++) 
-        item_ctxs[i] = con->items[i].did_i_small != 255 ? CTX(con->items[i].did_i_small)
-                     : !con->items[i].dict_id.num       ? NULL 
-                     :                                    ECTX (con->items[i].dict_id);
+        item_ctxs[i] = con.h->items[i].did_i_small != 255 ? CTX(con.h->items[i].did_i_small)
+                     : !con.h->items[i].dict_id.num       ? NULL 
+                     :                                      ECTX (con.h->items[i].dict_id);
 
     // for containers, new_value is the sum of all its items, all repeats last_value (either int or float)
     ValueType new_value = {};
 
     ContextP debug_lines_ctx = NULL;
     if (is_toplevel) {
-        buf_alloc (vb, &vb->lines, 0, con->repeats+1, uint32_t, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
+        buf_alloc (vb, &vb->lines, 0, con.h->repeats+1, uint32_t, 1.1, "lines"); // note: lines.len was set in piz_read_one_vb
         
         if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
             vb->is_dropped = writer_get_is_dropped (vb->vblock_i);
@@ -521,7 +529,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
 
     bool show_item_time = HAS_SHOW_TIME(vb) && container_is_of_fields (vb, ctx, is_toplevel); // TOPLEVEL, AUX, INFO, FORMAT etc
 
-    for (uint32_t rep_i=0; rep_i < con->repeats; rep_i++) {
+    for (uint32_t rep_i=0; rep_i < con.h->repeats; rep_i++) {
 
         current_con.repeat = rep_i;
         vb->curr_item = DID_NONE; // initialize again in each repeat, in case of an error before any item
@@ -540,7 +548,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
             DT_FUNC (vb, piz_init_line)(vb);
         }
 
-        if (con->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) 
+        if (con.h->filter_repeats && !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, -1, NULL))) 
             continue; // repeat is filtered out
 
         char *rep_reconstruction_start = BAFTtxt;
@@ -555,10 +563,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
             iprintf ("%s%s%s Repeat=%u LastRepeat=%u %s\n", 
                      vb->preprocessing    ? "preproc " : "", 
                      vb->peek_stack_level ? "peeking " : "",
-                     VB_NAME, rep_i, con->repeats-1, ctx->tag_name);
+                     VB_NAME, rep_i, con.h->repeats-1, ctx->tag_name);
 
         for (uint32_t item_i=0; item_i < num_items; item_i++) {
-            const ContainerItem *item = &con->items[item_i];
+            const ContainerItem *item = &con.h->items[item_i];
             ContextP item_ctx = item_ctxs[item_i];
             vb->curr_item = item_ctx ? item_ctx->did_i : DID_NONE; // for ASSPIZ
             ReconType reconstruct = !flag.genocat_no_reconstruct;
@@ -572,7 +580,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
             // - returns false - item is filtered out, and data is not consumed
             // - sets reconstruct=RECON_OFF - data is consumed, but prefix and item are not reconstructed
             // - sets reconstruct=RECON_PREFIX_ONLY - data is consumed, prefix is reconstructed, but item isn't
-            if (con->filter_items) {
+            if (con.h->filter_items) {
                 bool filter_out = !(DT_FUNC (vb, container_filter) (vb, ctx->dict_id, con, rep_i, item_i, &reconstruct));
 
                 // skip prefix if needed    
@@ -594,7 +602,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
                          reconstruct, reconstruct && !trans_nor);
 
             uint32_t item_prefix_len = 
-                reconstruct ? container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con->items[item_i].dict_id, show_item) : 0; // item prefix (we will have one per item or none at all)
+                reconstruct ? container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, con.h->items[item_i].dict_id, show_item) : 0; // item prefix (we will have one per item or none at all)
 
             if (reconstruct) last_item_reconstructed = item_i; // even if only prefix is reconstructed
 
@@ -624,7 +632,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
             }            
 
             // case: WORD_INDEX_MISSING - delete previous item's separator if it has one (used by SAM_AUX - sam_seg_aux_all)
-            if (recon_len == -1 && item_i > 0 && !con->keep_empty_item_sep && !CI0_ITEM_HAS_FLAG(item-1))  
+            if (recon_len == -1 && item_i > 0 && !con.h->keep_empty_item_sep && !CI0_ITEM_HAS_FLAG(item-1))  
                 Ltxt -= num_preceding_seps;
 
             // reconstruct separator(s) as needed
@@ -651,25 +659,25 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
         container_reconstruct_prefix (vb, con, &item_prefixes, &remaining_prefix_len, false, ctx->dict_id, DICT_ID_NONE, show_non_item); 
 
         // remove final separator, if we need to (introduced v12)
-        if (con->drop_final_item_sep && last_item_reconstructed >= 0) {
-            const ContainerItem *item = &con->items[last_item_reconstructed]; // last_item_reconstructed is the last item that survived the filter, of the last repeat
+        if (con.h->drop_final_item_sep && last_item_reconstructed >= 0) {
+            const ContainerItem *item = &con.h->items[last_item_reconstructed]; // last_item_reconstructed is the last item that survived the filter, of the last repeat
 
             Ltxt -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
                                             : ((item->separator[0] >= '\t') + (item->separator[1] >= '\t'));
         }
 
         // reconstruct repeats separator, if neeeded
-        if (rep_i+1 < con->repeats || !con->drop_final_repsep) {
-            if (con->repsep[0]) RECONSTRUCT1 (con->repsep[0]);
-            if (con->repsep[1]) RECONSTRUCT1 (con->repsep[1]);
+        if (rep_i+1 < con.h->repeats || !con.h->drop_final_repsep) {
+            if (con.h->repsep[0]) RECONSTRUCT1 (con.h->repsep[0]);
+            if (con.h->repsep[1]) RECONSTRUCT1 (con.h->repsep[1]);
         }
 
         // call callback if needed now that repeat reconstruction is done (always called for top level)
-        if (con->callback || (is_toplevel && DTP (container_cb)))
+        if (con.h->callback || (is_toplevel && DTP (container_cb)))
             DT_FUNC(vb, container_cb)(vb, ctx->dict_id, is_toplevel, rep_i, con, rep_reconstruction_start, 
                     BAFTtxt - rep_reconstruction_start, STRa(prefixes));
 
-        if (con->items[0].separator[1] == CI1_LOOKBACK)
+        if (con.h->items[0].separator[1] == CI1_LOOKBACK)
             lookback_insert_container (vb, con, num_items, item_ctxs);
 
         // in top level: after reconstructing line, verify it and filter it
@@ -677,10 +685,8 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
             if (debug_lines_ctx) 
                 container_verify_line_integrity (vb, debug_lines_ctx, rep_reconstruction_start);
 
-            // we allocate txt_data to be OVERFLOW_SIZE (=1MB) beyond needed, if we get 64KB near the edge
-            // of that we error here. These is to prevent actual overflowing which will manifest as difficult to trace memory issues
-            ASSPIZ (Rtxt > 64 KB, "%s: txt_data overflow: Ltxt=%u lines.len=%u con->repeats=%u recon_size=%u. vb->txt_data dumped to %s.gz", 
-                    LN_NAME, Ltxt, vb->lines.len32, con->repeats, vb->recon_size, txtfile_dump_vb (vb, z_name, NULL).s);
+            ASSPIZ_NO_TXT_OVERFLOW ("%s: txt_data overflow: Ltxt=%u lines.len=%u con->repeats=%u recon_size=%u. vb->txt_data dumped to %s", 
+                                    LN_NAME, Ltxt, vb->lines.len32, con.h->repeats, vb->recon_size, dump_fn);
 
             if (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer)
                 container_toplevel_filter (vb, rep_i, rep_reconstruction_start, show_non_item);
@@ -689,27 +695,27 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ConstContainer𐤐 co
 
     if (is_toplevel) {
         // sanity checks
-        ASSPIZ (vb->lines.len == con->repeats, "%s: Expected vb->lines.len=%"PRIu64" == con->repeats=%u", VB_NAME, vb->lines.len, con->repeats);
+        ASSPIZ (vb->lines.len == con.h->repeats, "%s: Expected vb->lines.len=%"PRIu64" == con->repeats=%u", VB_NAME, vb->lines.len, con.h->repeats);
 
         // final line_start entry (it has a total of num_lines+1 entires) - done last, after possibly dropping line
-        container_set_lines (vb, con->repeats);
+        container_set_lines (vb, con.h->repeats);
     }
 
     // remove final separator, only of final item (since v12, only remained used (by mistake) by SAM arrays - TODO: obsolete this. see sam_seg_array_field)
-    if (con->drop_final_item_sep_of_final_repeat && last_item_reconstructed >= 0) {
-        const ContainerItem *item = &con->items[last_item_reconstructed]; // last_item_reconstructed is the last item that survived the filter, of the last repeat
+    if (con.h->drop_final_item_sep_of_final_repeat && last_item_reconstructed >= 0) {
+        const ContainerItem *item = &con.h->items[last_item_reconstructed]; // last_item_reconstructed is the last item that survived the filter, of the last repeat
 
         Ltxt -= CI0_ITEM_HAS_FLAG(item) ? (translating ? 0 : !!IS_CI0_SET (CI0_NATIVE_NEXT))
                                         : (!!item->separator[0] + !!item->separator[1]);
     }
 
     if (ctx->flags.store == STORE_INDEX) // STORE_INDEX for a container means store number of repeats (since 13.0.5)
-        new_value.i += con->repeats;
+        new_value.i += con.h->repeats;
 
-    ((ContainerP)con)->repeats = save_repeats; // restore
+    con.h->repeats = save_repeats; // restore
 
     vb->con_stack_len--;
-    ctx->curr_container = NULL;
+    ctx->curr_container.h = NULL;
 
     if (flag_show_stack)
         iprintf ("%s: POP [%u] %s\n", LN_NAME, vb->con_stack_len, ctx->tag_name);
@@ -728,16 +734,16 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
 
     // case: if this container exists in the cache - use the cached one
     if (cache_exists && word_index != WORD_INDEX_NONE && ((cache_item_len = *B16(ctx->con_len, word_index)))) {
-        ContainerP con_p = (ContainerP)Bc(ctx->con_cache, *B32 (ctx->con_index, word_index));
+        ContainerP con = { .h = (Container_0 *)B8(ctx->con_cache, *B32(ctx->con_index, word_index)) };
         
         if (out_prefixes) {
-            size_t con_size = con_sizeof (*con_p);
-            *out_prefixes = (rom)con_p + con_size; // prefixes are stored after the Container
+            size_t con_size = con_sizeof (con);
+            *out_prefixes = (rom)con.h + con_size; // prefixes are stored after the Container
             *out_prefixes_len = cache_item_len - con_size;
         }
 
         ctx->last_con_wi = word_index;
-        return con_p;
+        return con;
     }
 
 
@@ -761,23 +767,23 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
 
     // IMPORTANT! we are returning a pointer into the cache buffer which might have just been realloced ^. 
     // We don't handle reallocs, so we cannot have a recursive calls into the same container context, as earlier pointers might be invalidated by the realloc
-    ContainerP con_p = (ContainerP)BAFTc(ctx->con_cache);
+    ContainerP con = { .h = (Container_0 *)BAFTc(ctx->con_cache) };
     ctx->con_cache.len32 += con_size;
 
     // decode full container into cache
     unsigned b64_len = base64_size (con_size);
-    base64_decode (snip, b64_len, (uint8_t *)con_p, -1);
+    base64_decode (snip, b64_len, (uint8_t *)con.h, -1);
     
     if (!VER2(15,84)) // up to 15.0.83 repeats was big endian
-        con_p->repeats = BGEN24 (con_p->repeats);
+        con.h->repeats = BGEN24 (con.h->repeats);
 
     // get the did_i for each dict_id - unfortunately we can only store did_i up to 254 (changing this would be a change in the file format)
-    for_con (con_p)
+    for_con (con)
         if (item->dict_id.num) { // not a prefix-only item
             Did did_i = ctx_get_existing_did_i (vb, item->dict_id);
             
             // note: we possibly won't have did_i if all instances of this container had repeats=0 (and hence items were not segged)
-            ASSPIZ (did_i != DID_NONE || !con_p->repeats, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
+            ASSPIZ (did_i != DID_NONE || !con.h->repeats, "analyzing a %s container in vb=%s: unable to find did_i for item %s/%s",
                     ctx->tag_name, VB_NAME, dtype_name_z(item->dict_id), dis_dict_id (item->dict_id).s);
 
             item->did_i_small = (did_i <= 254 ? (uint8_t)did_i : 255);
@@ -802,9 +808,9 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
                 ctx->tag_name, con_size, prefixes_len);
 
         if (prefixes_len > INITIAL_ALLOC_FOR_PREFIXES) { // need more space
-            uint32_t con_p_index = BNUM(ctx->con_cache, (rom)con_p);
+            uint32_t con_p_index = BNUM(ctx->con_cache, (rom)con.h);
             buf_alloc (vb, &ctx->con_cache, prefixes_len + CONTAINER_MAX_SELF_TRANS_CHANGE, 0, char, 2, NULL);
-            con_p = (ContainerP)Bc(ctx->con_cache, con_p_index); // update con_p after realloc
+            con.h = (Container_0 *)B8(ctx->con_cache, con_p_index); // update con after realloc
         }
         
         if (out_prefixes) *out_prefixes = BAFTc(ctx->con_cache);
@@ -812,10 +818,10 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
     }
 
     // if item[0] is a translator-only item, use it to translate the Container itself (used by SAM_AUX)
-    ContainerItemP item0 = &con_p->items[0];
+    ContainerItemP item0 = &con.h->items[0];
     
     if (vb->translation.trans_containers && !item0->dict_id.num && item0->translator) {
-        int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, (char *)con_p, con_size + prefixes_len, 0, false));  
+        int32_t prefixes_len_change = (DT_FUNC(vb, translator)[item0->translator](vb, ctx, (char *)con.h, con_size + prefixes_len, 0, false));  
         ASSPIZ (prefixes_len_change <= CONTAINER_MAX_SELF_TRANS_CHANGE, 
                 "ctx=%s: prefixes_len_change=%d exceeds range maximum %u", ctx->tag_name, prefixes_len_change, CONTAINER_MAX_SELF_TRANS_CHANGE);
         
@@ -831,7 +837,7 @@ ContainerP container_retrieve (VBlockP vb, ContextP ctx, WordIndex word_index, S
         *out_prefixes_len = prefixes_len;
 
     ctx->last_con_wi = word_index;
-    return con_p;
+    return con;
 }
 
 static StrText item_sep_name0 (uint8_t sep)
@@ -880,45 +886,45 @@ static StrText item_sep_name1 (uint8_t sep)
     return s;
 }
 
-static StrText1K container_flags (ConstContainerP con)
+static StrText1K container_flags (ContainerP con)
 {
     StrText1K s = {};
     int s_len = 0;
 
-    if (con->drop_final_repsep)                   SNPRINTF0 (s, "drop_final_repsep|");
-    if (con->drop_final_item_sep)                 SNPRINTF0 (s, "drop_final_item_sep|");
-    if (con->drop_final_item_sep_of_final_repeat) SNPRINTF0 (s, "drop_final_item_sep_of_final_repeat|");
-    if (con->keep_empty_item_sep)                 SNPRINTF0 (s, "keep_empty_item_sep|");
-    if (con->filter_repeats)                      SNPRINTF0 (s, "filter_repeats|");
-    if (con->filter_items)                        SNPRINTF0 (s, "filter_items|");
-    if (con->is_toplevel)                         SNPRINTF0 (s, "is_toplevel|");
-    if (con->callback)                            SNPRINTF0 (s, "callback|");
-    if (con->no_translation)                      SNPRINTF0 (s, "no_translation|");
+    if (con.h->drop_final_repsep)                   SNPRINTF0 (s, "drop_final_repsep|");
+    if (con.h->drop_final_item_sep)                 SNPRINTF0 (s, "drop_final_item_sep|");
+    if (con.h->drop_final_item_sep_of_final_repeat) SNPRINTF0 (s, "drop_final_item_sep_of_final_repeat|");
+    if (con.h->keep_empty_item_sep)                 SNPRINTF0 (s, "keep_empty_item_sep|");
+    if (con.h->filter_repeats)                      SNPRINTF0 (s, "filter_repeats|");
+    if (con.h->filter_items)                        SNPRINTF0 (s, "filter_items|");
+    if (con.h->is_toplevel)                         SNPRINTF0 (s, "is_toplevel|");
+    if (con.h->callback)                            SNPRINTF0 (s, "callback|");
+    if (con.h->no_translation)                      SNPRINTF0 (s, "no_translation|");
 
     if (s_len) s.s[s_len-1] = 0; // remove final |
 
     return s;
 }
 
-StrText16K container_to_json (ConstContainerP con, STRp (prefixes))
+StrText16K container_to_json (ContainerP con, STRp (prefixes))
 {
-    if (!con) return (StrText16K){ "NULL" };
+    if (!con.h) return (StrText16K){ "NULL" };
 
     StrText16K s;
     int s_len = 0;
     
-    uint32_t num_items = con_nitems (*con);
+    uint32_t num_items = con_nitems (con);
 
     SNPRINTF (s, "{ \"repeats\": %s, \"num_items\": %u, \"flags\": %s, \"repsep\": [ '%.5s', '%.5s' ], \"items\": [ ",
-              (con->repeats == CON_REPEATS_IS_SEQ_LEN?"SEQ_LEN" : con->repeats == CON_REPEATS_IS_SPECIAL?"SPECIAL" : str_int_s (con->repeats).s),
-              num_items,container_flags(con).s,
-              char_to_printable (con->repsep[0]).s, char_to_printable(con->repsep[1]).s);
+              (con.h->repeats == CON_REPEATS_IS_SEQ_LEN?"SEQ_LEN" : con.h->repeats == CON_REPEATS_IS_SPECIAL?"SPECIAL" : str_int_s (con.h->repeats).s),
+              num_items,container_flags(con.h).s,
+              char_to_printable (con.h->repsep[0]).s, char_to_printable(con.h->repsep[1]).s);
     
     for (unsigned i=0; i < num_items; i++)
         SNPRINTF (s, "[%d]={ \"dict_id\": \"%s\", \"separator\": [ %s, %s ], \"translator\": %u }, ",
-                  i, dis_dict_id (con->items[i].dict_id).s,  
-                  item_sep_name0 (con->items[i].separator[0]).s, item_sep_name1 (con->items[i].separator[1]).s, 
-                  con->items[i].translator);
+                  i, dis_dict_id (con.h->items[i].dict_id).s,  
+                  item_sep_name0 (con.h->items[i].separator[0]).s, item_sep_name1 (con.h->items[i].separator[1]).s, 
+                  con.h->items[i].translator);
     
     if (num_items) s_len -= 2; // remove last com
 
@@ -943,24 +949,24 @@ StrText16K container_to_json (ConstContainerP con, STRp (prefixes))
     return s;
 }
 
-void con_verify_items (ConstContainerP con, ContextP ctx, rom con_name)
+void con_verify_items (ContainerP con, ContextP ctx, rom con_name)
 {
-    for (ConstContainerItemP item=con->items; item < con->items + con_nitems(*con); item++) {
+    for (ConstContainerItemP item=con.h->items; item < con.h->items + con_nitems(con); item++) {
         char sep0 = item->separator[0]; 
         char sep1 = item->separator[1]; 
         
         if (!item->dict_id.num 
-        && !((item - con->items) == 0 && con->items[0].translator) // item 0 can be a translator-only item
+        && !((item - con.h->items) == 0 && con.h->items[0].translator) // item 0 can be a translator-only item
         && !(TXT_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->st_did_i == VCF_INFO))) // VCF_INFO can have dict_id=0 items (valueless items)
-            ABORT ("container %s item_i=%u has dict_id=0. Perhaps n_items is too large?", con_name, (int)(item - con->items));
+            ABORT ("container %s item_i=%u has dict_id=0. Perhaps n_items is too large?", con_name, (int)(item - con.h->items));
 
         if ((sep0 == CI0_LAST_MATCH && !IS_PRINTABLE(sep1)) ||
             ((sep0 == CI0_FIXED_0_PAD || sep0 == CI0_VAR_0_PAD || sep0 == CI0_COLONn) && !sep1))
-            ABORT ("container %s item_i=%u has sep0=%s, expecting sep1≠0", con_name, (int)(item - con->items), item_sep_name0(sep0).s);
+            ABORT ("container %s item_i=%u has sep0=%s, expecting sep1≠0", con_name, (int)(item - con.h->items), item_sep_name0(sep0).s);
 
         if ((sep0 == CI0_DIGIT || sep0 == CI0_SKIP || sep0 == CI0_NONE || sep0 == CI0_INVISIBLE) && sep1 > CI1_LAST_SPECIAL)
             ABORT ("container %s item_i=%u has sep0=%s, expecting sep1 ≤ CI1_LAST_SPECIAL(%u) but it is '%c'(%u)", 
-                   con_name, (int)(item - con->items), item_sep_name0(sep0).s, CI1_LAST_SPECIAL, sep1, sep1);
+                   con_name, (int)(item - con.h->items), item_sep_name0(sep0).s, CI1_LAST_SPECIAL, sep1, sep1);
     }
 }
 

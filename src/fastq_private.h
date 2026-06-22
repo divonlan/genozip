@@ -15,6 +15,7 @@
 #include "deep.h"
 #include "aligner.h"
 #include "sam_friend.h"
+#include "multiplexer.h"
 
 #define DTYPE_QNAME     DTYPE_1
 #define DTYPE_FASTQ_AUX DTYPE_2
@@ -77,7 +78,7 @@ typedef struct VBlockFASTQ {
     uint32_t num_bamass;            // number oflines segged by bamass
     uint32_t num_r2_gpos_Δ;         // number of R2 (R2 file or interleaved) reads with GPOS segged as delta R1's GPOS
     Multiplexer2 mux_illum_v;
-} VBlockFASTQ, *VBlockFASTQP;
+} VBlockFASTQ, *restrict VBlockFASTQP;
 
 #define VB_FASTQ ((VBlockFASTQP)vb)
 

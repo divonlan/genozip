@@ -138,7 +138,7 @@ void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsign
 
     // case: in paired files, its expected to be the same value as the mate
     if (segconf.is_paired && !IS_DEPN(vb)) 
-        sam_seg_buddied_i_fields (vb, dl, OPTION_nM_i, nm, &dl->nM, (MultiplexerP)&vb->mux_nM, STRa(copy_mate_nM_snip), add_bytes);
+        sam_seg_buddied_i_fields (vb, dl, OPTION_nM_i, nm, &dl->nM, &vb->mux_nM, STRa(copy_mate_nM_snip), add_bytes);
 
     // else: in non-paired files, we use the same method as NM:i
     else {

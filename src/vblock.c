@@ -71,7 +71,7 @@ void vb_release_vb_do (VBlockP *vb_p, rom func)
         buflist_test_overflows(vb, func); 
 
     // verify that bgzf memory was released after use
-    ASSERTISNULL (vb->gz_inflate_mem);
+    ASSERTISNULL (vb->libdef_decomp_mem);
     ASSERTISNULL (vb->gz_deflate_mem);
 
     // release all buffers in vb->buffer_list, and zero the space between these buffers
@@ -167,7 +167,7 @@ void vb_create_pool (VBlockPoolType type)
     // case: old pool is too small - realloc it (the pool contains only pointers to VBs, so the VBs themselves are not realloced)
     else if (pools[type]->num_vbs < num_vbs) {
         REALLOC (&pools[type], size, "VBlockPool"); 
-        memset (&pools[type]->vb[pools[type]->num_vbs], 0, (num_vbs - pools[type]->num_vbs) * sizeof (VBlockP)); // initialize new entries
+        memset ((char *)&pools[type]->vb[pools[type]->num_vbs], 0, (num_vbs - pools[type]->num_vbs) * sizeof (VBlockP)); // initialize new entries
     }
 
     pools[type]->name    = pool_type_names[type];

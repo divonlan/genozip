@@ -81,7 +81,7 @@ void bed_segconf_finalize (VBlockP vb)
 void bed_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Container(13) top_level = { 
+    Container_13 top_level = { 
         .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .nitems_lo    = 13,
@@ -107,7 +107,7 @@ void bed_seg_finalize (VBlockP vb)
         top_level.items[segconf.bed_num_flds-1].separator[0] = 0;    
     }
 
-    container_seg (vb, CTX(BED_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    container_seg (vb, CTX(BED_TOPLEVEL), &top_level, 0, 0, 0);
 }
 
 bool bed_seg_is_small (ConstVBlockP vb, DictId dict_id)

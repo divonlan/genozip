@@ -409,7 +409,7 @@ void fasta_seg_finalize (VBlockP vb)
 {
     if (!flag.make_reference) {
         // top level snip
-        Container(2) top_level = { 
+        Container_2 top_level = { 
             .repeats      = vb->lines.len,
             .is_toplevel  = true,
             .callback     = true,
@@ -418,7 +418,7 @@ void fasta_seg_finalize (VBlockP vb)
                               { .dict_id = { _FASTA_EOL      }  } }
         };
 
-        container_seg (vb, CTX(FASTA_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+        container_seg (vb, CTX(FASTA_TOPLEVEL), &top_level, 0, 0, 0);
     }
 }
 

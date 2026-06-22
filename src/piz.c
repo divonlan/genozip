@@ -76,18 +76,18 @@ static VBIType piz_get_standalone_vb_i (CompIType comp_i, // if COMP_NONE, we wi
                                         VBIType vb_i)   
 {
     if (comp_i == COMP_NONE)
-        comp_i = sections_vb_header (vb_i)->comp_i;
+        comp_i = sections_get_comp_of_vb (vb_i);
 
     return (Z_DT(FASTQ)   && comp_i >= FQ_COMP_R2)    ? (vb_i - sections_get_first_vb_i (comp_i) + 1)
          : (flag.deep     && comp_i >= SAM_COMP_FQ00) ? (vb_i - sections_get_first_vb_i (comp_i) + 1)
-         : (z_sam_gencomp && comp_i == SAM_COMP_MAIN) ? sections_get_num_vbs_up_to (SAM_COMP_MAIN, vb_i) // gencomp: don't count PRIM VBs in the midst of MAIN VBs, as --biopsy sets --no-gencomp
+         : (z_sam_gencomp && comp_i == SAM_COMP_MAIN) ? sections_get_num_vbs_up_to (SAM_COMP_MAIN, vb_i) // gencomp: don't count PRIM/DEPN VBs in the midst of MAIN VBs, as --biopsy sets --no-gencomp
          :                                              vb_i;
 }
 
 static StrText1K piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) // one of the two is needed
 {
     if (comp_i == COMP_NONE)
-        comp_i = sections_vb_header (vb_i)->comp_i;
+        comp_i = sections_get_comp_of_vb (vb_i);
 
     int file_i = ((Z_DT(BAM) || Z_DT(SAM)) && comp_i <= SAM_COMP_DEPN) ? 0
                 : (flag.deep && comp_i >= SAM_COMP_FQ00)               ? (1 + comp_i - SAM_COMP_FQ00)
@@ -101,23 +101,36 @@ static StrText1K piz_get_filename_by_comp_i (CompIType comp_i, VBIType vb_i) // 
         strncpy (s.s, filename_guess_original (txt_file), sizeof(s)-1);
 
     else // PIZ
-        s = txtheader_get_txt_filename_from_section (comp_i);
+        s = txtheader_get_txt_filename_from_section (comp_i, true);
 
     return s;
 }
 
 StrText1K piz_advise_biopsy (VBlockP vb)
 {
-    StrText1K s;
-    snprintf (s.s, sizeof(s), "To see the same data in the original file:\n"
-                              "genozip --biopsy %u%.20s%.20s%s %.768s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
-              piz_get_standalone_vb_i (vb->comp_i, vb->vblock_i),
-              // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+    rom original_filename = piz_get_filename_by_comp_i (vb->comp_i, vb->vblock_i).s;
+    VBIType standalone_vb_i = piz_get_standalone_vb_i (vb->comp_i, vb->vblock_i); // vb_i during biopsy, i.e. with no gencomp
+
+    StrText vb_size; // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+    snprintf (vb_size.s, sizeof(vb_size), "%.20s%.20s%s", 
               cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/ && !(segconf.vb_size % (1 MB)), " -B", (unsigned)(segconf.vb_size >> 20)), 
               cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
-              segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
-              piz_get_filename_by_comp_i (vb->comp_i, vb->vblock_i).s,
-              (DTP(txt_header_required) != HDR_NONE ? " (optionally add: --no-header)" : ""));
+              segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "");
+
+    StrText1K s;
+
+    // gencomp: is we are in a recon compute thread, we can't recreate that VB easily with biopsy: 1. vblock_i numbers
+    // might differ between executions 2. PRIM/DEPN VBs might differ between executions (bc MAIN VBs contribute alignments out-of-order) 
+    // This is not an issue the writer thread that deals with VBs after integrating them back.
+    if (z_has_gencomp && !threads_am_i_writer_thread())
+        snprintf (s.s, sizeof(s), "Biopsy is not available because file is gencomp. To get a biopsy, compress with --no-gencomp and hope that the issue causing the error persists:\n"
+                                  "genozip --no-gencomp%s%s %.768s", 
+                                  flag.test ? " --test" : "", vb_size.s, original_filename);
+    else
+        snprintf (s.s, sizeof(s), "To see the same data in the original file:\n"
+                                "genozip --biopsy %u%s %.768s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+                standalone_vb_i, vb_size.s, original_filename,
+                (DTP(txt_header_required) != HDR_NONE ? " (optionally add: --no-header)" : ""));
 
     return s;
 }
@@ -218,7 +231,7 @@ static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalT
         
         if (*ltype == LT_BITMAP) { 
             local_buf->nbits = local_buf->len * 64 - param ; 
-            LTEN_bits ((BitsP)local_buf); 
+            LTEN_bits (local_buf); 
         }
 
         else if (*ltype >= LT_UINT8_TR && *ltype <= LT_UINT64_TR)
@@ -518,7 +531,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
 
         if (flag.debug_read_ctxs) {
             if (section_read)
-                sections_show_header ((SectionHeaderP)Bc (vb->z_data, section_start), NULL, (*sec)->comp_i, (*sec)->offset, sections_read_prefix (is_pair_data || vb->preprocessing));
+                sections_show_header ((SectionHeaderP)Bc(vb->z_data, section_start), NULL, (*sec)->comp_i, (*sec)->offset, sections_read_prefix (is_pair_data || vb->preprocessing));
             else
                 iprintf ("%c Skipped loading %s/%u %s.%s\n", sections_read_prefix (is_pair_data || vb->preprocessing), 
                          comp_name((*sec)->comp_i), vb->vblock_i, zctx->tag_name, st_name ((*sec)->st));
@@ -857,7 +870,7 @@ Dispatcher piz_z_file_initialize (void)
     Dispatcher dispatcher = dispatcher_init (flag.reading_reference ? TASK_PIZ_REF : TASK_PIZ, // also referred to in dispatcher_recycle_vbs()
                                              flag.xthreads ? 1 : global_max_threads, 0, 
                                              (flag.test && flag.no_writer_thread) ? JOIN_OUT_OF_ORDER : JOIN_IN_ORDER, // out-of-order if --test with no writer thread (note: SAM gencomp always have writer thread to do digest). 
-                                             flag.out_filename ? flag.out_filename : txtheader_get_txt_filename_from_section(COMP_MAIN).s, 
+                                             flag.out_filename ? flag.out_filename : txtheader_get_txt_filename_from_section(COMP_MAIN, false).s, 
                                              piz_target_progress (COMP_MAIN));
 
     return dispatcher;

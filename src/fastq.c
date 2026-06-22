@@ -831,6 +831,7 @@ void fastq_zip_after_segconf (VBlockP vb)
     fastq_tip_if_should_be_pair(); // note: we can't run this in segconf_finalize because segconf sets flag.pair=NO_PAIR
 }
 
+TypeContainer(FASTQ_NUM_TOP_LEVEL_FIELDS);
 void fastq_seg_finalize (VBlockP vb)
 {
     // assign the QUAL codec
@@ -844,7 +845,7 @@ void fastq_seg_finalize (VBlockP vb)
         fastq_bamass_seg_finalize (VB_FASTQ);
 
     // top level snip
-    Container(FASTQ_NUM_TOP_LEVEL_FIELDS) top_level = { 
+    Container_FASTQ_NUM_TOP_LEVEL_FIELDS top_level = { 
         .repeats        = vb->lines.len32,
         .is_toplevel    = true,
         .filter_items   = true,
@@ -926,9 +927,10 @@ void fastq_seg_finalize (VBlockP vb)
     if (desc_is_l3 || !has_qname2)         REMOVE (2,  5,  2);
     if (!flag.deep)                        REMOVE (0,  2,  1);
 
-    container_seg (vb, CTX(FASTQ_TOPLEVEL), (ContainerP)&top_level, prefixes, prefixes_len, 0); // note: the '@', '+' and ' ' are accounted for in the QNAME, QNAME2/EXTRA/AUX and LINE3 fields respectively
+    container_seg (vb, CTX(FASTQ_TOPLEVEL), &top_level, prefixes, prefixes_len, 0); // note: the '@', '+' and ' ' are accounted for in the QNAME, QNAME2/EXTRA/AUX and LINE3 fields respectively
 }
 
+// compute thread: called after compressing a B250 or LOCAL section
 void fastq_zip_comp_cb (VBlockP vb, ContextP ctx, SectionType st, uint32_t comp_len)
 {
     if (flag.bam_assist)
@@ -1418,9 +1420,9 @@ IS_SKIP (fastq_piz_is_skip_section)
 }
 
 // called before reconstructing first repeat of toplevel container
-static inline void fastq_piz_initialize_item_filter (VBlockFASTQP vb, ConstContainerP con)
+static inline void fastq_piz_initialize_item_filter (VBlockFASTQP vb, ContainerP con)
 {
-    ASSERT (sizeof (vb->item_filter) >= con->nitems_lo, "top_level.nitems_lo=%u by item_filter is only %u", con->nitems_lo, (int)sizeof (vb->item_filter));
+    ASSERT (sizeof (vb->item_filter) >= con.h->nitems_lo, "top_level.nitems_lo=%u by item_filter is only %u", con.h->nitems_lo, (int)sizeof (vb->item_filter));
 
     memset (vb->item_filter, true, sizeof (vb->item_filter)); // default - reconstruct all items
 
@@ -1428,15 +1430,15 @@ static inline void fastq_piz_initialize_item_filter (VBlockFASTQP vb, ConstConta
     int nl[4];
     int n_nl = 0;
     int expected_n_nl = (FAF ? 2 : 4);
-    for (int i=0; i < con->nitems_lo && n_nl < expected_n_nl/*safety*/; i++)
-        if (con->items[i].did_i_small == FASTQ_E1L || con->items[i].did_i_small == FASTQ_E2L)
+    for (int i=0; i < con.h->nitems_lo && n_nl < expected_n_nl/*safety*/; i++)
+        if (con.h->items[i].did_i_small == FASTQ_E1L || con.h->items[i].did_i_small == FASTQ_E2L)
             nl[n_nl++] = i;
 
     ASSERT (n_nl == expected_n_nl, "expecting %d newlines in a FASTQ container but found %d", expected_n_nl, n_nl);
 
     #define KEEP_ITEMS(first_item, last_item) \
         ({ memset (&vb->item_filter[flag.deep], false, (first_item)-flag.deep); /*always keep DEEP (item 0, if flag.deep) */\
-           memset (&vb->item_filter[(last_item)+1], false, con->nitems_lo - ((last_item)+1)); })
+           memset (&vb->item_filter[(last_item)+1], false, con.h->nitems_lo - ((last_item)+1)); })
 
     // --header-only: keep items up to and including first newline
     if (flag.header_only_fast) KEEP_ITEMS (flag.deep, nl[0]);
@@ -1454,8 +1456,8 @@ static inline void fastq_piz_initialize_item_filter (VBlockFASTQP vb, ConstConta
     }
 
     // case: we have a seq_len item. we keep it if and only if we are dropping the first and third lines, that normally contain it
-    if (nl[n_nl-1] != con->nitems_lo - 1) // can only happen since v15
-        vb->item_filter[con->nitems_lo-1] = (flag.seq_only || flag.qual_only); 
+    if (nl[n_nl-1] != con.h->nitems_lo - 1) // can only happen since v15
+        vb->item_filter[con.h->nitems_lo-1] = (flag.seq_only || flag.qual_only); 
 }
 
 // filtering during reconstruction: called by container_reconstruct for each fastq record (repeat) and each toplevel item

@@ -33,7 +33,7 @@ uint32_t sam_get_QUAL_score (VBlockSAMP vb, STRp(qual))
 void sam_seg_ms_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t ms, unsigned add_bytes)
 {
     int32_t save = dl->QUAL_score;
-    sam_seg_buddied_i_fields (vb, dl, OPTION_ms_i, ms, &dl->QUAL_score, (MultiplexerP)&vb->mux_ms, STRa(copy_mate_ms_snip), add_bytes);
+    sam_seg_buddied_i_fields (vb, dl, OPTION_ms_i, ms, &dl->QUAL_score, &vb->mux_ms, STRa(copy_mate_ms_snip), add_bytes);
     dl->QUAL_score = save;
 }
 

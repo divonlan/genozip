@@ -10,6 +10,7 @@
 
 #include "genozip.h"
 
+#define BASE_DECODE_OVERFLOW 4
 extern unsigned base64_encode (STR8𐤐(in), char *restrict b64_str);
 extern uint32_t base64_decode (STR𐤐(b64_str), STR8c𐤐(out));
 extern DictId base64_decode_dict_id (rom b64_str);

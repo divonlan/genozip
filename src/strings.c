@@ -200,7 +200,7 @@ uint32_t str_int_ex (int64_t n, char *str /* out */, bool add_nul_terminator)
             n /= 10;
         }
         // now reverse it
-        for (int i=0; i < len; i++) str[i + is_negative] = rev[len-i-1];
+        for (uint32_t i=0; i < len; i++) str[i + is_negative] = rev[len-i-1];
 
         if (is_negative) {
             str[0] = '-';
@@ -272,7 +272,7 @@ uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool add_nu
             n /= 16;
         }
         // now reverse it
-        for (int i=0; i < len; i++) str[i + is_negative] = rev[len-i-1];
+        for (uint32_t i=0; i < len; i++) str[i + is_negative] = rev[len-i-1];
 
         if (is_negative) {
             str[0] = '-';
@@ -446,7 +446,7 @@ rom str_to_hex_(bytes𐤐 data, uint32_t data_len, char *restrict hex_str, bool 
 {
     char *s = hex_str;
 
-    for (int i=0; i < data_len; i++) {
+    for (uint32_t i=0; i < data_len; i++) {
         *s++ = NUM2HEXDIGIT(data[i] >> 4);
         *s++ = NUM2HEXDIGIT(data[i] & 0xf);
         if (with_dot) *s++ = '.';
@@ -483,7 +483,7 @@ StrText str_int_commas (int64_t n)
             n /= 10;
         }
         // now reverse it
-        for (int i=0; i < len; i++) *c++ = rev[len-i-1];
+        for (uint32_t i=0; i < len; i++) *c++ = rev[len-i-1];
     }
 
     *c = '\0'; // string terminator
@@ -797,7 +797,7 @@ uint32_t str_split_by_lines_do (STR𐤐(str), uint32_t max_lines, rom𐤐 *restr
 
 // splits a string based on container items (doesn't need to be nul-terminated). 
 // returns the number on unskipped items if successful
-uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR𐤐(con_prefixes),
+uint32_t str_split_by_container_do (STR𐤐(str), ContainerP con, STR𐤐(con_prefixes),
                                     rom𐤐 *restrict items, // out - array of char* of length max_items - one more than the number of separators
                                     uint32_t *restrict item_lens, // optional out - corresponding lengths
                                     rom𐤐 enforce_msg)     // non-NULL if enforcement of length is requested
@@ -806,7 +806,7 @@ uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR�
 
     if (!str) return 0; // note: str!=NULL + str_len==0 results in n_items=1 - one empty item
 
-    uint32_t num_items = con_nitems (*con);
+    uint32_t num_items = con_nitems (con);
     ASSERT0 (num_items, "Container has no items");
 
     const rom𐤐 *restrict save_items = items;
@@ -823,7 +823,7 @@ uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR�
 
     for (uint32_t item_i=0; item_i < num_items; item_i++) { 
 
-        char sep = con->items[item_i].separator[0];
+        char sep = con.h->items[item_i].separator[0];
                 
         // verify item prefix
         if (px < after_px) {
@@ -874,7 +874,7 @@ uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR�
                 break;
 
             case 32 ... 126: case '\t': case '\n': case '\r': { // printable
-                char sep1 = con->items[item_i].separator[1];
+                char sep1 = con.h->items[item_i].separator[1];
                 if (!IS_PRINTABLE (sep1)) sep1 = 0;
                 
                 *items = str;
@@ -901,11 +901,11 @@ uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR�
 
             case CI0_VAR_0_PAD:
                 // case: e.g. 4-pad but item is 10342 (5 digits)
-                if (after_str - str > con->items[item_i].separator[1]) goto long_var_0_pad;
+                if (after_str - str > con.h->items[item_i].separator[1]) goto long_var_0_pad;
                 // fallthrough
 
             case CI0_FIXED_0_PAD: 
-                *item_lens = con->items[item_i].separator[1];
+                *item_lens = con.h->items[item_i].separator[1];
                 *items = str; // zero-length item - next item will start from the same str_i
                 str += *item_lens;
                 ASSSPLIT (str <= after_str, "item_i=%u fixed_len=%u goes beyond end of string \"%.*s\"", item_i, *item_lens, str_len, save_str);
@@ -925,7 +925,7 @@ uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR�
             case CI0_ACGTN: // items goes until a A,C,G,T or N, but not less than sep[1] characters
                 *items = str;
 
-                str += (uint8_t)con->items[item_i].separator[1]; // minimum number of character
+                str += (uint8_t)con.h->items[item_i].separator[1]; // minimum number of character
                 while (str < after_str && !IS_ACGTN(*str)) str++;  
 
                 ASSSPLIT (str < after_str, "item_i=%u reached end of string without finding a ACGTN separator \"%.*s\"", 
@@ -938,7 +938,7 @@ uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR�
                 sep = ':'; goto multisep;
             
             multisep: {
-                int n = (uint8_t)con->items[item_i].separator[1];
+                int n = (uint8_t)con.h->items[item_i].separator[1];
                 
                 *items = str;
 
@@ -954,7 +954,7 @@ uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR�
             }
 
             case CI0_LAST_MATCH: { // items goes until LAST match in string of sep1
-                char sep1 = con->items[item_i].separator[1];
+                char sep1 = con.h->items[item_i].separator[1];
                 *items = str;
 
                 for (str=after_str-1; str >= *items && *str != sep1; str--);
@@ -1008,10 +1008,10 @@ uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out)
 }
 
 // in-place removal of flanking whitespace from a null-terminated string
-void str_trim (qSTRp(str))
+void str_trim (qSTR𐤐(str))
 {
     // remove leading whitespace
-    int i=0; for (; i < *str_len; i++)
+    uint32_t i=0; for (; i < *str_len; i++)
         if (str[i] != ' ' && str[i] != '\t' && str[i] != '\n' && str[i] != '\r')
             break;
 
@@ -1029,7 +1029,7 @@ void str_trim (qSTRp(str))
         *str_len = i+1;
         str[*str_len] = '\0';
     }
-}
+}   
 
 // splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items integers
 // returns the actual number of items, or 0 is unsuccessful
@@ -1189,12 +1189,11 @@ void str_query_user (rom query,
     char save_response[response_size];
     memcpy (save_response, response, response_size);
 
+    bool is_ascii;
     do {
         fprintf (stderr, "%s", query);
         if (save_response[0]) fprintf (stderr, "[%s] ", save_response);
 
-        // Linux: in case of non-Latin, fgets doesn't handle backspace well - not completely removing the multi-byte character from the string (bug 593)
-        // Windows (MingW): the string is terminated before the first non-Latin character on bash terminal and only ???? on Powershell and Command (bug 594)
         do {
             if (fgets (response, response_size, stdin)) { // success
                 len = strlen (response);
@@ -1207,7 +1206,10 @@ void str_query_user (rom query,
             len = strlen (response);
         }
 
-    } while (verifier && !verifier (response, len, verifier_param));
+        if (!(is_ascii = str_is_ascii (response, len))) 
+            fprintf (stderr, "\n"_ERR"Response contains non-ASCII characters, please try again:\n");
+
+    } while (!is_ascii || (verifier && !verifier (response, len, verifier_param)));
 }
 
 rom str_win_error_(uint32_t error)

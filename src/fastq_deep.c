@@ -38,11 +38,11 @@ uint32_t fastq_get_num_deeped (VBlockP vb)
 void fastq_deep_zip_initialize (void)
 {
     DO_ONCE {
-        static const Container(2) con1 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME  }, { .dict_id.num = _FASTQ_QmNAME  } }};
-        container_prepare_snip ((ContainerP)&con1, NULL, 0, qSTRa(con_decanonize1_snip));
+        static const Container_2 con1 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME  }, { .dict_id.num = _FASTQ_QmNAME  } }};
+        container_prepare_snip (&con1, NULL, 0, qSTRa(con_decanonize1_snip));
 
-        static const Container(2) con2 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME2 }, { .dict_id.num = _FASTQ_QmNAME2 } }};
-        container_prepare_snip ((ContainerP)&con2, NULL, 0, qSTRa(con_decanonize2_snip));
+        static const Container_2 con2 = { .repeats = 1, .nitems_lo = 2, .items = { { .dict_id.num = _FASTQ_Q0NAME2 }, { .dict_id.num = _FASTQ_QmNAME2 } }};
+        container_prepare_snip (&con2, NULL, 0, qSTRa(con_decanonize2_snip));
     }
 }
 
@@ -456,7 +456,7 @@ ent_consumed_by_another_thread:
               "%sWorkaround: compress without using --deep.\n"
               "This_line:\nQNAME=\"%.*s\"\nSEQ  =\"%.*s\"\nQUAL =\"%.*s\"\n"
               "To see other line, run: %s",
-              LN_NAME, comp_name (sections_vb_header (contention_place.vb_i)->comp_i), contention_place.vb_i, contention_place.line_i, str_size (segconf.vb_size).s, 
+              LN_NAME, comp_name (sections_get_comp_of_vb (contention_place.vb_i)), contention_place.vb_i, contention_place.line_i, str_size (segconf.vb_size).s, 
               DEEPHASHf(deep_hash), qtype_name(segconf.deep_qtype), TF(segconf.deep_no_qual), 
               report_support(), STRf(qname), STRf(seq), STRf(qual),
               piz_advise_biopsy_line (COMP_NONE, contention_place.vb_i, contention_place.line_i, NULL).s);
@@ -573,7 +573,11 @@ bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(qname), STR
     START_TIMER;
 
     uint64_t deep_value = 0;
-    void *matching_ent = NULL; // ZipZDeep or BamAssEnt
+    union {
+        ZipZDeep *deep;
+        BamAssEnt *bamass;
+    } matching_ent = {}; // ZipZDeep or BamAssEnt
+    
     DeepStatsZip reason;
     #define NO_MATCH(r) ({ reason=(r); goto no_match; })
 
@@ -622,19 +626,20 @@ bool fastq_seg_deep (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(qname), STR
     //       SAM entry - since we can't undo the previous lines at this point - we fail the execution
 
     // match by QNAME1 or QNAME2 ; SEQ must match ; QUAL must match unless deep_no_qual ; trimming allow if deep_has_trimmed
-    reason = flag.deep  ? fastq_seg_find_deep   (vb, dl, &deep_hash, STRa(seq), STRa(qual), (ZipZDeep **)&matching_ent)
-             /*bamass*/ : fastq_seg_find_bamass (vb, dl, &deep_hash, STRa(seq),            (BamAssEnt **)&matching_ent);
+    reason = flag.deep  ? fastq_seg_find_deep   (vb, dl, &deep_hash, STRa(seq), STRa(qual), &matching_ent.deep)
+             /*bamass*/ : fastq_seg_find_bamass (vb, dl, &deep_hash, STRa(seq),             &matching_ent.bamass);
 
     // case: single matching ent
-    if (matching_ent) {
+    if (matching_ent.deep) { // covers both - its a union
         if (flag.deep)
-            deep_value = 1 + fastq_seg_deep_consume_unique_matching_ent (vb, matching_ent, deep_hash, STRa(qname), STRa(seq), STRa(qual)); // +1 as 0 means "no match"
-        else {
+            deep_value = 1 + fastq_seg_deep_consume_unique_matching_ent (vb, matching_ent.deep, deep_hash, STRa(qname), STRa(seq), STRa(qual)); // +1 as 0 means "no match"
+       
+        else { // bamass
             vb->num_consumed++;
 
             if ((flag.show_deep == SHOW_DEEP_ONE_HASH && deephash_issame (flag.debug_deep_hash, deep_hash)) || flag.show_deep == SHOW_DEEP_ALL) 
                 iprintf ("\n%s %s (vb_size=%s): Found: %s_entry: matching this FASTQ read:\n%s_entry: %s\nread_QNAME=\"%.*s\"\nread_SEQ=\"%.*s\"\n", 
-                         txt_name, LN_NAME, str_size(segconf.vb_size).s, deep_or_bamass, deep_or_bamass, bamass_dis_ent (VB, matching_ent, deep_hash.qname).s,
+                         txt_name, LN_NAME, str_size(segconf.vb_size).s, deep_or_bamass, deep_or_bamass, bamass_dis_ent (VB, matching_ent.bamass, deep_hash.qname).s,
                          STRlstf (FASTQ_QNAME), STRf(seq));
         }
     }
@@ -669,7 +674,7 @@ done:
 
     COPY_TIMER (fastq_seg_deep);
 
-    return matching_ent != NULL;
+    return matching_ent.deep != NULL; // covers bamass to (its a union)
 }
 
 void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), ContextP bitmap_ctx, ContextP nonref_ctx)

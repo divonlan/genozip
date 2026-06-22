@@ -31,7 +31,7 @@ static void fastq_get_pair_1_gpos_strand (VBlockFASTQP vb, PosType64 *gpos_R1, b
                 LN_NAME, (unsigned)strand_ctx->localR1.nbits);
 
         // the corresponding line in pair-1 is aligned: get its gpos and is_forward
-        *is_forward_R1 = bits_get ((BitsP)&strand_ctx->localR1, gpos_ctx->localR1.next); 
+        *is_forward_R1 = bits_get (&strand_ctx->localR1, gpos_ctx->localR1.next); 
         *gpos_R1 = reconstruct_from_pair_int (vb, gpos_ctx); // also increments gpos_ctx->localR1.next: iterator for both GPOS and STRAND
     }
 }
@@ -269,8 +269,8 @@ bool fastq_piz_get_r2_is_forward (VBlockP vb)
         ASSPIZ (!VER(14) || gpos_ctx->localR1.next < strand_ctx->localR1.nbits, "gpos_ctx->localR1.next=%"PRId64" overflow: strand_ctx->localR1.nbits=%"PRIu64,
                 gpos_ctx->localR1.next, strand_ctx->localR1.nbits);
 
-        bool is_forward_pair_1 = VER(14) ? bits_get ((BitsP)&strand_ctx->localR1, gpos_ctx->localR1.next) // since v14, gpos_ctx->localR1.next is an iterator for both gpos and strand, and is incremented in fastq_special_PAIR2_GPOS
-                                         : bits_get ((BitsP)&strand_ctx->localR1, vb->line_i);            // up to v13, all lines had strand, which was 0 if unmapped
+        bool is_forward_pair_1 = VER(14) ? bits_get (&strand_ctx->localR1, gpos_ctx->localR1.next) // since v14, gpos_ctx->localR1.next is an iterator for both gpos and strand, and is incremented in fastq_special_PAIR2_GPOS
+                                         : bits_get (&strand_ctx->localR1, vb->line_i);            // up to v13, all lines had strand, which was 0 if unmapped
 
         return NEXTLOCALBIT (strand_ctx) ? is_forward_pair_1 : !is_forward_pair_1;
     }

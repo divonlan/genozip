@@ -26,8 +26,6 @@ extern rom arch_get_glibc (void);
 extern StrText4K arch_get_executable (void);
 extern StrText4K arch_get_genozip_executable (void);
 extern rom arch_get_argv0 (void);
-extern bool arch_is_valgrind (void);
-extern bool arch_is_docker (void);
 extern bool arch_is_first_compression (void);
 extern uint64_t arch_time (void);
 extern Timestamp arch_timestamp (void);
@@ -35,7 +33,6 @@ extern bool arch_is_process_alive (uint32_t pid);
 extern uint64_t arch_get_max_resident_set (void);
 extern bool wget_available (void);
 extern bool curl_available (void);
-
 extern rom get_distribution (void);
 extern bool dist_is_conda (void);
 extern bool dist_is_installforge (void);

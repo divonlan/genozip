@@ -186,7 +186,7 @@ extern bool codec_normq_comp_init (VBlockP vb, Did did_i, bool maybe_revcomped, 
 
 // DOMQ stuff
 typedef struct {
-    uint8_t *qual;
+    char *qual;
     uint32_t qual_len; 
     uint8_t dom;     // dom of this line
     bool is_diverse; // too few qual score in this line are dom

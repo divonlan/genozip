@@ -119,15 +119,15 @@ bool mutex_wait_do (Mutex *mutex, bool blocking, FUNCLINE)
 
 void serializer_initialize_do (SerializerP ser, rom name, rom func)
 {
-    ASSERT (!ser->initialized, "called from %s: serializer already initialized", func);
-    mutex_initialize_do ((MutexP)ser, name, func);
+    ASSERT (!ser->mutex.initialized, "called from %s: serializer already initialized", func);
+    mutex_initialize_do (&ser->mutex, name, func);
 }
 
 void serializer_destroy_do (SerializerP ser, rom func)
 {
-    if (!ser->initialized) return; // nothing to do
+    if (!ser->mutex.initialized) return; // nothing to do
 
-    mutex_destroy_do ((MutexP)ser, func);
+    mutex_destroy_do (&ser->mutex, func);
 }
 
 void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
@@ -136,10 +136,10 @@ void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
     #define TIMEOUT (30*60) // 30 min
 
     for (unsigned i=0; ; i++) {
-        mutex_lock_do ((MutexP)ser, true, func, code_line);
+        mutex_lock_do (&ser->mutex, true, func, code_line);
 
         ASSERT (ser->vb_i_last < vb_i, "called from %s:%u: Expecting vb_i_last=%u < vb->vblock_i=%u. serializer=%s", 
-                func, code_line, ser->vb_i_last, vb_i, ser->name);
+                func, code_line, ser->vb_i_last, vb_i, ser->mutex.name);
         
         if (ser->vb_i_last == vb_i - 1) { // its our turn now
             ser->vb_i_last++; // next please
@@ -147,12 +147,12 @@ void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
         }
         
         // not our turn, wait 5ms and try again
-        mutex_unlock_do ((MutexP)ser, func, code_line);
+        mutex_unlock_do (&ser->mutex, func, code_line);
         usleep (WAIT_TIME_USEC);
 
         // timeout after approx 30 minutes
         ASSERT (i < TIMEOUT * (1000000 / WAIT_TIME_USEC), "called from %s:%u: Timeout (%u sec) while waiting for serializer %s in vb=%u. vb_i_last=%u", 
-                func, code_line, TIMEOUT, ser->name, vb_i, ser->vb_i_last);
+                func, code_line, TIMEOUT, ser->mutex.name, vb_i, ser->vb_i_last);
     }
 }
 

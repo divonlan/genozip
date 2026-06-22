@@ -396,7 +396,7 @@ void sam_seg_pacbio_sn (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom sn, int/*signe
 
     // sn:B is identical for all subreads of a molecule
     if (segconf.sam_use_sn_mux) {
-        channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_sn_B_f, (MultiplexerP)&vb->mux_sn, get_sn_channel_i (vb));
+        channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_sn_B_f, &vb->mux_sn, get_sn_channel_i (vb));
 
         STRlast (prev_sn, OPTION_sn_B_f);
         if (str_issame (sn, prev_sn)) {

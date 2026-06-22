@@ -287,7 +287,7 @@ static bool is_show_header (SectionType st, uint32_t sec_i, DictId sec_dict_id/*
         return flag_show_sec_headers(st);
 }
 
-void sections_show_header (ConstSectionHeaderP header, 
+void sections_show_header (SectionHeaderUnionP header, 
                            VBlockP vb,       // optional if output to buffer (allowed only in ZIP)
                            CompIType comp_i, 
                            uint64_t offset, char rw)
@@ -296,12 +296,12 @@ void sections_show_header (ConstSectionHeaderP header,
 
     ASSERTW (!vb || IS_ZIP, _WRN "sections_show_header: expecting vb=NULL in PIZ", NULL); // because we dump the show_headers_buf to the terminal only in ZIP
 
-    SectionType st = header->section_type;
+    SectionType st = header.common->section_type;
     
-    if (!is_show_header (st, header->section_i, sections_get_dict_id (header)))
+    if (!is_show_header (st, header.common->section_i, sections_get_dict_id (header)))
         return; // we don't need to show this section
               
-    bool is_dict_offset = (header->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
+    bool is_dict_offset = (header.common->section_type == SEC_DICT && rw == 'W'); // at the point calling this function in zip, SEC_DICT offsets are not finalized yet and are relative to the beginning of the dictionary area in the genozip file
     bool v12 = (IS_ZIP || VER(12));
     bool v14 = (IS_ZIP || VER(14));
     bool v15 = (IS_ZIP || VER(15));
@@ -314,20 +314,20 @@ void sections_show_header (ConstSectionHeaderP header,
     snprintf (str, sizeof (str), "%c %s%-*"PRIu64" %-19s %-4.4s %.8s%.15s vb=%-3u %s=%*u txt_len=%-7u z_len=%-7u enc_len=%-7u ",
               rw, 
               is_dict_offset ? "~" : "", 9-is_dict_offset, offset, 
-              st_name(header->section_type), 
-              codec_name (header->codec), 
-              cond_str (header->section_type == SEC_LOCAL && header->sub_codec, "sub=", codec_name (header->sub_codec)),
-              cond_int (header->section_type == SEC_DICT, "dict_helper=", header->dict_helper),
-              BGEN32 (header->vblock_i), 
+              st_name(header.common->section_type), 
+              codec_name (header.common->codec), 
+              cond_str (header.common->section_type == SEC_LOCAL && header.common->sub_codec, "sub=", codec_name (header.common->sub_codec)),
+              cond_int (header.common->section_type == SEC_DICT, "dict_helper=", header.common->dict_helper),
+              BGEN32 (header.common->vblock_i), 
               v15 ? "z_digest" : "comp_off",
               v15 ? -10 : -4,
-              v15 ? BGEN32 (header->z_digest) : BGEN32 (header->v14_compressed_offset), 
-              BGEN32 (header->data_uncompressed_len), 
-              BGEN32 (header->data_compressed_len), 
-              BGEN32 (header->data_encrypted_len));
+              v15 ? BGEN32 (header.common->z_digest) : BGEN32 (header.common->v14_compressed_offset), 
+              BGEN32 (header.common->data_uncompressed_len), 
+              BGEN32 (header.common->data_compressed_len), 
+              BGEN32 (header.common->data_encrypted_len));
     PRINT;
 
-    SectionFlags f = header->flags;
+    SectionFlags f = header.common->flags;
     DataType dt    = (flag.deep && comp_i >= SAM_COMP_FQ00) ? DT_FASTQ : z_file->data_type;
     bool is_r2     = (dt == DT_FASTQ && comp_i == FQ_COMP_R2) ||
                      (flag.deep && flag.pair && comp_i % 2 == 0); // SAM_COMP_FQ01=4, SAM_COMO_FQ03=6...
@@ -335,7 +335,7 @@ void sections_show_header (ConstSectionHeaderP header,
     switch (st) {
 
     case SEC_GENOZIP_HEADER: {
-        SectionHeaderGenozipHeaderP h = (SectionHeaderGenozipHeaderP)header;
+        SectionHeaderGenozipHeaderP h = header.genozip_header;
         z_file->z_flags.not_md5 = h->flags.genozip_header.not_md5; // needed by digest_display_ex
         char dt_specific[REF_FILENAME_LEN + 2 KB] = "";
         dt = BGEN16 (h->data_type); // for GENOZIP_HEADER, go by what header declares
@@ -400,7 +400,7 @@ void sections_show_header (ConstSectionHeaderP header,
     }
 
     case SEC_TXT_HEADER: {
-        SectionHeaderTxtHeaderP h = (SectionHeaderTxtHeaderP)header;
+        SectionHeaderTxtHeaderP h = header.txt_header;
         if (!v15)
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
                       "%ssrc_codec=%s OLD_gz_size_3LSB=%u %s txt_filename=\"%.*s\"\n",
@@ -423,7 +423,7 @@ void sections_show_header (ConstSectionHeaderP header,
     }
 
     case SEC_VB_HEADER: {
-        SectionHeaderVbHeaderP h = (SectionHeaderVbHeaderP)header;
+        SectionHeaderVbHeaderP h = header.vb_header;
         if Z_DT(VCF) 
             snprintf (str, sizeof (str), 
                       "\n%srecon_size=%u longest_line=%u HT_n_lines=%u z_data_bytes=%u digest=%s %s\n",
@@ -473,14 +473,14 @@ void sections_show_header (ConstSectionHeaderP header,
 
     case SEC_REFERENCE:
     case SEC_REF_IS_SET: {
-        SectionHeaderReferenceP h = (SectionHeaderReferenceP)header;
+        SectionHeaderReferenceP h = header.reference;
         snprintf (str, sizeof (str), "pos=%-9"PRIu64" gpos=%-9"PRIu64" num_bases=%-6u chrom_word_index=%-4d\n",
                   BGEN64 (h->pos), BGEN64 (h->gpos), BGEN32 (h->num_bases), BGEN32 (h->chrom_word_index)); 
         break;
     }
     
     case SEC_REF_HASH: {
-        SectionHeaderRefHashP h = (SectionHeaderRefHashP)header;
+        SectionHeaderRefHashP h = header.ref_hash;
         if (VER2(15,81))
             snprintf (str, sizeof (str), "first_ent=%"PRIu64"\n", BGEN64 (h->first_ent)); 
         else
@@ -490,18 +490,18 @@ void sections_show_header (ConstSectionHeaderP header,
     }
     
     case SEC_REF_CONTIGS: {
-        snprintf (str, sizeof (str), "sequential_ref_index=%u\n", header->flags.ref_contigs.sequential_ref_index);
+        snprintf (str, sizeof (str), "sequential_ref_index=%u\n", header.common->flags.ref_contigs.sequential_ref_index);
         break;
     }
     
     case SEC_RECON_PLAN: {
-        SectionHeaderReconPlanP h = (SectionHeaderReconPlanP)header;
+        SectionHeaderReconPlanP h = header.recon_plan;
         snprintf (str, sizeof (str), "conc_writing_vbs=%u %s\n", BGEN32 (h->conc_writing_vbs), sections_dis_flags (f, st, dt, 0).s); 
         break;
     }
         
     case SEC_GZ_DIGESTS: {
-        SectionHeaderGzDigestsP h = (SectionHeaderGzDigestsP)header;
+        SectionHeaderGzDigestsP h = header.gz_digests;
         snprintf (str, sizeof (str), "gz_file_size=%"PRIu64" effective_codec=%s %s\n", 
                   BGEN64(h->gz_file_size), codec_name (h->effective_codec), sections_dis_flags (f, st, dt, 0).s); 
         break;
@@ -515,7 +515,7 @@ void sections_show_header (ConstSectionHeaderP header,
     }
     
     case SEC_B250: {
-        SectionHeaderCtxP h = (SectionHeaderCtxP)header;
+        SectionHeaderCtxP h = header.ctx;
         snprintf (str, sizeof (str), "%s/%-8s\tb250_size=%s param=%u %s\n",
                   dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s,  
                   h->b250_size==B250_BYTES_1?"1" : h->b250_size==B250_BYTES_2?"2" : h->b250_size==B250_BYTES_3?"3" : h->b250_size==B250_BYTES_4?"4" : h->b250_size==B250_VARL?"VARL" : "INVALID",
@@ -524,7 +524,7 @@ void sections_show_header (ConstSectionHeaderP header,
     }
 
     case SEC_LOCAL: {
-        SectionHeaderCtxP h = (SectionHeaderCtxP)header;
+        SectionHeaderCtxP h = header.ctx;
         snprintf (str, sizeof (str), "%s/%-8s\tltype=%s param=%u%s %s\n",
                   dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, lt_name (h->ltype), h->param, 
                   cond_str (lt_max(h->ltype), " nothing_char=", char_to_printable (h->nothing_char).s), // nothing_char only defined for integer ltypes
@@ -533,26 +533,26 @@ void sections_show_header (ConstSectionHeaderP header,
     }
 
     case SEC_DICT: {
-        SectionHeaderDictionaryP h = (SectionHeaderDictionaryP)header;
+        SectionHeaderDictionaryP h = header.dict;
         snprintf (str, sizeof (str), "%s/%-8s\tnum_snips=%u %s\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, BGEN32 (h->num_snips), 
                   sections_dis_flags (f, st, dt, 0).s); 
         break;
     }
 
     case SEC_COUNTS: {
-        SectionHeaderCountsP h = (SectionHeaderCountsP)header;
+        SectionHeaderCountsP h = header.counts;
         snprintf (str, sizeof (str), "  %s/%-8s param=%"PRId64"\t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, h->nodes_param); 
         break;
     }
 
     case SEC_SUBDICTS: {
-        SectionHeaderSubDictsP h = (SectionHeaderSubDictsP)header;
+        SectionHeaderSubDictsP h = header.subdicts;
         snprintf (str, sizeof (str), "  %s/%-8s param=%"PRId64"\t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s, h->param); 
         break;
     }
 
     case SEC_HUFFMAN: {
-        SectionHeaderHuffmanP h = (SectionHeaderHuffmanP)header;
+        SectionHeaderHuffmanP h = header.huffman;
         snprintf (str, sizeof (str), "  %s/%-8s \t\n", dtype_name_z (h->dict_id), dis_dict_id (h->dict_id).s); 
         break;
     }
@@ -569,7 +569,7 @@ void sections_show_header (ConstSectionHeaderP header,
 }
 
 // called from main()
-void noreturn genocat_show_headers (rom z_filename)
+noreturn void genocat_show_headers (rom z_filename)
 {
     TEMP_FLAG(quiet, false);
     z_file = file_open_z_read (z_filename);    
@@ -591,7 +591,7 @@ void noreturn genocat_show_headers (rom z_filename)
                 header = zfile_read_section_header (evb, sec, SEC_NONE).genozip_header;
                 header.section_i = sec_i; // note: replaces magic, 32 bit only. nonsense if sec is not in z_file->section_list.
 
-                sections_show_header ((SectionHeaderP)&header, NULL, sec->comp_i, sec->offset, 'R');
+                sections_show_header (&header, NULL, sec->comp_i, sec->offset, 'R');
             }        
     }
 
@@ -627,7 +627,7 @@ void noreturn genocat_show_headers (rom z_filename)
                 iprintf ("%5u ", sec_i);
             
             header.section_i = sec_i;
-            sections_show_header ((SectionHeaderP)&header, NULL, sec.comp_i, sec.offset, 'R');
+            sections_show_header (&header, NULL, sec.comp_i, sec.offset, 'R');
 
             sec.offset += header_size + BGEN32 (header.data_compressed_len);
             accumulated_gap = 0;
@@ -731,7 +731,7 @@ void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header)
     sections_show_section_list (dt, &z_file->section_list, SEC_NONE);
 }
 
-void noreturn genocat_show_txt_offsets (void)
+noreturn void genocat_show_txt_offsets (void)
 {
     // TODO: support gencomp files - this would require parsing the recon_plan
     ASSINP0 (!z_file->z_flags.has_gencomp, "Genozip limitation: --show-vb-offsets doesn't yet support files with gencomp");

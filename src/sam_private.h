@@ -19,6 +19,7 @@
 #include "context.h"
 #include "reconstruct.h"
 #include "sam_friend.h"
+#include "multiplexer.h"
 
 #define DTYPE_QNAME   DTYPE_1
 #define DTYPE_SAM_AUX DTYPE_2
@@ -236,7 +237,7 @@ typedef struct VBlockSAM {
     rom *auxs;                     
     uint32_t *aux_lens;
 
-    ConstContainerP aux_con;       // AUX container being reconstructed
+    ContainerP aux_con;       // AUX container being reconstructed
 
     // current line CIGAR stuff
     rom last_cigar;                // ZIP: last textual CIGAR (PIZ: use vb->textual_cigar instead)
@@ -331,9 +332,10 @@ typedef struct VBlockSAM {
     uint32_t deep_stats[NUM_DEEP_STATS]; // ZIP/PIZ: stats collection regarding Deep - one entry for each in DeepStatsZip/DeepStatsPiz
     
     uint32_t num_seq_by_aln;       // ZIP: number of alignments segged vs reference by rname/pos/cigar (i.e. not aligner, not copy from prim/saggy, not verbatim)
-    uint32_t num_vs_prim;
+    uint32_t num_by_prim;
+    uint32_t num_by_saggy;
     uint32_t num_tlen_pred;
-} VBlockSAM, *VBlockSAMP;
+} VBlockSAM, *restrict VBlockSAMP;
 
 #define VB_SAM ((VBlockSAMP)vb)
 
@@ -504,8 +506,8 @@ extern void sam_seg_float_as_snip (VBlockSAMP vb, ContextP ctx, STRp(sam_value),
 
 static inline bool sam_is_depn (SamFlags f) { return f.supplementary || f.secondary; }
 
-static bool inline sam_line_is_depn (ZipDataLineSAM𐤐 dl) { return  sam_is_depn (dl->FLAG); }
-static bool inline sam_line_is_prim (ZipDataLineSAM𐤐 dl) { return !sam_is_depn (dl->FLAG); }
+static inline bool sam_line_is_depn (ZipDataLineSAM𐤐 dl) { return  sam_is_depn (dl->FLAG); }
+static inline bool sam_line_is_prim (ZipDataLineSAM𐤐 dl) { return !sam_is_depn (dl->FLAG); }
 
 #define sam_has_mate  (VB_SAM->mate_line_i  != NO_LINE)
 #define sam_has_saggy (VB_SAM->saggy_line_i != NO_LINE)

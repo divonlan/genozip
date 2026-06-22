@@ -143,7 +143,7 @@ typedef struct FlagsMgzip FlagsMgzip;
 
 #define SECTION_FLAGS_NONE ((SectionFlags){ .flags = 0 })
 
-typedef struct SectionHeader {  // 28 bytes
+typedef struct __attribute__((__may_alias__)) SectionHeader {  // 28 bytes
     union {
     uint32_t     magic; 
     uint32_t     uncomp_adler32;              // used if --verify-codec is specified (a diagnostic)
@@ -575,7 +575,7 @@ typedef union {
     SectionHeaderRefHashP ref_hash;
     SectionHeaderReconPlanP recon_plan;
     SectionHeaderHuffmanP huffman;
-    SectionHeaderGzDigestsP exact_gz;
+    SectionHeaderGzDigestsP gz_digests;
 } SectionHeaderUnionP __attribute__((__transparent_union__));
 
 #pragma pack()
@@ -611,7 +611,7 @@ typedef packed_enum { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } AliasType;
 // ZIP stuff
 // ---------
 
-extern void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header);
+extern void sections_add_to_list (VBlockP vb, SectionHeaderUnionP header);
 extern void sections_remove_from_list (VBlockP vb, uint64_t offset, uint64_t len);
 extern void sections_list_concat (BufferP section_list);
 
@@ -647,9 +647,10 @@ extern Section sections_get_next_vb_header_sec (CompIType comp_i, Section *vb_se
 extern bool is_there_any_section_with_dict_id (DictId dict_id);
 extern SectionEnt *section_get_section (VBIType vb_i, SectionType st, DictId dict_id);
 extern uint32_t sections_txt_header_get_num_fragments (void);
-
 extern void sections_reading_list_add_vb_header (VBIType vb_i);
 extern void sections_reading_list_add_txt_header (CompIType comp_i);
+
+static inline CompIType sections_get_comp_of_vb (VBIType vb_i) { return sections_vb_header(vb_i)->comp_i; }
 
 extern void sections_list_memory_to_file_format (void);
 extern void sections_list_file_to_memory_format (SectionHeaderGenozipHeaderP genozip_header);
@@ -660,9 +661,9 @@ extern uint32_t st_header_size (SectionType sec_type);
 
 // display functions
 #define sections_read_prefix(P_prefix) ((P_prefix) ? 'P' : flag_loading_auxiliary ? 'L' : 'R')
-extern void sections_show_header (ConstSectionHeaderP header, VBlockP vb, CompIType comp_i, uint64_t offset, char rw);
-extern void noreturn genocat_show_headers (rom z_filename);
-extern void noreturn genocat_show_txt_offsets (void);
+extern void sections_show_header (SectionHeaderUnionP header, VBlockP vb, CompIType comp_i, uint64_t offset, char rw);
+extern noreturn void genocat_show_headers (rom z_filename);
+extern noreturn void genocat_show_txt_offsets (void);
 typedef struct { char s[128]; } FlagStr;
 extern FlagStr sections_dis_flags (SectionFlags f, SectionType st, DataType dt, bool is_r2);
 extern void sections_show_gheader (ConstSectionHeaderGenozipHeaderP header);
@@ -671,7 +672,7 @@ extern rom st_name (SectionType sec_type);
 extern rom lt_name (LocalType lt);
 extern rom store_type_name (StoreType store);
 extern rom make_ref_size_name (MakeRefSize size);
-extern DictId sections_get_dict_id (ConstSectionHeaderP header);
+extern DictId sections_get_dict_id (SectionHeaderUnionP header);
 
 extern StrText vb_name (VBlockP vb);
 #define VB_NAME vb_name(VB).s

@@ -27,25 +27,20 @@ static inline ContextP id_num2_ctx (VBlockP vb, ContextP ctx)
 static void seg_id_add_to_unknown (ContextP ctx, STRp(id))
 {
     if (!z_file) return;
-    
-    int id_i = -1;
-    
-    int i=0;  for (;i < NUM_COLLECTED_WORDS && z_file->unk_ids_tag_name[i][0]; i++)
-        if (!memcmp (ctx->tag_name, z_file->unk_ids_tag_name[i], MAX_TAG_LEN)) {
-            id_i = i;
-            break;
-        }
+        
+    int id_i=0; for (;id_i < NUM_UNK_ID_CTXS; id_i++)
+        // if we scan all ctxs and arrived at a free one, or we confirm this is our context - stop here
+        if (!z_file->unk_ids_tag_name[id_i][0] ||
+            !memcmp (ctx->tag_name, z_file->unk_ids_tag_name[id_i], MAX_TAG_LEN)) break;
 
-    if (i == NUM_COLLECTED_WORDS) return; // too many unknown ID contexts in file, no room to store
+    if (id_i == NUM_UNK_ID_CTXS) return; // too many unknown ID contexts in file, no room to store
 
-    if (id_i == -1) {
-        id_i = i;
-        memcpy (z_file->unk_ids_tag_name[i], ctx->tag_name, MAX_TAG_LEN);
-    }
+    if (!z_file->unk_ids_tag_name[id_i][0]) // first word in new context - copy name
+        memcpy (z_file->unk_ids_tag_name[id_i], ctx->tag_name, MAX_TAG_LEN);
 
-    for (i=0; i < NUM_UNK_ID_CTXS ; i++)
-        if (!z_file->unk_ids[id_i][i][0]) { // we still have room
-            memcpy (z_file->unk_ids[id_i][i], id, MIN_(id_len, UNK_ID_LEN));
+    for (int wrd_i=0; wrd_i < NUM_UNK_ID_CTXS; wrd_i++)
+        if (!z_file->unk_ids[id_i][wrd_i][0]) { // we still have room
+            memcpy (z_file->unk_ids[id_i][wrd_i], id, MIN_(id_len, UNK_ID_LEN));
             break;
         }
 }
@@ -178,14 +173,14 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
             ctx_num1 = id_num1_ctx (vb, ctx);
             ContextP ctx_num2 = id_num2_ctx (vb, ctx);
             
-            Container(2) con = {
+            Container_2 con = {
                 .repeats   = 1,
                 .nitems_lo = 2,
                 .items = { { .dict_id = ctx_num1->dict_id, .separator[0] = '.' },  // alpha and num1
                            { .dict_id = ctx_num2->dict_id                      } } // num2
             };
 
-            container_seg (vb, ctx, (ContainerP)&con, 0, 0, 0);
+            container_seg (vb, ctx, &con, 0, 0, 0);
 
             dyn_int_append (vb, ctx_num2, num2, num2_len);
         }

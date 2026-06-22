@@ -98,7 +98,8 @@ typedef struct {              // 8 bytes
 // Note: the full range of the signed type is supported, eg -128 to 127 for int8_t
 #define SAFE_NEGATE(signedtype,n) ((u##signedtype)(-((int64_t)n))) // careful negation to avoid overflow eg -(-128)==0 in int8_t
 #define INTERLACE(signedtype,num) ({ signedtype n=(signedtype)(num); (n < 0) ? ((SAFE_NEGATE(signedtype,n) << 1) - 1) : (((u##signedtype)n) << 1); })
-#define DEINTERLACE(signedtype,unum) (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
+#define DEINTERLACE(signedtype,unum) (((unum) & 1) ? (signedtype)(-(int64_t)(((unum) >> 1) + 1)) : (signedtype)((unum) >> 1)) // note: (int64_t) is needed to protect from negative number overflow which is undefined befaviour in C: if unum is the max (e.g. 0xffffffff for INT32)
+                   // up to 15.0.83: (((unum) & 1) ? -(signedtype)(((unum)>>1)+1) : (signedtype)((unum)>>1))
 
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75
@@ -131,9 +132,9 @@ static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { retur
 
 static inline void ctx_init_iterator (ContextP ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
 
-extern WordIndex ctx_create_node_do (VBlock𐤐 vb, Context𐤐 vctx, STR𐤐(snip), bool *restrict is_new);
-extern WordIndex ctx_create_node_is_new (VBlock𐤐 vb, Did did_i, STR𐤐(snip), bool *is_new);
-static inline WordIndex ctx_create_node (VBlock𐤐 vb, Did did_i, STR𐤐(snip)) { return ctx_create_node_is_new (vb, did_i, STRa(snip), NULL); }
+extern WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STR𐤐(snip), bool *restrict is_new);
+extern WordIndex ctx_create_node_is_new (VBlockP vb, Did did_i, STR𐤐(snip), bool *is_new);
+static inline WordIndex ctx_create_node (VBlockP vb, Did did_i, STR𐤐(snip)) { return ctx_create_node_is_new (vb, did_i, STRa(snip), NULL); }
 
 extern uint32_t ctx_get_count (VBlockP vb, ContextP ctx, WordIndex node_index);
 extern void ctx_decrement_count (VBlockP vb, ContextP ctx, WordIndex node_index);
@@ -358,7 +359,7 @@ extern void ctx_set_ltype (VBlockP vb, int ltype, ...);
 extern void ctx_consolidate_stats (VBlockP vb, int parent, ...);
 extern void ctx_consolidate_statsN(VBlockP vb, Did parent, Did first_dep, unsigned num_deps);
 extern void ctx_consolidate_statsA(VBlockP vb, Did parent, ContextP ctxs[], unsigned num_deps);
-extern void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ConstContainerP con);
+extern void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con);
 extern void ctx_show_zctx_big_consumers (FILE *out);
 extern void ca_init_d2d_map (ContextArrayP ca);
 extern rom dyn_type_name (DynType dyn_type);

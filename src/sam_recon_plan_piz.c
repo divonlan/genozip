@@ -24,7 +24,7 @@ StrText display_plan_item (ReconPlanItemP p)
 {
     StrText s;
     
-    rom comp = p->vb_i ? comp_name(sections_vb_header(p->vb_i)->comp_i) : NULL;
+    rom comp = p->vb_i ? comp_name(sections_get_comp_of_vb(p->vb_i)) : NULL;
     rom flav = recon_plan_flavors[p->flavor];
 
     rom no_recon = IS_ZIP                                                                         ? ""
@@ -50,7 +50,7 @@ StrText display_plan_item (ReconPlanItemP p)
         case PLAN_DOWNSAMPLE : snprintf (s.s, sizeof(s), "%-10s vb=%.12s/%u\tnum_lines=%u%s%s", flav, comp, p->vb_i, p->num_lines, no_recon, no_write); break;
         case PLAN_END_OF_VB  : snprintf (s.s, sizeof(s), "%-10s vb=%.12s/%u%.10s%s%s", flav, comp, p->vb_i, dropped_lines, no_recon, no_write); break;
         case PLAN_INTERLEAVE : snprintf (s.s, sizeof(s), "%-10s vb1=%.8s/%u\tvb2=%.8s/%u%.10s%.10s%.9s%.9s", flav, comp, p->vb_i,
-                                         comp_name(sections_vb_header(p->vb2_i)->comp_i), p->vb2_i,
+                                         comp_name(sections_get_comp_of_vb(p->vb2_i)), p->vb2_i,
                                          cond_int (IS_PIZ, "\tnum_lines=", p->num_lines), dropped_lines, no_recon, no_write); break;
         default              : ABORT ("Unknown flavor %u", p->flavor);
     }  

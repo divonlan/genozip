@@ -140,28 +140,28 @@ uint8_t lookback_size_to_local_param (uint32_t size)
 }
 
 // ZIP
-void lookback_flush (VBlockP vb, ConstContainer𐤐 con)
+void lookback_flush (VBlockP vb, ContainerP con)
 {
-    for (unsigned i=1; i < con->nitems_lo; i++)
-        if (con->items[i].separator[1] == CI1_LOOKBACK) {
-            ContextP ctx = ctx_get_ctx (vb, con->items[i].dict_id);
+    for (unsigned i=1; i < con.h->nitems_lo; i++)
+        if (con.h->items[i].separator[1] == CI1_LOOKBACK) {
+            ContextP ctx = ctx_get_ctx (vb, con.h->items[i].dict_id);
             ctx->lookback.gap_index = ctx->lookback.newest_index = 0;
         }
 }
 
 // PIZ: insert all values of lookbackable items in a container
-void lookback_insert_container (VBlockP vb, ConstContainerP con, unsigned num_items, ContextP *item_ctxs)
+void lookback_insert_container (VBlockP vb, ContainerP con, unsigned num_items, ContextP *item_ctxs)
 {        
     if (!item_ctxs[0]->is_initialized) {
         for (unsigned i=1; i < num_items; i++)
-            if (con->items[i].separator[1] == CI1_LOOKBACK)
+            if (con.h->items[i].separator[1] == CI1_LOOKBACK)
                 lookback_init (vb, item_ctxs[0], item_ctxs[i], item_ctxs[i]->flags.store);
 
         item_ctxs[0]->is_initialized = true;
     }
 
     for (unsigned i=1; i < num_items; i++) 
-        if (con->items[i].separator[1] == CI1_LOOKBACK) {
+        if (con.h->items[i].separator[1] == CI1_LOOKBACK) {
             if (item_ctxs[i]->flags.store != STORE_LAST_TXT)
                 lookback_insert (vb, item_ctxs[0]->did_i, item_ctxs[i]->did_i, true, NO_VALUE); // copy last_value
             else

@@ -131,12 +131,12 @@ void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF𐤐 dl, STRp
 
     // the GT field is represented as a Container, with a single item repeating as required by poidy, and the separator 
     // determined by the phase
-    Container(1) con = { .repeats              = n_hs, 
-                         .nitems_lo            = 1, 
-                         .callback             = true, // see vcf_piz_container_cb
-                         .drop_final_repsep    = true, 
-                         .items[0].dict_id.num = _FORMAT_GT_HT,
-                         .repsep[0]            = phase };
+    Container_1 con = { .repeats              = n_hs, 
+                        .nitems_lo            = 1, 
+                        .callback             = true, // see vcf_piz_container_cb
+                        .drop_final_repsep    = true, 
+                        .items[0].dict_id.num = _FORMAT_GT_HT,
+                        .repsep[0]            = phase };
 
     unsigned save_gt_len = gt_len;
     
@@ -238,7 +238,7 @@ void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF𐤐 dl, STRp
         else {
             ctx->gt.prev_ploidy = no_duplicate ? 0 : con.repeats; // if no_duplicate - 0 to prevent next sample from duplicating this one
             ctx->gt.prev_phase  = con.repsep[0];
-            container_seg (vb, ctx, (ContainerP)&con, 0, 0, save_gt_len); 
+            container_seg (vb, ctx, &con, 0, 0, save_gt_len); 
         }
     }
 }

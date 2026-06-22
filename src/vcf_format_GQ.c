@@ -75,10 +75,11 @@ static int64_t vcf_predict_GQ_by_GP (VBlockVCFP vb)
     if (!n_vals) return 0; // array too long or not all float
 
     // round to integers (in-place)
-    int64_t *val_ints = (int64_t *)vals; 
+    typedef int64_t __attribute__((__may_alias__)) aliasing_int64_t;
+    aliasing_int64_t *val_ints = (aliasing_int64_t *)vals; 
     for (int i=0; i < n_vals; i++) 
-        val_ints[i] = (int64_t)(vals[i] + 0.5); 
-
+        val_ints[i] = (int64_t)(vals[i] + 0.5);  
+        
     // take mid-value
     qsort (val_ints, n_vals, sizeof(int64_t), value_sorter);
     return val_ints[n_vals / 2]; 
@@ -121,11 +122,11 @@ void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
         }}
 
         case MUX_DOSAGExDP:
-            vcf_seg_FORMAT_mux_by_dosagexDP (vb, ctx, STRa(gq), &vb->mux_GQ);
+            vcf_seg_FORMAT_mux_by_dosagexDP (vb, ctx, STRa(gq), &vb->mux_GQ.by_dosageXdp);
             break;
 
         case MUX_DOSAGE:
-            vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRa(gq), (DosageMultiplexer *)&vb->mux_GQ);
+            vcf_seg_FORMAT_mux_by_dosage (vb, ctx, STRa(gq), &vb->mux_GQ.by_dosage);
             break;
 
         case GQ_INTEGER:

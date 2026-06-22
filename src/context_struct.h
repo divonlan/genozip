@@ -396,7 +396,7 @@ typedef struct Context {
         Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
     };
 
-    ConstContainerP curr_container;// PIZ: current container in this context currently in the stack. NULL if none.
+    ContainerP curr_container;// PIZ: current container in this context currently in the stack. NULL if none.
 
     WordIndex last_wi;         // PIZ: last word_index retrieved from b250 
     LineIType recon_insertion; // PIZ VCF: for deferred fields (mostly INFO fields inserted after samples) - whether to reconstruct. if to reconstruct - set to vb->line_i+1. any other value means "don't reconstruct"

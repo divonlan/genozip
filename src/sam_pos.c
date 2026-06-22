@@ -23,7 +23,7 @@ PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, WordIndex prev_line
 
     bool do_mux = IS_MAIN(vb) && segconf.is_paired && !segconf.sam_is_unmapped; // for simplicity. To do: also for prim/depn components
     int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
-    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_POS, (MultiplexerP)&vb->mux_POS, channel_i) 
+    ContextP channel_ctx = do_mux ? seg_mux_get_channel_ctx (VB, SAM_POS, &vb->mux_POS, channel_i) 
                                   : pos_ctx;
 
     if (segconf.sam_is_unmapped && !dl->POS)
@@ -89,7 +89,7 @@ void sam_seg_PNEXT (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(pnext_str)/* opti
 
     if (segconf_has(SAM_PNEXT)) {
         int channel_i = sam_PNEXT_get_mux_channel (vb, vb->RNEXT_is_equal);
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, SAM_PNEXT, (MultiplexerP)&vb->mux_PNEXT, channel_i);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, SAM_PNEXT, &vb->mux_PNEXT, channel_i);
 
         // case: copy mate's POS
         if (channel_i==0 && DATA_LINE (vb->mate_line_i)->POS == pnext) 

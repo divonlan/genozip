@@ -75,7 +75,7 @@ static alignas(64) const uint8_t sbox[256] = {
 static const uint8_t Rcon[11] = { 0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36 };
 
 // This function shifts the 4 bytes in a word to the left once. [a0,a1,a2,a3] becomes [a1,a2,a3,a0]
-static void inline aes_rotate_word (uint8_t *w)
+static inline void aes_rotate_word (uint8_t *w)
 {
     const uint8_t u8tmp = w[0];
     w[0] = w[1];
@@ -85,7 +85,7 @@ static void inline aes_rotate_word (uint8_t *w)
 }
 
 // this function that takes a four-byte input word and applies the S-box to each of the four bytes to produce an output word.
-static void inline aes_substitute_word (uint8_t *w)
+static inline void aes_substitute_word (uint8_t *w)
 {
     w[0] = sbox[w[0]];
     w[1] = sbox[w[1]];
@@ -93,18 +93,18 @@ static void inline aes_substitute_word (uint8_t *w)
     w[3] = sbox[w[3]];
 }
 
-static void inline aes_assign_word (uint8_t *dst, bytes src)
+static inline void aes_assign_word (uint8_t *dst, bytes src)
 {
     *(uint32_t *)dst = *(uint32_t *)src;
 }
 
-static void inline aes_xor_word (uint8_t *dst, bytes w1, bytes w2)
+static inline void aes_xor_word (uint8_t *dst, bytes w1, bytes w2)
 {
     *(uint32_t *)dst = *(uint32_t *)w1 ^ *(uint32_t *)w2;
 }
 
 // This function produces Nb(Nr+1) round keys. The round keys are used in each round to decrypt the states. 
-static void inline aes_expand_key(uint8_t* aes_round_key, bytes Key)
+static inline void aes_expand_key(uint8_t* aes_round_key, bytes Key)
 {
     // The first round key is the key itself.
     memcpy (aes_round_key, Key, AES_KEYLEN);

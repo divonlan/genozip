@@ -22,7 +22,7 @@
     ContextP bnd1_ctx UNUSED = ctx_get_ctx (vb, _ID_BND1);  \
     ContextP bnd2_ctx UNUSED = ctx_get_ctx (vb, _ID_BND2); 
 
-static Container(3) id_bnd_con = { // goes into I1D
+static Container_3 id_bnd_con = { // goes into I1D
     .nitems_lo = 3,
     .repeats   = 1,
     .items = { { .dict_id.num = _ID_BND0, .separator[0] = ':' },     // copy of CHROM
@@ -39,7 +39,7 @@ static int i1d_mux_channel[NUM_VTs] = { [VT_BND]=2, [VT_SYM_CNV]=1, [VT_DEL]=0, 
 void vcf_pbsv_zip_initialize (void)
 {
     DO_ONCE {
-        container_prepare_snip ((ContainerP)&id_bnd_con, 0, 0, qSTRa(con_id_bnd_snip));
+        container_prepare_snip (&id_bnd_con, 0, 0, qSTRa(con_id_bnd_snip));
     }
     
     // re-initialize for every file, as SV type might change
@@ -57,7 +57,7 @@ void vcf_pbsv_seg_initialize (VBlockVCFP vb)
     ctx_set_store_per_line (VB, VCF_ID, VCF_FILTER, INFO_MATEID, DID_EOL);
     
     ctx_consolidate_stats (VB, VCF_ID, id0_ctx->did_i, id1_ctx->did_i, DID_EOL);      
-    ctx_consolidate_stats_(VB, CTX(VCF_ID), (ContainerP)&id_bnd_con);      
+    ctx_consolidate_stats_(VB, CTX(VCF_ID), &id_bnd_con);      
 
     ctx_set_dyn_int (VB, id1_ctx->did_i, bnd1_ctx->did_i, DID_EOL);
 
@@ -203,7 +203,7 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
             (!VT0(SYM_DUP) && svtype_by_vt[vt] && (vt_item = match_vt (vt, pSTRa(id), svtype_by_vt[vt], strlen (svtype_by_vt[vt]), 0, 0, &vt_item_len)))) {
 
             ContextP channel_ctx = 
-                seg_mux_get_channel_ctx (VB, id0_ctx->did_i, (MultiplexerP)&vb->mux_pbsv_I0D, i0d_mux_channel[vt]);
+                seg_mux_get_channel_ctx (VB, id0_ctx->did_i, &vb->mux_pbsv_I0D, i0d_mux_channel[vt]);
 
             seg_by_ctx (VB, STRa(vt_item), channel_ctx, vt_item_len);
             seg_by_ctx (VB, STRa(vb->mux_pbsv_I0D.snip), id0_ctx, 0); // I0D de-multiplexer
@@ -217,7 +217,7 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
         // channel 1 - CNV - its own number range
         // channel 2 - BND - chrom/pos of this and mate
         ContextP channel_ctx = 
-            seg_mux_get_channel_ctx (VB, id1_ctx->did_i, (MultiplexerP)&vb->mux_pbsv_I1D, i1d_mux_channel[vt]);
+            seg_mux_get_channel_ctx (VB, id1_ctx->did_i, &vb->mux_pbsv_I1D, i1d_mux_channel[vt]);
 
         if (VT0(BND)) {
             if (!vcf_seg_pbsv_ID_BND (vb, channel_ctx, STRa(id)))

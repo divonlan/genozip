@@ -56,7 +56,7 @@ extern void mutex_who_is_locked (void);
 // -------------------
 
 typedef struct Serializer {
-    Mutex;             // note: gcc/clang flag -fms-extensions is needed for this type of anonymous struct use
+    Mutex mutex; 
     VBIType vb_i_last; // used by serializer_lock
 } Serializer;
 
@@ -69,7 +69,7 @@ extern void serializer_destroy_do (SerializerP ser, rom func);
 extern void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE);
 #define serializer_lock(ser, vb_i) serializer_lock_do (&(ser), vb_i, __FUNCLINE)
 
-#define serializer_unlock(ser) mutex_unlock_do ((MutexP)&(ser), __FUNCLINE)
+#define serializer_unlock(ser) mutex_unlock_do (&(ser).mutex, __FUNCLINE)
 
 // --------------
 // spinlock stuff

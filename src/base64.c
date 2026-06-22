@@ -83,7 +83,7 @@ unsigned base64_encode (STR8𐤐(data), char *restrict b64)
 }
 
 // returns length of decoded data. b64_len is updated to the length of b64 string that was consumed.
-// IMPORTANT: data allocated must be 4 bytes longer than expected data (overflow space)
+// IMPORTANT: data allocated must be BASE_DECODE_OVERFLOW=4 bytes longer than expected data (overflow space)
 uint32_t base64_decode (STR𐤐(b64), STR8c𐤐(out)) // out_len==1 if asking to read to end of snip (a non-b64 char like \0 or \t will terminate the b64 string) 
 {
 	if (out_len == -1) // read entire b64

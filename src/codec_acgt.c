@@ -81,7 +81,7 @@ COMPRESS (codec_acgt_compress)
     
     // case: this is our second entry, after soft-failing. Just continue from where we stopped
     if (has_x && nonref_x_ctx->local.len) {
-        packed = (BitsP)&vb->scratch;
+        packed = &vb->scratch;
         goto compress_sub;
     }
     
@@ -89,7 +89,7 @@ COMPRESS (codec_acgt_compress)
 
     // we will pack into vb->scratch
     buf_alloc (vb, &vb->scratch, 0, roundup_bits2bytes64 (*uncompressed_len * 2), uint8_t, 1, "scratch");
-    packed = (BitsP)&vb->scratch;
+    packed = &vb->scratch;
 
     // option 1 - pack contiguous data
     if (uncompressed) {
@@ -191,7 +191,7 @@ UNCOMPRESS (codec_xcgt_uncompress)
     codec_args[sub_codec].uncompress (vb, ctx, sub_codec, param, STRa(compressed), uncompressed_buf, uncompressed_len, CODEC_NONE, name);
 
     START_TIMER;
-    ConstBitsP packed = (BitsP)&nonref_ctx->packed;    // data from NONREF context (2-bit per base)
+    ConstBitsP packed = &nonref_ctx->packed;    // data from NONREF context (2-bit per base)
     rom acgt_x = B1ST (const char, *uncompressed_buf); // data from NONREF_X context (possibly NULL)
         
     char *nonref = B1STc (nonref_ctx->local); // note: local was allocated by caller ahead of comp_uncompress -> codec_acgt_uncompress of the NONREF context
@@ -215,18 +215,17 @@ UNCOMPRESS (codec_xcgt_uncompress)
 // 3) codec_xcgt_uncompress also combines vb->scratch with NONREF_X.local to recreate NONREF.local - an LT_BLOB local buffer
 UNCOMPRESS (codec_acgt_uncompress)
 {
-    BufferP packed_buf = ctx->flags.acgt_no_x ? &vb->scratch : &ctx->packed;
-    ASSERTNOTINUSE (*packed_buf);
+    BitsP packed = ctx->flags.acgt_no_x ? &vb->scratch : &ctx->packed;
+    ASSERTNOTINUSE (*packed);
 
     uint64_t bitmap_num_bytes = roundup_bits2bytes64 (uncompressed_len * 2); // 4 nucleotides per byte, rounded up to whole 64b words
-    buf_alloc (vb, packed_buf, 0, bitmap_num_bytes, char, 1, "packed");    
+    buf_alloc (vb, packed, 0, bitmap_num_bytes, char, 1, "packed");    
 
     // uncompress bitmap using CODEC_ACGT.sub_codec (passed to us as sub_codec) into vb->scratch
-    codec_args[sub_codec].uncompress (vb, ctx, sub_codec, param, compressed, compressed_len, packed_buf, bitmap_num_bytes, CODEC_NONE, name);
+    codec_args[sub_codec].uncompress (vb, ctx, sub_codec, param, compressed, compressed_len, packed, bitmap_num_bytes, CODEC_NONE, name);
 
     // finalize bitmap structure
     START_TIMER;
-    BitsP packed   = (BitsP)packed_buf;
     packed->nbits  = uncompressed_len * 2;
     packed->nwords = roundup_bits2words64 (packed->nbits);
 
@@ -242,7 +241,7 @@ UNCOMPRESS (codec_acgt_uncompress)
         for (uint32_t i=0; i < uncompressed_len; i++) 
             *nonref++ = base_by_idx(packed, i);
 
-        buf_free (*packed_buf);
+        buf_free (*packed);
     }
 
     COPY_TIMER (compressor_acgt);

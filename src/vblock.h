@@ -32,7 +32,7 @@ typedef struct {
 } DeferredField;
 
 typedef struct { 
-    ConstContainerP con; 
+    ContainerP con; 
     STR(prefixes); 
     int32_t repeat; // PIZ: current repeat being reconstructed in each container in the container stack
     Did did_i;      // of container 
@@ -131,7 +131,7 @@ typedef struct {
     \
     /* bgzf - for handling bgzf-compressed files */ \
     void *gz_deflate_mem;         /* memory allocation for gz compressor libraries */ \
-    void *gz_inflate_mem;         /* memory allocation for gz uncompressor libraries (note: during gz discovery, both gz_deflate_mem and gz_inflate_mem are used concurrently) */ \
+    struct libdeflate_decompressor *libdef_decomp_mem; \
     uint64_t vb_mgzip_i;          /* ZIP: index into txt_file->mgzip_isizes of the first MGZIP block in vb->gz_blocks. This first gz_block might have been partially consumed by the previous VB (vb->gz_blocks.consumed_by_prev_vb bytes of it) */ \
     Buffer gz_blocks;             /* ZIP: an array of GzBlockZip tracking the uncompression of BGZF/ILxM blocks in comp_txt_data into txt_data.  */\
                                   /* PIZ: an array of BgzfBlockPiz */ \
@@ -221,7 +221,7 @@ typedef struct {
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
-} VBlock;
+} __attribute__((__may_alias__)) VBlock;
 
 #define current_con vb->con_stack[vb->con_stack_len-1]
 

@@ -223,7 +223,7 @@ void fastq_segconf_check_if_Parse (VBlockP vb)
         else if (bc_did[1] != DID_NONE) X.umi_did_i = bc_did[1];
 
         // prepare container
-        const Container(7) con = {
+        const Container_7 con = {
             .nitems_lo = 7,
             .repeats   = 1,
             .items = {
@@ -238,7 +238,7 @@ void fastq_segconf_check_if_Parse (VBlockP vb)
         };
 
         segconf.nonbio_con_snip_len = sizeof (segconf.nonbio_con_snip);
-        container_prepare_snip ((ContainerP)&con, 0, 0, qSTRa(segconf.nonbio_con_snip));
+        container_prepare_snip (&con, 0, 0, qSTRa(segconf.nonbio_con_snip));
 
         if (X.umi_did_i != DID_NONE) {
             segconf.copy_qname_umi_snip_len = sizeof (segconf.copy_qname_umi_snip);
@@ -310,7 +310,7 @@ bool fastq_parse_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), 
         if (error_free)
             seg_by_ctx (VB, &seq[X.linker_index[i]], X.linker_len[i], CTX(FASTQ_NONBIO_LINK0 + i), X.linker_len[i]);
         else
-            seg_diff (VB, CTX(FASTQ_NONBIO_LINK0 + i), DIFF_SEQ_VS_1ST_SNIP_IN_DICT, 
+            seg_diff (VB, CTX(FASTQ_NONBIO_LINK0 + i), vs_ACGTN_DICT, NULL, 
                       &seq[X.linker_index[i]], X.linker_len[i], true, X.linker_len[i]);
 
     // handle the biological portion - the "excess" based beyond the non-biological

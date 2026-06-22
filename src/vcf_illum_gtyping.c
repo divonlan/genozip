@@ -276,7 +276,7 @@ void vcf_seg_mux_by_adjusted_dosage (VBlockVCFP vb, ContextP ctx, STRp(baf), con
 
     else {
         int channel_i = vcf_seg_adjust_channel_i (VB, vcf_seg_get_mux_channel_i (vb));
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)mux, channel_i);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, mux, channel_i);
 
         seg_by_ctx (VB, STRa(baf), channel_ctx, baf_len);
         seg_by_ctx (VB, STRa(mux->snip), ctx, 0);

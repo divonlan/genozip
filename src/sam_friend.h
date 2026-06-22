@@ -82,7 +82,7 @@ typedef union BamCigarOp {
         uint32_t n  : 28;
     };
     uint32_t value;
-} __attribute__((aligned(1))) BamCigarOp; // unaligned, because appears as such in BAM data
+} __attribute__((packed)) BamCigarOp; // unaligned=packed, because appears as such in BAM data
 
 typedef packed_enum {
     BC_M=0, BC_I=1, BC_D=2, BC_N=3, BC_S=4, BC_H=5, BC_P=6, BC_E=7, BC_X=8, BC_NONE=15, BC_INVALID=255

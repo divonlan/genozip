@@ -29,7 +29,7 @@ void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx))
                   : !ctx_encountered (VB, FORMAT_GQ) ? 1
                   :                                    2;
 
-    ContextP chan_ctx = seg_mux_get_channel_ctx (VB, FORMAT_GQX, (MultiplexerP)&vb->mux_GQX, channel_i);
+    ContextP chan_ctx = seg_mux_get_channel_ctx (VB, FORMAT_GQX, &vb->mux_GQX, channel_i);
     
     if (channel_i == 2) 
         seg_delta_vs_other_localS (VB, chan_ctx, CTX(FORMAT_GQ), STRa(gqx), -1);
@@ -184,20 +184,20 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_GMAF_AF)
 // case 2: REF=C ALT=. RefMinor;GMAF=C|0.04812
 void vcf_seg_INFO_GMAF (VBlockVCFP vb, ContextP ctx, STRp(gmaf))
 {        
-    static Container(2) con = { 
+    static Container_2 con = { 
         .repeats   = 1,
         .nitems_lo = 2,
         .items[0]  = { .dict_id.num = DICT_ID_MAKE1_5("G0MAF"), .separator = "|" },
         .items[1]  = { .dict_id.num = DICT_ID_MAKE1_5("G1MAF")                   } 
     };
     
-    seg_struct (VB, ctx, (ContainerP)&con, STRa(gmaf), (SegCallback[]){ vcf_seg_GMAF_allele_cb, vcf_seg_GMAF_AF_cb }, gmaf_len, true);
+    seg_struct (VB, ctx, &con, STRa(gmaf), (SegCallback[]){ vcf_seg_GMAF_allele_cb, vcf_seg_GMAF_AF_cb }, gmaf_len, true);
 }
 
 
 void vcf_seg_INFO_EVS (VBlockVCFP vb, ContextP ctx, STRp(evs))
 {        
-    static const Container(3) con = { 
+    static const Container_3 con = { 
         .nitems_lo = 3,
         .repeats   = CON_REPEATS_IS_SPECIAL, // faster seg if expected_num_repeats (=N_ALTS) is correct
         .repsep    = ",",
@@ -207,7 +207,7 @@ void vcf_seg_INFO_EVS (VBlockVCFP vb, ContextP ctx, STRp(evs))
         .items[2]  = { .dict_id.num = DICT_ID_MAKE1_8("E2VS_CNT")                   } 
     };
 
-    seg_array_of_struct_(VB, ctx, (ContainerP)&con, 0, 0, STRa(evs), 
+    seg_array_of_struct_(VB, ctx, &con, 0, 0, STRa(evs), 
                          (SegCallback[]){ seg_add_to_local_string_cb, seg_integer_or_not_cb, seg_integer_or_not_cb },
                          VCF_SPECIAL_N_ALTS, N_ALTS, 0, evs_len);
 }

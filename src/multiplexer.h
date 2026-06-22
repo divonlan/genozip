@@ -22,22 +22,26 @@ struct {                                                \
     uint16_t num_channels;                              \
     uint32_t snip_len;                                  \
     DictId dict_ids[n_channels];                        \
-    ContextP channel_ctx[n_channels];                   \
     char snip[BASE64_DICT_ID_LEN * (n_channels) + 6];   \
 }                               
-#define MUX ((MultiplexerP)mux)
+
 #define MUX_CAPACITY(mux)    (sizeof((mux).dict_ids)/sizeof(DictId)) // max number of channels this mux can contain
-#define MUX_CHANNEL_CTX(mux) ((ContextP *)((mux)->dict_ids + (mux)->num_channels))
-#define MUX_SNIP(mux)        ((char *)(MUX_CHANNEL_CTX(mux) + (mux)->num_channels))
-#define MUX_SIZEOF_SNIP(mux) (BASE64_DICT_ID_LEN * ((mux)->num_channels) + 6)
+#define MUX_SNIP(mux)        ((char *)((mux).m->dict_ids + (mux).m->num_channels))
+#define MUX_SIZEOF_SNIP(mux) (BASE64_DICT_ID_LEN * ((mux).m->num_channels) + 6)
 
-typedef MULTIPLEXER(1000) *MultiplexerP;
-typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
+// types that don't break strict-aliasing rules (the non-typedef struct is needed to be able to define a union in genozip.h)
+#define TypeMultiplexer(n) struct Multiplexer##n { MULTIPLEXER(n); }; typedef struct Multiplexer##n Multiplexer##n, *Multiplexer##n##P // note: n must be constant: clang doesn't allow variable-length arrays in struct
 
-typedef MULTIPLEXER(2)  Multiplexer2,  *Multiplexer2P;
-typedef MULTIPLEXER(3)  Multiplexer3,  *Multiplexer3P;
-typedef MULTIPLEXER(4)  Multiplexer4,  *Multiplexer4P;
-typedef MULTIPLEXER(5)  Multiplexer5,  *Multiplexer5P;
-typedef MULTIPLEXER(6)  Multiplexer6,  *Multiplexer6P;
-typedef MULTIPLEXER(7)  Multiplexer7,  *Multiplexer7P;
-typedef MULTIPLEXER(10) Multiplexer10, *Multiplexer10P;
+TypeMultiplexer(2); TypeMultiplexer(3); TypeMultiplexer(4); TypeMultiplexer(5); 
+TypeMultiplexer(6); TypeMultiplexer(7); TypeMultiplexer(10); TypeMultiplexer(1000/*arbitrary large*/);
+//xx typedef MULTIPLEXER(1000) *MultiplexerP;
+// typedef const MULTIPLEXER(1000) *ConstMultiplexerP;
+
+// typedef MULTIPLEXER(0)  Multiplexer0,  *Multiplexer0P;
+// typedef MULTIPLEXER(2)  Multiplexer2,  *Multiplexer2P;
+// typedef MULTIPLEXER(3)  Multiplexer3,  *Multiplexer3P;
+// typedef MULTIPLEXER(4)  Multiplexer4,  *Multiplexer4P;
+// typedef MULTIPLEXER(5)  Multiplexer5,  *Multiplexer5P;
+// typedef MULTIPLEXER(6)  Multiplexer6,  *Multiplexer6P;
+// typedef MULTIPLEXER(7)  Multiplexer7,  *Multiplexer7P;
+// typedef MULTIPLEXER(10) Multiplexer10, *Multiplexer10P;

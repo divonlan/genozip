@@ -7,6 +7,9 @@
 //   and subject to penalties specified in the license.
 
 #include <math.h>
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
 #include "context.h"
 #include "file.h"
 #include "hash.h"
@@ -30,7 +33,8 @@ uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
     // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
     // minimum ~16K to prevent horrible miscalculations in edge cases that result in dramatic slow down
     static uint32_t hash_sizes[] = { 
-        16381, 23167, 32749, 46337, 65521, 92681, 131071, 
+        // 16381, 23167, 32749, 46337, 
+        65521, 92681, 131071, 
         185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
         11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
         94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
@@ -235,6 +239,38 @@ void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
     hash_populate_from_nodes (zctx);
 }
 
+static inline uint32_t hash_crc32 (STRp(snip))
+{
+#ifdef __SSE4_2__ // x64 only
+    // Note: this is CRC-32C (Castagnoli, 0x1EDC6F41), not the same as zlib's CRC-32 (0x04C11DB7)
+    uint64_t crc = 0;
+    
+    // full words
+    uint32_t i=0; for (; i + 8 <= snip_len; i += 8)  
+        crc = _mm_crc32_u64 (crc, *(unaligned_uint64_t *)&snip[i]); 
+
+    // note: using switch - compiled to a jump table - rather than 3 'if's each with a 50% misprediction rate
+    #define C32 crc = _mm_crc32_u32(crc, *(unaligned_uint32_t *)&snip[i]); i += 4
+    #define C16 crc = _mm_crc32_u16(crc, *(unaligned_uint16_t *)&snip[i]); i += 2
+    #define C8  crc = _mm_crc32_u8 (crc,                         snip[i])
+
+    // tail - comprised of up to 7 bytes, handled with up to 3 crc32 instructions: maybe a 32b, then maybe a 16b, then maybe a byte
+    switch (snip_len & 7) {
+        case 0:               break;
+        case 1:           C8; break;
+        case 2:      C16;     break;
+        case 3:      C16; C8; break;
+        case 4: C32;          break;
+        case 5: C32;      C8; break;
+        case 6: C32; C16;     break;
+        case 7: C32; C16; C8; break;
+    }
+    return (uint32_t)crc;
+#else
+    return crc32 (0, STRa(snip));
+#endif
+}
+
 // search for snip in singletons - returns true and result if found
 // ston_hash  - fixed size hash table, type uint32_t points to head of linked-list - index into ston_ents
 // ston_ents  - linked lists associated with each hash value, type SingletonEnt
@@ -248,7 +284,7 @@ static inline bool hash_stons_remove_singleton (ContextP zctx, uint32_t hash, ST
     uint32_t *head = B32(zctx->ston_hash, hash);
     uint32_t *prevs_next = head;
 
-    uint32_t digest = crc32 (0, STRa(snip));
+    uint32_t digest = hash_crc32 (STRa(snip));
     SingletonEnt dummy = { .next = *head }, *stonent = &dummy;
 
     while (stonent->next != NO_NEXT) {
@@ -296,7 +332,7 @@ static inline void hash_stons_add_singleton (ContextP zctx, uint32_t hash, STRp(
         // heads of linked-lists - one for each hash value, +1 for decommissions singletons
         buf_alloc_exact_255 (evb, zctx->ston_hash, zctx->global_hash.len + 1, uint32_t, Z_ C_STON_HASH); 
 
-    uint32_t digest = crc32 (0, STRa(snip));
+    uint32_t digest = hash_crc32 (STRa(snip));
 
     // if we have a decommissioned singleton - use it
     uint32_t *decommissioned_head = BLST32(zctx->ston_hash);
@@ -332,30 +368,29 @@ static inline void hash_stons_add_singleton (ContextP zctx, uint32_t hash, STRp(
 // search for snip in (non-singleton) nodes
 static inline bool hash_global_find_in_nodes (ContextP zctx, uint32_t hash, STRp(snip), bool compare_to_snip, WordIndex *existing_node_index, uint32_t *last_ent_on_linked_list)
 {
-    uint32_t *head = B32(zctx->global_hash, hash);
-    CtxNode dummy = { .next = *head }, *node = &dummy;
-    node->next = *head; 
-    WordIndex this = WORD_INDEX_NONE;
+    WordIndex previous = WORD_INDEX_NONE;    
+    WordIndex current  = *B32(zctx->global_hash, hash);
 
-    while (node->next != NO_NEXT) {
-        ASSERT (node->next < zctx->nodes.len32, "node->next=%d out of range in context=%s, nodes.len=%"PRIu64,  
-                node->next, zctx->tag_name, zctx->nodes.len);
+    while (current != NO_NEXT) {
+        ASSERT (current < zctx->nodes.len32, "current=%d out of range in context=%s, nodes.len=%"PRIu64,  
+                current, zctx->tag_name, zctx->nodes.len);
 
-        this = node->next;
-        node = B(CtxNode, zctx->nodes, this);
+        CtxNode node = *B(CtxNode, zctx->nodes, current);
 
-        if (compare_to_snip) { // we're actually trying to find the snip, not just traverse to the end of the linked list
-            rom snip_in_dict = Bc(zctx->dict, node->char_index);
-        
-            // case: found snip's node 
-            if (str_issame_(STRa(snip), snip_in_dict, node->snip_len)) {
-                if (existing_node_index) *existing_node_index = this;
-                return true;
-            }
+        // find the snip, if we were asked to
+        if (compare_to_snip && // note: compiler eliminates this condition, because function is inline called with this a constant
+            node.snip_len == snip_len && // note: not str_issame, so we don't calculate Bc(zctx->dict, node.char_index) if unneeded
+            !memcmp (snip, Bc(zctx->dict, node.char_index), snip_len)) {
+             
+            if (existing_node_index) *existing_node_index = current;
+            return true;
         }
+
+        previous = current;
+        current  = node.next;
     }
 
-    *last_ent_on_linked_list = (node == &dummy) ? ENT_HEAD : this;
+    *last_ent_on_linked_list = (previous == WORD_INDEX_NONE) ? ENT_HEAD : previous;
 
     return false; // we've reached the end of the linked list and the node was not found
 }
@@ -450,44 +485,41 @@ WordIndex hash_find_snip_in_ol_nodes (VBlockP vb, ContextP vctx, STRp(snip),
                                       rom *snip_in_dict_out) // optional out - snip - pointer into vctx->dict or vctx->ol_dict (only if existing, NULL if not)
 {    
     if (!vctx->global_hash.len32) 
-        return WORD_INDEX_NONE; // new context that didn't have a zctx at time of cloning
+        return WORD_INDEX_NONE;
 
-    uint32_t hash = hash_do (vctx->global_hash.len32, STRa(snip)); // entry in hash table determined by hash function on snip
-    
+    uint32_t hash = hash_do (vctx->global_hash.len32, STRa(snip));
+
     // note: no need for atomic operation to load from global hash: if its value < ol_nodes.len then
     // it is immutable, and if >= ol_nodes.len - it remains to so indefinitely - it might only ever 
     // change once, from NO_NEXT to a value >= ol_nodes.len (in single CPU op since global_hash.data is word aligned).
-    #ifndef sanitize_thread
-    CtxNode dummy = { .next = *B32(vctx->global_hash, hash) }, *node = &dummy;
-    #else // just so sanitize-threads doesn't shout
-    CtxNode dummy = { .next = load_relaxed (*B32(vctx->global_hash, hash)) }, *node = &dummy;
-    #endif
+#ifndef sanitize_thread
+    WordIndex current = *B32(vctx->global_hash, hash); // just to quiet sanitize_thread complaining
+#else
+    WordIndex current = load_relaxed (*B32(vctx->global_hash, hash));
+#endif
 
-    while (1) {
-        // three cases for "next":
-        // 1. NO_NEXT - the linked list is terminated and we have not found our snip
-        // 2. next > ol_nodes.len - this node was entered after our cloning and we shall not access it as it might 
-        //    not be in the memory cloned (in case zctx realloced), and even if it is, its index conflicts 
-        //    with our own new nodes in vctx->nodes. 
-        // 3. next points to a valid index with our overlaid nodes - we follow it
+    // three cases for "current":
+    // 1. NO_NEXT - the linked list is terminated and we have not found our snip
+    // 2. next > ol_nodes.len - this node was entered after our cloning and we shall not access it as it might 
+    //    not be in the memory cloned (in case zctx realloced), and even if it is, its index conflicts 
+    //    with our own new nodes in vctx->nodes. 
+    // 3. next points to a valid index with our overlaid nodes - we follow it
+    while ((uint32_t)current < vctx->ol_nodes.len32) { // casting to uint also checks that current != NO_NEXT (0xffffffff)
+        CtxNode node = *B(CtxNode, vctx->ol_nodes, current);
 
-        uint32_t word_index = node->next; // no need for an atomic operation for the same reason mention above
-
-        if (word_index >= vctx->ol_nodes.len32) // case 1 and 2
-            break;
-
-        node = B(CtxNode, vctx->ol_nodes, word_index);
-                
-        rom snip_in_dict = Bc(vctx->ol_dict, node->char_index);
-
-        // case: snip is in the global hash table - we're done
-        if (str_issame_(STRa(snip), snip_in_dict, node->snip_len)) { 
-            if (snip_in_dict_out) *snip_in_dict_out = snip_in_dict; // pointer into vctx->ol_dict
-            return word_index; // case 3
+        if (node.snip_len == snip_len) { // don't calculate snip_in_dict if lengths differ
+            rom snip_in_dict = Bc(vctx->ol_dict, node.char_index);
+            
+            if (!memcmp (snip, snip_in_dict, snip_len)) {
+                if (snip_in_dict_out) *snip_in_dict_out = snip_in_dict; 
+                return current; // case 3: found in overlaid global hash table cloned from zctx
+            }
         }
+
+        current = node.next;
     }
 
-    return WORD_INDEX_NONE; // not found
+    return WORD_INDEX_NONE; // not found in global hash table
 }
 
 // gets the node_index if the snip is already in the hash table, or puts a new one in the hash table in not

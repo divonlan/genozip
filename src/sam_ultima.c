@@ -57,7 +57,7 @@ void sam_ultima_finalize_segconf (VBlockSAMP vb)
     segconf.sam_has_ultima_t0 = segconf_has(OPTION_t0_Z) && codec_t0_data_is_a_fit_for_t0(VB);
 }
 
-static inline void seg_one_tp (VBlockSAMP vb, Context𐤐 chan[TP_NUM_BINS], char *restrict next[TP_NUM_BINS-1], char tp, char qual)
+static inline void seg_one_tp (VBlockSAMP vb, ContextP chan[TP_NUM_BINS], char *restrict next[TP_NUM_BINS-1], char tp, char qual)
 {
     uint8_t bin = tp_bins[(uint8_t)qual];
     if (bin == 6) { // seg as a snip, as its expected to be all-the-same '0'
@@ -86,7 +86,7 @@ ARRAY_ITEM_CALLBACK (sam_seg_ULTIMA_tp)
 
     ContextP chan[TP_NUM_BINS];
     for (int bin=0; bin < TP_NUM_BINS; bin++)     
-        chan[bin] = seg_mux_get_channel_ctx (VB, OPTION_tp_B_ARR, (MultiplexerP)&vb->mux_tp, bin); 
+        chan[bin] = seg_mux_get_channel_ctx (VB, OPTION_tp_B_ARR, &vb->mux_tp, bin); 
 
     char *restrict next[TP_NUM_BINS-1];
     for (int bin=0; bin < TP_NUM_BINS-1; bin++) {
@@ -266,7 +266,7 @@ static bool sam_seg_ultima_XV_MAPQ (VBlockP vb, ContextP ctx, STRp(mapq_str), ui
 // example: XV:Z:chr1,25173438,306,60
 void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes)
 {
-    static const Container(4) container_XV = {
+    static const Container_4 container_XV = {
         .repeats      = 1, 
         .nitems_lo    = 4, 
         .items        = { { .dict_id.num = DICT_ID_MAKE2_8("X0V_RNAM"), .separator = "," }, 
@@ -276,14 +276,14 @@ void sam_seg_ultima_XV (VBlockSAMP vb, STRp(xv), unsigned add_bytes)
 
     static SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS, sam_seg_ultima_XV_AS, sam_seg_ultima_XV_MAPQ }; 
 
-    seg_struct (VB, CTX(OPTION_XV_Z), (ContainerP)&container_XV, STRa(xv), callbacks, add_bytes, true);
+    seg_struct (VB, CTX(OPTION_XV_Z), &container_XV, STRa(xv), callbacks, add_bytes, true);
 }
 
 // describes the first few mismatches - except for .repeats, it can be 100% determined by MD:Z and SEQ
 // example: XW:Z:chr1,9206568,G,A;chr1,9206575,C,T;
 void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes)
 {
-    static const Container(4) container_XW = { // bug 892
+    static const Container_4 container_XW = { // bug 892
         .repsep    = ";", 
         .repeats   = 1,  // faster seg if this happens to be correct
         .nitems_lo = 4, 
@@ -294,7 +294,7 @@ void sam_seg_ultima_XW (VBlockSAMP vb, STRp(xw), unsigned add_bytes)
 
     SegCallback callbacks[4] = { 0, sam_seg_ultima_delta_POS }; 
 
-    seg_array_of_struct (VB, CTX(OPTION_XW_Z), (ContainerP)&container_XW, STRa(xw), callbacks, 
+    seg_array_of_struct (VB, CTX(OPTION_XW_Z), &container_XW, STRa(xw), callbacks, 
                          segconf.sam_semcol_in_contig ? sam_seg_correct_for_semcol_in_contig : NULL,
                          add_bytes); 
 }

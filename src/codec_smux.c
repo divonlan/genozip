@@ -87,9 +87,8 @@ void codec_smux_calc_stats (VBlockP vb)
 
     // calculate histograms
     for (LineIType line_i=0; line_i < vb->lines.len32 && num_bp < BP_IN_SAMPLE; line_i++) {   
-        bytes qual; 
-        uint32_t qual_len;
-        qual_callback (vb, ctx, line_i, (char **)pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
+        STRw(qual); 
+        qual_callback (vb, ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
         
         if (!qual_len) continue; // case in SAM: dl->dont_compress_QUAL
 
@@ -154,7 +153,7 @@ static bool codec_smux_maybe_used (Did did_i)
 
     return did_i == SAM_QUAL/*==FASTQ_QUAL*/ && // we only calculated stats for SAM_QUAL (not OQ)
                (flag.force_qual_codec == CODEC_SMUX || 
-                (TECH(MGI) && segconf.nontrivial_qual && !flag.no_smux && segconf.smux_max_stdv > SMUX_STDV_THREADHOLD)); // not yet seen benefit for non-MGI files);
+                ((TECH(MGI) || segconf.has_BQSR) && segconf.nontrivial_qual && !flag.no_smux && segconf.smux_max_stdv > SMUX_STDV_THREADHOLD)); // not yet seen benefit for non-MGI/BQSR files);
 }
 
 bool codec_smux_comp_init (VBlockP vb, Did qual_did_i, LocalGetLineCB get_line_cb, bool force)
@@ -187,8 +186,8 @@ COMPRESS (codec_smux_compress)
     decl_smux_ctxs_zip (ctx->dict_id.id);
 
     int32_t count_base[5] = {};
-    STRw(seq); STRw(qual);
-    char *next[5];
+    STRw𐤐(seq); STRw𐤐(qual);
+    char *restrict next[5];
     bool is_rev;
 
     // first pass - count bases to allocate memory and allocate txt_len
@@ -223,7 +222,7 @@ COMPRESS (codec_smux_compress)
         get_line_cb (vb, ctx, line_i, pSTRa (qual), CALLBACK_NO_SIZE_LIMIT, NULL);
         if (!qual_len) continue;
 
-        STRw(seq);
+        STRw𐤐(seq);
         bool is_rev;
         seq_callback (vb, NULL, line_i,  pSTRa(seq), CALLBACK_NO_SIZE_LIMIT, &is_rev);
 
@@ -289,8 +288,8 @@ CODEC_RECONSTRUCT (codec_smux_reconstruct)
     bool is_src_rev   = VB_DT(SAM) ? sam_is_last_flags_rev_comp (vb) : false;
     bool is_recon_rev = OUT_DT(FASTQ) ? false : is_src_rev;
 
-    char *recon = BAFTtxt;
-    rom next_b[5], after_b[5];
+    char *restrict recon = BAFTtxt;
+    rom𐤐 next_b[5], after_b[5];
 
     for (int b=0; b < 5; b++) {
         next_b[b]  = ctxs[b] ? Bc(ctxs[b]->local, ctxs[b]->next_local) : NULL;

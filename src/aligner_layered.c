@@ -18,9 +18,9 @@
 
 // functions in aligner.c
 static inline uint64_t aligner_get_kmer (Bits𐤐 seq, uint64_t bit_i, bool is_forward);
-static Bits aligner_seq_to_bitmap (VBlock𐤐 vb, rom𐤐 seq, uint64_t seq_len, uint64_t *restrict bitmap_words, bool𐤐 seq_is_all_acgt);
+static Bits aligner_seq_to_bitmap (VBlockP vb, rom𐤐 seq, uint64_t seq_len, uint64_t *restrict bitmap_words, bool𐤐 seq_is_all_acgt);
 static inline int percent_match (uint32_t n_matching, uint32_t seq_len);
-static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos, PosType64 gpos_R1, PosType64 gpos1, Bits𐤐 seq_bits, uint32_t seq_len, bool fwd, ConstBits𐤐 genome, PosType64 genome_nbases, uint32_t near_perfect_max_mismatches, BestAlignment *restrict best);
+static inline bool aligner_update_best (VBlockP vb, PosType64 gpos, PosType64 gpos_R1, PosType64 gpos1, Bits𐤐 seq_bits, uint32_t seq_len, bool fwd, ConstBits𐤐 genome, PosType64 genome_nbases, uint32_t near_perfect_max_mismatches, BestAlignment *restrict best);
 
 #define layer_bitmask ((uint64_t[NUM_LAYERS]){ 0x0fffffffULL, 0x07ffffffULL, 0x03ffffffULL, 0x01ffffffULL })  // LSb set for 28,27,26,25 bits
 static inline PosType64 aligner_get_gpos_LAYERED (VBlockP vb, BitsP seq, uint64_t base_i, uint64_t *kmer, bool is_forward)                                              

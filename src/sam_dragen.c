@@ -26,7 +26,7 @@ void sam_dragen_seg_sd_f (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sd), ValueT
 {
     if (dl->AS) { 
         int channel_i = sd_channel_i (dl->SEQ.len, dl->AS);
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_sd_f, (MultiplexerP)&vb->mux_dragen_sd, channel_i);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_sd_f, &vb->mux_dragen_sd, channel_i);
 
         sam_seg_float_as_snip (vb, channel_ctx, STRa(sd), numeric, add_bytes);
 
@@ -56,7 +56,7 @@ void sam_dragen_seg_ga_Z (VBlockSAMP vb, STRp(ga), unsigned add_bytes)
 {
     decl_ctx (OPTION_ga_Z);
 
-    static const Container(6) container_ga = { 
+    static const Container_6 container_ga = { 
         .nitems_lo = 6,
         .repeats   = 1,          
         .items     = { { .dict_id = { _OPTION_ga_CONTIG }, .separator = {','} }, // usually, not in the RNAME dict (extra contigs Illumina provides beyond the user's FASTA reference)
@@ -71,7 +71,7 @@ void sam_dragen_seg_ga_Z (VBlockSAMP vb, STRp(ga), unsigned add_bytes)
                                         [SA_CIGAR] = sam_seg_0A_cigar_cb, 
                                         [SA_MAPQ]  = sam_seg_0A_mapq_cb   };
      
-    seg_struct (VB, ctx,(ContainerP)&container_ga, STRa(ga), callbacks, add_bytes, true);
+    seg_struct (VB, ctx, &container_ga, STRa(ga), callbacks, add_bytes, true);
 
     seg_set_last_txt (VB, ctx, STRa(ga));
 }

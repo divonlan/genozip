@@ -28,7 +28,7 @@ void vcf_samples_zip_initialize_PS_PID (void)
         for (int i=0; i < PS_PID_LOOKBACK_LINES; i++)
             seg_prepare_snip_other_chari (SNIP_LOOKBACK, _VCF_LOOKBACK, 'T'+i, ps_lookback_snip, i);
 
-        static const Container(3) con_PS_pos_ref_alt = {
+        static const Container_3 con_PS_pos_ref_alt = {
             .repeats   = 1,
             .nitems_lo = 3,
             .items     = { { .dict_id.num = _FORMAT_PSpos, .separator = "_"},
@@ -36,7 +36,7 @@ void vcf_samples_zip_initialize_PS_PID (void)
                            { .dict_id.num = _FORMAT_PSalt                  } } };                       
 
         ps_pra_snip_len = sizeof (ps_pra_snip);
-        container_prepare_snip ((ContainerP)&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
+        container_prepare_snip (&con_PS_pos_ref_alt, 0, 0, ps_pra_snip, &ps_pra_snip_len); 
     }
 }
 

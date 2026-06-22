@@ -102,6 +102,8 @@ static rom help_footer[] = {
     "Technical questions, bug reports and feature requests: " EMAIL_SUPPORT,
     "Sales inquiries: " EMAIL_SALES,
     "",
+    "License Terms & Conditions: " WEBSITE_LICENSE " or view with genozip --license",
+    "",
     "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS OR DISTRIBUTORS OF THIS SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
 };
 
@@ -271,7 +273,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     }
     
     // no need to waste time freeing memory of the last file, the process termination will do that
-    flag.let_OS_cleanup_on_exit = is_last_z_file && !arch_is_valgrind(); 
+    flag.let_OS_cleanup_on_exit = is_last_z_file && !flag.is_valgrind; 
 
     // note: must be before file_close, bc is_dropped_buf are Buffers embedded in is in z_file->vb_info, 
     // but in the wvb buffer list, so they must be destroyed first
@@ -827,7 +829,7 @@ int main (int argc, char *argv[])
     // genozip with no input filename, no output filename, and no input redirection 
     // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
     // coming from a pipe. the user must use "-" to redirect from stdin
-    if (optind == argc && !flag.out_filename && !flag.files_from && (isatty(0) || arch_is_docker())/* && !IS_REF_EXTERNAL*/) {
+    if (optind == argc && !flag.out_filename && !flag.files_from && (isatty(0) || flag.is_docker)/* && !IS_REF_EXTERNAL*/) {
         main_no_files (argc);
         return 0;
     }
@@ -850,11 +852,13 @@ int main (int argc, char *argv[])
                                    ((flag.is_windows || flag.is_mac || flag.is_wsl || flag.low_memory) 
                                         ? ((float)MAX_(arch_get_num_cores() * 0.75, arch_get_num_cores()-3))  // under-subscribe on Windows / Mac to maintain UI interactivity
                                         : ((float)arch_get_num_cores() * 1.1 ))); // over-subscribe to keep all cores busy even when some threads are waiting on mutex or join
-
+    
     ASSINP (input_files_len || !isatty(0) || IS_REF_EXTERNAL || !IS_ZIP, "missing input file. Example: %s myfile.bam", global_cmd);
     ASSINP (input_files_len || !isatty(0) || IS_REF_EXTERNAL || !IS_PIZ, "missing input file. Example: %s myfile.bam.genozip", global_cmd);
 
     primary_command = flag.command; 
+
+    n_files = MAX_(input_files_len, 1); // must be before license_load
 
     // IF YOU'RE CONSIDERING EDITING THIS CODE TO BYPASS THE REGISTRTION, DON'T! It would be a violation of the license,
     // and might put you personally as well as your organization at legal and financial risk - see "Severly unauthorized use of Genozip"
@@ -867,8 +871,7 @@ int main (int argc, char *argv[])
     // if we're genozipping with tar, initialize tar file
     if (IS_ZIP && tar_zip_is_tar()) 
         tar_initialize (&input_files_buf);
-
-    n_files = MAX_(input_files_len, 1);
+    
     unsigned z_file_i=0;
     for (file_i=0; file_i < n_files; file_i++) {
 
@@ -947,7 +950,7 @@ int main (int argc, char *argv[])
 
     ASSINP0 (flag_no_biopsy_line, "biopsy line not found, try a lower number");
 
-    if (arch_is_valgrind()) { // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
+    if (flag.is_valgrind) { // when testing with valgrind, release memory we normally intentionally leak, to expose true leaks
         main_destroy_filename_list();
         regions_destroy();
     }

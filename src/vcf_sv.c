@@ -61,7 +61,7 @@ void vcf_sv_seg_initialize (VBlockVCFP vb, Did *tw_dids, int num_tw_dids)
 // in case a field is predicted to be the same as mate's
 ContextP vcf_seg_sv_copy_mate (VBlockVCFP vb, ContextP ctx, STRp(value), int my_tw, int her_tw, bool seg_only_if_mated, unsigned add_bytes)
 {
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)&vb->mux_mate[my_tw], vcf_has_mate);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, &vb->mux_mate[my_tw], vcf_has_mate);
     ContextP ret = NULL; // default: caller shouldn't seg 
 
     if (vcf_has_mate) {

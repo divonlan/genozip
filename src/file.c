@@ -276,7 +276,7 @@ static void file_redirect_output_to_stream (FileP file, rom exec_name,
                                        format_option_1, format_option_2, format_option_3,
                                        NULL);
     
-    file->file = stream_to_stream_stdin (output_compressor);
+    file->os_file = stream_to_stream_stdin (output_compressor);
 }
 
 // starting samtools 1.10, a PG record is added to the SAM header every "samtools view", and an option, --no-PG, 
@@ -397,21 +397,21 @@ static void file_open_ext_decompessor (FileP file, rom exec_name, rom subcommand
                        (name_if_not_remote && !file->is_remote) ? file->name : SKIP_ARG,
                        NULL); 
     
-    file->file       = stream_from_stream_stdout (input_decompressor);
+    file->os_file    = stream_from_stream_stdout (input_decompressor);
     file->redirected = true;
     file->effective_codec = streamed_codec; // data received from input_decompressor is in this codec
 }
 
 static void file_open_txt_read_bz2 (FileP file)
 {
-    file->file = file->is_remote  ? BZ2_bzdopen (fileno (url_open_remote_file (NULL, file->name)), READ) // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
-               : file->redirected ? BZ2_bzdopen (STDIN_FILENO, READ)
-               :                    BZ2_bzopen (file->name, READ);  // for local files we decompress ourselves   
+    file->bz_file = file->is_remote  ? BZ2_bzdopen (fileno (url_open_remote_file (NULL, file->name)), READ) // we're abandoning the FILE structure (and leaking it, if libc implementation dynamically allocates it) and working only with the fd
+                  : file->redirected ? BZ2_bzdopen (STDIN_FILENO, READ)
+                  :                    BZ2_bzopen (file->name, READ);  // for local files we decompress ourselves   
 
-    ASSERT (file->file, "failed to open BZ2 file %s", file->name);
+    ASSERT (file->bz_file, "failed to open BZ2 file %s", file->name);
         
     if (!file->is_remote && !file->redirected) {
-        int fd = BZ2_get_fd (file->file);
+        int fd = BZ2_get_fd (file->bz_file);
         
         stream_set_inheritability (fd, false); // Windows: allow file_remove in case of --replace
         #ifdef __linux__
@@ -422,16 +422,16 @@ static void file_open_txt_read_bz2 (FileP file)
 
 static void file_open_txt_read_gz (FileP file)
 {
-    file->file = file->is_remote  ? url_open_remote_file (NULL, file->name)  
-               : file->redirected ? fdopen (STDIN_FILENO,  "rb") 
-               :                    fopen (file->name, READ);
+    file->os_file = file->is_remote  ? url_open_remote_file (NULL, file->name)  
+                  : file->redirected ? fdopen (STDIN_FILENO,  "rb") 
+                  :                    fopen (file->name, READ);
     
-    ASSERT (file->file, "failed to open %s: %s", file->name, strerror (errno));
+    ASSERT (file->os_file, "failed to open %s: %s", file->name, strerror (errno));
 
     if (!file->is_remote && !file->redirected) {
-        stream_set_inheritability (fileno (file->file), false); // Windows: allow file_remove in case of --replace
+        stream_set_inheritability (fileno (file->os_file), false); // Windows: allow file_remove in case of --replace
         #ifdef __linux__
-        posix_fadvise (fileno ((FILE *)file->file), 0, 0, POSIX_FADV_SEQUENTIAL); // ignore errors
+        posix_fadvise (fileno (file->os_file), 0, 0, POSIX_FADV_SEQUENTIAL); // ignore errors
         #endif
     }
 
@@ -643,7 +643,7 @@ FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_lev
     // open the file, based on the codec 
     switch (file->effective_codec) { 
         case CODEC_BGZF : 
-        case CODEC_NONE : file->file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
+        case CODEC_NONE : file->os_file = file->redirected ? fdopen (STDOUT_FILENO, "wb") : fopen (file->name, WRITE); break;
 
         case CODEC_CRAM : {
             StrText4K samtools_T_option = cram_get_samtools_option_T();
@@ -666,7 +666,7 @@ FileP file_open_txt_write (rom filename, DataType data_type, MgzipLevel bgzf_lev
         default: {} // never reaches here
     }
 
-    ASSINP (file->file, "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
+    ASSINP (file->os_file, "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
     file_initialize_txt_file_fields (file);
 
@@ -783,23 +783,23 @@ FileP file_open_z_read (rom filename)
         if ((sb.st_mode & S_IFMT) != S_IFREG) cause=7; // not regular file
 
         if (!cause) {
-            file->file = fopen (disk_filename, READ);
+            file->os_file = fopen (disk_filename, READ);
 
-            stream_set_inheritability (fileno (file->file), false); // Windows: allow file_remove in case of --replace
+            stream_set_inheritability (fileno (file->os_file), false); // Windows: allow file_remove in case of --replace
         }
         
         // verify that this is a genozip file 
         // we read the Magic at the end of the file (as the magic at the beginning may be encrypted)
         uint32_t magic;
         if (cause ||
-            (cause = 1 * !file->file) ||
+            (cause = 1 * !file->os_file) ||
             (cause = 2 * !sb.st_size) ||
             (cause = 3 * !file_seek (file, -(int)sizeof (magic), SEEK_END, READ, SOFT_FAIL)) || 
-            (cause = 4 * !fread (&magic, sizeof (magic), 1, file->file)) ||
+            (cause = 4 * !fread (&magic, sizeof (magic), 1, file->os_file)) ||
             (cause = 5 * (BGEN32 (magic) != GENOZIP_MAGIC && !(flag.show_headers && flag.force)))) {
             
             int fail_errno = errno;
-            FCLOSE (file->file, disk_filename);
+            FCLOSE (file->os_file, disk_filename);
 
             if (flag.validate == VLD_REPORT_INVALID) 
                 flag.validate = VLD_INVALID_FOUND;
@@ -849,7 +849,7 @@ FileP file_open_z_read (rom filename)
     
     file_initialize_z_file_data (file);
 
-    ASSINP (file->file, "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
+    ASSINP (file->os_file, "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
 done:
     COPY_TIMER_EVB (file_open_z);
@@ -909,15 +909,15 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
 
         // if we're writing to a tar file, we get the already-openned tar file
         if (file->is_in_tar)
-            file->file = tar_open_file (file->name, file->name);
+            file->os_file = tar_open_file (file->name, file->name);
             // note: tar doesn't have a z_reread_file bc --pair and --deep are not yet supported with --tar
 
         else {
-            file->file = fopen (file->name, file->mode);
+            file->os_file = fopen (file->name, file->mode);
             
 #ifndef _WIN32
             // set z_file permissions to be the same as the txt_file permissions (if possible)
-            if (file->file && txt_file && txt_file->name && !txt_file->is_remote) {
+            if (file->os_file && txt_file && txt_file->name && !txt_file->is_remote) {
                 struct stat st;
                 if (stat (txt_file->name, &st))
                     WARN (_FYI "Failed to set permissions of %s because failed to stat(%s): %s", file->name, txt_file->name, strerror(errno));
@@ -933,7 +933,7 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
 
     file_initialize_z_file_data (file);
 
-    ASSINP (file->file || flag.zip_no_z_file, 
+    ASSINP (file->os_file || flag.zip_no_z_file, 
             "cannot open file \"%s\": %s", file->name, strerror(errno)); // errno will be retrieve even the open() was called through zlib and bzlib 
 
     COPY_TIMER_EVB (file_open_z);
@@ -979,14 +979,14 @@ void file_close (FileP *file_p)
         flag.show_time_comp_i == COMP_ALL && !flag.show_time[0]) // show-time without the optional parameter 
         profiler_add_evb_and_print_report();
 
-    store_relaxed (*file_p, (FileP)NULL); 
+    __atomic_store_n ((File **)file_p, (FileP)NULL, __ATOMIC_RELAXED); // can't use store_relaxed here bc need to cast away the "restrict" on file_p
 
     if (!file) return; // nothing to do
 
     if (file->file && file->supertype == TXT_FILE) {
 
         if (file->mode == READ && file->effective_codec == CODEC_BZ2)
-            BZ2_bzclose((BZFILE *)file->file);
+            BZ2_bzclose (file->bz_file);
         
         else if (file->mode == READ && is_read_via_ext_decompressor (file)) 
             stream_close (&input_decompressor, STREAM_WAIT_FOR_PROCESS);
@@ -996,13 +996,13 @@ void file_close (FileP *file_p)
 
         // if its stdout - just flush, don't close - we might need it for the next file
         else if (file->mode == WRITE && flag.to_stdout) 
-            fflush ((FILE *)file->file);
+            fflush (file->os_file);
 
         else if (file->is_remote)
-            url_close_remote_file_stream ((FILE**)&file->file);
+            url_close_remote_file_stream (&file->os_file);
 
         else
-            FCLOSE (file->file, file_printname (file));
+            FCLOSE (file->os_file, file_printname (file));
 
         // create an index file using samtools, bcftools etc, if applicable
         if (file->mode == WRITE && flag.ext_indexing && !flag_loading_auxiliary) 
@@ -1021,7 +1021,7 @@ void file_close (FileP *file_p)
         if (file->is_in_tar && file->mode != READ)
             tar_close_file (&file->file);
         else {
-            FCLOSE (file->file, file_printname (file));
+            FCLOSE (file->os_file, file_printname (file));
             FCLOSE (file->z_reread_file, file_printname (file));
         }
         serializer_destroy (file->digest_serializer);  
@@ -1185,7 +1185,7 @@ bool file_seek (FileP file, int64_t offset,
     } 
     else
         ASSERT (!ret, "fseeko64(offset=%"PRId64" whence=%d) failed on file %s (FILE*=%p remote=%s redirected=%s): %s", 
-                offset, whence, file_printname (file), file->file, TF(file->is_remote), TF(file->redirected), strerror (errno));
+                offset, whence, file_printname (file), file->os_file, TF(file->is_remote), TF(file->redirected), strerror (errno));
 
     return !ret;
 }
@@ -1331,11 +1331,12 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
     
     mutex_unlock (put_data_mutex);
 
-    ASSERT (!renamed_failed, "Failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
+    // warnings and not errors, because we might be called in the midst of printing a much more important error message
+    ASSERTW (!renamed_failed, "Failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
     FREE (tmp_filename);
 
-    if (chmod_to) 
-        ASSERT (!chmod (filename, chmod_to), "Failed to chmod %s: %s", filename, strerror (errno));
+    if (chmod_to && !renamed_failed) 
+        ASSERTW (!chmod (filename, chmod_to), "Failed to chmod %s: %s", filename, strerror (errno));
     
     return true;
 }

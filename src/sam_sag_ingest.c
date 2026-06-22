@@ -125,7 +125,7 @@ static void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32
         next_bit += vb_grp->seq_len * 2;
     }
 
-    bits_clear_excess_bits_in_top_word ((BitsP)packed_seq_buf, true);
+    bits_clear_excess_bits_in_top_word (packed_seq_buf, true);
 
     COPY_TIMER (sam_zip_prim_ingest_vb_pack_seq);
 }
@@ -349,7 +349,7 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
                     VB_NAME, MAX_SA_SEQ_INDEX, report_support());
 
             buf_alloc_bits (evb, &z_file->sag_seq, packed_seq_buf.nbits, 0, NOINIT, CTX_GROWTH, "z_file->sag_seq");
-            bits_copy ((BitsP)&z_file->sag_seq, start_seq * 2, (BitsP)&packed_seq_buf, 0, packed_seq_buf.nbits);
+            bits_copy (&z_file->sag_seq, start_seq * 2, &packed_seq_buf, 0, packed_seq_buf.nbits);
 
             seq_done = achieved_something = true;                
             mutex_unlock (seq_mutex);

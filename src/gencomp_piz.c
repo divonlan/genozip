@@ -18,7 +18,7 @@
 #include "threads.h"
 
 // PIZ main thread, genocat --show-plan (note: genounzip --show-plan uses a different code path)
-void noreturn gencomp_piz_genocat_show_plan (void)
+noreturn void gencomp_piz_genocat_show_plan (void)
 {
     for (int64_t i=0; i < z_file->recon_plan.len; i++) {
         ReconPlanItemP p = B(ReconPlanItem, z_file->recon_plan, i);

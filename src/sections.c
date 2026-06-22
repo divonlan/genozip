@@ -86,29 +86,29 @@ static const SectionsCompIndexEnt *Bcompindex (CompIType comp_i)
     return comp_index_ent;
 }
 
-DictId sections_get_dict_id (ConstSectionHeaderP header)
+DictId sections_get_dict_id (SectionHeaderUnionP header)
 {
-    if (!header) return DICT_ID_NONE;
+    if (!header.common) return DICT_ID_NONE;
     
-    switch (header->section_type) {
-        case SEC_DICT     : return ((SectionHeaderDictionaryP)header)->dict_id; break;
-        case SEC_B250     : return ((SectionHeaderCtxP       )header)->dict_id; break;
-        case SEC_LOCAL    : return ((SectionHeaderCtxP       )header)->dict_id; break;
-        case SEC_COUNTS   : return ((SectionHeaderCountsP    )header)->dict_id; break;
-        case SEC_SUBDICTS : return ((SectionHeaderSubDictsP  )header)->dict_id; break;
-        case SEC_HUFFMAN  : return ((SectionHeaderHuffmanP   )header)->dict_id; break;
+    switch (header.common->section_type) {
+        case SEC_DICT     : return header.dict->dict_id;     break;
+        case SEC_B250     : return header.ctx->dict_id;      break;
+        case SEC_LOCAL    : return header.ctx->dict_id;      break;
+        case SEC_COUNTS   : return header.counts->dict_id;   break;
+        case SEC_SUBDICTS : return header.subdicts->dict_id; break;
+        case SEC_HUFFMAN  : return header.huffman->dict_id;  break;
         default           : return DICT_ID_NONE;
     }
 }
 
 // ZIP only: create section list that goes into the genozip header, as we are creating the sections. returns offset
-void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
+void sections_add_to_list (VBlockP vb, SectionHeaderUnionP header)
 {
     // case: we're re-creaating a section already on this list - nothing to do
     if (vb->section_list.len && vb->z_data.len <= BLST (SectionEnt, vb->section_list)->offset)
         return;
 
-    SectionType st = header->section_type;
+    SectionType st = header.common->section_type;
     ASSERT (st >= SEC_NONE && st < NUM_SEC_TYPES, "sec_type=%u ∉ [-1,%u]", st, NUM_SEC_TYPES-1);
 
     DictId dict_id = sections_get_dict_id (header);
@@ -116,17 +116,17 @@ void sections_add_to_list (VBlockP vb, ConstSectionHeaderP header)
     
     buf_alloc (vb, &vb->section_list, 1, 50, SectionEnt, 2, "section_list");
     
-    int header_size = st_header_size (header->section_type);
-    if (header->data_encrypted_len) header_size = ROUNDUP16 (header_size);
+    int header_size = st_header_size (header.common->section_type);
+    if (header.common->data_encrypted_len) header_size = ROUNDUP16 (header_size);
 
     BNXT (SectionEntModifiable, vb->section_list) = (SectionEntModifiable) {
-        .st             = header->section_type,
-        .vblock_i       = (IS_VB_SEC(st) || IS_FRAG_SEC(st)) ? BGEN32 (header->vblock_i) : 0, // big endian in header - convert back to native
+        .st             = header.common->section_type,
+        .vblock_i       = (IS_VB_SEC(st) || IS_FRAG_SEC(st)) ? BGEN32 (header.common->vblock_i) : 0, // big endian in header - convert back to native
         .comp_i         = IS_COMP_SEC(st) ? vb->comp_i : COMP_NONE,
         .offset         = vb->z_data.len,  // this is a partial offset (within vb) - we will correct it later
-        .flags          = header->flags,
+        .flags          = header.common->flags,
         .num_lines      = ST(VB_HEADER) ? vb->lines.len32 : 0, 
-        .size           = header_size  + MAX_(BGEN32 (header->data_compressed_len), BGEN32 (header->data_encrypted_len))
+        .size           = header_size  + MAX_(BGEN32 (header.common->data_compressed_len), BGEN32 (header.common->data_encrypted_len))
         //up to v14: header_size  + BGEN32 (header->data_compressed_len)
     };
 

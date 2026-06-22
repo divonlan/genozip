@@ -19,7 +19,7 @@ void vcf_seg_pos (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(pos_str))
         // note: using a multiplexer for distinguising END and POS, while keeping them as an alias
         // has the advantage the that delta=1 snip common in GVCF will be the same self-delta snip
         // regardless if previous line has an END or not (i.e. delta might be against the END or the POS, but these will result in the same snip)
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_POS, (MultiplexerP)&vb->mux_POS, 0); // goes into channel_i=0: "this is POS"
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_POS, &vb->mux_POS, 0); // goes into channel_i=0: "this is POS"
 
         pos = dl->pos = seg_pos_field (VB, channel_ctx->did_i, VCF_POS, 0, '.', STRa(pos_str), 0, pos_str_len+1);
         ctx_set_last_value (VB, ctx, pos);
@@ -52,7 +52,7 @@ void vcf_seg_INFO_END (VBlockVCFP vb, ContextP end_ctx, STRp(end_str)) // end_ct
 {
     // END is an alias of POS
     if (segconf.vcf_is_gvcf) {
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_POS, (MultiplexerP)&vb->mux_POS, 1); // goes into channel_i=1: "this is END"
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_POS, &vb->mux_POS, 1); // goes into channel_i=1: "this is END"
 
         PosType64 end = seg_pos_field (VB, channel_ctx->did_i, VCF_POS, SPF_BAD_SNIPS_TOO | SPF_ZERO_IS_BAD, 0, STRa(end_str), 0, end_str_len);
         ctx_set_last_value (VB, CTX(VCF_POS), end); // END is an alias of POS

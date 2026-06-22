@@ -47,6 +47,7 @@
 
 #include "genozip.h"
 #include "buf_struct.h"
+#include "buffer.h"
 
 //------------------------------------------------------------------
 // Macros 
@@ -131,7 +132,6 @@
 #define bitset_get(arr,pos)       bitset_op (bitset2_get,  (arr), (pos))
 #define bitset_get2(arr,pos)      bitset_op (bitset2_get2, (arr), (pos)) 
 #define bitset_get4(arr,pos)      bitset_op (bitset2_get4, (arr), (pos)) 
-#define bitset_get5(arr,pos)      bitset_op (bitset2_get5, (arr), (pos)) 
 #define bitset_set(arr,pos)       bitset_op (bitset2_set,  (arr), (pos))
 #define bitset_del(arr,pos)       bitset_op (bitset2_del,  (arr), (pos))
 #define bitset_tgl(arr,pos)       bitset_op (bitset2_tgl,  (arr), (pos))
@@ -148,27 +148,24 @@
 
 typedef uint8_t word_offset_t; // Offset within a 64 bit word
 
-typedef struct Bits {
-    // Note: These fields map to Buffer
-    uint64_t *words;     // maps to Buffer->data
-    uint64_t nbits;      // maps to Buffer->nbits
-    uint64_t nwords;     // maps to Buffer->len  ; round_up (nbits / 64)
-    uint64_t type  : BUF_TYPE_BITS;  // maps to Buffer->type
-    uint64_t other : 64-BUF_TYPE_BITS; // used only if this is a Buffer
-} Bits;
+typedef Buffer Bits;
 
-#define bits_in_top_word(nbits) (__builtin_expect ((nbits) > 0, true) ? bitset64_idx((nbits) - 1) + 1 : 0)
+static inline word_offset_t bits_in_top_word (uint64_t nbits) {
+    return nbits ? (((nbits - 1) & 63) + 1) : 0;
+}
 
 // clear excess bits in top used word of bitmap 
 static inline void bits_clear_excess_bits_in_top_word (BitsP bits, bool atomic)
 {
-    if (bits->nwords) {
-        word_offset_t bits_active = bits_in_top_word(bits->nbits);
+    word_offset_t bits_active = bits->nbits & 63;
+    if (bits_active) { // we have a partial word
         //atomic version of &= in case multiple threads do this in concurrently while working on different regions of the bitmap
         if (atomic)
             __atomic_and_fetch (&bits->words[bits->nwords-1], bitmask64(bits_active), __ATOMIC_RELAXED);
-        else
+        else {
+            // note: this is a read-modify-write operation, if the last word is not initialized then valgrind etc will shout upon the read
             bits->words[bits->nwords-1] &= bitmask64(bits_active);
+        }
     }
 }
 
@@ -188,7 +185,6 @@ extern void LTEN_bits (BitsP bits);
 static inline bool    bits_get (ConstBitsP arr, uint64_t i) { return bitset_get (arr->words, i); }
 static inline uint8_t bits_get2(ConstBitsP arr, uint64_t i) { return bitset_get2(arr->words, i); }
 static inline uint8_t bits_get4(ConstBitsP arr, uint64_t i) { return bitset_get4(arr->words, i); }
-static inline uint8_t bits_get5(ConstBitsP arr, uint64_t i) { return bitset_get5(arr->words, i); }
 static inline void bits_set    (BitsP arr, uint64_t i) { bitset_set(arr->words, i); }
 static inline void bits_clear  (BitsP arr, uint64_t i) { bitset_del(arr->words, i); }
 static inline void bits_toggle (BitsP arr, uint64_t i) { bitset_tgl(arr->words, i); }

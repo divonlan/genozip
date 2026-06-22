@@ -19,7 +19,7 @@ sSTRl(con_meinfo_snip, con_snip_sizeof(5));
 #define _MEINFO_END      DICT_ID_MAKE1_7("M3E_END")
 #define _MEINFO_POLARITY DICT_ID_MAKE1_8("M4E_POLR")
 
-static Container(5) meinfo_con = { 
+static Container_5 meinfo_con = { 
     .repeats   = 1, 
     .nitems_lo = 5, 
     .items     = { { .dict_id.num = _MEINFO_NAME,  .separator = ","               }, 
@@ -38,13 +38,13 @@ void vcf_me_zip_initialize (void)
 
         seg_prepare_plus_snip (VCF, 3, ((DictId[]){ {_MEINFO_START}, {_INFO_SVLEN}, {_MEINFO_DELTA} }), START_plus_SVLEN_plus_DELTA_snip);
         
-        container_prepare_snip ((ContainerP)&meinfo_con, NULL, 0, qSTRa(con_meinfo_snip));
+        container_prepare_snip (&meinfo_con, NULL, 0, qSTRa(con_meinfo_snip));
     }
 }
 
 void vcf_me_seg_initialize (VBlockVCFP vb)
 {
-    ctx_consolidate_stats_(VB, CTX(INFO_MEINFO), (ContainerP)&meinfo_con);
+    ctx_consolidate_stats_(VB, CTX(INFO_MEINFO), &meinfo_con);
 
     CTX(INFO_ADJLEFT)->flags.same_line = true;
 }
@@ -124,14 +124,14 @@ void vcf_seg_melt_ADJRIGHT (VBlockVCFP vb, ContextP ctx, STRp(adjright_str))
 // Example: INTERNAL=NM_000384,PROMOTER
 void vcf_seg_melt_INTERNAL (VBlockVCFP vb, ContextP ctx, STRp(internal))
 {
-    Container(2) con = {
+    Container_2 con = {
         .repeats   = 1,
         .nitems_lo = 2,
         .items     = { { .dict_id.num = DICT_ID_MAKE1_8("I0N_GENE"), .separator = "," },
                        { .dict_id.num = DICT_ID_MAKE1_8("I1N_DESC")                   } }
     };    
 
-    seg_struct (VB, ctx, (ContainerP)&con, STRa(internal), NULL, internal_len, true);
+    seg_struct (VB, ctx, &con, STRa(internal), NULL, internal_len, true);
 }
 
 static bool vcf_seg_melt_DIFF_arr (VBlockP vb, ContextP ctx, STRp(diff_arr), uint32_t repeat)
@@ -145,12 +145,12 @@ static bool vcf_seg_melt_DIFF_arr (VBlockP vb, ContextP ctx, STRp(diff_arr), uin
 // Example: DIFF=0.94:g73c,t89c,c96a,i127aaa,g145a,c174t,g237c
 void vcf_seg_melt_DIFF (VBlockVCFP vb, ContextP ctx, STRp(diff))
 {
-    Container(2) con = {
+    Container_2 con = {
         .repeats   = 1,
         .nitems_lo = 2,
         .items     = { { .dict_id.num = DICT_ID_MAKE1_8("D0FF_VAL"), .separator = ":" },
                        { .dict_id.num = DICT_ID_MAKE1_8("D1FF_ARR")                   } }
     };    
 
-    seg_struct (VB, ctx, (ContainerP)&con, STRa(diff), (SegCallback[]){ 0, vcf_seg_melt_DIFF_arr }, diff_len, true);
+    seg_struct (VB, ctx, &con, STRa(diff), (SegCallback[]){ 0, vcf_seg_melt_DIFF_arr }, diff_len, true);
 }

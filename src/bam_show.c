@@ -12,20 +12,20 @@ static void bam_show_one_aux (STRp(aux))
 {
     ASSERT (aux_len > 3, "\nExpecting aux_len=%u > 3", aux_len);
 
-    iprintf ("%c%c:%c:", aux[0], aux[1], aux[2]);
+    fprintf (info_stream, "%c%c:%c:", aux[0], aux[1], aux[2]);
 
     rom next_field = &aux[3];
     switch (aux[2]) {
-        case 'c' : iprintf ("%d ", (int8_t) NEXT_UINT8);   break;
-        case 'C' : iprintf ("%u ",          NEXT_UINT8);   break;
-        case 'A' : iprintf ("%c ",          NEXT_UINT8);   break;
-        case 's' : iprintf ("%d ", (int16_t)NEXT_UINT16);  break;
-        case 'S' : iprintf ("%u ",          NEXT_UINT16);  break;
-        case 'i' : iprintf ("%d ", (int32_t)NEXT_UINT32);  break;
-        case 'I' : iprintf ("%u ",          NEXT_UINT32);  break;
-        case 'f' : iprintf ("%f ",          NEXT_FLOAT32); break;
+        case 'c' : fprintf (info_stream, "%d ", (int8_t) NEXT_UINT8);   break;
+        case 'C' : fprintf (info_stream, "%u ",          NEXT_UINT8);   break;
+        case 'A' : fprintf (info_stream, "%c ",          NEXT_UINT8);   break;
+        case 's' : fprintf (info_stream, "%d ", (int16_t)NEXT_UINT16);  break;
+        case 'S' : fprintf (info_stream, "%u ",          NEXT_UINT16);  break;
+        case 'i' : fprintf (info_stream, "%d ", (int32_t)NEXT_UINT32);  break;
+        case 'I' : fprintf (info_stream, "%u ",          NEXT_UINT32);  break;
+        case 'f' : fprintf (info_stream, "%f ",          NEXT_FLOAT32); break;
         case 'H' :
-        case 'Z' : iprintf ("%s ", next_field); next_field += strlen (next_field)+1 ; break;
+        case 'Z' : fprintf (info_stream, "%s ", next_field); next_field += strlen (next_field)+1 ; break;
         
         case 'B' : {
             uint8_t type   = NEXT_UINT8;
@@ -34,13 +34,13 @@ static void bam_show_one_aux (STRp(aux))
             for (uint32_t i=0; i < count; i++) 
                 switch (type) {
                     #define SEP (i==count-1 ? ' ' : ',')
-                    case 'c' : iprintf ("%d%c", (int8_t) NEXT_UINT8,   SEP); break;
-                    case 'C' : iprintf ("%u%c",          NEXT_UINT8,   SEP); break;
-                    case 's' : iprintf ("%d%c", (int16_t)NEXT_UINT16,  SEP); break;
-                    case 'S' : iprintf ("%u%c",          NEXT_UINT16,  SEP); break;
-                    case 'i' : iprintf ("%d%c", (int32_t)NEXT_UINT32,  SEP); break;
-                    case 'I' : iprintf ("%u%c",          NEXT_UINT32,  SEP); break;
-                    case 'f' : iprintf ("%f%c",          NEXT_FLOAT32, SEP); break;
+                    case 'c' : fprintf (info_stream, "%d%c", (int8_t) NEXT_UINT8,   SEP); break;
+                    case 'C' : fprintf (info_stream, "%u%c",          NEXT_UINT8,   SEP); break;
+                    case 's' : fprintf (info_stream, "%d%c", (int16_t)NEXT_UINT16,  SEP); break;
+                    case 'S' : fprintf (info_stream, "%u%c",          NEXT_UINT16,  SEP); break;
+                    case 'i' : fprintf (info_stream, "%d%c", (int32_t)NEXT_UINT32,  SEP); break;
+                    case 'I' : fprintf (info_stream, "%u%c",          NEXT_UINT32,  SEP); break;
+                    case 'f' : fprintf (info_stream, "%f%c",          NEXT_FLOAT32, SEP); break;
                 }
         }
     }
@@ -54,7 +54,7 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
 
     if (segconf_running) return after;
 
-    iprintf ("block_size=%d ", block_size);
+    fprintf (info_stream, "block_size=%d ", block_size);
 
     // a non-sensical block_size might indicate an false-positive identification of a BAM alignment in bam_unconsumed
     ASSERT (block_size + 4 >= sizeof (BAMAlignmentFixed) && block_size + 4 <= remaining_txt_len, 
@@ -62,41 +62,41 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
             LN_NAME, block_size+4, remaining_txt_len);
 
 
-    iprintf ("rname=%d ", NEXT_UINT32);
-    iprintf ("pos=%u ", 1 + NEXT_UINT32);
-    uint8_t l_read_name  = NEXT_UINT8;               
-    iprintf ("l_qname=%u ", l_read_name);    
-    iprintf ("mapq=%u ", NEXT_UINT8);
-    iprintf ("bin=%u ", NEXT_UINT16);
-    uint16_t n_cigar_op  = NEXT_UINT16;
-    iprintf ("n_cigar_op=%u ", n_cigar_op);    
-    iprintf ("flag=%u ", NEXT_UINT16);
-    uint32_t l_seq       = NEXT_UINT32;
-    iprintf ("l_seq=%u ", l_seq);    
-    iprintf ("rnext=%d ", NEXT_UINT32);
-    iprintf ("pnext=%u ", 1+NEXT_UINT32);
-    iprintf ("tlen=%d ", NEXT_UINT32);
+    fprintf (info_stream, "rname=%d ", NEXT_UINT32);
+    fprintf (info_stream, "pos(1-based)=%u ", 1 + NEXT_UINT32); 
+    uint8_t l_read_name = NEXT_UINT8;               
+    fprintf (info_stream, "l_qname=%u ", l_read_name);    
+    fprintf (info_stream, "mapq=%u ",  NEXT_UINT8);
+    fprintf (info_stream, "bin=%u ",   NEXT_UINT16);
+    uint16_t n_cigar_op = NEXT_UINT16;
+    fprintf (info_stream, "n_cigar_op=%u ", n_cigar_op);    
+    fprintf (info_stream, "flag=%u ",  NEXT_UINT16);
+    uint32_t l_seq      = NEXT_UINT32;
+    fprintf (info_stream, "l_seq=%u ", l_seq);    
+    fprintf (info_stream, "rnext=%d ", NEXT_UINT32);
+    fprintf (info_stream, "pnext=%u ", 1+NEXT_UINT32);
+    fprintf (info_stream, "tlen=%d ",  NEXT_UINT32);
 
-    iprintf ("qname=\"%s\" cigar=\"", str_to_printable_(next_field, MIN_(l_read_name-1,512)).s); // restrict to 512 in case l_read_name is corrupted
+    fprintf (info_stream, "qname=\"%s\" cigar=\"", str_to_printable_(next_field, MIN_(l_read_name-1,512)).s); // restrict to 512 in case l_read_name is corrupted
     next_field += l_read_name; // note: l_read_name includes \0
 
     for (int i=0; i < n_cigar_op; i++) {
         BamCigarOp op = (BamCigarOp){ .value = NEXT_UINT32 };
-        iprintf ("%u%c", op.n, cigar_op_to_char[op.op]);
+        fprintf (info_stream, "%u%c", op.n, cigar_op_to_char[op.op]);
     }
     
     rom textual_seq = bam_seq_display ((bytes)next_field, l_seq);
-    iprintf ("\" seq=\"%s\" ", textual_seq); next_field += (l_seq+1)/2; FREE(textual_seq);
+    fprintf (info_stream, "\" seq=\"%s\" ", textual_seq); next_field += (l_seq+1)/2; FREE(textual_seq);
     
     rom textual_qual = bam_qual_display ((bytes)next_field, l_seq);
-    iprintf ("qual=\"%s\" ", textual_qual); next_field += l_seq; FREE (textual_qual);
+    fprintf (info_stream, "qual=\"%s\" ", textual_qual); next_field += l_seq; FREE (textual_qual);
 
     // split auxillary fields
     STR_ARRAY (aux, MAX_FIELDS) = bam_split_aux (vb, alignment, next_field, after, auxs, aux_lens);
     for (int i=0; i < n_auxs; i++)
         bam_show_one_aux (auxs[i], aux_lens[i]);
 
-    iprint_newline();
+    iprint_newline(); // flush once per line
 
     return after;
 }

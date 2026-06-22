@@ -21,7 +21,7 @@ void profiler_initialize (void)
     mutex_initialize (profile_mutex);
 }
 
-void profiler_add (VBlock𐤐 vb)
+void profiler_add (VBlockP vb)
 {
     mutex_lock (profile_mutex);
 
@@ -33,14 +33,14 @@ void profiler_add (VBlock𐤐 vb)
     int num_profiled = sizeof (typeof (struct { char profiled; })) - MAX_DICTS * 2; // all except compress_field and seg_recon_field
     
     for (int i=0; i < num_profiled; i++) 
-        if (((uint32_t *)&vb->profile.count)[i]) {
-            ((uint64_t *)&profile.nanosecs)[i] += ((uint64_t *)&vb->profile.nanosecs)[i];
-            ((uint64_t *)&profile.count)[i]    += ((uint32_t *)&vb->profile.count)[i];
+        if (vb->profile.count.array[i]) {
+            profile.nanosecs.array[i] += vb->profile.nanosecs.array[i];
+            profile.count.array[i]    += vb->profile.count.array[i];
         }
 
     // add compressor data by zctx, while collected by vctx
     for_vctx {
-        Context𐤐 zctx = NULL;
+        ContextP zctx = NULL;
 
         if (vb->profile.count.compress_field[vctx->did_i]) {
             zctx = IS_ZIP ? ctx_get_zctx_from_vctx (vctx, false, false) : ZCTX(vctx->did_i);

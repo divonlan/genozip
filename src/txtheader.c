@@ -258,7 +258,9 @@ static rom txtheader_piz_get_filename_do (rom orig_name, rom prefix, rom out_dir
 }
 
 // returns filename which caller is responsible to free (but returns NULL if to stdout)
-static rom txtheader_piz_get_filename (const SectionHeaderTxtHeader *header, rom out_dirname/*optional*/)
+static rom txtheader_piz_get_filename (const SectionHeaderTxtHeader *header, 
+                                       bool original_name, // if true gets original txt name, if false gets output txt name
+                                       rom out_dirname/*optional*/)
 {
     // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
     #define C(cdc) (header->src_codec == CODEC_##cdc)
@@ -270,16 +272,17 @@ static rom txtheader_piz_get_filename (const SectionHeaderTxtHeader *header, rom
                       !header->flags.txt_header.no_gz_ext &&         // source was gzip-compressed but lacked a .gz extension - we keep it that way
                       !OUT_DT(BCF) && !OUT_DT(BAM) && !OUT_DT(CRAM); // data types for which we never add .gz
 
-    rom filename = flag.to_stdout    ? NULL 
-                 : flag.out_filename ? ({ char *fn=MALLOC(strlen(flag.out_filename)+1); strcpy (fn, flag.out_filename); fn; })
-                 : flag.unbind       ? txtheader_piz_get_filename_do (header->txt_filename, flag.unbind, out_dirname, false, has_gz_ext)
-                 :                     txtheader_piz_get_filename_do (z_name,               "",          out_dirname, true,  has_gz_ext); // use genozip filename as a base regardless of original name
+    rom filename = (flag.to_stdout    && !original_name) ? NULL 
+                 : (flag.out_filename && !original_name) ? ({ char *fn=MALLOC(strlen(flag.out_filename)+1); strcpy (fn, flag.out_filename); fn; })
+                 : (flag.unbind || original_name)        ? txtheader_piz_get_filename_do (header->txt_filename, flag.unbind, out_dirname, false, has_gz_ext)
+                 :                                         txtheader_piz_get_filename_do (z_name,               "",          out_dirname, true,  has_gz_ext); // use genozip filename as a base regardless of original name
 
     return filename;
 }
 
 // PIZ: get filename (without the directory name), even if txt_file has not been opened. 
-StrText1K txtheader_get_txt_filename_from_section (CompIType comp_i)
+StrText1K txtheader_get_txt_filename_from_section (CompIType comp_i, 
+                                                   bool original_name) // if true gets original txt name, if false gets output txt name
 {
     Section sec;
 
@@ -293,7 +296,7 @@ StrText1K txtheader_get_txt_filename_from_section (CompIType comp_i)
 
     SectionHeaderTxtHeader header = zfile_read_section_header (evb, sec, SEC_TXT_HEADER).txt_header;
 
-    rom filename = txtheader_piz_get_filename (&header, NULL);
+    rom filename = txtheader_piz_get_filename (&header, original_name, NULL);
 
     StrText1K name = {};
     if (filename) {
@@ -350,7 +353,7 @@ void txtheader_piz_read_and_reconstruct (Section sec)
 
         mgzip_flags = mgzip_piz_calculate_mgzip_flags (sec->comp_i, header.src_codec);
 
-        filename = txtheader_piz_get_filename (&header, flag.out_dirname);
+        filename = txtheader_piz_get_filename (&header, false, flag.out_dirname);
     }
 
     // note: when reading an auxiliary file or no_writer - we still create txt_file (but don't actually open the physical file)

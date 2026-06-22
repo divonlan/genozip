@@ -22,7 +22,7 @@ void sam_seg_bowtie2_YS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, ValueType YS, u
     
     ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_YS_i, (MultiplexerP)&vb->mux_YS, sam_has_mate);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_YS_i, &vb->mux_YS, sam_has_mate);
 
     if (sam_has_mate && mate_dl->AS == YS.i) 
         seg_by_ctx (VB, STRa(copy_mate_AS_snip), channel_ctx, add_bytes);

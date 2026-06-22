@@ -148,7 +148,7 @@ done:
 void sam_seg_RE_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(re), unsigned add_bytes)
 {
     int channel_i = (ctx_encountered_in_line (VB, OPTION_GX_Z) && CTX(OPTION_GX_Z)->last_txt.len > 0);
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_RE_Z, (MultiplexerP)&vb->mux_RE, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_RE_Z, &vb->mux_RE, channel_i);
 
     seg_by_ctx (VB, STRa(re), channel_ctx, add_bytes);
     seg_by_did (VB, STRa(vb->mux_RE.snip), OPTION_RE_Z, 0);

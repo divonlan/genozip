@@ -222,19 +222,24 @@ BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t more_bits, uint64_t p
     buf->nbits += more_bits;   
     buf->nwords = roundup_bits2words64 (buf->nbits);
     
-    buf_alloc_(vb, buf, buf->nwords - old_nwords, preallocate_at_least_bits / 64, 
-               sizeof(uint64_t), grow_at_least_factor, name, func, code_line);
+    // case: we're adding more words
+    if (buf->nwords != old_nwords) {
+        buf_alloc_(vb, buf, buf->nwords - old_nwords, preallocate_at_least_bits / 64, 
+                   sizeof(uint64_t), grow_at_least_factor, name, func, code_line);
 
-    bits_clear_excess_bits_in_top_word ((BitsP)buf, false);
-
+        // we need to clear the unused bits in the high word, however we can't use bits_clear_excess_bits_in_top_word because
+        // it is read-modify-write, in which read, reads uninitialized memory. instead, we just the zero the entire new word
+        buf->words[buf->nwords-1] = 0;
+    }
+    
     // clear / set only added bits
     if (init_to == CLEAR && buf->nbits > old_nbits) 
-        bits_clear_region ((BitsP)buf, old_nbits, buf->nbits - old_nbits);           
+        bits_clear_region (buf, old_nbits, buf->nbits - old_nbits);           
     
     else if (init_to == SET && buf->nbits > old_nbits) 
-        bits_set_region ((BitsP)buf, old_nbits, buf->nbits - old_nbits);           
+        bits_set_region (buf, old_nbits, buf->nbits - old_nbits);           
 
-    return (BitsP)buf;
+    return buf;
 }
 
 // creates and optionally initializes a bitmap of requested "exact_bits" 
@@ -247,16 +252,16 @@ BitsP buf_alloc_bits_exact_do (VBlockP vb, BufferP buf, uint64_t exact_bits, Bit
     
     buf_alloc_(vb, buf, 0, buf->nwords, sizeof(uint64_t), grow_at_least_factor, name, func, code_line);
 
-    bits_clear_excess_bits_in_top_word ((BitsP)buf, false);
+    bits_clear_excess_bits_in_top_word (buf, false);
 
     // clear / set all bits
     if (init_to == CLEAR) 
-        bits_clear_region ((BitsP)buf, 0, exact_bits);
+        bits_clear_region (buf, 0, exact_bits);
 
     else if (init_to == SET) 
-        bits_set_region ((BitsP)buf, 0, exact_bits);
+        bits_set_region (buf, 0, exact_bits);
 
-    return (BitsP)buf;
+    return buf;
 }
 
 BitsP buf_overlay_bits_do (VBlockP vb,
@@ -271,7 +276,7 @@ BitsP buf_overlay_bits_do (VBlockP vb,
 
     top_buf->nbits  = nbits;
     top_buf->nwords = nwords;
-    return (BitsP)top_buf;
+    return top_buf;
 }
 
 // convert a Buffer from a z_file section whose len is in char to a bits
@@ -280,7 +285,7 @@ Bits *buf_zfile_buf_to_bits (BufferP buf, uint64_t nbits)
     ASSERT (roundup_bits2bytes (nbits) <= buf->len, "nbits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
             nbits, roundup_bits2bytes (nbits), buf->len);
 
-    Bits *bits = (BitsP)buf;
+    Bits *bits = buf;
     bits->nbits  = nbits;
     bits->nwords = roundup_bits2words64 (bits->nbits);
 
@@ -296,7 +301,7 @@ Bits *buf_zfile_buf_to_bits (BufferP buf, uint64_t nbits)
 
 void buf_add_bit (BufferP buf, int64_t new_bit) 
 {
-    Bits *bar = (BitsP)buf;
+    Bits *bar = buf;
 
     ASSERT (bar->nbits < buf->size * 8, "no room in Buffer %s to extend the bitmap", buf->name);
     bar->nbits++;     
@@ -310,7 +315,7 @@ void buf_add_bit (BufferP buf, int64_t new_bit)
  
 uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits) 
 {
-    Bits *bar = (BitsP)buf;
+    Bits *bar = buf;
 
     ASSERT (bar->nbits + num_new_bits <= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap: nbits=%"PRIu64", num_new_bits=%"PRId64", buf->size=%"PRIu64, 
             __FUNCLINE, buf->name, bar->nbits, num_new_bits, (uint64_t)buf->size);
@@ -443,7 +448,7 @@ void BGEN_deinterlace_d16_buf (BufferP buf, LocalType *lt)
 void BGEN_deinterlace_d32_buf (BufferP buf, LocalType *lt)
 {
     for (uint64_t i=0; i < buf->len; i++) {
-        uint32_t num_big_en = *B32 ( *buf, i);
+        uint32_t num_big_en = *B32 (*buf, i);
         uint32_t unum = BGEN32 (num_big_en);
         *B(int32_t, *buf, i) = DEINTERLACE(int32_t,unum); 
     }

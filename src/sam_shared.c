@@ -36,7 +36,7 @@ void sam_reset_line (VBlockP vb_)
 
     ASSERT (VB_DT(BAM) || VB_DT(SAM), "VB has wrong data type: %s", dt_name (vb->data_type));
     
-    vb->aux_con = NULL; 
+    vb->aux_con.h = NULL; 
     vb->textual_cigar.len = vb->binary_cigar.len = vb->binary_cigar.next = 0;
     vb->textual_seq.len = 0;
     vb->meth_call.len32 = 0;

@@ -70,25 +70,25 @@ extern char *str_toupper (rom in, char *out);
 
 static inline bool str_islower (STRp (str))
 {
-    for (int i=0; i < str_len; i++)
+    for (uint32_t i=0; i < str_len; i++)
         if (!IS_SLETTER(str[i])) return false;
     return true;
 }
 
-static bool inline str_issame_(STRp(str1), STRp(str2)) // true if the same
+static inline bool str_issame_(STRp(str1), STRp(str2)) // true if the same
 {
     return (str1_len == str2_len) && !memcmp (str1, str2, str1_len);
 }
 #define str_issame(str1,str2) str_issame_ (str1, str1##_len, str2, str2##_len)
 
-static bool inline str_isprefix_(STRp(long_str), STRp(short_str)) // true short_str is a prefix of long_str
+static inline bool str_isprefix_(STRp(long_str), STRp(short_str)) // true short_str is a prefix of long_str
 {
     return (long_str_len >= short_str_len) && !memcmp (long_str, short_str, short_str_len);
 }
 #define str_isprefix(long_str,short_str) str_isprefix_ (long_str, long_str##_len, short_str, short_str##_len)
 
 // same as str_issame, but internally it searches in reverse - good for strings that are known to differ at their end
-static bool inline str_issameR_ (STRp(str1), STRp(str2)) // true if the same
+static inline bool str_issameR_ (STRp(str1), STRp(str2)) // true if the same
 {
     if (str1_len != str2_len) return false;
 
@@ -99,7 +99,7 @@ static bool inline str_issameR_ (STRp(str1), STRp(str2)) // true if the same
 }
 #define str_issameR(str1,str2) str_issameR_ (str1, str1##_len, str2, str2##_len)
 
-static bool inline str_issame_rev_(STRp(str1), STRp(str2)) // true if the same
+static inline bool str_issame_rev_(STRp(str1), STRp(str2)) // true if the same
 {
     if (str1_len != str2_len) return false;
     for (uint32_t i=0; i < str1_len; i++)
@@ -177,7 +177,7 @@ static inline bool str_is_monochar (STRp(str))
 {
     char mono = str_len ? str[0] : 0;
  
-    for (int i=1; i < str_len; i++)
+    for (uint32_t i=1; i < str_len; i++)
         if (str[i] != mono) return false;
     
     return true;
@@ -185,16 +185,16 @@ static inline bool str_is_monochar (STRp(str))
 
 static inline bool str_is_monochar_(STRp(str), char mono)
 {
-    for (int i=0; i < str_len; i++)
+    for (uint32_t i=0; i < str_len; i++)
         if (str[i] != mono) return false;
     
     return true;
 }
 
-static inline unsigned homopolymer_len (STRp(seq), unsigned start)
+static inline unsigned homopolymer_len (STRp(seq), uint32_t start)
 {
     char base = seq[start];
-    for (unsigned i=start+1; i < seq_len; i++)
+    for (uint32_t i=start+1; i < seq_len; i++)
         if (seq[i] != base) return i - start;
 
     return seq_len - start;
@@ -284,22 +284,23 @@ extern bool str_get_int_range_allow_hex16 (STR𐤐(str), uint16_t min_val, uint1
 extern bool str_get_int_range_allow_hex32 (STR𐤐(str), uint32_t min_val, uint32_t max_val, uint32_t *value);
 extern bool str_get_int_range_allow_hex64 (STR𐤐(str), uint64_t min_val, uint64_t max_val, uint64_t *value);
 
-static bool inline str_is_int(STRp(str))       { return str_get_int (STRa(str), NULL); } // integer - leading zeros not allowed
+static inline bool str_is_int(STRp(str))       { return str_get_int (STRa(str), NULL); } // integer - leading zeros not allowed
 extern bool str_is_simple_float (STRp(str), uint32_t *decimals);
-static bool inline str_is_hexlo(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i])) return false; return true; } 
-static bool inline str_is_hexup(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i])) return false; return true; } 
-static bool inline str_is_printable(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))  return false; return true; } 
-static bool inline str_is_fastq_seq(STRp(str)) { for (int i=0; i<str_len; i++) if (!IS_FASTQ_SEQ(str[i]))  return false; return true; } 
+static inline bool str_is_hexlo(STRp(str))     { for (uint32_t i=0; i<str_len; i++) if (!IS_HEXDIGITlo(str[i])) return false; return true; } 
+static inline bool str_is_hexup(STRp(str))     { for (uint32_t i=0; i<str_len; i++) if (!IS_HEXDIGITUP(str[i])) return false; return true; } 
+static inline bool str_is_printable(STRp(str)) { for (uint32_t i=0; i<str_len; i++) if (!IS_PRINTABLE(str[i]))  return false; return true; } 
+static inline bool str_is_ascii(STRp(str))     { for (uint32_t i=0; i<str_len; i++) if (!IN_RANGX(str[i],32,126)) return false; return true; } 
+static inline bool str_is_fastq_seq(STRp(str)) { for (uint32_t i=0; i<str_len; i++) if (!IS_FASTQ_SEQ(str[i]))  return false; return true; } 
 extern bool str_is_utf8 (STRp(str));
-static bool inline str_is_no_ws(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_NON_WS(str[i]))     return false; return true; } 
-static bool inline str_is_ACGT(STRp(str), uint32_t *bad_i) { for (int i=0; i<str_len; i++) if (!IS_ACGT(str[i])) { if(bad_i) *bad_i = i; return false; } return true; } 
-static bool inline str_is_ACGTN(STRp(str))     { for (int i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))      return false; return true; } 
-static bool inline str_is_qual_scores(STRp(str)){for (int i=0; i<str_len; i++) if (!IS_QUAL_SCORE(str[i])) return false; return true; } 
+static inline bool str_is_no_ws(STRp(str))     { for (uint32_t i=0; i<str_len; i++) if (!IS_NON_WS(str[i]))     return false; return true; } 
+static inline bool str_is_ACGT(STRp(str), uint32_t *bad_i) { for (uint32_t i=0; i<str_len; i++) if (!IS_ACGT(str[i])) { if(bad_i) *bad_i = i; return false; } return true; } 
+static inline bool str_is_ACGTN(STRp(str))     { for (uint32_t i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))      return false; return true; } 
+static inline bool str_is_qual_scores(STRp(str)){for (uint32_t i=0; i<str_len; i++) if (!IS_QUAL_SCORE(str[i])) return false; return true; } 
 
 extern bool str_is_in_range (STRp(str), char first_c, char last_c);
-static bool inline str_is_upper (STRp(str))    { return str_is_in_range (STRa(str), 'A', 'Z'); }
-static bool inline str_is_lower (STRp(str))    { return str_is_in_range (STRa(str), 'a', 'z'); }
-static bool inline str_is_numeric(STRp(str))   { return str_is_in_range (STRa(str), '0', '9'); } // numeric - leading zeros ok
+static inline bool str_is_upper (STRp(str))    { return str_is_in_range (STRa(str), 'A', 'Z'); }
+static inline bool str_is_lower (STRp(str))    { return str_is_in_range (STRa(str), 'a', 'z'); }
+static inline bool str_is_numeric(STRp(str))   { return str_is_in_range (STRa(str), '0', '9'); } // numeric - leading zeros ok
 
 extern uint32_t str_pack_bases (uint8_t *restrict packed, STR𐤐(bases), bool revcomp);
 extern uint32_t str_unpack_bases (char *restrict bases, bytes𐤐 packed, uint32_t num_bases);
@@ -321,10 +322,10 @@ extern uint32_t str_split_do (STR𐤐(str), uint32_t max_items, char sep, rom�
 // max_items : maximum allowed items, or 0 if not known
 #define str_split(str,str_len,max_items,sep,name,exactly) str_split_enforce((str),(str_len),(max_items),(sep),name,(exactly),NULL)
 
-extern uint32_t str_split_by_container_do (STR𐤐(str), ConstContainer𐤐 con, STR𐤐(con_prefixes), rom𐤐 *restrict items, uint32_t *restrict item_lens, rom𐤐 enforce_msg);
+extern uint32_t str_split_by_container_do (STR𐤐(str), ContainerP con, STR𐤐(con_prefixes), rom𐤐 *restrict items, uint32_t *restrict item_lens, rom𐤐 enforce_msg);
 
 #define str_split_by_container(str,str_len,container,prefix,prefix_len,name,enforce_msg) \
-    STR_ARRAY (name, MAX_(con_nitems(*container), 1)) = str_split_by_container_do ((str), (str_len), (ConstContainerP)(container), (prefix), (prefix_len), name##s, name##_lens, (enforce_msg))
+    STR_ARRAY (name, MAX_(con_nitems(container), 1)) = str_split_by_container_do ((str), (str_len), (container), (prefix), (prefix_len), name##s, name##_lens, (enforce_msg))
 
 extern rom str_split_by_tab_do (STR𐤐(str), uint32_t *restrict n_flds, rom𐤐 *restrict flds, uint32_t *restrict fld_lens, bool *restrict has_13, bool exactly, bool ignore_excess, bool enforce);
 #define str_split_by_tab(str,max_len,max_flds,has_13,exactly,ignore_excess,enforce) \
@@ -365,7 +366,7 @@ extern void str_nul_separate_do (STR𐤐s(item));
 #define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)
 
 extern uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out);
-extern void str_trim (qSTRp(str));
+extern void str_trim (qSTR𐤐(str));
 
 extern rom type_name (uint32_t item, 
                       rom const *name, // the address in which a pointer to name is found, if item is in range
@@ -387,7 +388,7 @@ extern char *memchr2 (const void *p, char ch1, char ch2, uint32_t count);
 extern void *memrchr (const void *s, int c, size_t n);
 #endif
 
-#ifdef __APPLE__ // is mempcpy available on gcc of darwin? if so, this is ifdef should be just for clang
+#ifdef __APPLE__ // mempcpy not available on clang
 static inline void *mempcpy(void *restrict dst, const void *restrict src, size_t n)
 {
     memcpy (dst, src, n);

@@ -436,8 +436,11 @@ static void stats_output_file_metadata (void)
                 if (z_file->sam_num_seq_by_aln) // seg SEQ vs internal or external reference according to SAM alignment 
                     bufprintf (evb, &features, "seq_by_sam_aln=%.1f%%;", percent (z_file->sam_num_seq_by_aln, num_alignments));
 
-                if (z_file->sam_num_by_prim)    // seg SEQ vs PRIM VB or vs saggy line
+                if (z_file->sam_num_by_prim)    // seg SEQ vs PRIM VB 
                     bufprintf (evb, &features, "seq_by_prim=%.1f%%;", percent (z_file->sam_num_by_prim, num_alignments)); 
+
+                if (z_file->sam_num_by_saggy)    // seg SEQ vs saggy line
+                    bufprintf (evb, &features, "seq_by_saggy=%.1f%%;", percent (z_file->sam_num_by_saggy, num_alignments)); 
 
                 if (z_file->sam_num_aligned)    // seg SEQ vs external reference using our aligner
                     bufprintf (evb, &features, "seq_by_aligner (perfect)=%.1f%% (%.1f%%);", percent (z_file->sam_num_aligned, num_alignments), percent (z_file->sam_num_aligned_perfect, num_alignments)); // report even if num_aligned=0 (i.e. wrong reference)           
@@ -1105,6 +1108,7 @@ void stats_show_seg_summary (void)
     SUMMARIZE(sam_num_aligned_perfect,  num_alignments, 2);
     SUMMARIZE(sam_num_verbatim,         num_alignments, 1);
     SUMMARIZE(sam_num_by_prim,          num_alignments, 1);
+    SUMMARIZE(sam_num_by_saggy,         num_alignments, 1);
     SUMMARIZE(sam_num_tlen_pred,        num_alignments, 1);
     
     if (num_fq_reads) iprintf ("fq_num_reads=%"PRIu64" (100%%)\n", num_fq_reads);

@@ -532,11 +532,15 @@ int huffman_uncompress (Did did_i, bytes comp, STRc(uncomp))
     uint32_t prefix_len = 0;
     if (h->max_prefix_len) {
         _Static_assert (HUFFMAN_PREFIX_LEN_BITS==5, "bits_get5");
-        prefix_len = bits_get5 (&bits, bit_i); 
+        
+        // prefix_len is first 5 bits of comp (always starts at the beginning of a byte, but not necessarily a beginning of a word)
+        prefix_len = comp[0] & 0x1f;
+        bit_i += 5;
+
         ASSERT (prefix_len <= h->master_len, "expected prefix_len=%u <= h->master_len=%u", prefix_len, h->master_len);
 
+        // note: valgrind shouts about this test, no idea why
         memcpy (uncomp, h->master, prefix_len);
-        bit_i += 5;
     }
 
     // new codec starting 15.0.68. Files up to 15.0.64 didn't have SEC_HUFFMAN and a trival new codec huffman was produced in huffman_piz_read_all
@@ -582,10 +586,11 @@ int huffman_uncompress_len (Did did_i, bytes comp, uint32_t uncomp_len)
     // if we use master, then first 5 bits indicate the subset of master used
     uint32_t prefix_len = 0;
     if (h->max_prefix_len) {
-        prefix_len = bits_get5 (&bits, bit_i); // assumes HUFFMAN_PREFIX_LEN_BITS=5
-        ASSERT (prefix_len <= h->master_len, "expected prefix_len=%u <= h->master_len=%u", prefix_len, h->master_len);
-
+        // prefix_len is first 5 bits of comp (always starts at the beginning of a byte, but not necessarily a beginning of a word)
+        prefix_len = comp[0] & 0x1f;
         bit_i += 5;
+
+        ASSERT (prefix_len <= h->master_len, "expected prefix_len=%u <= h->master_len=%u", prefix_len, h->master_len);
     }
 
     for (int i=prefix_len; i < uncomp_len; i++) {

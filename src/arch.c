@@ -90,14 +90,16 @@ static void arch_add_to_windows_path (void)
 
 void arch_set_locale (void)
 {
-#ifdef _WIN32 // see bug 679
-    // ASSERTWD (SetThreadLocale (LOCALE_USER_DEFAULT),
-    ASSERTWD (SetThreadLocale (LOCALE_INVARIANT), // same as En_US
-              _WRN "failed SetThreadLocale: %s", str_win_error());
+#ifdef _WIN32 
+    // set Windows Console to UTF-8 input/output
+    SetConsoleCP(65001);       
+    SetConsoleOutputCP(65001);
 #else 
-    ASSERTWD (setlocale (LC_CTYPE,   flag.is_windows ? ".UTF-8" : "en_US.UTF-8"), _WRN "failed to setlocale of LC_CTYPE", NULL);   // accept and print UTF-8 text (to do: doesn't work for Windows)
+    // accept and print UTF-8 text (doesn't work for Windows - although printing UTF-8 works fine anyway, and we don't allow non-ASCII in --activate)
+    ASSERTWD (setlocale (LC_CTYPE, "C.UTF-8"), _WRN "failed to setlocale of LC_CTYPE", NULL);   
 #endif
-    ASSERTWD (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "en_US.UTF-8"), _WRN "failed to setlocale of LC_NUMERIC", NULL); // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
+    // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
+    ASSERTWD (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "C.UTF-8"), _WRN "failed to setlocale of LC_NUMERIC", NULL); 
 }
 
 static bool arch_is_wsl (void)
@@ -123,8 +125,9 @@ void arch_initialize (rom my_argv0)
 {
     argv0 = my_argv0;
 
-#if defined _M_X64 || defined _M_IA64
-    ASSERT0 (__builtin_cpu_supports("avx2"), "Genozip, running on Intel/AMD CPUs, requires AVX2 support");
+    // if code was compiled with AVX2, verify that the runtime machine has it
+#if defined(__AVX2__) 
+    ASSINP0 (__builtin_cpu_supports("avx2"), "Genozip, running on Intel/AMD CPUs, requires AVX2 support");
 #endif
 
     rom slash = strrchr (argv0, '/');
@@ -133,15 +136,22 @@ void arch_initialize (rom my_argv0)
     base_argv0 = slash ? slash + 1 : argv0;
 
     // verify CPU architecture and compiler is supported
-    _Static_assert (sizeof(char)==1,      "unsupported sizeof(char)");
-    _Static_assert (sizeof(short)==2,     "unsupported sizeof(short)");
-    _Static_assert (sizeof(unsigned)==4,  "unsupported sizeof(unsigned)");
-    _Static_assert (sizeof(long long)==8, "unsupported sizeof(long long)");
-    _Static_assert (sizeof(size_t)==8,    "unsupported sizeof(size_t)");
-    _Static_assert (sizeof(time_t)==8,    "unsupported sizeof(time_t)");
+    _Static_assert (sizeof (char)          == 1,  "expecting sizeof (char)==1");
+    _Static_assert (sizeof (short)         == 2,  "expecting sizeof (short)==2");
+    _Static_assert (sizeof (unsigned)      == 4,  "expecting sizeof (unsigned)==4");
+    _Static_assert (sizeof (long long)     == 8,  "expecting sizeof (long long)==8");
+    _Static_assert (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
+    _Static_assert (sizeof (size_t)        == 8,  "expecting sizeof (size_t)==8");
+    _Static_assert (sizeof (time_t)        == 8,  "expecting sizeof (time_t)==8");
+    _Static_assert (sizeof (SectionType)   == 1,  "expecting sizeof (SectionType)==1");
+    _Static_assert (sizeof (Codec)         == 1,  "expecting sizeof (Codec)==1");
+    _Static_assert (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
+    _Static_assert (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
+    _Static_assert (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_uncompress, str_pack_bases
+    _Static_assert (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
     
     // verify endianity is as expected
-    ASSERT0 (!strcmp (arch_get_endianity(), "little"), "Genozip is currently not supported on big endian architectures");
+    ASSINP0 (!strcmp (arch_get_endianity(), "little"), "Genozip is currently not supported on big endian architectures");
 
 // Verify that this Windows is 64 bit
 #ifdef _WIN32
@@ -150,18 +160,9 @@ void arch_initialize (rom my_argv0)
 #endif
 #endif
 
-    // verify that type sizes are as required (types that appear in section headers written to the genozip format)
-    ASSERT0 (sizeof (SectionType)   == 1,  "expecting sizeof (SectionType)==1");
-    ASSERT0 (sizeof (Codec)         == 1,  "expecting sizeof (Codec)==1");
-    ASSERT0 (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
-    ASSERT0 (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
-    ASSERT0 (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
-    ASSERT0 (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_uncompress, str_pack_bases
-    ASSERT0 (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
-
     // Note: __builtin_clzl is inconsistent between Windows and Linux, even on the same host, so we don't use it
-    ASSERT0 (__builtin_clz(5)   == 29, "expecting __builtin_clz to be 32 bit");
-    ASSERT0 (__builtin_clzll(5) == 61, "expecting __builtin_clzll to be 64 bit");
+    ASSINP0 (__builtin_clz(5)   == 29, "expecting __builtin_clz to be 32 bit");
+    ASSINP0 (__builtin_clzll(5) == 61, "expecting __builtin_clzll to be 64 bit");
 
     // verify that order of bit fields in a structure is as expected (this is compiler-implementation dependent, and we go by gcc)
     // it might be endianity-dependent, and we haven't implemented big-endian yet, see: http://mjfrazer.org/mjfrazer/bitfields/
@@ -170,8 +171,8 @@ void arch_initialize (rom my_argv0)
         struct __attribute__ ((packed)) { uint8_t a : 1; uint8_t b : 1; } bit_1;
         struct __attribute__ ((packed)) { uint8_t a : 3; } bit_3;
     } bittest = { .bit_1 = { .a = 1 } }; // we expect this to set the LSb of .byte and of .bit_3.a
-    ASSERT0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
-    ASSERT0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
+    ASSINP0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
+    ASSINP0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
     arch_set_locale();
 
@@ -184,6 +185,17 @@ void arch_initialize (rom my_argv0)
     
     flag.is_wsl = arch_is_wsl();
     arch_start_time = arch_timestamp();
+
+    // initialize the random number generator
+    struct timespec ts;
+    srand (!clock_gettime (CLOCK_MONOTONIC, &ts) ? ts.tv_nsec : time (NULL));
+
+    // test for valgrind
+    rom p = getenv ("LD_PRELOAD");
+    flag.is_valgrind = flag.debug_valgrind || (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
+
+    // test for docker: note: this doesn't always work. need to improve. 
+    flag.is_docker = file_exists ("/.dockerenv")/*new*/ || file_exists ("/.dockerinit")/*old*/;
 }
 
 rom arch_get_endianity (void)
@@ -332,7 +344,7 @@ StrText arch_get_filesystem_type (FileP file)
 
 #elif defined _WIN32
     WCHAR ws[100];
-    if (!GetVolumeInformationByHandleW ((HANDLE)_get_osfhandle(fileno (file->file)), 0, 0, 0, 0, 0, ws, ARRAY_LEN(ws))) goto done;
+    if (!GetVolumeInformationByHandleW ((HANDLE)_get_osfhandle(fileno (file->os_file)), 0, 0, 0, 0, 0, ws, ARRAY_LEN(ws))) goto done;
 
     if (wcstombs (s.s, ws, sizeof(s.s)-1) == (size_t)-1)
         strcpy (s.s, "failed-wcstombs"); // can happen if locale is set to non-english
@@ -367,11 +379,15 @@ uint64_t arch_get_max_resident_set (void)
     HANDLE process = OpenProcess (PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
     if (!process) return 0;
 
-    PROCESS_MEMORY_COUNTERS_EX mem_counters = {};
-    GetProcessMemoryInfo (process, (PROCESS_MEMORY_COUNTERS*)&mem_counters, sizeof (mem_counters));
+    union {
+        PROCESS_MEMORY_COUNTERS base;
+        PROCESS_MEMORY_COUNTERS_EX ex;
+    } mem_counters;
+
+    GetProcessMemoryInfo (process, &mem_counters.base, sizeof (mem_counters));
     CloseHandle (process);
 
-    return mem_counters.WorkingSetSize; // still 0 if error
+    return mem_counters.ex.WorkingSetSize; // still 0 if error
 #endif
 }
 
@@ -400,7 +416,7 @@ rom arch_get_scheduler (void)
     if (getenv ("SLURM_JOB_ID"))            return "slurm";
     if (getenv ("KUBERNETES_SERVICE_HOST")) return "kubernetes";
     if (getenv ("LSB_JOBID"))               return "LSF";
-    if (arch_is_docker())                   return "docker";
+    if (flag.is_docker)                     return "docker";
 
     return NULL; // not scheduler identified
 }
@@ -474,33 +490,11 @@ StrText4K arch_get_genozip_executable (void)
     return fn;
 }
 
-
-
 rom arch_get_argv0 (void)
 {
     return base_argv0;
 }
  
-// true if running under valgrind
-bool arch_is_valgrind (void)
-{
-    static thool is_valgrind = unknown;
-
-    if (is_valgrind == unknown) {
-        rom p = getenv ("LD_PRELOAD");
-        is_valgrind = flag.debug_valgrind || (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
-    }
-
-    return is_valgrind;
-}
-
-bool arch_is_docker (void)
-{
-    static thool is_docker = unknown; 
-    
-    return (is_docker != unknown) ? is_docker : (is_docker = file_exists ("/.dockerinit"));
-}
-
 Timestamp inline arch_timestamp (void) 
 {
     struct timespec tb;

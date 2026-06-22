@@ -89,15 +89,20 @@
         compress_field[MAX_DICTS], /* ZIP: measures codec compress time */ \
         seg_recon_field[MAX_DICTS] /* ZIP: seg time of each field, PIZ: recon time of each field */ 
 
+typedef struct { uint64_t profiled; } Profiled64;
+typedef struct { uint32_t profiled; } Profiled32;
+
+#define NUM_PROFILED (sizeof (Profiled64) / sizeof (uint64_t))
+
 typedef struct {
-        struct { uint64_t profiled; } nanosecs; // note: if changing types, update profile_add
-        struct { uint32_t profiled; } count;
+        union { Profiled64; uint64_t array[NUM_PROFILED]; } nanosecs;
+        union { Profiled32; uint32_t array[NUM_PROFILED]; } count;
         rom next_name, next_subname;
 } ProfilerVb;
 
 typedef struct {
-        struct { uint64_t profiled; } nanosecs; 
-        struct { uint64_t profiled; } count;
+        union { Profiled64; uint64_t array[NUM_PROFILED]; } nanosecs;
+        union { Profiled64; uint64_t array[NUM_PROFILED]; } count;
         unsigned num_vbs, max_vb_size_mb, num_txt_files;
         float avg_compute_vbs[MAX_NUM_TXT_FILES_IN_ZFILE];  // ZIP/PIZ: average number of compute threads active at any given time during the lifetime of the ZIP/PIZ dispatcher
 } ProfilerGlobal;
@@ -166,7 +171,7 @@ extern void show_time_one (VBlockP vb, rom res, uint64_t delta);
                            clock_gettime(CLOCK_REALTIME, &tb); \
                            iprintf ("%u.%06u: %s\n", (uint32_t)tb.tv_sec, (uint32_t)(tb.tv_nsec/1000), (str)); }
 
-extern void profiler_add (VBlock𐤐 vb);
+extern void profiler_add (VBlockP vb);
 extern void profiler_initialize (void);
 extern void profiler_add_evb_and_print_report (void);
 extern void profiler_new_z_file (void);

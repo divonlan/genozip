@@ -97,7 +97,7 @@ static RefCacheState ref_cache_handle_existing (uint64_t data_size,
 
     // either the original creator process or a third process that beat us to grabbing the 
     // timestamp are alive. We shall wait up to 1 minute for the cache to be populated
-    for (int i=0; !ALOAD (is_populated) && (arch_timestamp() / 1000000000) - gref.cache->creation_ts < 60;   i++) {
+    for (int i=0; !ALOAD (is_populated) && (arch_timestamp() / 1000000000) - gref.cache->creation_ts < 60; i++) {
 
         // process died without completing
         if (!arch_is_process_alive (creator_pid) && !ALOAD (is_populated)) 
@@ -132,7 +132,7 @@ bool ref_cache_initialize_genome (void)
 
     #define FAIL_MSG _FYI "Reference file cache is not used. Technical details: "
     ASSERT (gref.cache_state == CACHE_INITITAL, "unexpected cache_state=%d", gref.cache_state);
-    ASSERT0 (flag.reading_reference && z_file && z_file->file, "not reading reference");
+    ASSERT0 (flag.reading_reference && z_file && z_file->os_file, "not reading reference");
 
     uint64_t shm_size = sizeof (RefCache) + genome_size + refhash_size;
     uint32_t holder_pid = 0;
@@ -261,7 +261,7 @@ bool ref_cache_initialize_genome (void)
         if (flag.show_cache) iprint0 ("show-cache: POPULATING\n");
     }
 
-    gref.genome = (BitsP)&gref.genome_buf;
+    gref.genome = &gref.genome_buf;
 
 cache_ok:
     buf_attach_bits_to_shm (evb, &gref.genome_buf, gref.cache->genome_data, gref.genome_nbases * 2, "genome_buf");

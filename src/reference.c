@@ -130,7 +130,7 @@ void ref_set_access_mode (ReferenceAccessMode genome_mode, ReferenceAccessMode r
 // caller allocates: requirement: 3 bytes before and 3 bytes after ref must be writtable
 // returns ref;
 // if revcomp: seq generated is still between [gpos, (gpos + seq_len - 1)], just revcomped 
-rom ref_get_textual_seq (VBlock𐤐 vb, PosType64 gpos, STRc𐤐(ref), bool revcomp)
+rom ref_get_textual_seq (VBlockP vb, PosType64 gpos, STRc𐤐(ref), bool revcomp)
 {
     START_TIMER;
 
@@ -583,7 +583,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
         // uncompress into r->is_set, via vb->scratch
         ASSERTNOTINUSE (vb->scratch);
-        zfile_uncompress_section (vb, (SectionHeaderP)h, &vb->scratch, "scratch", 0, SEC_REF_IS_SET);
+        zfile_uncompress_section (vb, h, &vb->scratch, "scratch", 0, SEC_REF_IS_SET);
 
         Bits *is_set = buf_zfile_buf_to_bits (&vb->scratch, ref_sec_len);
 
@@ -661,7 +661,7 @@ static void ref_uncompress_one_range (VBlockP vb)
 
     // uncompress into r->ref, via vb->scratch
     ASSERTNOTINUSE (vb->scratch);
-    zfile_uncompress_section (vb, (SectionHeaderP)h, &vb->scratch, "scratch", 0, SEC_REFERENCE);
+    zfile_uncompress_section (vb, h, &vb->scratch, "scratch", 0, SEC_REFERENCE);
 
     // lock - while different threads uncompress regions of the range that are non-overlapping, they might overlap at the bit level
     RefLock lock;
@@ -987,7 +987,7 @@ static void ref_copy_one_compressed_section (FileP ref_file, const RAEntry *ra)
     h->vblock_i = 0; // we don't belong to any VB and there is no encryption of external ref
 
     // "manually" add the reference section to the section list - normally it is added in comp_compress()
-    sections_add_to_list (evb, (SectionHeaderP)h);
+    sections_add_to_list (evb, h);
 
     // Write header and body of the reference to z_file
     // Note on encryption: reference sections originating from an external reference are never encrypted - not

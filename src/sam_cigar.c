@@ -885,7 +885,7 @@ void sam_cigar_seg_MC_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(mc), uint32_
 {
     ZipDataLineSAM𐤐 mate_dl = DATA_LINE (vb->mate_line_i); // an invalid pointer if mate_line_i is -1
 
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MC_Z, (MultiplexerP)&vb->mux_MC, sam_has_mate);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MC_Z, &vb->mux_MC, sam_has_mate);
 
     if (sam_has_mate && 
         (!IS_BAM_ZIP || line_textual_cigars_used) && // there might be a rare edge case there are no MC:Z lines in the segconf vb, but are after - in which case, in depn/prim VBs, we won't have line_textual_cigars

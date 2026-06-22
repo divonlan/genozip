@@ -16,6 +16,7 @@
 #include "codec.h"
 #include "dyn_int.h"
 #include "reconstruct.h"
+#include "multiplexer.h"
 
 mSTRl(copy_qname, NUM_QTYPES, 16);
 sSTRl(copy_q5name, 16);
@@ -142,7 +143,7 @@ void qname_zip_initialize (void)
                 qfs->con = *qfs->con_template;
 
                 // verify container dict_id and separators are valid
-                con_verify_items ((ContainerP)&qfs->con, NULL, qfs->name);
+                con_verify_items (&qfs->con, NULL, qfs->name);
 
                 char item_sep = qfs->con.items[qfs->con.nitems_lo-1].separator[0];
                 ASSERT (item_sep == CI0_SKIP, "In flavor=\"%s\", expecting separator of %s to be I_AM_MATE since it is mated, but it is '%c'(%u)", 
@@ -213,7 +214,7 @@ void qname_zip_initialize (void)
             for (QType q=QNAME1; q < NUM_QTYPES; q++) {
                 Did first_did_i = did_by_q (q);
                 
-                for_con2 (&con_no_skip)
+                for_con2 ((ContainerP){.cMAX_QNAME_ITEMS = &con_no_skip})
                     if (item->dict_id.num != _SAM_QmNAME) 
                         item->dict_id = dt_fields[DT_FASTQ].predefined[first_did_i + item_i + 1].dict_id; 
                     else
@@ -221,7 +222,7 @@ void qname_zip_initialize (void)
 
                 // prepare container snip for this QF
                 qfs->con_snip_lens[q] = sizeof (qfs->con_snips[0]);            
-                container_prepare_snip ((ContainerP)&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qSTRi(qfs->con_snip,q));
+                container_prepare_snip (&con_no_skip, qfs->con_prefix, prefix_no_skip_len, qSTRi(qfs->con_snip,q));
             }
 
             static rom err_both_fmt = "Bad definition of QNAME flavor=%s: item=%u is invalidly defined as both %s";
@@ -1011,7 +1012,7 @@ static void seg_qname_ug100_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value))
     Multiplexer2P mux = (is_fq ? fastq_get_illum_v_mux : sam_get_illum_v_mux)(vb);
     
     if (!ctx->is_initialized) {
-        seg_mux_init_(VB, ctx->did_i, 2, (is_fq ? FASTQ_SPECIAL_ILLUM_V : SAM_SPECIAL_ILLUM_V), false, (MultiplexerP)mux);
+        seg_mux_init_(VB, ctx->did_i, 2, (is_fq ? FASTQ_SPECIAL_ILLUM_V : SAM_SPECIAL_ILLUM_V), false, mux);
 
         seg_by_ctx (VB, STRa(mux->snip), ctx, 0);  // all-the-same (not ctx_create node bc we need the b250 to carry the flags)
         
@@ -1022,7 +1023,7 @@ static void seg_qname_ug100_Q5NAME_cb (VBlockP vb, ContextP ctx, STRp(value))
 
     int channel_i = ctx_has_value_in_line_(vb, ctx-1) && ((ctx-1)->last_value.i == 2);
 
-    ContextP channel_ctx = seg_mux_get_channel_ctx (vb, ctx->did_i, (MultiplexerP)mux, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (vb, ctx->did_i, mux, channel_i);
 
     seg_integer_or_not (vb, channel_ctx, STRa(value), value_len);
 }

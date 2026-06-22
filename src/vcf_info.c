@@ -728,7 +728,7 @@ void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
     // case INFO is muxed: multiplex by has_RGQ or FILTER in Isaac
     ContextP channel_ctx;
     if (!segconf_running && (segconf_has(FORMAT_RGQ) || segconf.vcf_is_isaac)) {
-        channel_ctx = seg_mux_get_channel_ctx (VB, VCF_INFO, (MultiplexerP)&vb->mux_INFO, (segconf_has(FORMAT_RGQ) ? CTX(FORMAT_RGQ)->line_has_RGQ : vcf_isaac_info_channel_i (VB)));
+        channel_ctx = seg_mux_get_channel_ctx (VB, VCF_INFO, &vb->mux_INFO, (segconf_has(FORMAT_RGQ) ? CTX(FORMAT_RGQ)->line_has_RGQ : vcf_isaac_info_channel_i (VB)));
         seg_by_ctx (VB, STRa(vb->mux_INFO.snip), ctx, 0);
     }
 
@@ -736,7 +736,7 @@ void vcf_seg_finalize_INFO_fields (VBlockVCFP vb)
     else 
         channel_ctx = ctx;
 
-    container_seg (vb, channel_ctx, (ContainerP)&con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
+    container_seg (vb, channel_ctx, &con, prefixes, prefixes_len, total_names_len /* names inc. = and separator */);
     
     COPY_TIMER (vcf_seg_finalize_INFO_fields);
 }

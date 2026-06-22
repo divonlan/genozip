@@ -10,7 +10,6 @@
 
 #include "genozip.h"
 #include "sections.h"
-#include "multiplexer.h"
 
 #pragma GENDICT_PREFIX SAM
 
@@ -782,6 +781,7 @@ extern uint32_t sam_seg_seq_len_from_cigar (STRp(cigar));
 extern uint32_t sam_seg_get_seq_len_by_MD_field (STRp(md_str));
 extern void sam_zip_init_vb (VBlockP vb);
 extern void sam_zip_after_compress (VBlockP vb);
+extern void sam_zip_comp_cb (VBlockP vb, ContextP ctx, SectionType st, uint32_t comp_len);
 extern void sam_stats_reallocate (void);
 extern void sam_zip_genozip_header (SectionHeaderGenozipHeaderP header);
 extern void sam_deep_zip_merge (VBlockP vb);
@@ -795,7 +795,7 @@ extern int32_t sam_zip_get_np (VBlockP vb, LineIType line_i);
 extern void sam_zip_compress_sec_gencomp (void);
 extern void sam_compress_solo_huffman_sections (void);
 extern void sam_xcons_split_qual_line (VBlockP vb_, BufferP ql_buf);
-extern Multiplexer2P sam_get_illum_v_mux (VBlockP vb);
+extern struct Multiplexer2 *sam_get_illum_v_mux (VBlockP vb);
 extern void seg_qname_parse_QNAME0_cb (VBlockP vb, ContextP item_ctx, STRp(q0name));
 
 // PIZ Stuff

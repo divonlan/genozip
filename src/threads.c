@@ -77,7 +77,7 @@ void threads_finalize (void)
 {
     // normally, we intentionally leak the signal handler thread, letting it cancel implicitly when
     // the process exits. Under valgrind, we cancel it explicitly so that we only display unintentional leaks, not this intentional one 
-    if (arch_is_valgrind()) {
+    if (flag.is_valgrind) {
         buf_destroy (log);
         buf_destroy (threads);
     }

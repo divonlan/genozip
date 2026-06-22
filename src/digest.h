@@ -10,7 +10,8 @@
 
 #include "genozip.h"
 
-typedef packed_enum { DIGEST_MD5=0, DIGEST_ADLER=1, DIGEST_XXH3=2, DIGEST_UNKNOWN=127 } DigestAlg; // part of the file format: GenozipHeader.ref_genome_digest_alg (compatable with "bool is_adler" of previous versions: 1=Adler32 0=MD5)
+typedef packed_enum { DIGEST_MD5=0, DIGEST_ADLER=1, DIGEST_XXH3=2 } DigestAlg; // part of the file format: GenozipHeader.ref_genome_digest_alg (compatable with "bool is_adler" of previous versions: 1=Adler32 0=MD5)
+#define DIGEST_UNKNOWN 127 // not part of the enum, and never in DigestStateHeader.alg
 
 typedef union { 
     struct { uint32_t adler32, unused32[3]; };
@@ -23,13 +24,13 @@ typedef union {
 #define DIGEST_NONE ((Digest){})
 
 typedef struct {
-    DigestAlg alg; 
-    bool initialized;
-    bool log;
-    uint64_t bytes_digested;
+    uint64_t bytes_digested : 60;
+    DigestAlg alg           : 2; 
+    bool initialized        : 1;
+    bool log                : 1;
 } DigestStateHeader;
 
-typedef struct {
+typedef struct { // 96 bytes
     DigestStateHeader;
     uint64_t     n_bytes;
     uint32_t     a, b, c, d;

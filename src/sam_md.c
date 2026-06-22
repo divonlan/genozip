@@ -20,7 +20,7 @@
 // we now verify that the mismatches are consistent with SEQ.
 void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), PosType32 pos, BitsP sqbitmap, uint64_t sqbitmap_start)
 {
-    BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
+    BitsP M_is_ref = &vb->md_M_is_ref;
 
     bool bitmap_matches_MD = vb->md_verified && !bits_hamming_distance (M_is_ref, sqbitmap, sqbitmap_start);
 
@@ -196,7 +196,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom md_orig, ui
 
     // start by marking all as matching, and clear the SNPs later
     buf_alloc_bits_exact (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, SET, CTX_GROWTH, "md_M_is_ref"); 
-    BitsP M_is_ref = (BitsP)&vb->md_M_is_ref;
+    BitsP M_is_ref = &vb->md_M_is_ref;
     
     uint64_t M_is_ref_i=0;
     
@@ -295,7 +295,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
 
     ContextP sqbitmap_ctx = LOADED_CTX(SAM_SQBITMAP);
     
-    BitsP line_sqbitmap = (BitsP)&sqbitmap_ctx->line_sqbitmap;
+    BitsP line_sqbitmap = &sqbitmap_ctx->line_sqbitmap;
     bool is_depn = !!line_sqbitmap->nwords;
     uint32_t line_sqbitmap_next = 0;
 
@@ -319,7 +319,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_MD)
             // reconstruct a series of <number><base> where number can be 0 and the base of the last pair can be missing. eg: 0T12A4
             else while (n) {
                 uint32_t run = is_depn ? bits_get_run (line_sqbitmap, line_sqbitmap_next, n)
-                                       : bits_get_run ((BitsP)&sqbitmap_ctx->local, sqbitmap_ctx->next_local, n);
+                                       : bits_get_run (&sqbitmap_ctx->local, sqbitmap_ctx->next_local, n);
                 count_match += run;
                 n           -= run;
                 pos         += run;

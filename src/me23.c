@@ -63,7 +63,7 @@ void me23_seg_initialize (VBlockP vb)
 void me23_seg_finalize (VBlockP vb)
 {
     // top level snip
-    Container(5) top_level = { 
+    Container_5 top_level = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 5,
@@ -74,9 +74,9 @@ void me23_seg_finalize (VBlockP vb)
                        { .dict_id = { _ME23_EOL },                        } }
     };
 
-    container_seg (vb, CTX(ME23_TOPLEVEL), (ContainerP)&top_level, 0, 0, 0);
+    container_seg (vb, CTX(ME23_TOPLEVEL), &top_level, 0, 0, 0);
 
-    Container(4) top_level_to_vcf = { 
+    Container_4 top_level_to_vcf = { 
         .repeats   = vb->lines.len,
         .is_toplevel = true,
         .nitems_lo = 4,
@@ -86,7 +86,7 @@ void me23_seg_finalize (VBlockP vb)
                        { .dict_id = { _ME23_GENOTYPE }, .separator = "\n", .translator = ME232VCF_GENOTYPE } }
     };
 
-    container_seg (vb, CTX(ME23_TOP2VCF), (ContainerP)&top_level_to_vcf, 0, 0, 0);
+    container_seg (vb, CTX(ME23_TOP2VCF), &top_level_to_vcf, 0, 0, 0);
 }
 
 bool me23_seg_is_small (ConstVBlockP vb, DictId dict_id)

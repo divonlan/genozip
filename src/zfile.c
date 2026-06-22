@@ -89,7 +89,7 @@ static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, C
 }
 
 // command: genocat --show-b250 (possibly in combination with --one-vb)
-void noreturn zfile_show_b250_only (void)
+noreturn void zfile_show_b250_only (void)
 {
     ASSERTNOTNULL (z_file);
     
@@ -212,7 +212,7 @@ void zfile_uncompress_section (VBlockP vb,
     uint32_t actual_z_digest = adler32 (1, (uint8_t*)h + compressed_offset, MAX_(data_compressed_len, data_encrypted_len));
 
     if (VER(15) && expected_z_digest != actual_z_digest) {
-        sections_show_header (header_p.common, NULL, vb->comp_i, 0, 'E');
+        sections_show_header (header_p, NULL, vb->comp_i, 0, 'E');
         ABORT ("%s:%s: Section %s data failed digest verification: expected_z_digest=%u != actual_z_digest=%u", 
                z_name, VB_NAME, st_name(h->section_type), expected_z_digest, actual_z_digest);
     }
@@ -826,31 +826,12 @@ static void zfile_read_genozip_header_handle_ref_info (ConstSectionHeaderGenozip
     }
 }
 
-static uint64_t zfile_read_genozip_header_get_actual_offset (void)
-{
-    uint32_t size = MIN_(z_file->disk_size, 16 MB);
-    file_seek (z_file, z_file->disk_size - size, SEEK_SET, READ, HARD_FAIL);
-
-    ASSERTNOTINUSE (evb->scratch);
-    buf_alloc_exact_zero (evb, evb->scratch, size + 100, char, "scratch");
-    evb->scratch.len -= 100; // extra allocated memory to ease the scan loop
-
-    int ret = fread (evb->scratch.data, size, 1, GET_FP(z_file));
-    ASSERT (ret == 1, "Failed to read %u bytes from the end of %s", size, z_name);
-
-    for_buf_back (uint8_t, p, evb->scratch)
-        if (BGEN32(GET_UINT32(p)) == GENOZIP_MAGIC && ((SectionHeaderP)p)->section_type == SEC_GENOZIP_HEADER) 
-            return BNUM (evb->scratch, p) + (z_file->disk_size - size);
-
-    ABORT ("Cannot locate the SEC_GENOZIP_HEADER in the final %u bytes of %s", size, z_name);
-}
-
 // gets offset to the beginning of the GENOZIP_HEADER section, and sets z_file->genozip_ver
 uint64_t zfile_read_genozip_header_get_offset (bool as_is)
 {
     // read the footer from the end of the file
     if (z_file->disk_size < sizeof(SectionFooterGenozipHeader) ||
-        !z_file->file ||
+        !z_file->os_file ||
         !file_seek (z_file, -sizeof(SectionFooterGenozipHeader), SEEK_END, READ, SOFT_FAIL))
         return 0; // failed
 
@@ -864,8 +845,7 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     // case: there is no genozip header. this can happen if the file was truncated (eg because compression did not complete)
     ASSWRET (BGEN32 (footer.magic) == GENOZIP_MAGIC, 0, "Error in %s: the file appears to be incomplete (it is missing the Footer).", z_name);
     
-    uint64_t offset = flag.recover ? zfile_read_genozip_header_get_actual_offset() // get correct offset in case of corruption
-                                   : BGEN64 (footer.genozip_header_offset);
+    uint64_t offset = BGEN64 (footer.genozip_header_offset);
         
     if (as_is) return offset;
 
@@ -1109,7 +1089,7 @@ void zfile_update_txt_header_section_header (uint64_t offset_in_z_file)
         h->digest = digest_snapshot (&z_file->digest_state, "file");
 
     if (flag.show_headers)
-        sections_show_header ((SectionHeaderP)h, NULL, COMP_NONE, offset_in_z_file, 'W'); 
+        sections_show_header (h, NULL, COMP_NONE, offset_in_z_file, 'W'); 
 
     evb->scratch.len = crypt_padded_len (sizeof (SectionHeaderTxtHeader));
 
@@ -1205,7 +1185,7 @@ DataType zfile_piz_get_file_dt (rom z_filename)
 
     // case: we don't know yet what file type this is - we need to read the genozip header to determine
     if (dt == DT_NONE && z_filename) {
-        if (!(file = file_open_z_read (z_filename)) || !file->file)
+        if (!(file = file_open_z_read (z_filename)) || !file->os_file)
             goto done; // not a genozip file
 
         // read the footer from the end of the file

@@ -65,7 +65,9 @@ static rom url_write_post_data_to_file (rom post)
 #endif
 }
 
-static StreamP url_open (StreamP parent_stream, rom url, rom user, rom password, bool head_only, rom post, bool async_post)
+static StreamP url_open (StreamP parent_stream, rom url, rom user, rom password, bool head_only, 
+                         rom post, bool async_post, 
+                         bool get_txt) // get the txt file for compression
 {
     char str5[6] = "";
     strncpy (str5, url, 5);
@@ -91,16 +93,17 @@ static StreamP url_open (StreamP parent_stream, rom url, rom user, rom password,
             DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
             "URL", "wget", 
             "--quiet", 
-            post       ? SKIP_ARG      : "--tries=50",    // max nubmer of re-connects (except if server returns Connection Refused or File Not Found)
-            post       ? SKIP_ARG      : "--waitretry=1", // wait this number of seconds before retrying 
-            post       ? SKIP_ARG      : "--continue",    // upon restarting after connection drop, continue from where we left off, if the server supports it (re-fetching from scratch if not)
-            post       ? "--post-data" : SKIP_ARG,
-            post       ? post          : SKIP_ARG,
-            user       ? "--user"      : SKIP_ARG,
-            user       ? user          : SKIP_ARG,
-            password   ? "--password"  : SKIP_ARG,
-            password   ? password      : SKIP_ARG,
-            head_only  ? "--spider"    : SKIP_ARG,
+            get_txt    ? "--tries=50"    : SKIP_ARG, // max nubmer of re-connects (except if server returns Connection Refused or File Not Found)
+            get_txt    ? "--waitretry=1" : SKIP_ARG, // wait this number of seconds before retrying 
+            get_txt    ? "--continue"    : SKIP_ARG, // upon restarting after connection drop, continue from where we left off, if the server supports it (re-fetching from scratch if not)
+            (!get_txt) ? "--timeout=10"  : SKIP_ARG, 
+            post       ? "--post-data"   : SKIP_ARG,
+            post       ? post            : SKIP_ARG,
+            user       ? "--user"        : SKIP_ARG,
+            user       ? user            : SKIP_ARG,
+            password   ? "--password"    : SKIP_ARG,
+            password   ? password        : SKIP_ARG,
+            head_only  ? "--spider"      : SKIP_ARG,
             head_only  ? "--server-response"                       : SKIP_ARG,
             head_only  ? "--output-document=/dev/null"             : "--output-document=/dev/stdout", 
             post       ? "--header=Content-Type: application/json" : SKIP_ARG,
@@ -140,7 +143,7 @@ static bool url_get_head (rom url, qSTRp(data), qSTRp(error),
 {
     store_release (*url_stream, (StreamP)NULL);
 
-    store_release (*url_stream, url_open (NULL, url, 0, 0, true, NULL, false));
+    store_release (*url_stream, url_open (NULL, url, 0, 0, true, NULL, false, false));
     
     bool wget = is_wget (*url_stream);
 
@@ -319,7 +322,7 @@ static void url_read_string_do (rom url, rom user, rom password,
 {
     store_release (*url_stream, (StreamP)NULL);
 
-    store_release (*url_stream, url_open (NULL, url, user, password, false, post, false));
+    store_release (*url_stream, url_open (NULL, url, user, password, false, post, false, false));
 
     FILE *data_stream  = stream_from_stream_stdout (*url_stream);
     FILE *error_stream = stream_from_stream_stdout (*url_stream);
@@ -463,7 +466,7 @@ bool url_post_async (rom url, rom user, rom password, rom post)
 
     url_verify_url_legality (url);
 
-    StreamP url_stream = url_open (NULL, url, user, password, false, post, true);
+    StreamP url_stream = url_open (NULL, url, user, password, false, post, true, false);
     int exit_code = stream_close (&url_stream, STREAM_DONT_WAIT_FOR_PROCESS);
 
     if (exit_code && flag.telemetry && flag.debug) 
@@ -480,7 +483,7 @@ bool url_post_async (rom url, rom user, rom password, rom post)
 FILE *url_open_remote_file (StreamP parent_stream, rom url)
 {
     ASSERTISNULL (remote_file_stream);
-    remote_file_stream = url_open (parent_stream, url, 0, 0, false, NULL, false);
+    remote_file_stream = url_open (parent_stream, url, 0, 0, false, NULL, false, true);
 
     return stream_from_stream_stdout (remote_file_stream);
 }

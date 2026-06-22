@@ -34,23 +34,25 @@ static inline WordStr _print_word (uint64_t word)
 }
 
 #define DEBUG_VALIDATE(a) validate_bits((a), __FUNCLINE)
-static void validate_bits (ConstBitsP bits, rom file, int lineno)
+static void validate_bits (ConstBitsP bits, FUNCLINE)
 {
     // Verify that its allocated
-    ASSERT (bits->type != BUF_UNALLOCATED, "[%s:%i] Bits is not allocated", file, lineno);
+    ASSERT (bits->type != BUF_UNALLOCATED, "[%s:%i] Bits is not allocated", func, code_line);
 
     // Check num of words is correct
     uint64_t num_words = roundup_bits2words64 (bits->nbits);
     ASSERT (num_words == bits->nwords, "[%s:%i] num of words wrong [bits: %i, expected nwords: %i, actual nwords: %i]", 
-            file, lineno, (int)bits->nbits, (int)num_words, (int)bits->nwords);
+            func, code_line, (int)bits->nbits, (int)num_words, (int)bits->nwords);
 
     // Check top word is masked (only if not overlayed - the unused bits of top word don't belong to this bit array and might be used eg by another bit array in genome.ref/genome.is_set)
-    if (bits->type == BUF_REGULAR && bits->nwords) {
-      uint64_t tw = bits->nwords - 1;
-      uint64_t top_bits = bits_in_top_word (bits->nbits);
+    if (bits->type == BUF_REGULAR) {
+        word_offset_t top_bits = bits->nbits & 63; // 0 to 63
+        if (top_bits) { // not full word (and also not empty bitmap)
+            uint64_t tw = bits->nwords - 1;
 
-      ASSERT (top_bits == 64 ||  bits->words[tw] <= bitmask64(top_bits), "[%s:%i] Expected %i bits in top word[%i] (the rest should be 0) but word=%s\n", 
-              file, lineno, (int)top_bits, (int)tw, _print_word(bits->words[tw]).s);
+            ASSERT (bits->words[tw] <= bitmask64(top_bits), "[%s:%i] Expected %i bits in top word[%i] (the rest should be 0) but word=%s\n", 
+                    func, code_line, (int)top_bits, (int)tw, _print_word(bits->words[tw]).s);
+        }
     }
 }
 

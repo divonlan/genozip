@@ -206,9 +206,11 @@ void vcf_seg_initialize (VBlockP vb_)
     // room for already existing FORMATs from previous VBs
     ContextP samples_ctx = CTX(VCF_SAMPLES);
     uint32_t n_fmts = CTX(VCF_FORMAT)->ol_nodes.len;
-    buf_alloc_exact_zero (vb, samples_ctx->format_mapper_buf, n_fmts, FormatContainer, C_"format_mapper_buf");
-    buf_alloc_exact_zero (vb, samples_ctx->format_contexts, n_fmts, ContextPBlock, C_"format_contexts");
-
+    if (n_fmts) {
+        buf_alloc_exact_zero (vb, samples_ctx->format_mapper_buf, n_fmts, FormatContainer, C_"format_mapper_buf");
+        buf_alloc_exact_zero (vb, samples_ctx->format_contexts, n_fmts, ContextPBlock, C_"format_contexts");
+    }
+    
     if (segconf.vcf_QUAL_method == VCF_QUAL_by_RGQ) {
         seg_mux_init (vb, VCF_QUAL, VCF_SPECIAL_MUX_BY_HAS_RGQ, false, QUAL);
 
@@ -407,7 +409,7 @@ void vcf_seg_finalize (VBlockP vb_)
     VBlockVCFP vb = (VBlockVCFP)vb_;
         
     // Toplevel snip for reconstructing this VBp
-    Container(10) top_level = { 
+    Container_10 top_level = { 
         .repeats      = vb->lines.len32,
         .is_toplevel  = true,
         .callback     = (CTX(INFO_SF)->sf.SF_by_GT == yes),   // cases where we need a callback
@@ -427,7 +429,7 @@ void vcf_seg_finalize (VBlockP vb_)
 
     ContextP ctx = CTX(VCF_TOPLEVEL);
 
-    container_seg (vb_, ctx, (ContainerP)&top_level, 0, 0, 0); 
+    container_seg (vb_, ctx, &top_level, 0, 0, 0); 
     
     vcf_samples_seg_finalize (vb);
 
@@ -502,14 +504,14 @@ void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), 
         return;
     }
 
-    Container(1) con = { .repeats           = CON_REPEATS_IS_SPECIAL,
+    Container_1 con = { .repeats           = CON_REPEATS_IS_SPECIAL,
                          .repsep            = ",",
                          .drop_final_repsep = true,
                          .nitems_lo         = 1, 
                          .items             = { { .dict_id = sub_dict_id (ctx->dict_id, '0') } } };
 
     if (!ctx->is_initialized) { 
-        ctx_consolidate_stats_(VB, ctx, (ContainerP)&con);
+        ctx_consolidate_stats_(VB, ctx, &con);
         ctx->con_rep_special = VCF_SPECIAL_N_ALTS;
         ctx->is_initialized  = true;
         ctx->nothing_char    = '.';
@@ -523,7 +525,7 @@ void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), 
         else // float
             seg_add_to_local_string (VB, item_ctx, STRi(number,i), LOOKUP_SIMPLE, 0);
 
-    container_seg (VB, ctx, (ContainerP)&con, 0, 0, value_len);
+    container_seg (VB, ctx, &con, 0, 0, value_len);
 }
 
 // used by container_reconstruct to retrieve the number of repeats

@@ -13,6 +13,7 @@
 #include "piz.h"
 #include "context.h"
 #include "reconstruct.h"
+#include "multiplexer.h"
 
 #define VCF_MAGIC "##fileformat=VCF"
 #define BCF_MAGIC "BCF"
@@ -46,9 +47,16 @@ typedef struct {
 
 typedef enum { VCF_v_UNKNOWN, VCF_v4_1, VCF_v4_2, VCF_v4_3, VCF_v4_4, VCF_v4_5 } VcfVersion;
 
-#define ZIP_MAX_PLOIDY_FOR_MUX 4 // ZIP only. In PIZ use z_file->max_ploidy_for_mux
-#define ZIP_NUM_DOSAGES_FOR_MUX (ZIP_MAX_PLOIDY_FOR_MUX+1) // ZIP only: 0 to ZIP_MAX_PLOIDY_FOR_MUX
-typedef MULTIPLEXER(ZIP_NUM_DOSAGES_FOR_MUX) DosageMultiplexer, *DosageMultiplexerP;
+#define ZIP_MAX_PLOIDY_FOR_MUX 4      // ZIP only. In PIZ use z_file->max_ploidy_for_mux
+#define N_DOSAGES_IN_MUX       5      // (ZIP_MAX_PLOIDY_FOR_MUX+1) (must be numeric macro): ZIP only: 0 to ZIP_MAX_PLOIDY_FOR_MUX
+#define N_DOSAGEx7_IN_MUX     35      // N_DOSAGES_IN_MUX x 7
+#define N_DOSAGEx51_IN_MUX   255      // N_DOSAGES_IN_MUX x 51
+TypeMultiplexer(N_DOSAGES_IN_MUX),    DosageMultiplexer;
+TypeMultiplexer(N_DOSAGEx7_IN_MUX),   DosageX7Multiplexer;
+TypeMultiplexer(N_DOSAGEx51_IN_MUX),  DosageX51Multiplexer;
+
+#define MAX_DP_FOR_MUX 60       
+TypeMultiplexer(MAX_DP_FOR_MUX),      DPMultiplexer;
 
 typedef packed_enum { 
     VT_UNKNOWN, 
@@ -152,6 +160,7 @@ typedef struct VBlockVCF {
 
     // FORMAT/AD
     #define MAX_ALLELES 16 // maximum number of of alleles (including reference allele)
+    #define DOUBLE_MAX_ALLELES 32  // 2x MAX_ALLELES (must be an integer macro)
     int64_t ad_values[MAX_ALLELES];
     
     #define first_idx idx_AN        // ZIP: INFO fields indices within INFO
@@ -172,11 +181,9 @@ typedef struct VBlockVCF {
     DosageMultiplexer mux_PLn, mux_GL, mux_GP, mux_PRI, mux_DS, mux_PP, mux_PVAL, mux_FREQ, mux_RD, 
                       mux_LAD, mux_QL, mux_FT, mux_VAF, mux_AD[2], mux_ADALL[2];
     
-    MULTIPLEXER(51 * ZIP_NUM_DOSAGES_FOR_MUX) mux_PLy; // TODO: 60 would be better than 51 as it was up to 15.0.35, but mux is currently limited to 256 channels
-    MULTIPLEXER(7 * ZIP_NUM_DOSAGES_FOR_MUX) mux_GQ;
-    #define MAX_DP_FOR_MUX 60       
-    MULTIPLEXER(MAX_DP_FOR_MUX) mux_RGQ;   
-
+    DosageX51Multiplexer mux_PLy; // TODO: 60 would be better than 51 as it was up to 15.0.35, but mux is currently limited to 256 channels
+    union { DosageMultiplexer by_dosage; DosageX7Multiplexer by_dosageXdp; } mux_GQ;
+    DPMultiplexer mux_RGQ;   
     Multiplexer2 mux_POS;           // GVCF: multiplex by whether this field is END or POS
     Multiplexer2 mux_QUAL, mux_INFO;// GVCF: multiplex by has_RGQ
     Multiplexer2 mux_FORMAT_DP;     // channel=1 by AD or SDP, channel=0 transposed if AD/SDP not available           
@@ -189,7 +196,7 @@ typedef struct VBlockVCF {
     Multiplexer2 mux_CAF;           // dbSNP: mux CAF by COMMON
 
     thool PL_mux_by_DP;
-} VBlockVCF, *VBlockVCFP;
+} VBlockVCF, *restrict VBlockVCFP;
 
 typedef struct {
     STR(alt);
@@ -242,7 +249,7 @@ extern void vcf_seg_INFO_NS (VBlockVCFP vb, ContextP ctx, STRp(ns_str));
 
 // Samples stuff
 #define MAX_FORMAT_FIELDS 64 // maximum format (sample) fields in any one variant. note: this can be increased or decreaed at will, no backcomp issues.
-typedef Container(MAX_FORMAT_FIELDS) FormatContainer;
+TypeContainer(MAX_FORMAT_FIELDS), FormatContainer;
 typedef FormatContainer *restrict FormatContainer𐤐;
 typedef const FormatContainer *restrict ConstFormatContainer𐤐;
 typedef ContextP ContextPBlock[MAX_FORMAT_FIELDS];
@@ -257,7 +264,7 @@ extern rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, int32_t len, c
 extern int vcf_seg_get_mux_channel_i (VBlockVCFP vb);
 extern int vcf_piz_get_mux_channel_i (VBlockVCFP vb);
 extern ContextP vcf_seg_FORMAT_mux_by_dosage (VBlockVCFP vb, ContextP ctx, STRp(cell), const DosageMultiplexer *mux);
-extern void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), void *mux_p);
+extern void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), MultiplexerP mux);
 
 // FORMAT/GT stuff
 extern void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF𐤐 dl, STRp(cell), ContextP *ctxs, STR𐤐s(sf));
@@ -274,7 +281,7 @@ extern bool vcf_is_GT_only (VBlockVCFP vb);
 extern void vcf_copy_sample_seg_initialize (VBlockVCFP vb);
 extern void vcf_copy_samples_segconf_finalize (VBlockVCFP vb);
 extern void vcf_copy_sample_seg_finalize (VBlockVCFP vb);
-extern unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP *ctxs, ConstFormatContainer𐤐 format, STRp(sample));
+extern bool vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP *ctxs, ConstFormatContainer𐤐 format, STRp(sample));
 extern void vcf_copy_sample_seg_set_copied (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, bool is_copied);
 extern void seg_mux_by_is_prev_sample_copied (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, Multiplexer2P mux, STRp(value));
 extern void vcf_sample_copy_piz_init_vb (VBlockVCFP vb);

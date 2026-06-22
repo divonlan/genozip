@@ -1122,7 +1122,7 @@ typedef struct {
             uint64_t n_mapped, n_unmapped;
         };
     };
-} BinStruct, *BinStructP, __attribute__((aligned(1))) *UnalignedBinStructP;
+} BinStruct, *BinStructP, UNALIGNED *UnalignedBinStructP;
 
 static void bai_show_one_bin (BinStructP bin, rom rname_s)
 {

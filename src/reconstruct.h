@@ -22,11 +22,22 @@ extern StrText1K piz_advise_biopsy (VBlockP vb);
 extern StrText1K piz_advise_biopsy_line (CompIType comp_i, VBIType vblock_i, LineIType line_i, rom filename);
 
 // assert piz
-extern void noreturn error_asspiz (VBlockP vb, FUNCLINE, rom format, ...);
+extern noreturn void error_asspiz (VBlockP vb, FUNCLINE, rom format, ...);
 #define ASSPIZ(condition, format, ...) ({ if (__builtin_expect (!(condition), 0)) error_asspiz (VB, __FUNCLINE, (format), ##__VA_ARGS__); })
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string, 0)
 #define ASSPIZNOTZERO(n)           ASSPIZ ((n), "%s=0", #n)
 #define ABORT_PIZ(format, ...) error_asspiz (VB, __FUNCLINE, (format), ##__VA_ARGS__)
+
+// we allocate txt_data to be OVERFLOW_SIZE (=1MB) beyond needed, if we get 64KB near the edge
+// of that we error here. These is to prevent actual overflowing which will manifest as difficult to trace memory issues
+#define ASSPIZ_NO_TXT_OVERFLOW(format, ...) \
+    if (Rtxt < 64 KB) { \
+        DO_ONCE { \
+            rom dump_fn = txtfile_dump_vb (VB, z_name, &vb->txt_data).s; /* call before error_asspiz so error messages don't get mangled */  \
+            error_asspiz (VB, __FUNCLINE, (format), ##__VA_ARGS__); \
+        } \
+        else stall(); /* one thread prints the error, other threads hang until killed */ \
+    }
 
 // goes into ctx->history if not STORE_INT
 typedef packed_enum {        LookupTxtData,   LookupDict,   LookupLocal,   LookupPerLine } LookupType;
@@ -114,14 +125,14 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 
 #define NEXTLOCALBIT(ctx) ({ \
     ASSPIZ ((ctx)->next_local < (ctx)->local.nbits, "%s.local exhausted: next_local=%u nbits=%u", (ctx)->tag_name, (ctx)->next_local, (uint32_t)(ctx)->local.nbits); \
-    bool ret = bits_get ((BitsP)&(ctx)->local, (ctx)->next_local); \
+    bool ret = bits_get (&(ctx)->local, (ctx)->next_local); \
     (ctx)->next_local++; \
     ret; \
 })
     
 #define NEXTLOCAL2BITS(ctx) ({ \
     ASSPIZ ((ctx)->next_local < (ctx)->local.nbits-1, "%s.local exhausted: next_local=%u nbits=%u", (ctx)->tag_name, (ctx)->next_local, (uint32_t)(ctx)->local.nbits); \
-    uint8_t ret = bits_get ((BitsP)&(ctx)->local, (ctx)->next_local) | (bits_get ((BitsP)&(ctx)->local, (ctx)->next_local+1) << 1); \
+    uint8_t ret = bits_get (&(ctx)->local, (ctx)->next_local) | (bits_get (&(ctx)->local, (ctx)->next_local+1) << 1); \
     (ctx)->next_local += 2; \
     ret; \
 })

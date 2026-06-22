@@ -22,7 +22,7 @@ sSTRl (copy_ALT_BND_REF_snip, 32);
 void vcf_refalt_zip_initialize (void)
 {
     DO_ONCE {
-        static const Container(5) con_BND[4] = {
+        static const Container_5 con_BND[4] = {
             [0] = { // REF=A ALT="AAACTCCT[hs37d5:33588521[" 
                 .repeats   = 1,
                 .nitems_lo = 5,
@@ -62,7 +62,7 @@ void vcf_refalt_zip_initialize (void)
         };
 
         for (int i=0; i < 4; i++)
-            container_prepare_snip ((ContainerP)&con_BND[i], 0, 0, con_BND_snips[i], &con_BND_snip_lens[i]);
+            container_prepare_snip (&con_BND[i], 0, 0, con_BND_snips[i], &con_BND_snip_lens[i]);
 
         seg_prepare_snip_other (SNIP_COPY, _ALT_BND_REF, false, 0, copy_ALT_BND_REF_snip);
     }

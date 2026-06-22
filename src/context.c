@@ -400,7 +400,7 @@ done:
 }
 
 // Seg only: create a node without adding to counts
-WordIndex ctx_create_node_is_new (VBlock𐤐 vb, Did did_i, STR𐤐(snip), bool *is_new)
+WordIndex ctx_create_node_is_new (VBlockP vb, Did did_i, STR𐤐(snip), bool *is_new)
 {
     WordIndex node_index = ctx_create_node_do (vb, CTX(did_i), STRa(snip), is_new); 
     ctx_decrement_count (vb, CTX(did_i), node_index);
@@ -1090,7 +1090,7 @@ void ctx_merge_in_vb_ctx (VBlockP vb)
     bool custom_merge_pending = !!DTP(zip_custom_merge);
     
     ContextP v_did_i_to_zctx[vb->ca.num_contexts];
-    memset (v_did_i_to_zctx, 0, vb->ca.num_contexts * sizeof(ContextP));
+    memset ((void*)v_did_i_to_zctx, 0, vb->ca.num_contexts * sizeof(ContextP));
 
     while (!all_merged) {
 
@@ -1876,18 +1876,18 @@ void ctx_set_dyn_int (VBlockP vb,                    ...) { SET_MULTI_CTX (vb, d
 void ctx_set_ltype (VBlockP vb, int ltype,           ...) { SET_MULTI_CTX (ltype, ctx->ltype=(ltype)); ASSERT0 (!IS_LT_DYN(ltype), "Use ctx_set_dyn_int"); }
 void ctx_consolidate_stats (VBlockP vb, int parent,  ...) { SET_MULTI_CTX (parent, ({ ctx->st_did_i=parent; ctx->header_info=CTX(parent)->header_info; })); CTX(parent)->is_stats_parent = true;}
 
-void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ConstContainerP con)
+void ctx_consolidate_stats_(VBlockP vb, ContextP parent_ctx, ContainerP con)
 {
-    uint32_t num_deps = con_nitems (*con);
+    uint32_t num_deps = con_nitems (con);
 
     // find the ultimate ancestor to be displayed in stats
     if (parent_ctx->st_did_i != DID_NONE) 
         parent_ctx = CTX(parent_ctx->st_did_i);
 
     for (uint32_t d=0; d < num_deps; d++) {
-        if (!con->items[d].dict_id.num) continue;
+        if (!con.h->items[d].dict_id.num) continue;
 
-        ContextP item_ctx = ctx_get_ctx (vb, con->items[d].dict_id);
+        ContextP item_ctx = ctx_get_ctx (vb, con.h->items[d].dict_id);
         if (item_ctx->did_i != parent_ctx->did_i) {
             item_ctx->st_did_i = parent_ctx->did_i;
             item_ctx->header_info = parent_ctx->header_info;

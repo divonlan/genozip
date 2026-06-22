@@ -179,7 +179,7 @@ void sam_deep_set_SEQ_hash (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_s
 void sam_deep_set_QUAL_hash (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(qual))
 {
     if (!dl->is_deepable || 
-        !vb->has_qual || segconf.has_bqsr) return; // case: deepable, but without QUAL: dl->deep_qual_hash remains 0
+        !vb->has_qual || segconf.has_BQSR) return; // case: deepable, but without QUAL: dl->deep_qual_hash remains 0
 
     dl->deep_hash.qual = deep_qual_hash (VB, STRa(qual), dl->FLAG.rev_comp); 
 
@@ -373,7 +373,7 @@ void sam_piz_set_deep_seq (VBlockSAMP vb,
 }
 
 // strive to alloc exactly twice: 128K initialy, and then a good guess of the total
-static void inline sam_piz_alloc_deep_ents (VBlockSAMP vb, uint32_t size)
+static inline void sam_piz_alloc_deep_ents (VBlockSAMP vb, uint32_t size)
 {
     // case: initial allocation
     if (!vb->deep_ents.len) {

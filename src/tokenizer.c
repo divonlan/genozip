@@ -96,7 +96,8 @@ static void tokenizer_split (STRp(field), rom is_sep, bool split_on_digit_bounda
     }
 }                                      
 
-static Container(MAX_TOKENS) tokenizer_con_template; 
+TypeContainer(MAX_TOKENS);
+static Container_MAX_TOKENS tokenizer_con_template; 
 
 void tokenizer_zip_initialize (void)
 {
@@ -119,7 +120,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
     uint8_t n_items;
     tokenizer_split (STRa(field), is_sep, false, items, &n_items);
 
-    Container(MAX_TOKENS) con; // note: allocate maximum because clang doesn't allow a variable here (gcc does) - no harm, we only touch the memory actually needed
+    Container_MAX_TOKENS con; // note: allocate maximum because clang doesn't allow a variable here (gcc does) - no harm, we only touch the memory actually needed
     memcpy (&con, &tokenizer_con_template, con_sizeof_(n_items));
     con.nitems_lo = n_items;
 
@@ -130,7 +131,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
 
     bool is_ordered = !((VB_DT(BAM) || VB_DT(SAM)) && segconf.is_sorted);
 
-    for_con2 (&con) {
+    for_con2 ((ContainerP){.cMAX_TOKENS = &con}) {
         Token *ci = &items[item_i];
 
         // process the subfield that just ended
@@ -172,7 +173,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                  item_ctx->ltype != LT_DYN_INT) { // not already set to LT_DYN_INT in a previous line of this VB
             
             item_ctx->ltype = LT_UINT8;
-            seg_diff (vb, item_ctx, item_ctx, STRa(ci->item), item_ctx->flags.all_the_same, ci->item_len); // don't xor-diff if it can ruin the all-the-same
+            seg_diff (vb, item_ctx, vs_LAST, NULL, STRa(ci->item), item_ctx->flags.all_the_same, ci->item_len); // don't xor-diff if it can ruin the all-the-same
         }
 
         else fallback: {
@@ -197,5 +198,5 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
         seg_set_last_txt (vb, item_ctx, STRa(ci->item));
     }
 
-    container_seg (vb, field_ctx, (ContainerP)&con, prefixes, prefixes_len, num_seps + add_additional_bytes);
+    container_seg (vb, field_ctx, &con, prefixes, prefixes_len, num_seps + add_additional_bytes);
 }

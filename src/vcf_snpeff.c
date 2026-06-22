@@ -15,7 +15,7 @@
 // segs cDNA, CDS, AA which may be in the format of "pos" and may "pos/len" 
 static bool vcf_seg_INFO_ANN_pos_len (VBlockP vb, ContextP ctx, STRp(value), uint32_t repeat) 
 {
-    static const Container(2) con = {
+    static const Container_2 con = {
         .repeats      = 1, 
         .nitems_lo    = 2, 
         .items        = { { .dict_id.num = DICT_ID_MAKE2_8("A0NN_pos"), .separator = "/" }, 
@@ -40,7 +40,7 @@ static bool vcf_seg_INFO_ANN_pos_len (VBlockP vb, ContextP ctx, STRp(value), uin
         seg_by_ctx (vb, "", 0, ctx, 0);
 
     else if (ctx->has_len)
-        seg_struct (vb, ctx, (ContainerP)&con, STRa(value), NULL, value_len, false);
+        seg_struct (vb, ctx, &con, STRa(value), NULL, value_len, false);
     
     else
         seg_integer_or_not (vb, ctx, STRa(value), value_len);
@@ -53,7 +53,7 @@ static bool vcf_seg_INFO_ANN_pos_len (VBlockP vb, ContextP ctx, STRp(value), uin
 // example: ANN=T|intergenic_region|MODIFIER|U2|ENSG00000277248|intergenic_region|ENSG00000277248|||n.10510103A>T||||||
 void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    static const Container(16) ann = {
+    static const Container_16 ann = {
         .nitems_lo   = 16, 
         .repeats     = 1,  // faster seg if this happens to be correct
         .drop_final_repsep = true,
@@ -79,7 +79,7 @@ void vcf_seg_INFO_ANN (VBlockVCFP vb, ContextP ctx, STRp(value))
                                   [9]         = vcf_seg_INFO_HGVS,
                                   [11 ... 13] = vcf_seg_INFO_ANN_pos_len };
 
-    seg_array_of_struct (VB, ctx, (ContainerP)&ann, STRa(value), callbacks, NULL, value_len);
+    seg_array_of_struct (VB, ctx, &ann, STRa(value), callbacks, NULL, value_len);
 }
 
 // See: https://pcingola.github.io/SnpEff/se_inputoutput/#eff-field-vcf-output-files
@@ -93,7 +93,7 @@ void vcf_seg_INFO_EFF (VBlockVCFP vb, ContextP ctx, STRp(value))
     // TODO: move to this after we improve to exploit correlations between fields
     bool is_xstream = value_len > 10 && (!memcmp (value, "UPSTREAM", 8) || !memcmp (value, "DOWNSTREAM", 10));
 
-    Container(12) eff = {
+    Container_12 eff = {
         .nitems_lo   = 12, 
         .repeats     = 1,  // faster seg if this happens to be correct
         .repsep      = {','},
@@ -115,6 +115,6 @@ void vcf_seg_INFO_EFF (VBlockVCFP vb, ContextP ctx, STRp(value))
                         // { .dict_id={ _INFO_EFF_Warnings_Errors       }, .separator = {')'} }, 
                        } };
 
-    seg_array_of_struct (VB, ctx, (ContainerP)&eff, STRa(value), NULL, NULL, value_len);
+    seg_array_of_struct (VB, ctx, &eff, STRa(value), NULL, NULL, value_len);
 #endif
 }

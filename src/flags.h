@@ -109,8 +109,13 @@ typedef struct __attribute__((gcc_struct)) {
     #define flag_after_bits bam_assist // first field after 64-bits
     rom bam_assist, show_time, show_mutex; 
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
+    
+    // other high frequency flags
+    uint64_t no_BDBI            : 1; // ZIP SAM: disable the BD/BI method 
+
     // _____________________________________________________________________________________________________________________
 
+    
     // Other bits
 
     // OTHER BIT FLAGS: not accessed in every line in NORMAL seg/recon
@@ -120,6 +125,8 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t is_wsl             : 1; 
     uint64_t is_lten            : 1; // set according to endianness  
     uint64_t is_sanitize_thread : 1; // build includes -fsanitize=thread 
+    uint64_t is_valgrind        : 1; // running under valgrind
+    uint64_t is_docker          : 1; // running in a docker container
     uint64_t explicit_out_dt    : 1; // genocat - out txt file data type set explicitly from command line
     packed_enum { NO_PREPROC, PREPROC_RUNNING, PREPROC_FINALIZING } preprocessing : 2; // we're currently dispatching compute threads for preprocessing (PIZ: loading SA Groups, ZIP: loading bamass ents)
     uint64_t dont_load_ref_file : 1; // PIZ (genocat): we don't need to load the reference data
@@ -277,7 +284,6 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t skip_index         : 1;
     uint64_t xthreads           : 1;
     uint64_t echo               : 2; // 0,1 or 2. show the command line in case of an error (including echo and its optional argument)
-    uint64_t recover            : 1; // PIZ: attempted recovery from data corruption
     uint64_t show_headers       : 1;
     uint64_t only_headers       : 1; // genocat --show_headers (not genounzip) show only headers
 

@@ -9,7 +9,7 @@
 #include "vcf_private.h"
 #include "libdeflate_1.19/libdeflate.h"
 
-static const Container(7) id_con = {
+static const Container_7 id_con = {
     .nitems_lo = 7,
     .repeats   = 1,
     .items = { { .dict_id.num = DICT_ID_MAKEF_3("I0D"), .separator[0] = ':' },
@@ -27,7 +27,7 @@ sSTRl(con_id_snip, con_snip_sizeof(7));
 void vcf_manta_zip_initialize (void)
 {
     DO_ONCE
-        container_prepare_snip ((ContainerP)&id_con, 0, 0, qSTRa(con_id_snip));
+        container_prepare_snip (&id_con, 0, 0, qSTRa(con_id_snip));
 
     // re-initialize for every file, as SV type might change
     segconf.MATEID_method = MATE_01;
@@ -39,11 +39,11 @@ void vcf_manta_seg_initialize (VBlockVCFP vb)
 {
     vcf_sv_seg_initialize (vb, tw_dids, NUM_MANTA_TWs);
 
-    ctx_consolidate_stats_(VB, CTX(VCF_ID), (ContainerP)&id_con);      
+    ctx_consolidate_stats_(VB, CTX(VCF_ID), &id_con);      
 
     ctx_set_dyn_int (VB, INFO_HOMLEN, INFO_BND_DEPTH, INFO_MATE_BND_DEPTH, DID_EOL);
 
-    for_con2 (&id_con) {
+    for_con2 ((ContainerP){ .c7 = &id_con }) {
         ContextP ctx = ctx_get_ctx (vb, item->dict_id);
         
         ctx_set_dyn_int (VB, ctx->did_i, DID_EOL);
@@ -73,7 +73,7 @@ void vcf_seg_manta_ID (VBlockVCFP vb, STRp(id))
         seg_special0 (VB, VCF_SPECIAL_COPY_MATE, CTX(VCF_ID), id_len + 1); // +1 for \t
 
     else
-        seg_struct (VB, CTX(VCF_ID), (ContainerP)&id_con, STRa(id), callbacks, id_len + 1, true);
+        seg_struct (VB, CTX(VCF_ID), &id_con, STRa(id), callbacks, id_len + 1, true);
 }
 
 static void vcf_manta_predcited_CIGAR (VBlockVCFP vb, qSTRp (cigar))

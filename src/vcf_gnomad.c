@@ -36,23 +36,23 @@ void vcf_gnomad_zip_initialize (void)
         seg_prepare_snip_other (SNIP_COPY, _INFO_QUALapprox,     false, 0, copy_QUALapprox_snip);
         seg_prepare_snip_other (SNIP_COPY, _INFO_ReadPosRankSum, false, 0, copy_ReadPosRankSum_snip);
 
-        static const Container(2) vrs_end_con = { 
+        static const Container_2 vrs_end_con = { 
             .nitems_lo = 2,
             .repeats   = 1,
             .items[0]  = { .dict_id.num = _INFO_VRS_Ends_REF, .separator[0] = ',' },
             .items[1]  = { .dict_id.num = _INFO_VRS_Ends_ALT                      } 
         };
 
-        container_prepare_snip ((ContainerP)&vrs_end_con, 0, 0, qSTRa(con_VRS_End_snip));
+        container_prepare_snip (&vrs_end_con, 0, 0, qSTRa(con_VRS_End_snip));
 
-        static const Container(2) vrs_states_con = { 
+        static const Container_2 vrs_states_con = { 
             .nitems_lo = 2,
             .repeats   = 1,
             .items[0]  = { .dict_id.num = _INFO_VRS_States_REF, .separator[0] = ',' },
             .items[1]  = { .dict_id.num = _INFO_VRS_States_ALT                      } 
         };
 
-        container_prepare_snip ((ContainerP)&vrs_states_con, 0, 0, qSTRa(con_VRS_States_snip));
+        container_prepare_snip (&vrs_states_con, 0, 0, qSTRa(con_VRS_States_snip));
     }
 }
 
@@ -70,7 +70,7 @@ void vcf_gnomad_seg_initialize (VBlockVCFP vb)
 
 void vcf_seg_INFO_VRS_Allele_IDs (VBlockVCFP vb, ContextP ctx, STRp(ids))
 {
-    static const Container(1) VRS_Allele_IDs_con = {
+    static const Container_1 VRS_Allele_IDs_con = {
         .repeats   = 2, // most common value of repeats
         .repsep    = { ',' },
         .nitems_lo = 1,
@@ -80,7 +80,7 @@ void vcf_seg_INFO_VRS_Allele_IDs (VBlockVCFP vb, ContextP ctx, STRp(ids))
 
     #define VRS_ALL_ID_PREFIX "\4\4ga4gh:VA.\4" // \4 == CON_PX_SEP
 
-    seg_array_of_struct_(VB, ctx, (ContainerP)&VRS_Allele_IDs_con, VRS_ALL_ID_PREFIX, STRLEN(VRS_ALL_ID_PREFIX), 
+    seg_array_of_struct_(VB, ctx, &VRS_Allele_IDs_con, VRS_ALL_ID_PREFIX, STRLEN(VRS_ALL_ID_PREFIX), 
                          STRa(ids), (SegCallback[]){ seg_add_to_local_fixed_len_cb }, // expected to be all of length 32, so better seg as a fixed-len blob than a string
                          0, 0, NULL, ids_len);
 }

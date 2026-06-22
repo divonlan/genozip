@@ -15,7 +15,7 @@
 
 #define MAX_QNAME_ITEMS (SAM_QmNAME - SAM_Q0NAME + 1) 
 
-typedef Container (MAX_QNAME_ITEMS) QnameContainer;
+TypeContainer(MAX_QNAME_ITEMS), QnameContainer;
 
 //-----------------------------------------------------------------------------------------
 // Illumina-7 format: <instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos>  

@@ -89,7 +89,7 @@ static inline uint64_t aligner_get_kmer (Bits𐤐 seq, uint64_t bit_i, bool is_f
 }
 
 static __attribute__((always_inline)) inline 
-uint64_t aligner_prefetch_gpos (VBlock𐤐 vb, Bits𐤐 seq, uint64_t base_i, bool is_forward)                                              
+uint64_t aligner_prefetch_gpos (VBlockP vb, Bits𐤐 seq, uint64_t base_i, bool is_forward)                                              
 {   
     uint64_t kmer = aligner_get_kmer (seq, base_i*2, is_forward); 
     uint64_t hash = fibonacci_hash (kmer);
@@ -113,7 +113,7 @@ uint64_t aligner_prefetch_gpos (VBlock𐤐 vb, Bits𐤐 seq, uint64_t base_i, bo
 }
 
 // converts a string sequence to a 2-bit bitmap
-static Bits aligner_seq_to_bitmap (VBlock𐤐 vb, rom𐤐 seq, uint64_t seq_len, 
+static Bits aligner_seq_to_bitmap (VBlockP vb, rom𐤐 seq, uint64_t seq_len, 
                                    uint64_t *restrict bitmap_words, // allocated by caller
                                    bool𐤐 seq_is_all_acgt)  
 {
@@ -193,7 +193,7 @@ static inline uint32_t aligner_count_mismatches (ConstBits𐤐 seq_bits, // the 
     #undef calc_n_mismatches
 }
 
-static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos, 
+static inline bool aligner_update_best (VBlockP vb, PosType64 gpos, 
                                         PosType64 gpos_R1, // if this is for R2: gpos of R1
                                         PosType64 gpos1,   // if splicing: main gpos of sequence
                                         Bits𐤐 seq_bits, uint32_t seq_len, bool fwd, 
@@ -236,7 +236,7 @@ static inline bool aligner_update_best (VBlock𐤐 vb, PosType64 gpos,
 }                                                                                                                               
 
 static __attribute__((always_inline)) inline 
-PosType64 aligner_collect_gpos (VBlock𐤐 vb, 
+PosType64 aligner_collect_gpos (VBlockP vb, 
                                 uint64_t s1_hash, Direction s1_is_fwd, PosType64 s1_gpos_decrement,
                                 PosType64 gpos1, uint32_t seq_len, 
                                 ConstBits𐤐 genome, PosType64 genome_nbases,
@@ -288,7 +288,7 @@ PosType64 aligner_collect_gpos (VBlock𐤐 vb,
 }
 
 static void aligner_evaluate_hooks (
-    VBlock𐤐 vb, 
+    VBlockP vb, 
     Bits𐤐 seq_bits, rom𐤐 seq, PosType64 seq_len, // sequence to be aligned 
     ConstBits𐤐 genome, PosType64 genome_nbases,  // genome aligned against 
     PosType64 gpos_R1,  // we are R2, this is the gpos of our counterpart in R1
@@ -386,7 +386,7 @@ done:
 // returns false if no match found.
 // note: matches that imply a negative GPOS (i.e. their beginning is aligned to before the start of the genome), aren't consisdered
 static inline PosType64 aligner_best_match (
-    VBlock𐤐 vb, STR𐤐(seq), PosType64 gpos_R1,
+    VBlockP vb, STR𐤐(seq), PosType64 gpos_R1,
     ConstBits𐤐 genome, PosType64 genome_nbases,
     bool𐤐 is_forward, bool𐤐 is_perfect, PosType64𐤐 gpos2, bool𐤐 can_match_as_nonspliced) // out
 {
@@ -430,7 +430,7 @@ static inline PosType64 aligner_best_match (
 }
 
 
-void aligner_seg_gpos_and_fwd (VBlock𐤐 vb, 
+void aligner_seg_gpos_and_fwd (VBlockP vb, 
                                uint32_t seq_len, // note: less that vb->seq_len when aligning the excess of a nonbio read
                                PosType64 gpos, PosType64 gpos2, bool is_forward, 
                                uint32_t junction, // only if spliced, i.e. gpos2 is set
@@ -539,7 +539,7 @@ static void aligner_get_junction_do (STR𐤐(seq), rom ref1, rom ref2, int *rest
 }
 
 // finds index in seq which minimizes mismatches vs ref and ref2
-static bool aligner_get_junction (VBlock𐤐 vb, STR𐤐(seq), rom ref1, rom ref2, // note: ref1,2 might be aliased pointers
+static bool aligner_get_junction (VBlockP vb, STR𐤐(seq), rom ref1, rom ref2, // note: ref1,2 might be aliased pointers
                                   uint32_t *junction, bool *ref1_then_ref2)    // out
 {          
     START_TIMER;
@@ -585,7 +585,7 @@ static bool aligner_get_junction (VBlock𐤐 vb, STR𐤐(seq), rom ref1, rom ref
     return true; // splice it away!
 }
 
-static char *alloc_ref (VBlock𐤐 vb, STRc(ref_space), uint32_t ref_len)
+static char *alloc_ref (VBlockP vb, STRc(ref_space), uint32_t ref_len)
 {
     ASSERTNOTINUSE (vb->scratch);
 
@@ -599,7 +599,7 @@ static char *alloc_ref (VBlock𐤐 vb, STRc(ref_space), uint32_t ref_len)
 }
 
 // get textual reference starting at the lower of gpos, gpos2, and containing seq_len starting for each gpos and gpos2
-static inline void aligner_get_textual_ref (VBlock𐤐 vb, 
+static inline void aligner_get_textual_ref (VBlockP vb, 
                                             PosType64 gpos, PosType64 gpos2, uint32_t seq_len, bool is_forward,
                                             STRc (ref_space), // use if possible, or scratch if not
                                             rom *ref, rom *ref2)
@@ -639,7 +639,7 @@ static inline void aligner_get_textual_ref (VBlock𐤐 vb,
 }
 
 // segs SQBITMAP(local), SEQMIS_*, JUNCTION. Returns true is is_perfect (no mismatches)
-static bool aligner_seg_mismatches (VBlock𐤐 vb, STR𐤐(seq), 
+static bool aligner_seg_mismatches (VBlockP vb, STR𐤐(seq), 
                                     PosType64𐤐 gpos, PosType64𐤐 gpos2, // might be swapped
                                     bool is_forward, bool can_match_as_nonspliced,
                                     uint32_t *restrict junction) // out
@@ -764,7 +764,7 @@ static void aligner_set_is_set (PosType64 gpos, PosType64 gpos2/*if spliced*/, u
     }
 }
 
-MappingType aligner_seg_seq (VBlock𐤐 vb, STR𐤐(seq),  
+MappingType aligner_seg_seq (VBlockP vb, STR𐤐(seq),  
                              bool am_i_R2, // R2 file, or R2 read in an interleaved file (whether or not we have gpos_R1)
                              PosType64 gpos_R1, bool is_forward_R1)
 {
@@ -846,7 +846,7 @@ no_mapping:
          :                      MAPPING_ALIGNED; 
 }
 
-void aligner_recon_get_gpos_and_fwd (VBlock𐤐 vb, bool am_i_R2, 
+void aligner_recon_get_gpos_and_fwd (VBlockP vb, bool am_i_R2, 
                                      bool spliced_2nd_segment, 
                                      PosType64𐤐 gpos, bool𐤐 is_forward) // out
 {    
@@ -956,7 +956,7 @@ void aligner_reconstruct_seq (VBlockP vb,
 #endif
             char *recon = BAFTtxt;
             for (uint32_t i=0; i < seq_len; i++) {
-                uint32_t matches = bits_get_run ((BitsP)&bitmap_ctx->local, bitmap_ctx->next_local, seq_len - i);
+                uint32_t matches = bits_get_run (&bitmap_ctx->local, bitmap_ctx->next_local, seq_len - i);
 
                 bool has_mismatch = (i + matches < seq_len);
                 recon += matches;

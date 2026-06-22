@@ -141,8 +141,8 @@ void vcf_piz_insert_field (VBlockVCFP vb, ContextP ctx, STRp(value))
         Ltxt += move_by;
 
         // note: keep txt_data.len 64b to detect bugs
-        ASSPIZ (Rtxt, "txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s", 
-                vb->txt_data.len, (uint64_t)vb->txt_data.size, txtfile_dump_vb (VB, z_name, NULL).s);
+        ASSPIZ_NO_TXT_OVERFLOW ("txt_data overflow: len=%"PRIu64" > size=%"PRIu64". vb->txt_data dumped to %s", 
+                                vb->txt_data.len, (uint64_t)vb->txt_data.size, dump_fn);
         
         // adjust last_txt of other INFO contexts that might need insertion (and hence last_txt)
         if (ctx->did_i != VCF_ID) { // no need to adjust after inserting ID, as it is inserted during REFALT reconstruction (not at end of TOPLEVEL like the rest)
@@ -208,7 +208,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_HAS_RGQ)
 // not be reconstructed. contexts are not consumed.
 CONTAINER_FILTER_FUNC (vcf_piz_filter)
 {
-    uint64_t dnum = (item >= 0) ? con->items[item].dict_id.num : 0;
+    uint64_t dnum = (item >= 0) ? con.h->items[item].dict_id.num : 0;
 
     switch (dict_id.num) {
 
@@ -304,7 +304,7 @@ void vcf_piz_insert_VCF_ID (VBlockVCFP vb)
 // callback called after reconstruction
 // ------------------------------------
 
-static void inline vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, unsigned num_reps, int32_t recon_len)
+static inline void vcf_piz_SAMPLES_subset_samples (VBlockVCFP vb, unsigned rep, unsigned num_reps, int32_t recon_len)
 {
     if (!samples_am_i_included (rep))
         Ltxt -= recon_len + (rep == num_reps - 1); // if last sample, we also remove the preceeding \t (recon_len includes the sample's separator \t, except for the last sample that doesn't have a separator)
@@ -394,11 +394,11 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
     // note: occurs if GT is a container, not if it is segged as a snip (in which case it happens in vcf_piz_con_item_cb)
     if (dict_id.num == _FORMAT_GT) {
         // after first HT is reconstructed, re-write the predictable phase (note: predictable phases are only used for ploidy=2)
-        if (rep==0 && con->repsep[0] == '&') 
+        if (rep==0 && con.h->repsep[0] == '&') 
             vcf_piz_FORMAT_GT_rewrite_predicted_phase (vb, STRa (recon));
    
-        if (rep==1 && vb->flags.vcf.use_null_DP_method && con->repeats==2 && 
-            con->items[0].separator[1] != CI1_ITEM_PRIVATE/*override flag*/) 
+        if (rep==1 && vb->flags.vcf.use_null_DP_method && con.h->repeats==2 && 
+            con.h->items[0].separator[1] != CI1_ITEM_PRIVATE/*override flag*/) 
             vcf_piz_GT_cb_null_GT_if_null_DP (vb, recon);
 
         if (rep==0/*first HT*/) 
@@ -424,12 +424,12 @@ CONTAINER_CALLBACK (vcf_piz_container_cb)
 
     // store reference to sample, in case the same sample in the next line needs to copy it
     else if (dict_id.num == _VCF_SAMPLES) {
-        ctx_set_last_value (VB, CTX(VCF_LOOKBACK), (ValueType){ .i = con->repeats });
+        ctx_set_last_value (VB, CTX(VCF_LOOKBACK), (ValueType){ .i = con.h->repeats });
 
         if (segconf.vcf_sample_copy)  // since 15.0.69
             vcf_copy_sample_piz_store (vb, STRa(recon));
 
         if (flag.samples) 
-            vcf_piz_SAMPLES_subset_samples (vb, rep, con->repeats, recon_len);
+            vcf_piz_SAMPLES_subset_samples (vb, rep, con.h->repeats, recon_len);
     }
 }

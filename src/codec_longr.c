@@ -78,16 +78,16 @@ void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx,
 
     if (callback)
         for_line {
-            uint8_t *values; uint32_t values_len;
+            STRw(values);
             callback (vb, ctx, line_i, (char **)pSTRa(values), Ltxt, NULL);
             
             if (!IS_SPACE (values)) {
-                add_to_histogram (histogram, STRa(values));
+                add_to_histogram (histogram, (bytes)STRa(values));
                 num_values += values_len;
             }
         }
     else {
-        add_to_histogram (histogram, B1ST8 (ctx->local), ctx->local.len);
+        add_to_histogram (histogram, B1ST8(ctx->local), ctx->local.len);
         num_values = ctx->local.len;
     }
 

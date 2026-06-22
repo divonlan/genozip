@@ -44,6 +44,7 @@
 #include "progress.h"
 #include "tip.h"
 #include "reconstruct.h"
+#include "license.h"
 
 // mechanism to print a specific message upon exception
 static _Thread_local rom catch_msg=0, catch_func=0;
@@ -211,7 +212,7 @@ static void error_print_call_stack (void)
 }
 
 // signal handler of SIGINT (CTRL-C) - flag.debug_or_test only 
-static void noreturn signal_handler_INT (int signum) 
+static noreturn void signal_handler_INT (int signum) 
 {
     fprintf (stderr, "\n%s process %u Received SIGINT (usually caused by Ctrl-C)\n", global_cmd, getpid()); 
 
@@ -341,12 +342,12 @@ static void error_free_all (void)
 
 extern rom command_name (void);
 
-void noreturn error_exit (bool show_stack, bool is_error) 
+noreturn void error_exit (bool show_stack, bool is_error) 
 {
     DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
 
         // case: skip freeing buffers since we're exiting any, UNLESS run under valgrind - in which case we free, so we can detect true memory leaks
-        if (!arch_is_valgrind())
+        if (!flag.is_valgrind)
             flag.let_OS_cleanup_on_exit = true;  
 
         if (!is_error && (IS_ZIP || (IS_PIZ && flag.test && flag.check_latest)/*non-returning test after compress*/)) {
@@ -384,6 +385,8 @@ void noreturn error_exit (bool show_stack, bool is_error)
             file_kill_external_compressors(); 
         }
 
+        license_cleanup();
+
         // if we're in ZIP - delete z_file
         if (primary_command == ZIP && !flag_loading_auxiliary/*z_file is a reference file*/) 
             error_close_and_maybe_delete_file (z_file, is_error);
@@ -404,7 +407,7 @@ void noreturn error_exit (bool show_stack, bool is_error)
         threads_finalize();
 
         // we normally intentionally leak the VBs at process termination, but if we're running valgrind we free so to not display intentional leaks
-        if (arch_is_valgrind()) 
+        if (flag.is_valgrind) 
             error_free_all();
     }
 
@@ -414,7 +417,7 @@ void noreturn error_exit (bool show_stack, bool is_error)
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
 
-void noreturn error_assert_failed (FUNCLINE, rom format, ...)
+noreturn void error_assert_failed (FUNCLINE, rom format, ...)
 {
     progress_newline();    
     fprintf (stderr, "%s "_ERR"%s:%u %s%s: ", str_time().s, func, code_line, version_str().s, license_get_number().s);
@@ -424,12 +427,14 @@ void noreturn error_assert_failed (FUNCLINE, rom format, ...)
     vfprintf (stderr, format, args);      
     va_end (args);                        
 
+    fprintf (stderr, "command was: %s\n", flags_command_line());
+
     fprintf (stderr, "%s", report_support_if_unexpected());
     fflush (stderr);
     error_exit (true, true);
 }
 
-void noreturn error_assertinp_failed (rom format, ...)
+noreturn void error_assertinp_failed (rom format, ...)
 {
     progress_newline(); 
     fprintf (stderr, "%s: ", global_cmd); 
@@ -461,7 +466,7 @@ void warn (rom format, ...)
     fflush (stderr);     
 }
 
-void noreturn error_asspiz (VBlockP vb, FUNCLINE, rom format, ...)
+noreturn void error_asspiz (VBlockP vb, FUNCLINE, rom format, ...)
 {
     DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
         StrText4K s;
@@ -486,13 +491,16 @@ void noreturn error_asspiz (VBlockP vb, FUNCLINE, rom format, ...)
         fprintf (stderr, "\n%s\n", piz_advise_biopsy(VB).s);     
         va_end (args);                        
 
+        fprintf (stderr, "command was: %s\n", flags_command_line());
+        fflush (stderr);
+        
         error_exit (true, true);
     }
     
     else stall(); // other threads stall while waiting for the first thread ^ to exit
 }
 
-void noreturn error_restart (rom add_cmd_option, rom format, ...)
+noreturn void error_restart (rom add_cmd_option, rom format, ...)
 {
     progress_newline();                  
     fprintf (stderr, "%s: ", global_cmd);
@@ -521,7 +529,7 @@ void noreturn error_restart (rom add_cmd_option, rom format, ...)
         fprintf (stderr, "\nRecovering by restarting with %s\n\n", add_cmd_option); 
 
         // case: skip freeing buffers since we're exiting any, UNLESS run under valgrind - in which case we free, so we can detect true memory leaks
-        if (!arch_is_valgrind())
+        if (!flag.is_valgrind)
             flag.let_OS_cleanup_on_exit = true;  
 
         if (flag.debug_threads)

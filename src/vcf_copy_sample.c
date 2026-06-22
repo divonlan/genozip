@@ -33,8 +33,8 @@ void vcf_copy_sample_seg_initialize (VBlockVCFP vb)
 
     if (segconf.vcf_sample_copy) {
         uint32_t n_fmts = CTX(VCF_FORMAT)->ol_nodes.len;
-        buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,  n_fmts * vcf_num_samples, TxtWord, C_"last_samples");
-        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, n_fmts * vcf_num_samples, bool, C_"sample_copied");
+        buf_alloc_exact_zero (vb, CTX(VCF_SAMPLES)->last_samples,      n_fmts * vcf_num_samples, TxtWord, C_"last_samples");
+        buf_alloc_exact_zero (vb, CTX(VCF_COPY_SAMPLE)->sample_copied, n_fmts * vcf_num_samples, bool,    C_"sample_copied");
    
         seg_mux_init (vb, FORMAT_GT, VCF_SPECIAL_MUX_BY_PREV_COPIED, false, GT);
 
@@ -68,7 +68,7 @@ void vcf_copy_sample_seg_finalize (VBlockVCFP vb)
         ctx->local.len = 0;
 }
 
-unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP *ctxs, ConstFormatContainer𐤐 format, STRp(sample))
+bool vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP *ctxs, ConstFormatContainer𐤐 format, STRp(sample))
 {
     START_TIMER;
 
@@ -82,7 +82,7 @@ unsigned vcf_seg_copy_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP
         success = true;
 
         // update txt_len for all subfields
-        str_split (sample, sample_len, con_nitems (*format) - 1, ':', sf, false);
+        str_split (sample, sample_len, con_nitems (format) - 1, ':', sf, false);
 
         for (uint32_t i=0; i < n_sfs; i++) {
             // account for subfields
@@ -179,14 +179,14 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_SAMPLE)
         RECONSTRUCT (Btxt(tw.index), tw.len);
         if (*BLSTtxt == '\t') Ltxt--; // \t will be reconstructed by the container
 
-        ConstContainerP con = vb->con_stack[vb->con_stack_len-1].con;
+        ContainerP con = vb->con_stack[vb->con_stack_len-1].con;
 
-        str_split (recon, BAFTtxt - recon, con_nitems(*con)-1, ':', sf, false);
+        str_split (recon, BAFTtxt - recon, con_nitems(con)-1, ':', sf, false);
 
         for (int i=0; i  < n_sfs; i++) {
-            ContextP item_ctx = !con->items[i+1].dict_id.num      ? NULL // note: +1 bc first con element in VCF_COPY_SAMPLE
-                              : con->items[i+1].did_i_small < 255 ? CTX(con->items[i+1].did_i_small)
-                              :                                     ECTX(con->items[i+1].dict_id);
+            ContextP item_ctx = !con.h->items[i+1].dict_id.num      ? NULL // note: +1 bc first con element in VCF_COPY_SAMPLE
+                              : con.h->items[i+1].did_i_small < 255 ? CTX(con.h->items[i+1].did_i_small)
+                              :                                       ECTX(con.h->items[i+1].dict_id);
 
             set_last_txt_(item_ctx->did_i, sfs[i], sf_lens[i]);
 
@@ -206,7 +206,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_SAMPLE)
                 case FORMAT_SB:
                 case FORMAT_PS:
                 case FORMAT_PID:
-                    vcf_piz_con_item_cb (VB, &con->items[i+1], STRi(sf, i));
+                    vcf_piz_con_item_cb (VB, &con.h->items[i+1], STRi(sf, i));
                     break;
 
                 default: {}
@@ -222,7 +222,7 @@ void seg_mux_by_is_prev_sample_copied (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, Con
     ASSERTINRANGE (vb->sample_i, 0, vcf_num_samples);
     int channel_i = SAMPLE_COPIED_SAME_FMT_ZIP;
 
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, (MultiplexerP)mux, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, mux, channel_i);
 
     vcf_seg_field_fallback (vb, channel_ctx, STRa(value));
     seg_by_ctx (VB, STRa(mux->snip), ctx, 0);

@@ -122,12 +122,12 @@ static void sam_seg_CB_Z_segconf (VBlockSAMP vb, STRp(cb))
 
     segconf.CB_con.items[n_items-1].dict_id.num = has_suffix ? _OPTION_CB_SUFFIX : _OPTION_CB_ARR;
 
-    container_prepare_snip ((ContainerP)&segconf.CB_con, 0, 0, qSTRa(segconf.CB_con_snip));
+    container_prepare_snip (&segconf.CB_con, 0, 0, qSTRa(segconf.CB_con_snip));
 }
 
 static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), unsigned add_bytes)
 {
-    if (!seg_by_container (VB, channel_ctx, (ContainerP)&segconf.CB_con, STRa(cb), STRa(segconf.CB_con_snip), NULL, false, add_bytes))
+    if (!seg_by_container (VB, channel_ctx, &segconf.CB_con, STRa(cb), STRa(segconf.CB_con_snip), NULL, false, add_bytes))
         seg_add_to_local_string (VB, channel_ctx, STRa(cb), LOOKUP_SIMPLE, add_bytes); // requires no_stons
 }
 
@@ -186,7 +186,7 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
         seg_set_last_txt (VB, cb_ctx, STRa(cb)); // needed for seg_diff
 
         if (cb_len >= cr_len)
-            seg_diff (VB, channel_ctx, cb_ctx, STRa(cr), false, add_bytes); 
+            seg_diff (VB, channel_ctx, vs_OTHER, cb_ctx, STRa(cr), false, add_bytes); 
 
         cb_ctx->last_txt = save_last_txt; // restore
 
@@ -242,10 +242,10 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, Solo
             str_split (qual, qual_len, 0, sep, item, false);
             
             con_initialize (con, 1);
-            con->repeats           = n_items;
-            con->repsep[0]         = sep;
-            con->drop_final_repsep = true;
-            con->items[0].dict_id  = CTX(array_did_i)->dict_id;
+            con.h->repeats           = n_items;
+            con.h->repsep[0]         = sep;
+            con.h->drop_final_repsep = true;
+            con.h->items[0].dict_id  = CTX(array_did_i)->dict_id;
 
             container_prepare_snip (con, 0, 0, STRa(con_snip));
         }
@@ -258,7 +258,7 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, Solo
     // seg as an array - with items in local
     else if (con_snip[0]) {
 
-        str_split (qual, qual_len, con->repeats, con->repsep[0], item, true);
+        str_split (qual, qual_len, con.h->repeats, con.h->repsep[0], item, true);
         if (!n_items) goto fallback;
 
         for (int i=0; i < n_items; i++) 
@@ -292,7 +292,7 @@ static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), un
         seg_set_last_txt (VB, bx_ctx, STRa(bx));
 
         if (bx_len >= rx_len)
-            seg_diff (VB, channel_ctx, bx_ctx, STRa(rx), false, add_bytes); 
+            seg_diff (VB, channel_ctx, vs_OTHER, bx_ctx, STRa(rx), false, add_bytes); 
 
         bx_ctx->last_txt = save_last_txt; // restore
     
@@ -606,7 +606,7 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gr), unsigned add_
 
         if (cr_len < gr_len) goto fallback; // can't diff
 
-        seg_diff (VB, CTX(OPTION_GR_Z), CTX(OPTION_CR_Z), STRa(gr), false, add_bytes); 
+        seg_diff (VB, CTX(OPTION_GR_Z), vs_OTHER, CTX(OPTION_CR_Z), STRa(gr), false, add_bytes); 
     }
     
     else fallback: {
@@ -634,7 +634,7 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gy), unsigned add_
 
         if (cy_len < gy_len) goto fallback; // can't diff
 
-        seg_diff (VB, CTX(OPTION_GY_Z), CTX(OPTION_CY_Z), STRa(gy), false, add_bytes); 
+        seg_diff (VB, CTX(OPTION_GY_Z), vs_OTHER, CTX(OPTION_CY_Z), STRa(gy), false, add_bytes); 
     }
     
     else fallback: {
@@ -873,7 +873,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_COPY_TEXTUAL_CIGAR)
 //     AN:Z:hg19_ENST00000456328,-1400,91M;hg19_ENST00000515242,-1393,91M;hg19_ENST00000518655,-1226,91M
 void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(value), unsigned add_bytes)
 {
-    static const Container(7) tx_con = {
+    static const Container_7 tx_con = {
         .nitems_lo         = 7, 
         .repeats           = 1, // most common number of repeats (faster seg if correct)
         .drop_final_repsep = true,
@@ -887,7 +887,7 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(valu
                                { .dict_id = { _OPTION_TX_SAM_POS   }, .separator = { CI0_INVISIBLE, CI1_LOOKBACK   } } }
     };
 
-    static const Container(7) an_con = {
+    static const Container_7 an_con = {
         .nitems_lo         = 7,
         .repeats           = 1, // most common number of repeats (faster seg if correct)
         .drop_final_repsep = true,
@@ -906,7 +906,7 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(valu
     SegCallback callbacks_lb[]    = { seg_do_nothing_cb, seg_do_nothing_cb, sam_seg_TX_AN_gene, 0, sam_seg_TX_AN_pos,          sam_seg_TX_AN_cigar, sam_seg_TX_AN_sam_pos };
     SegCallback callbacks_no_lb[] = { seg_do_nothing_cb, seg_do_nothing_cb, 0,                  0, sam_seg_TX_AN_pos_unsorted, sam_seg_TX_AN_cigar, sam_seg_TX_AN_sam_pos };
 
-    ContainerP con = (did_i == OPTION_TX_Z) ? (ContainerP)&tx_con : (ContainerP)&an_con;
+    const Container_7 *con = (did_i == OPTION_TX_Z) ? &tx_con : &an_con;
 
     int32_t repeats = seg_array_of_struct (VB, CTX(did_i), con, STRa(value),
                                            use_lb ? callbacks_lb : callbacks_no_lb, 
@@ -921,7 +921,7 @@ void sam_seg_TX_AN_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(valu
 void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes)
 {
     int channel_i = sam_has_mate?2 : dl->FLAG.rev_comp?1 : 0;
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_GP_i, (MultiplexerP)&vb->mux_GP, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_GP_i, &vb->mux_GP, channel_i);
     dl->GP = value;
 
     if (channel_i==2 && (value == DATA_LINE (vb->mate_line_i)->MP)) 
@@ -952,7 +952,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_crdna_GP)
 void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes)
 {
     int channel_i = sam_has_mate?2 : dl->FLAG.rev_comp?1 : 0;
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MP_i, (MultiplexerP)&vb->mux_MP, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_MP_i, &vb->mux_MP, channel_i);
     dl->MP = value;
 
     if (sam_has_mate) {
@@ -977,7 +977,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_by_REVCOMP_MATE)
 void sam_seg_xf_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned add_bytes)
 {
     int channel_i = dl->FLAG.duplicate;
-    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_xf_i, (MultiplexerP)&vb->mux_xf, channel_i);
+    ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_xf_i, &vb->mux_xf, channel_i);
 
     seg_integer (VB, channel_ctx, value, false, add_bytes);
     seg_by_did (VB, STRa(vb->mux_xf.snip), OPTION_xf_i, 0);

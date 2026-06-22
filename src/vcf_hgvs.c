@@ -34,7 +34,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     v -= pos_str_len;
     if (memcmp (v, pos_str, pos_str_len)) return false; // POS differs
 
-    static const Container(2) con = { 
+    static const Container_2 con = { 
         .repeats   = 1,
         .nitems_lo = 2,
         .items = { { .dict_id.num = _INFO_HGVS_snp_pos    },
@@ -45,7 +45,7 @@ static bool vcf_seg_INFO_HGVS_snp (VBlockVCFP vb, ContextP ctx, STRp(value))
     SAFE_ASSIGNx (&value[-1], CON_PX_SEP, 1);
     SAFE_ASSIGNx (v,          CON_PX_SEP, 2);
 
-    container_seg (vb, ctx, (ContainerP)&con, &value[-1], v - value + 2, value_len - pos_str_len - 3);
+    container_seg (vb, ctx, &con, &value[-1], v - value + 2, value_len - pos_str_len - 3);
 
     SAFE_RESTOREx(1);
     SAFE_RESTOREx(2);
@@ -128,7 +128,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     static const uint8_t special_end_pos[NUM_HGVS_TYPES]  = { VCF_SPECIAL_HGVS_DEL_END_POS, VCF_SPECIAL_HGVS_INS_END_POS, VCF_SPECIAL_HGVS_DELINS_END_POS, VCF_SPECIAL_HGVS_INS_END_POS, VCF_SPECIAL_HGVS_DELINS_END_POS };
     static const uint8_t special_payload[NUM_HGVS_TYPES]  = { VCF_SPECIAL_HGVS_DEL_PAYLOAD, VCF_SPECIAL_HGVS_INS_PAYLOAD, VCF_SPECIAL_HGVS_DELINS_PAYLOAD, 0                           , 0 };
 
-    const Container(3) con = { 
+    const Container_3 con = { 
         .repeats   = 1,
         .nitems_lo = 3,
         .items = { { .dict_id = dict_id_start_pos[t], .separator = "_" }, // separator deleted in container_reconstruct() if end_pos is missing
@@ -146,7 +146,7 @@ static bool vcf_seg_INFO_HGVS_indel (VBlockVCFP vb, ContextP ctx, STRp(value), r
     memcpy (&prefixes[1], value, header_len);
     memcpy (&prefixes[header_len+4], op, op_len);
     
-    container_seg (vb, ctx, (ContainerP)&con, prefixes, prefixes_len, value_len - pos_lens[0] - (n_poss==2 ? pos_lens[1] : 0) - payload_len);
+    container_seg (vb, ctx, &con, prefixes, prefixes_len, value_len - pos_lens[0] - (n_poss==2 ? pos_lens[1] : 0) - payload_len);
 
     CTX(did_i_start_pos[t])->flags.store = STORE_INT; // consumed by vcf_piz_special_INFO_HGVS_DEL_END_POS
 

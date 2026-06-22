@@ -146,7 +146,7 @@ static SamTlenType sam_piz_predict_TLEN (VBlockSAMP vb, bool has_mc, bool has_xc
     else if (!last_flags.multi_segs) 
         prediction = vb->ref_consumed;
 
-    else if (!OUT_DT(SAM) && *(int32_t*)last_rname != *(int32_t*)last_rnext) 
+    else if (!OUT_DT(SAM) && *(unaligned_uint32_t*)last_rname != *(unaligned_uint32_t*)last_rnext) 
         prediction = 0;
 
     else if (OUT_DT(SAM) && !IS_EQUAL_SIGN (last_rnext) && !str_issame (last_rname, last_rnext)) 

@@ -166,7 +166,7 @@ static inline void sam_load_groups_add_qnames (VBlockSAMP vb, PlsgVbInfo *plsg, 
     if (ctx->mate_copied_exactly)
         g->qname = vb_grps[ctx->last_value.i].qname; // last_value is buddy_line_i     
 
-    else if (start) { // precise - compress directly into z_file
+    else if (start) { // precise - compress directly into z_file->sag_qnames
         g->qname = *next - start;
     
         uint32_t comp_len = after - *next; // theoretical maximum 
@@ -244,7 +244,7 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
     ASSERT (vb->textual_seq.len32 == vb->seq_len, "Expecting textual_seq.len=%u == seq_len=%u", vb->textual_seq.len32, vb->seq_len);
 
     // pack SEQ data into z_file->sag_seq
-    BitsP z_sa_seq = (BitsP)&z_file->sag_seq;
+    BitsP z_sa_seq = &z_file->sag_seq;
     { START_TIMER; 
     sam_seq_pack (vb, z_sa_seq, (*next - start) * 2/*2 bits per base*/, B1STc(vb->textual_seq), vb->seq_len, false, false, HARD_FAIL); 
     COPY_TIMER (sam_load_groups_add_seq_pack); }
@@ -910,9 +910,9 @@ void sam_piz_preproc_finalize (Dispatcher dispatcher)
     dispatcher_set_task (dispatcher, TASK_PIZ);
 
     // zero up to 7 bytes at the end of the buffers, so that the last Bits word (if huffman-compressed) doesn't contain uninitialized bytes, angrying valgrind
-    memset (BAFT8(z_file->sag_qual),      0, MIN_(7, z_file->sag_qual.size      - z_file->sag_qual.len));
-    memset (BAFT8(z_file->sag_cigars),    0, MIN_(7, z_file->sag_cigars.size    - z_file->sag_cigars.len)); // union with solo_data
-    memset (BAFT8(z_file->sag_qnames),    0, MIN_(7, z_file->sag_qnames.size    - z_file->sag_qnames.len));
+    if (z_file->sag_qual.len)   memset (BAFT8(z_file->sag_qual),   0, MIN_(7, z_file->sag_qual.size   - z_file->sag_qual.len));
+    if (z_file->sag_cigars.len) memset (BAFT8(z_file->sag_cigars), 0, MIN_(7, z_file->sag_cigars.size - z_file->sag_cigars.len)); // union with solo_data
+    if (z_file->sag_qnames.len) memset (BAFT8(z_file->sag_qnames), 0, MIN_(7, z_file->sag_qnames.size - z_file->sag_qnames.len));
 }
 
 static void sam_sag_load_alloc_z (BufferP buf, bool is_precise, uint64_t precise_len, uint64_t estimated_len, MutexP mutex, rom buf_name)

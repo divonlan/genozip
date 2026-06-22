@@ -89,7 +89,7 @@ void vcf_seg_INFO_VC (VBlockVCFP vb, ContextP ctx, STRp(vc))
 {
     if (!segconf_running) {
         VarType vartype = get_vartype (vb);
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, INFO_VC, (MultiplexerP)&vb->mux_VC, vartype);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, INFO_VC, &vb->mux_VC, vartype);
 
         seg_by_ctx (VB, STRa(vc), channel_ctx, vc_len);
         seg_by_ctx (VB, STRa(vb->mux_VC.snip), ctx, 0);
@@ -114,7 +114,7 @@ void vcf_seg_INFO_CAF (VBlockVCFP vb, ContextP ctx, STRp(caf))
         BII(COMMON)->value_len == 1 && (*BII(COMMON)->value == '0' || *BII(COMMON)->value == '1')) {
         
         bool common = (*BII(COMMON)->value == '1');
-        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, INFO_CAF, (MultiplexerP)&vb->mux_CAF, common);
+        ContextP channel_ctx = seg_mux_get_channel_ctx (VB, INFO_CAF, &vb->mux_CAF, common);
 
         seg_by_ctx (VB, STRa(caf), channel_ctx, caf_len);
         seg_by_ctx (VB, STRa(vb->mux_CAF.snip), ctx, 0);

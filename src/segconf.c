@@ -138,6 +138,8 @@ void segconf_set_vb_size (VBlockP vb, uint64_t curr_vb_size)
 
             segconf.vb_size = bytes;
         }
+
+        if (flag.biopsy) return; // in --biopsy we always accept user's request
     }
 
     // set memory if --make_reference and user didn't specify --vblock

@@ -270,7 +270,7 @@ static void dict_io_read_one_vb (VBlockP vb) // one vb = one fragment
                 z_name, dict_ctx->tag_name, vb->vblock_i, dict_ctx->dict.len, (uint64_t)dict_ctx->dict.size, dict_ctx->dict.prm32[0], dict_ctx->dict.prm32[1]);
 
         if (flag.debug_read_ctxs)
-            sections_show_header ((SectionHeaderP)header, NULL, COMP_NONE, dict_sec->offset, sections_read_prefix (flag.preprocessing));
+            sections_show_header (header, NULL, COMP_NONE, dict_sec->offset, sections_read_prefix (flag.preprocessing));
     }
 
 done: 
@@ -457,15 +457,19 @@ StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
                 b64_len, n_items, snip_len-1, str_to_printable_(STRa(snip)).s);
 
         // decode
-        Container(MAX_FIELDS+1) con; // +1 for base64_decode overflow space (clang doesn't allow variable-length containers)
-        base64_decode (&snip[1], b64_len, (uint8_t*)&con, -1);
+        struct __attribute__ ((packed)) { 
+            Container_MAX_FIELDS con;
+            char overflow[BASE_DECODE_OVERFLOW];
+        } con;
+
+        base64_decode (&snip[1], b64_len, (uint8_t*)&con.con, -1);
         i += b64_len;
 
         if (!VER2(15,84)) // up to 15.0.83 repeats was big endian
-            con.repeats = BGEN24 (con.repeats);
+            con.con.repeats = BGEN24 (con.con.repeats);
             
         unsigned prefixes_len = snip_len - i;
-        SNPRINTF (s, "%.*s", (int)sizeof(s)-20, container_to_json ((ContainerP)&con, &snip[i], prefixes_len).s);
+        SNPRINTF (s, "%.*s", (int)sizeof(s)-20, container_to_json (&con.con, &snip[i], prefixes_len).s);
         i += prefixes_len;
     }
 

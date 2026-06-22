@@ -75,36 +75,51 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based (if MAI
     if (!vb->lines.len32) return 0;
 
     // since data is unmodified, we have only FULL_VB, RANGE, END_OF_VB and TXTHEADER plan items 
-    int64_t txt_num_lines  = 0;
+    int64_t txt_num_lines = 0, txt_num_lines_before_this_MAIN = 0;
     LineIType vb_num_lines = 0;
-    int64_t factor = VB_DT(FASTQ) ? 4 : 1; // in FASTQ, each plan line is 4 txt lines
+    int64_t factor = (!VB_DT(FASTQ))?1 : FAF?2 : 4; // in FASTQ, each plan line is 4 txt lines (or 2 if FAF)
 
     // if vb is PRIM/DEPN - find the MAIN VB embedding the desired line and expand it
-    if (z_has_gencomp && vb->comp_i != COMP_MAIN) {
+    if (z_has_gencomp) {
+        
         // TODO (bug 1137): traverse MAIN VBs in VbInfo in order of absorption(!), looking for the VB embedding the requested prim/depn line:
         // 1. set vb_num_lines to the sum of num_gc_lines[vb->comp_i] of all MAIN VBs prior (in absorption order!) 
         //    to the VB embedding the the requested PRIM/DEPN line  
         // 2. find the VB in which the requested prim/depn line: call a version of gencomp_piz_expand_PLAN_VB_PLAN 
         //    that can run from an arbitrary thread to expand the PLAN_VB_PLAN in recon_plan
         // -. We probably will need update gencomp_piz_initialize_vb_info to add more fields to VbInfo to do this
-        return -999; // not implemented
+        if (vb->comp_i != COMP_MAIN) return -999; // not implemented
+
+        // case: writer_main_loop->gencomp_piz_vb_to_plan is constantly changing z_file->recon_plan so we can't inspect it
+        if (!flag.debug) {
+            WARN_ONCE (_TIP"Rerun with --debug to calculate txt_line_i.%s in the following error message", "");
+            return -999;
+        } 
     }
     
     for (int64_t i=0; i < z_file->recon_plan.len; i++) {
         ReconPlanItemP p = B(ReconPlanItem, z_file->recon_plan, i);
     
         // case: interleaved plan  
-        if (p->flavor == PLAN_INTERLEAVE) {
+        if (p->flavor == PLAN_INTERLEAVE && (p->vb_i == vb->vblock_i || p->vb2_i == vb->vblock_i)) {
             if (p->vb_i == vb->vblock_i && p->num_lines/2 > line_in_vb) // R1
                 return txt_num_lines + 2 * line_in_vb * factor + 1; // +1 because 1-based 
 
             else if (p->vb2_i == vb->vblock_i && p->num_lines/2 > line_in_vb) // R2
                 return txt_num_lines + (2 * line_in_vb + 1) * factor + 1; // +1 because 1-based
+
+            else {
+                WARN (_ERR "%s:%u secondary error while printing error: line %u does not exist in vb=%u (INTERLEAVE)", __FUNCTION__, __LINE__, line_in_vb, vb->vblock_i);
+                return -999;
+            }
         }
 
         // case: MAIN VB containing the requested line in a gencomp file - expand PLAN_VB_PLAN first
         else if (p->flavor == PLAN_VB_PLAN && p->vb_i == vb->vblock_i) {
-            return -999; // not implemented 
+            if (line_in_vb == 0) 
+                return txt_num_lines + 1; // we just want the beginning of the VB (+1 bc result is 1-based)
+            else
+                return -999; // not implemented 
 
             // TODO (bug 1137): we need a version of gencomp_piz_expand_PLAN_VB_PLAN that can run from an arbitrary 
             // thread (not just main or writer) - this will require using a copy of z_file->recon_plan, 
@@ -114,16 +129,30 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based (if MAI
             // continue;
         } 
 
+        // case: we reached the end of a VB and haven't encountered our line
+        else if (p->flavor == PLAN_END_OF_VB && p->vb_i == vb->vblock_i) {
+            if (line_in_vb == 0) 
+                return txt_num_lines_before_this_MAIN + 1; // this MAIN VB has only PRIM/DEPN lines
+
+            else {
+                WARN (_ERR "%s:%u secondary error while printing error: line %u does not exist in vb=%u (END_OF_VB)", __FUNCTION__, __LINE__, line_in_vb, vb->vblock_i);
+                return 999;
+            }
+        }
+
+        else if (p->flavor == PLAN_END_OF_VB && sections_get_comp_of_vb(p->vb_i) == SAM_COMP_MAIN)
+            txt_num_lines_before_this_MAIN = txt_num_lines;
+
         else if (p->vb_i == vb->vblock_i) {
             // case: non-interleaved plan item containing this line
             if (vb_num_lines + p->num_lines > line_in_vb) 
                 return txt_num_lines + (line_in_vb - vb_num_lines) * factor + 1; // +1 because 1-based 
 
             // case: plan item is from current VB, but we have not yet reached the current line
-            else
+            else 
                 vb_num_lines += p->num_lines;
         }
-
+        
         // note: txtheader lines are not included in the plan item, bc they are not counted for --header, --downsample etc
         bool no_write = (p->vb_i && !writer_does_vb_need_write (p->vb_i)) ||
                         (p->flavor == PLAN_TXTHEADER && !writer_does_txtheader_need_write (p->comp_i));
@@ -132,8 +161,8 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based (if MAI
             txt_num_lines += (p->flavor == PLAN_TXTHEADER) ? TXTINFO(p->comp_i)->num_lines
                                                            : (factor * p->num_lines); 
     }
-
-    WARN_ONCE ("While Unexpectedly, unable to find current line %s/%u in recon_plan", VB_NAME, line_in_vb);
+    
+    WARN_ONCE ("%s:%u: Secondary error while preparing error message: Unexpectedly, unable to find current line %s/%u in recon_plan", __FUNCLINE, VB_NAME, line_in_vb);
     return 0;
 }
 
@@ -196,7 +225,7 @@ Bits *writer_get_is_dropped (VBIType vb_i)
     // allocate if needed. buffer was put in wvb buffer_list by writer_z_initialize
     if (!v->is_dropped && v->needs_write) {
         buf_alloc_bits_exact (NULL, &v->is_dropped_buf, v->num_lines, CLEAR, 0, IS_DROPPED_BUF_NAME);
-        v->is_dropped = (BitsP)&v->is_dropped_buf;
+        v->is_dropped = &v->is_dropped_buf;
     }
 
     return v->is_dropped;
@@ -774,7 +803,7 @@ static void writer_add_SAM_plan (void)
         writer_add_trivial_plan (SAM_COMP_MAIN, PLAN_FULL_VB);
 }
 
-static void noreturn writer_report_count (void)
+static noreturn void writer_report_count (void)
 {
     uint64_t count=0;
     for_buf (ReconPlanItem, p, z_file->recon_plan) 
@@ -1221,7 +1250,8 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
                 break;
 
             case PLAN_VB_PLAN: // gencomp VB starting 15.0.64
-                gencomp_piz_vb_to_plan (v->vb, &i, true);
+                // note: in debug we don't modify z_file->recon_plan so that writer_get_txt_line_i can work
+                gencomp_piz_vb_to_plan (v->vb, &i, !flag.debug);
                 continue; // items already executed are removed and VB is inserted at beginging of modified plan ; i reset to 0
             
             case PLAN_FULL_VB:   
@@ -1254,11 +1284,12 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
                 bool needs_flush = do_digest_v ? digest_one_vb (v->vb, false, &wvb->txt_data) : true;
 
                 // note: if we're digesting gencomp VBs, we dont flush wvb when finishing a non-digestable VB (eg PRIM/DEPN in SAM/BAM)
-                if (needs_flush || i == z_file->recon_plan.len-1/*final VB*/)  
+                if (needs_flush || i == z_file->recon_plan.len-1/*final VB*/) {
                     writer_flush_vb (dispatcher, wvb, false, false); // flush remaining unflushed lines of this VB
-
+                    wvb->lines.len32 = 0;
+                }
+                
                 writer_release_vb (v);
-                wvb->lines.len32 = 0;
                 
                 v->range_vb_in_use = false; 
 
