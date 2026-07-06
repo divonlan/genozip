@@ -1011,7 +1011,7 @@ uint32_t str_remove_whitespace (STRp(in), bool also_uppercase, char *out)
 void str_trim (qSTR𐤐(str))
 {
     // remove leading whitespace
-    uint32_t i=0; for (; i < *str_len; i++)
+    int32_t i=0; for (; i < *str_len; i++)
         if (str[i] != ' ' && str[i] != '\t' && str[i] != '\n' && str[i] != '\r')
             break;
 

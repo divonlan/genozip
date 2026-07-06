@@ -555,7 +555,7 @@ static bool aligner_get_junction (VBlockP vb, STR𐤐(seq), rom ref1, rom ref2, 
     // ref1 is a better match that ref2, but it is not necessary appears first in spicing.
     thool ref1_is_first = who_is_first (STRa(seq), ref1, ref2, true); // see if we can determine from the first 16 bases
     
-    int max_matches_ref1_first=0, max_matches_ref2_first=0, junction_if_ref1_first, junction_if_ref2_first=0;
+    int max_matches_ref1_first=0, max_matches_ref2_first=0, junction_if_ref1_first=0, junction_if_ref2_first=0;
 
     // ref1 *might* be first - get max_matches assuming it is
     if (ref1_is_first != no) {
