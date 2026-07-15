@@ -258,10 +258,11 @@ double arch_get_physical_mem_size (void)
     if (!fp) return 0;
 
     char meminfo[100] = {}; // note: can't use a Buffer because called from a signal handler - we don't know which is the running thread
-    fread (meminfo, 1, sizeof(meminfo)-1, fp); // -1 to guarantee that (at least) last character is \0 
+    if (fread (meminfo, 1, sizeof(meminfo)-1, fp) > 0) { // -1 to guarantee that (at least) last character is \0 
 
-    int num_start = strcspn (meminfo, "0123456789");
-    mem_size = (double)atoll(&meminfo[num_start]) / (1024.0*1024.0); // convert KB to GB
+        int num_start = strcspn (meminfo, "0123456789");
+        mem_size = (double)atoll(&meminfo[num_start]) / (1024.0*1024.0); // convert KB to GB
+    }
     
     fclose (fp);
 

@@ -139,7 +139,7 @@ bool ref_cache_initialize_genome (void)
     
 #ifndef _WIN32
     struct stat st;
-    ASSGOTO (stat64 (gref.filename, &st) >= 0, FAIL_MSG "stat (%s) failed: %s", gref.filename, strerror(errno));
+    ASSGOTO (stat64 (gref.filename, &st) >= 0, "%sstat (%s) failed: %s", FAIL_MSG, gref.filename, strerror(errno));
 
     // since 15.0.82: key by inode (up to 15.0.81: ftok (ref_basename, 20010802), ref_basename as in command line)
     // note: inode is consistent across docker containers mounting the same filesystem, 
@@ -164,14 +164,14 @@ bool ref_cache_initialize_genome (void)
     bool cache_did_not_exist = (errno == ENOENT);
 
     ASSGOTO (gref.cache_shm >= 0 || (flag.removing_cache && cache_did_not_exist), 
-             FAIL_MSG "shmget (%s key=0x%08x size=%"PRIu64") failed: %s.%s", 
+             "%sshmget (%s key=0x%08x size=%"PRIu64") failed: %s.%s", FAIL_MSG,
              gref.filename, key, shm_size, strerror(errno), tip);
 
     if (flag.show_cache) iprintf ("show-cache: shmget of shm id %u\n", gref.cache_shm);
 
     if (gref.cache_shm != CACHE_SHM_NONE) {
         gref.cache = shmat (gref.cache_shm, NULL, 0);
-        ASSGOTO (gref.cache != (void*)-1, FAIL_MSG "shmat (%s) failed: %s.%s", gref.filename, strerror(errno), tip);
+        ASSGOTO (gref.cache != (void*)-1, "%sshmat (%s) failed: %s.%s", FAIL_MSG, gref.filename, strerror(errno), tip);
     }
 
 #else // Windows
@@ -180,7 +180,7 @@ bool ref_cache_initialize_genome (void)
         gref.cache_shm = CreateFileMappingA (INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, shm_size >> 32, shm_size & 0xffffffff, gref.filename);
         cache_did_not_exist = (GetLastError() == ERROR_SUCCESS);
     
-        ASSGOTO (gref.cache_shm, FAIL_MSG "CreateFileMapping (%s, size=%"PRIu64") failed: %s.%s", 
+        ASSGOTO (gref.cache_shm, "%sCreateFileMapping (%s, size=%"PRIu64") failed: %s.%s", FAIL_MSG,
                  gref.filename, shm_size, str_win_error(), tip);
         if (flag.show_cache) iprintf ("show-cache: CreateFileMapping %s\n", gref.filename);
     }
@@ -188,7 +188,7 @@ bool ref_cache_initialize_genome (void)
         gref.cache_shm = OpenFileMappingA (FILE_MAP_WRITE, false, gref.filename);
         cache_did_not_exist = !gref.cache_shm && GetLastError() == ERROR_FILE_NOT_FOUND;
 
-        ASSERT (gref.cache_shm || cache_did_not_exist, FAIL_MSG "OpenFileMapping (%s) failed: %s.%s", 
+        ASSERT (gref.cache_shm || cache_did_not_exist, "%sOpenFileMapping (%s) failed: %s.%s", FAIL_MSG,
                 gref.filename, str_win_error(), tip);
         if (flag.show_cache) iprintf ("show-cache: OpenFileMapping %s: %s\n", gref.filename, str_win_error());
     }
@@ -216,7 +216,7 @@ bool ref_cache_initialize_genome (void)
 
     if (gref.cache_shm != CACHE_SHM_NONE) {
         gref.cache = MapViewOfFile (gref.cache_shm, FILE_MAP_WRITE, 0, 0, 0);
-        ASSGOTO (gref.cache, FAIL_MSG "MapViewOfFile (read-write) (%s) failed: %s.%s", gref.filename, str_win_error(), tip);
+        ASSGOTO (gref.cache, "%sMapViewOfFile (read-write) (%s) failed: %s.%s", FAIL_MSG, gref.filename, str_win_error(), tip);
     }
 
 #endif

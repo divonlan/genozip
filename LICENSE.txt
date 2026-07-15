@@ -243,5 +243,5 @@ STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.86
+Genozip license version: 15.0.87
 

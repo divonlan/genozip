@@ -427,7 +427,7 @@ noreturn void error_assert_failed (FUNCLINE, rom format, ...)
     vfprintf (stderr, format, args);      
     va_end (args);                        
 
-    fprintf (stderr, "command was: %s\n", flags_command_line());
+    fprintf (stderr, "\ncommand was: %s\n", flags_command_line());
 
     fprintf (stderr, "%s", report_support_if_unexpected());
     fflush (stderr);

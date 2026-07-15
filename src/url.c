@@ -48,11 +48,11 @@ static inline bool is_wget (StreamP stream) { return stream_exec_is (stream, "wg
 static rom url_write_post_data_to_file (rom post) 
 {
 #ifdef _WIN32
-    char path[MAX_PATH];
+    char path[MAX_PATH-20];
     char *post_data_filename = MALLOC (MAX_PATH + 1);
 
     // constant filename - overwrite previous post
-    ASSERT (GetTempPath (MAX_PATH-20, path), "GetTempPath: %s", str_win_error());
+    ASSERT (GetTempPath (sizeof(path), path), "GetTempPath: %s", str_win_error());
     snprintf (post_data_filename, MAX_PATH-1, "@%sgenozip_data.tmp", path); // @ as expected by curl --binary-data
 
     file_put_data (post_data_filename+1, post, strlen (post), 0);

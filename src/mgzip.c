@@ -958,10 +958,11 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
         bb->gz_digest     = this_block_digest;
     }
 
+    size_t actual_txt_size = 0;
     enum libdeflate_result ret = bb->txt_size  
         ? libdeflate_deflate_decompress (vb->libdef_decomp_mem, 
                                          h + header_len, bb->gz_size - header_len - GZIP_FOOTER_LEN, // compressed
-                                         Btxt (bb->txt_index), bb->txt_size, NULL)  // uncompressed
+                                         Btxt (bb->txt_index), bb->txt_size, &actual_txt_size)  // uncompressed
         : LIBDEFLATE_SUCCESS; // don't uncompress if empty block: 1. not needed 2. header size of EOF block might differ (as in MGZF) so arithmetic will be wrong
 
     // account for the case of decompression, and also the case bb is discarded due to a certain truncate situation (see below).
@@ -970,7 +971,7 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
     // case: wrong isize, likely becuase the gz block is actually multiple gz blocks - we missed the header 
     // of the pervious block(s) (e.g. because gz compression was outside of ratio, or header differed from first header)
     // note: normally we catch this in mgzip_read_block_no_bsize, but there could be edge cases where bsize/isize ratio appears ok and we arrive here
-    while (ret == LIBDEFLATE_INSUFFICIENT_SPACE && !TXT_GZ_HEADER_HAS_BSIZE)
+    if (ret == LIBDEFLATE_INSUFFICIENT_SPACE && !TXT_GZ_HEADER_HAS_BSIZE)
         RESTART ("--no-bgzf", "Main thread mis-divided gz blocks. codec=%s bb=%s gz_index=%u vb->comp_txt_data.len=%"PRIu64, 
                  codec_name (txt_file->effective_codec), display_bb (bb).s, bb->gz_index, vb->comp_txt_data.len);
 
@@ -991,6 +992,15 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
             ABORT ("Failed to uncompress the final %s block of the file: %s. " _TIP "If it is expected that the file is truncated, use --truncate to ignore the defective final block.", 
                    codec_name (vb->txt_codec), libdeflate_error(ret));
         }
+    }
+
+    // reported to happen in FASTQ generated when two .ora files are concatenated and then converted to .gz with ora - possibly because last gz block (GZBL?) of first file is a lot smaller
+    if (bb->txt_size != actual_txt_size) {
+        #define BAD_BGZF_BLOCK_FILENAME "bad_gz_block.gz"
+        file_put_data (BAD_BGZF_BLOCK_FILENAME, h, bb->gz_size, 0);
+
+        RESTART ("--no-bgzf", "Encountered %s block with unexpected isize: expecting: bb->txt_size=%u but actual_txt_size=%u. Dumped bad BGZF block to %s",
+                 codec_name (vb->txt_codec), bb->txt_size, (uint32_t)actual_txt_size, BAD_BGZF_BLOCK_FILENAME);
     }
 
     ASSERT (ret == LIBDEFLATE_SUCCESS, "libdeflate_deflate_decompress failed: %s", libdeflate_error(ret));
