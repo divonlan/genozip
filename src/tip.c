@@ -62,9 +62,6 @@ void tip_print_genozip (void)
     if (dist_is_github())  
         valid_tips[n++] = _TIP "Do you like Genozip? Please support it by starring it on github: " GITHUB_REPO "\n";
 
-    if (E(SAM) || E(BAM) || E(FASTQ)) 
-        valid_tips[n++] = _TIP "Use 'genocat --coverage myfile.genozip' get coverage information for BAM or FASTQ. " WEBSITE_COVERAGE "\n";
-
     if (E(BCF))
         valid_tips[n++] = _TIP "genozip compresses VCF files 5-10X faster than it compresses BCF files";
     

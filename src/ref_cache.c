@@ -136,8 +136,14 @@ bool ref_cache_initialize_genome (void)
 
     uint64_t shm_size = sizeof (RefCache) + genome_size + refhash_size;
     uint32_t holder_pid = 0;
-    
+
 #ifndef _WIN32
+    uint64_t shmmax = arch_get_shmmax();
+
+    // verify that shm_size is not too big
+    ASSGOTO (flag.removing_cache || IN_RANGX (shm_size, 1, shmmax), _FYI "%sshm_size=%"PRIu64" ∉ [1,shmmax=%s]", 
+             FAIL_MSG, shm_size, str_size (shmmax).s);    
+        
     struct stat st;
     ASSGOTO (stat64 (gref.filename, &st) >= 0, "%sstat (%s) failed: %s", FAIL_MSG, gref.filename, strerror(errno));
 
@@ -146,6 +152,12 @@ bool ref_cache_initialize_genome (void)
     // and in case of a symlink, it is the inode of the actual target file
     key_t key = fibonacci (st.st_ino + 20010802/*salt*/, 31); // 31 to avoid negative keys, which cause mis-indentation in /proc/sysvipc/shm that we parse
     int permissions = 0600 | (st.st_mode & 066); // RW permissions to "groups" and "other" copied from the reference file
+
+    // verify that if shm segment already exists, then it is the same size
+    struct shmid_ds ds = {};
+    ASSGOTO (shmctl (shmget(key, 0, permissions), IPC_STAT, &ds) == -1 || shm_size == ds.shm_segsz, // TO DO: on Mac, ds.shm_segsz is rounded up to the next page size
+             "%sshm_size=%"PRIu64" != size of existing shm segment = %"PRIu64,
+             FAIL_MSG, shm_size, (uint64_t)ds.shm_segsz);
 
     // note: a new shm segment is initialized by the OS to 0.
     gref.cache_shm = shmget (key, shm_size, (flag.removing_cache ? 0 : IPC_CREAT) | permissions); 
@@ -164,8 +176,8 @@ bool ref_cache_initialize_genome (void)
     bool cache_did_not_exist = (errno == ENOENT);
 
     ASSGOTO (gref.cache_shm >= 0 || (flag.removing_cache && cache_did_not_exist), 
-             "%sshmget (%s key=0x%08x size=%"PRIu64") failed: %s.%s", FAIL_MSG,
-             gref.filename, key, shm_size, strerror(errno), tip);
+             "%sshmget (%s key=0x%08x size=%"PRIu64" shmmax=%s) failed: %s.%s", FAIL_MSG,
+             gref.filename, key, shm_size, str_size (shmmax).s, strerror(errno), tip);
 
     if (flag.show_cache) iprintf ("show-cache: shmget of shm id %u\n", gref.cache_shm);
 
@@ -180,8 +192,8 @@ bool ref_cache_initialize_genome (void)
         gref.cache_shm = CreateFileMappingA (INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, shm_size >> 32, shm_size & 0xffffffff, gref.filename);
         cache_did_not_exist = (GetLastError() == ERROR_SUCCESS);
     
-        ASSGOTO (gref.cache_shm, "%sCreateFileMapping (%s, size=%"PRIu64") failed: %s.%s", FAIL_MSG,
-                 gref.filename, shm_size, str_win_error(), tip);
+        ASSGOTO (gref.cache_shm, "%sCreateFileMapping (%s, size=%"PRIu64" shmmax=%s) failed: %s.%s", FAIL_MSG,
+                 gref.filename, shm_size, str_size (arch_get_shmmax()).s, str_win_error(), tip);
         if (flag.show_cache) iprintf ("show-cache: CreateFileMapping %s\n", gref.filename);
     }
     else { 

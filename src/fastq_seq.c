@@ -10,7 +10,6 @@
 #include "deep.h"
 #include "aligner.h"
 #include "refhash.h"
-#include "coverage.h"
     
 #define SEQ_LEN_BY_QNAME 0x7fffffff
 #define NONBIO_EXCESS_ALIGNED '@'
@@ -315,33 +314,6 @@ bool fastq_piz_R1_test_aligned (VBlockFASTQP vb)
     return (bitmap_ctx->r1_is_aligned == PAIR1_ALIGNED);
 }
 
-void fastq_update_coverage_aligned (VBlockFASTQP vb)
-{
-    declare_seq_contexts;
-    PosType64 gpos;
-
-    if (vb->comp_i == FQ_COMP_R1) 
-        gpos = NEXTLOCAL (uint32_t, gpos_ctx);
-
-    else { // pair-2
-        reconstruct_from_ctx (VB, FASTQ_GPOS, 0, false); // calls fastq_special_PAIR2_GPOS
-        gpos = gpos_ctx->last_value.i;
-    }
-
-    // TO DO: interleaved files, see aligner_recon_get_gpos_and_fwd
-    
-    ASSPIZ0 (gpos != NO_GPOS, "expecting a GPOS, because sequence is aligned");
-
-    WordIndex ref_index = ref_contig_get_by_gpos (gpos, 0, NULL, true); // if gpos is in a gap between to contigs, it means that bulk of seq is on the next contig while its beginning is in the gap
-    ASSPIZ0 (ref_index != WORD_INDEX_NONE, "expecting ref_index, because sequence is aligned");
-
-    if (flag.show_coverage)
-        *B64 (vb->coverage, ref_index) += vb->seq_len;
-
-    if (flag.show_coverage || flag.idxstats)
-        (*B64 (vb->read_count, ref_index))++;
-}
-
 // PIZ: reconstruct_seq callback: aligned SEQ reconstruction - called by reconstructing FASTQ_SQBITMAP which is a LOOKUP (either directly, or via fastq_special_mate_lookup)
 void fastq_recon_aligned_SEQ (VBlockP vb_, STRp(snip), ReconType reconstruct)
 {
@@ -363,12 +335,8 @@ void fastq_recon_aligned_SEQ (VBlockP vb_, STRp(snip), ReconType reconstruct)
     if (vb->seq_len == SEQ_LEN_BY_QNAME) // introduced v15
         vb->seq_len = reconstruct_peek_by_dict_id (VB, segconf.seq_len_dict_id, 0, 0).i; // peek, since length can come from either line1 or line3
 
-    // just update coverage
-    if (flag.collect_coverage) 
-        fastq_update_coverage_aligned (vb);
-
     // --qual-only: only set vb->seq_len without reconstructing
-    else if (flag.qual_only) {}
+    if (flag.qual_only) {}
 
     else if (spliced_alignment) {
         int64_t junction = reconstruct_from_local_int (VB, junction_ctx, 0, false); // negative means first segment uses ref2
@@ -417,57 +385,46 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
         if (fastq_piz_R1_test_aligned (VB_FASTQ) || !VER(14)) // up to v13, even non-aligned reads had a GPOS entry
             gpos_ctx->localR1.next++; // gpos_ctx->localR1.next is an iterator for both gpos and strand
 
-    // just update coverage (unaligned)
-    if (flag.collect_coverage) {
-        if (flag.show_coverage)
-            *(BAFT64 (vb->coverage) - NUM_COVER_TYPES + CVR_UNMAPPED) += vb->seq_len;
+    // case: non-biological (containerized) sequence
+    if (VER(15) && (snip[0] == NONBIO_EXCESS_ALIGNED || snip[0] == NONBIO_CONTAINERIZED)) {
+        uint32_t len_before = Ltxt;
+        reconstruct_from_ctx (vb, FASTQ_NONBIO, 0, true); // always reconstruct, so we can calculate seq_len
+        vb->seq_len = Ltxt - len_before;
 
-        if (flag.show_coverage || flag.idxstats)
-            (*(BAFT64 (vb->read_count) - NUM_COVER_TYPES + CVR_UNMAPPED))++;
+        if (!reconstruct) Ltxt = len_before;
+        goto done;
     }
 
+    if (flag.show_aligner) iprintf ("%s: unaligned\n", LN_NAME);
+    
+    if (VER(15) && snip[0] == '*') { // empty reads supported since 15.0.81
+        vb->seq_len = 0;
+        goto done;
+    }
+
+    char monochar = 0;
+
+    if (VER(15)) { 
+        if (snip[0] != ' ') monochar = snip[0];
+        STRinc (snip, 1);
+    }
+    
+    if (IS_CHAR0(snip)) // '0' means "no seq_len_dict_id", it does not mean seq_len=0 
+        vb->seq_len = reconstruct_peek_by_dict_id (vb, segconf.seq_len_dict_id, 0, 0).i; // peek, since length can come from either line1 or line3
+    
+    else 
+        vb->seq_len = atoi(snip);
+
+    // --qual-only: only set vb->seq_len without reconstructing
+    if (flag.qual_only) {}
+
+    // case: take seq_len from DESC item with length=
+    else if (!monochar) 
+        reconstruct_from_local_sequence (vb, nonref_ctx, vb->seq_len, reconstruct);
+
     else {
-        // case: non-biological (containerized) sequence
-        if (VER(15) && (snip[0] == NONBIO_EXCESS_ALIGNED || snip[0] == NONBIO_CONTAINERIZED)) {
-            uint32_t len_before = Ltxt;
-            reconstruct_from_ctx (vb, FASTQ_NONBIO, 0, true); // always reconstruct, so we can calculate seq_len
-            vb->seq_len = Ltxt - len_before;
-
-            if (!reconstruct) Ltxt = len_before;
-            goto done;
-        }
-
-        if (flag.show_aligner) iprintf ("%s: unaligned\n", LN_NAME);
-        
-        if (VER(15) && snip[0] == '*') { // empty reads supported since 15.0.81
-            vb->seq_len = 0;
-            goto done;
-        }
-
-        char monochar = 0;
-
-        if (VER(15)) { 
-            if (snip[0] != ' ') monochar = snip[0];
-            STRinc (snip, 1);
-        }
-        
-        if (IS_CHAR0(snip)) // '0' means "no seq_len_dict_id", it does not mean seq_len=0 
-            vb->seq_len = reconstruct_peek_by_dict_id (vb, segconf.seq_len_dict_id, 0, 0).i; // peek, since length can come from either line1 or line3
-        
-        else 
-            vb->seq_len = atoi(snip);
-
-        // --qual-only: only set vb->seq_len without reconstructing
-        if (flag.qual_only) {}
-
-        // case: take seq_len from DESC item with length=
-        else if (!monochar) 
-            reconstruct_from_local_sequence (vb, nonref_ctx, vb->seq_len, reconstruct);
-
-        else {
-            memset (BAFTtxt, monochar, vb->seq_len);
-            Ltxt += vb->seq_len;
-        }
+        memset (BAFTtxt, monochar, vb->seq_len);
+        Ltxt += vb->seq_len;
     }
 
     done: return NO_NEW_VALUE;

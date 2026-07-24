@@ -697,8 +697,6 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dh {"show-hash",        no_argument,       &fint.show_hash,        1 }  
         #define _SH {"show-segconf-has", no_argument,       &fint.show_segconf_has, 1 }  
         #define _ct {"count",            optional_argument, 0, 20                     }  
-        //bug 1287 #define _SX {"coverage",         optional_argument, 0, 13                     }  
-        //bug 1287 #define _ix {"idxstats",         no_argument,       &fint.idxstats,         1 }
         #define _vl {"validate",         optional_argument, 0, 19                     }  
         #define _lg {"log",              required_argument, 0, 15                     }  
         #define _bi {"biopsy",           required_argument, 0, 134,                   }
@@ -822,10 +820,7 @@ verify_command:
             case 9   : flags_set_downsample (optarg); break;
             case 10  : sections_set_show_headers (optarg); break; // +1 so SEC_NONE maps to 0
             case 12  : flag.debug_memory  = optarg ? atoi (optarg) : 1; break;
-            case 13  : flag.show_coverage = !optarg                 ? COV_CHROM 
-                                          : !strcmp (optarg, "all") ? COV_ALL 
-                                          : !strcmp (optarg, "one") ? COV_ONE 
-                                          :                           COV_ALL; break;
+            case 13  : /* currently unused - previously show_coverage */ break;
             case 15  : flag.log_filename  = optarg;   break;
             case 16  : flags_set_dict (optarg, &flag.show_counts_δ); break;
             case 155 : flags_set_dict (optarg, &flag.debug_huffman_δ); // fallthrough: debug_huffman implies show_huffman
@@ -982,17 +977,6 @@ static void flags_test_conflicts (unsigned num_files /* optional */)
         CONFLICT (flag.no_header,       flag.header_one,        OT("no-header", "H"),  OT("header-one", "1"));
         CONFLICT (flag.test,            flag.out_filename,      OT("output", "o"),     OT("test", "t"));
         CONFLICT (flag.test,            flag.replace,           OT("replace", "^"),    OT("test", "t"));
-        CONFLICT (flag.show_coverage,   flag.idxstats,          "--coverage",          "--idxstats");
-        CONFLICT (flag.show_coverage,   flag.regions==1,        "--coverage",          OT("regions", "r"));
-        CONFLICT (flag.show_coverage,   flag.out_filename,      "--coverage",          OT("output", "o"));
-        CONFLICT (flag.show_coverage,   flag.grep,              "--coverage",          OT("grep", "g"));
-        CONFLICT (flag.show_coverage,   flag.count,             "--coverage",          "--count");
-        CONFLICT (flag.show_coverage,   flag.test,              "--coverage",          OT("test", "t"));
-        CONFLICT (flag.show_coverage,   flag.qname_only,        "--coverage",          "--qname-only");
-        CONFLICT (flag.idxstats,        flag.test,              "--idxstats",          OT("test", "t"));
-        CONFLICT (flag.idxstats,        flag.count,             "--idxstats",          "--count");
-        CONFLICT (flag.idxstats,        flag.show_coverage,     "--idxstats",          "--coverage");
-        CONFLICT (flag.idxstats,        flag.qname_only,        "--idxstats",          "--qname-only");
         CONFLICT (flag.count,           flag.out_filename,      "--count",             OT("output", "o"));
         CONFLICT (flag.count,           flag.header_only,       "--count",             OT("header-only", "H"));
         CONFLICT (flag.count,           flag.header_one,        "--count",             OT("header-one", "1"));
@@ -1106,8 +1090,6 @@ static void flags_piz_verify_dt_specific (DataType dt)
     FLAG_ONLY_FOR_2DTs(SAM, FASTQ, seq_filter,    "seqs-file");
     FLAG_ONLY_FOR_2DTs(SAM, FASTQ, bases,         "bases");
     FLAG_ONLY_FOR_2DTs(SAM, FASTQ, interleaved,   "interleaved");
-    FLAG_ONLY_FOR_2DTs(SAM, FASTQ, show_coverage, "coverage");
-    FLAG_ONLY_FOR_2DTs(SAM, FASTQ, idxstats,      "idxstats");
     FLAG_ONLY_FOR_DT(SAM,          FLAG,          "FLAG");
     FLAG_ONLY_FOR_DT(SAM,          MAPQ,          "MAPQ");
     FLAG_ONLY_FOR_DT(SAM,          qname_only,   "qname-only");
@@ -1253,7 +1235,7 @@ void flags_update (unsigned num_files, rom *filenames)
     if ((is_genocat || flag.show_bai) && !(flag.out_filename ||
         // cases when we show some section metadata, and DO NOT show the actual file
         flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_bgzf || flag.show_b250_δ.num || 
-        flag.show_one_dict || flag.show_counts_δ.num || flag.show_reference || flag.show_contigs || flag.show_coverage ||
+        flag.show_one_dict || flag.show_counts_δ.num || flag.show_reference || flag.show_contigs ||
         flag.show_ranges || flag.show_aliases || flag.show_index || flag.show_gheader || flag.show_reading_list || flag.show_recon_plan || 
         flag.show_ref_contigs || flag.show_data_type || flag.dump_b250_δ.num || flag.show_isizes ||
         flag.dump_local_δ.num || flag.show_singletons_δ.num || flag.show_stats || flag.show_ref_index || flag.show_ref_hash || 
@@ -1291,7 +1273,7 @@ void flags_update (unsigned num_files, rom *filenames)
     flag.explicit_quiet = flag.quiet;
     if (flag.show_dict || flag.show_b250 || flag.show_headers || flag.show_threads || flag.show_bgzf || flag.show_mutex || flag.show_containers || flag.show_stack ||
         flag.show_b250_δ.num || flag.show_one_dict || flag.show_counts_δ.num || flag.show_sag || flag.show_depn || flag.show_singletons_δ.num ||
-        flag.show_reference || flag.show_digest || flag.show_contigs || flag.show_coverage == COV_ONE || flag.show_ranges || flag.show_snips || flag.show_compress ||
+        flag.show_reference || flag.show_digest || flag.show_contigs || flag.show_ranges || flag.show_snips || flag.show_compress ||
         flag.show_alleles || flag.show_vblocks || flag.show_codec || flag.show_codec_δ.num || flag.show_cache || flag_debug_gencomp || flag.show_qual || flag.show_aligner ||
         flag.show_buddy || flag.debug_peek || flag.show_aliases || (flag.show_index && IS_PIZ) || flag.count || flag.biopsy || flag.show_is_exactable ||
         flag.show_sec_gencomp || flag.show_recon_plan || flag.show_reading_list || flag.show_isizes || flag.show_uncompress ||
@@ -1312,7 +1294,6 @@ void flags_update (unsigned num_files, rom *filenames)
     if (IS_ZIP && flag.out_filename && !flag.quiet) flags_warn_if_duplicates (num_files, filenames);
 
     // cases where we don't need to load the reference file, even if the genozip file normally needs it
-    // note: we don't exclude due to collect_coverage here, instead we do it in main_load_reference
     // note: this is here and not in flags_update_piz_one_z_file bc it is consumed by main_load_reference
     // note: this is in flags_update and not flags_update_piz, bc reference file is loaded first 
     flag.dont_load_ref_file |= is_genocat &&
@@ -1321,8 +1302,7 @@ void flags_update (unsigned num_files, rom *filenames)
          flag.show_index || flag.dump_section || flag.show_counts_δ.num || flag.show_data_type || flag.show_isizes ||
          flag.show_aliases || flag.show_txt_contigs || flag.show_gheader || flag.show_reading_list || flag.show_recon_plan || flag.show_ref_contigs ||
         (flag.count && !flag.bases && !flag.grep) ||
-         flag.qname_only || flag.show_headers || flag.show_txt_offsets ||
-         flag.collect_coverage); // note: this is updated in flags_update_piz_one_z_file
+         flag.qname_only || flag.show_headers || flag.show_txt_offsets);
 
     flag.dont_load_ref_file |= is_genozip &&
         (flag.make_reference || zip_is_biopsy || flag.show_is_exactable || flag.show_bam || flag.show_bai);
@@ -1592,13 +1572,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
 
         flag.one_vb_comp_i = sections_get_comp_of_vb (flag.one_vb);
     }
-
-    flag.collect_coverage = flag.show_coverage || flag.idxstats;
-    
-    // non-translated mode needed for coverage collection
-    if (flag.collect_coverage && Z_DT(SAM)) 
-        flag.out_dt = DT_SAM; 
-                
+                    
     ASSINP0 (!is_genounzip || !flag.to_stdout, "Cannot use --stdout with genounzip, use genocat instead");
 
     flag.pair = sections_is_paired() ? PAIRED : NOT_PAIRED; // also updates z_file->z_flags in case of backward compatibility issues
@@ -1715,7 +1689,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
     // if this flag is set, no data will be written, although it still could be read and reconstructed 
     // (unless blocked in flag.genocat_no_reconstruct or piz_default_skip_section) 
     flag.no_writer = is_genocat &&
-        (flag.genocat_no_reconstruct || flag.collect_coverage || 
+        (flag.genocat_no_reconstruct || 
          flag.count==CNT_VBs || 
          (flag.count==CNT_TOTAL && flag.has_reconstructor_filter) || // note: if (flag.count==CNT_TOTAL && !flag.has_reconstructor_filter), writer reports during create_plan and no_writer needs to be false
          flag.show_singletons_δ.num || flag.dump_local_δ.num || flag.dump_b250_δ.num || flag.show_b250 || flag.show_b250_δ.num || flag.show_sag);
@@ -1772,7 +1746,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
 
     flag.maybe_lines_dropped_by_reconstructor = is_genocat && 
         (flag.has_reconstructor_filter ||
-         flag.collect_coverage || flag.count); // no-writer, but nevertheless modify the txt_data
+         flag.count); // no-writer, but nevertheless modify the txt_data
 
     flag.maybe_lines_dropped_by_writer = is_genocat && 
          (flag.downsample || flag.lines_first != NO_LINE || flag.tail);
@@ -1820,7 +1794,7 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
 
     // cases where we don't read unnecessary contexts, and should just reconstruct them as an empty
     // string (in other cases, it would be an error)
-    flag.missing_contexts_allowed = flag.collect_coverage || flag.count || flag.drop_genotypes ||
+    flag.missing_contexts_allowed = flag.count || flag.drop_genotypes ||
                                     flag.qual_only || flag.seq_only || flag.header_only_fast;
 
     ASSINP0 (!flag.interleaved || flag.deep_fq_only || flag.pair, 
@@ -1842,16 +1816,6 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
         ASSINP (!flag.sequential || OUT_DT(FASTA), 
                 "--sequential is not supported for %s because it only works on FASTA data, but this file has %s data",
                 z_name, z_dt_name());
-
-    // --coverage is only possible on SAM/BAM and FASTQ
-    ASSINP (!flag.show_coverage || OUT_DT(BAM) || OUT_DT(SAM) || OUT_DT(FASTQ), // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
-            "--coverage is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
-            z_name, z_dt_name());
-
-    // --idxstats is only possible on SAM/BAM and FASTQ
-    ASSINP (!flag.idxstats || OUT_DT(BAM) || OUT_DT(SAM) || OUT_DT(FASTQ), // note: if genozip file has BAM data, it will be translated to SAM bc it is always stdout
-            "--idxstats is not supported for %s because it only works on SAM, BAM and FASTQ data, but this file has %s data",
-            z_name, z_dt_name());
 
     // --add-line-numbers is only possible on SAM
     ASSINP0 (!flag.add_line_numbers || OUT_DT(SAM), "--add_line_numbers works on SAM/BAM data, when outputting it as SAM");

@@ -16,7 +16,6 @@
 #include "tip.h"
 #include "deep.h"
 #include "tokenizer.h"
-#include "coverage.h"
 #include "arch.h"
 #include "filename.h"
 #include "aligner.h"
@@ -1347,13 +1346,6 @@ void fastq_piz_header_init (CompIType comp_i)
         qname_filter_initialize_from_opt (flag.qnames_opt, comp_i); 
 }
 
-// PIZ: main thread: piz_process_recon callback: usually called in order of VBs, but out-of-order if --test with no writer
-void fastq_piz_process_recon (VBlockP vb)
-{
-    if (flag.collect_coverage)    
-        coverage_add_one_vb (vb);
-}
-
 // returns true if section is to be skipped reading / uncompressing
 IS_SKIP (fastq_piz_is_skip_section)
 {
@@ -1400,13 +1392,6 @@ IS_SKIP (fastq_piz_is_skip_section)
     if (flag.qual_only && !FAF && 
         (   dict_id_is_in (dict_id, LINE1_3_dicts, //SEQ_dicts/*we need seq_len (bug 1154)*/,
             _FASTQ_DEBUG_LINES, DICT_ID_NONE) || DESC_subfields))
-        return true;
-
-    // if we're doing --coverage, we only need TOPLEVEL, FASTQ_SQBITMAP and GPOS
-    if (flag.collect_coverage && 
-        (   dict_id_is_in (dict_id, LINE1_3_dicts, _FASTQ_DEBUG_LINES, QUAL_dicts, DICT_ID_NONE)
-         || DESC_subfields
-         || (!flag.bases && dict_id_is_in (dict_id, SEQ_dicts_skip_if_cov, DICT_ID_NONE))))
         return true;
 
     // note: we don't SKIP for --count with an additional filter. Logic is too complicated and bug-prone.

@@ -59,35 +59,39 @@ typedef struct __attribute__((gcc_struct)) {
     // Fit everything in a single 64B L1 cache line that will become pinned during seg/recon
 
     // recon - used in every line
+    DataType out_dt             : 6; // used to indicate the desired dt of the output txt - consumed by file_open_z, and thereafter equal to txt_file->data_type
+    int8_t qname_filter         : 2; // (end of byte 0) possible values: -1, 0, 1
+    packed_enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } bases : 2;
     uint64_t maybe_lines_dropped_by_reconstructor : 1;
     uint64_t maybe_lines_dropped_by_writer : 1;
     uint64_t missing_contexts_allowed      : 1; // PIZ: its not an error if contexts are missing - just reconstruct as an empty string
-    uint64_t genocat_no_reconstruct : 1;   // PIZ: User requested to genocat with only metadata to be shown, not file contents
-    packed_enum { IUP_NONE, IUP_POSITIVE, IUP_NEGATIVE } bases : 2;
-    uint64_t collect_coverage   : 1;        // PIZ: collect coverage data for show_coverage/idxstats
+    uint64_t genocat_no_reconstruct        : 1; // PIZ: User requested to genocat with only metadata to be shown, not file contents
     uint64_t show_lines         : 1;
-    uint64_t show_stack         : 1;
+    uint64_t show_stack         : 1; // (end of byte 1)
+
     uint64_t show_snips         : 1;
     uint64_t seq_only           : 1;
     uint64_t qual_only          : 1;
     uint64_t show_aligner       : 1;
     uint64_t header_only_fast   : 1;
-    int8_t qname_filter         : 2; // possible values: -1, 0, 1
-    DataType out_dt             : 6; // (within on byte) used to indicate the desired dt of the output txt - consumed by file_open_z, and thereafter equal to txt_file->data_type
 
     // seg & recon - used in both seg and recon of every line 
+    ReferenceType reference     : 3; // (end of byte 2)
+
+    CommandType command         : 8; // (byte 3) command running now (eg genozip -d and genounzip are both PIZ)
+    CompIType show_time_comp_i  : 8; // (byte 4) comp_i for which to show time (possibly COMP_NONE or COMP_ALL) - used by COPY_TIMER    
+    
     PairType pair               : 2; 
-    CommandType command         : 8; // (on byte boundary) command running now (eg genozip -d and genounzip are both PIZ)
-    CompIType show_time_comp_i  : 8; // (on byte boundary) comp_i for which to show time (possibly COMP_NONE or COMP_ALL) - used by COPY_TIMER    
-    ReferenceType reference     : 3; // (within byte) 
     uint64_t deep               : 1; // deep is set with --deep in ZIP and from SectionHeaderGenozipHeader.flags.genozip_header.is_deep in PIZ
 
     // seg - used in every line
     uint64_t aligner_available  : 1; // ZIP: compression requires using the aligner
     packed_enum { SHOW_DEEP_SUMMARY=1, SHOW_DEEP_ONE_HASH=2, SHOW_DEEP_ALL=3 } show_deep : 2;
     uint64_t fast               : 1; 
-    uint64_t best               : 1; 
+    uint64_t best               : 1; // (end of byte 5)
+
     uint64_t low_memory         : 1;
+    uint64_t no_BDBI            : 1; // ZIP SAM: disable the BD/BI method 
     
     // developer options that are nonetheless tested in normal seg/recon
     uint64_t debug_seg          : 1;
@@ -95,7 +99,8 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t debug_split        : 1;
     uint64_t debug_peek         : 1;
     uint64_t show_wrong_md      : 1;
-    uint64_t show_wrong_xg      : 1;
+    uint64_t show_wrong_xg      : 1; // (end of byte 6)
+
     uint64_t show_wrong_xm      : 1;
     uint64_t show_wrong_xb      : 1;
     uint64_t show_tlen_pred     : 1;
@@ -103,18 +108,14 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t debug_aligner      : 1;
     uint64_t show_buddy         : 1;
     uint64_t debug_sag          : 1;
-    uint64_t debug_lines        : 1;
+    uint64_t debug_lines        : 1; // (end of byte 7)
     // ——— 64 bits up to here ———
 
     #define flag_after_bits bam_assist // first field after 64-bits
     rom bam_assist, show_time, show_mutex; 
     struct biopsy_line { VBIType vb_i; int32_t line_i/*within vb*/; } biopsy_line; // argument of --biopsy-line (line_i=-1 means: not used)
     
-    // other high frequency flags
-    uint64_t no_BDBI            : 1; // ZIP SAM: disable the BD/BI method 
-
     // _____________________________________________________________________________________________________________________
-
     
     // Other bits
 
@@ -196,9 +197,7 @@ typedef struct __attribute__((gcc_struct)) {
 
     // analysis
     uint64_t show_contigs       : 1;
-    uint64_t idxstats           : 1;
     enum { CNT_NONE, CNT_TOTAL, CNT_VBs } count : 2; 
-    enum { COV_NONE, COV_ALL, COV_CHROM, COV_ONE } show_coverage : 2;
     enum { TELEMETRY_OFF, TELEMETRY_SEND, TELEMETRY_FILE } telemetry : 2;
 
     // diagnostics
@@ -441,8 +440,7 @@ extern void flags_restore (Flags *save_flag);
     flag.test = flag.md5 = flag.show_memory = flag.show_stats = flag.no_header = flag.show_bgzf =                               \
     flag.header_one = flag.header_only = flag.regions = flag.show_index = flag.show_dict =                                      \
     flag.show_b250 = flag.show_ref_contigs = flag.show_contigs = flag.count =                                                   \
-    flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads =                                           \
-    flag.show_coverage = flag.idxstats = flag.collect_coverage = 0; /* int */                                   \
+    flag.downsample = flag.shard = flag.one_vb = flag.one_component = flag.xthreads = 0; /* int */                                   \
     flag.bases = IUP_NONE;                                                                                                      \
     flag.interleaved = INTERLEAVE_NONE;                                                                                         \
     flag.grep = flag.unbind = flag.show_one_dict = flag.out_filename = NULL; /* char* */                                        \

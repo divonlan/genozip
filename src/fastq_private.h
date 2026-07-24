@@ -144,7 +144,6 @@ extern void sam_seg_MM_Z (VBlockP vb, STRp(mm), unsigned add_bytes);
 
 // SEQ
 extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), bool deep);
-extern void fastq_update_coverage_aligned (VBlockFASTQP vb);
 
 // QUAL
 extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(qual));

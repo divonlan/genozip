@@ -29,7 +29,6 @@
 #define WEBSITE_ATTRIBUTIONS    GENOZIP_URL "/attributions"
 #define WEBSITE_TELEMETRY       GENOZIP_URL "/telemetry"
 #define WEBSITE_COMPRESS_URL    GENOZIP_URL "/compression#url"
-#define WEBSITE_COVERAGE        GENOZIP_URL "/coverage"
 #define WEBSITE_DOWNSAMPLING    GENOZIP_URL "/downsampling"
 #define WEBSITE_ENCRYPTION      GENOZIP_URL "/premium#encryption"
 #define WEBSITE_PREMIUM         GENOZIP_URL "/premium"

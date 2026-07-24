@@ -9,7 +9,6 @@
 #include <math.h>
 #include "sam_private.h"
 #include "aligner.h"
-#include "coverage.h"
 #include "bases_filter.h"
 #include "lookback.h"
 #include "qname.h"
@@ -155,9 +154,6 @@ void sam_piz_after_recon (VBlockP vb)
 // PIZ: main thread: piz_process_recon callback: usually called in order of VBs, but out-of-order if --test with no writer
 void sam_piz_process_recon (VBlockP vb)
 {
-    if (flag.collect_coverage)
-        coverage_add_one_vb (vb);
-    
     if (flag.deep)
         sam_piz_deep_grab_deep_ents (VB_SAM);
 }
@@ -234,7 +230,6 @@ IS_SKIP (sam_piz_is_skip_section)
 
     bool is_prim = (comp_i == SAM_COMP_PRIM) && !preproc;
     bool is_main = (comp_i == SAM_COMP_MAIN);
-    bool cov     = flag.collect_coverage;
     bool cnt     = flag.count && !flag.grep;  // we skip if we're only counting, but not also if based on --count, but not if --grep, because grepping requires full reconstruction
     bool deep_fq = OUT_DT(FASTQ) && (comp_i <= SAM_COMP_DEPN); // genocat of fastq data from a Deep file
     bool qonly   = flag.qname_only;
@@ -245,7 +240,7 @@ IS_SKIP (sam_piz_is_skip_section)
     switch (dict_id.num) {
         case _SAM_SQBITMAP :
             SKIPIF (qonly);
-            SKIPIFF ((cov || cnt) && !flag.bases && 
+            SKIPIFF (cnt && !flag.bases && 
                      !has_sa); // if this file has SA:Z: needed by MD:Z which is needed by NM:i which is needed by SA:Z
             
         case _SAM_NONREF   : case _SAM_NONREF_X : case _SAM_GPOS     : case _SAM_STRAND :
@@ -253,21 +248,21 @@ IS_SKIP (sam_piz_is_skip_section)
         case _SAM_SEQINS_A : case _SAM_SEQINS_C : case _SAM_SEQINS_G : case _SAM_SEQINS_T : 
             SKIPIF (is_prim || qonly); // in PRIM, we skip sections that we used for loading the SA Groups in sam_piz_load_sags, but not needed for reconstruction
                            // (during PRIM SA Group loading, skip function is temporarily changed to sam_plsg_only). see also: sam_load_groups_add_grps
-            SKIPIFF ((cov || cnt) && !flag.bases && !has_sa);
+            SKIPIFF (cnt && !flag.bases && !has_sa);
 
         case _SAM_QUAL  : case _SAM_DOMQRUNS  : case _SAM_QUALMPLX  : case _SAM_DIVRQUAL  :
         case _SAM_CQUAL : case _SAM_CDOMQRUNS : case _SAM_CQUALMPLX : case _SAM_CDIVRQUAL : // backcomp up to 15.0.75
         case _SAM_BADQUAL : 
             SKIPIF (is_prim);                                         
             SKIPIF (deep_fq && (flag.seq_only || flag.header_only_fast));
-            SKIPIFF (cov || cnt || qonly);
+            SKIPIFF (cnt || qonly);
 
         case _OPTION_XO_i : // needed to reconstruct QUAL in xcons
-            SKIPIFF (cov || cnt || qonly);
+            SKIPIFF (cnt || qonly);
 
         case _OPTION_np_i : case _OPTION_ec_f : // np is needed for reconstruting QUAL (PACB codec), and ec is needed to rereconstruct np
         case _OPTION_iq_sq_dq : case SAM_QUAL_PACBIO_DIFF: // iq_sq_dq, if it exists, is combined with DIFF to construct QUAL
-            SKIPIFF (cov || cnt || qonly);
+            SKIPIFF (cnt || qonly);
 
         case _SAM_TLEN    :
             SKIPIF (qonly); 
@@ -279,7 +274,7 @@ IS_SKIP (sam_piz_is_skip_section)
             // fallthrough
 
         case _SAM_QUALSA  :
-            SKIPIFF (preproc || qonly || cov || (cnt && !(flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))));
+            SKIPIFF (preproc || qonly || (cnt && !(flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))));
 
         case _SAM_Q1NAME : case _SAM_QNAMESA : case _SAM_QNAME2 :
             KEEPIF (preproc || dict_needed_for_preproc || (cnt && flag.bases && (OUT_DT(BAM) || OUT_DT(CRAM)))); // if output is BAM we need the entire BAM record to correctly analyze the SEQ for IUPAC, as it is a structure.
@@ -300,7 +295,7 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_AS_i  : // we don't skip AS in preprocessing unless it is entirely skipped
             SKIPIF (preproc && !segconf.sag_has_AS);
             SKIPIF (deep_fq || qonly);
-            SKIPIFF ((cov || cnt) && is_aux);
+            SKIPIFF (cnt && is_aux);
   
         // data stored in SAGs - needed for reconstruction, and also for preproccessing
         case _OPTION_NH_i: 
@@ -310,9 +305,9 @@ IS_SKIP (sam_piz_is_skip_section)
         case _OPTION_CY_Z: case _OPTION_CY_ARR: case _OPTION_CY_DIVRQUAL: case _OPTION_CY_DOMQRUNS: case _OPTION_CY_QUALMPLX:
         case _OPTION_QT_Z: case _OPTION_QT_ARR: case _OPTION_QT_DIVRQUAL: case _OPTION_QT_DOMQRUNS: case _OPTION_QT_QUALMPLX:
         case _OPTION_QX_Z:                      case _OPTION_QX_DIVRQUAL: case _OPTION_QX_DOMQRUNS: case _OPTION_QX_QUALMPLX:
-            SKIPIFF (deep_fq || cov || cnt || qonly);
+            SKIPIFF (deep_fq || cnt || qonly);
 
-        case _SAM_FQ_AUX   : KEEPIFF (OUT_DT(FASTQ) || flag.collect_coverage);
+        case _SAM_FQ_AUX   : KEEPIFF (OUT_DT(FASTQ));
         
         case _SAM_FLAG     : KEEP; // needed for demultiplexing by has_prim
         case _SAM_BUDDY    : KEEP; // always needed (if any of these are needed: QNAME, FLAG, MAPQ, CIGAR...)
@@ -345,7 +340,7 @@ IS_SKIP (sam_piz_is_skip_section)
         
         default            : other :
             SKIPIF (qonly);
-            SKIPIF ((cov || cnt) && is_aux && !(is_dict && dict_id.num == _OPTION_OC_Z/*dict-alias of MC0_Z needed to reconstruct CIGAR*/));
+            SKIPIF (cnt && is_aux && !(is_dict && dict_id.num == _OPTION_OC_Z/*dict-alias of MC0_Z needed to reconstruct CIGAR*/));
             SKIPIF (deep_fq && is_aux && !is_dict); // Dictionaries might be needed for FASTQ AUX fields
             SKIPIF (deep_fq && is_dict && is_aux && !f.dictionary.deep_fastq); // outputting FASTQ: we don't need SAM-only AUX dicts
             SKIPIF (is_dict && !flag.deep && is_aux && f.dictionary.deep_fastq && !f.dictionary.deep_sam);   // Deep file, but we are not reconstructed FQ (hence !flag.deep) - we don't need FASTQ-only AUX dicts
@@ -480,27 +475,6 @@ void sam_set_MAPQ_filter (rom optarg)
         flag.sam_mapq_filter = SAM_MAPQ_INCLUDE_IF_AT_LEAST;
 
     ASSERT (str_get_int_range8 (optarg, 0, 0, 255, &flag.MAPQ), MAPQ_ERR, optarg);
-}
-
-static inline void sam_piz_update_coverage (VBlockSAMP vb, SamFlags sam_flags, uint32_t soft_clip)
-{
-    ARRAY (uint64_t, read_count, vb->read_count);
-    ARRAY (uint64_t, coverage, vb->coverage);
-    uint64_t *coverage_special   = BAFT64 (vb->coverage)   - NUM_COVER_TYPES;
-    uint64_t *read_count_special = BAFT64 (vb->read_count) - NUM_COVER_TYPES;
-    WordIndex chrom_index = vb->last_index(SAM_RNAME);
-
-    if (chrom_index == WORD_INDEX_NONE ||
-             sam_flags.unmapped)      { coverage_special[CVR_UNMAPPED]      += vb->seq_len; read_count_special[CVR_UNMAPPED]     ++; }
-    else if (sam_flags.filtered)      { coverage_special[CVR_FAILED]        += vb->seq_len; read_count_special[CVR_FAILED]       ++; }
-    else if (sam_flags.duplicate)     { coverage_special[CVR_DUPLICATE]     += vb->seq_len; read_count_special[CVR_DUPLICATE]    ++; }
-    else if (sam_flags.secondary)     { coverage_special[CVR_SECONDARY]     += vb->seq_len; read_count_special[CVR_SECONDARY]    ++; }
-    else if (sam_flags.supplementary) { coverage_special[CVR_SUPPLEMENTARY] += vb->seq_len; read_count_special[CVR_SUPPLEMENTARY]++; }
-    else {
-        coverage_special[CVR_SOFT_CLIP] += soft_clip;
-        coverage[chrom_index] += vb->seq_len - soft_clip;
-        read_count[chrom_index]++;
-    }
 }
 
 // Case 1: BIN is set to SPECIAL, we will set new_value here to -1 and wait for CIGAR to calculate it, 
@@ -759,17 +733,6 @@ CONTAINER_CALLBACK (sam_piz_container_cb)
         if (flag.seq_filter && !sam_piz_line_survives_seq_filter (STRlst (SAM_SQBITMAP))) // works also for FASTQ as SAM_SQBITMAP==FASTQ_SQBITMAP
             DROP_LINE ("seq_filter");
 
-        // count coverage, if needed    
-        if (flag.show_coverage)
-            sam_piz_update_coverage (vb, (SamFlags){ .value = vb->last_int(SAM_FLAG) }, vb->soft_clip[0] + vb->soft_clip[1]);
-
-        if (flag.idxstats) {
-            if (vb->last_int(SAM_FLAG) & SAM_FLAG_UNMAPPED)   
-                (*B64 (vb->unmapped_read_count, vb->last_index(SAM_RNAME)))++;
-            else
-                (*B64 (vb->read_count, vb->last_index(SAM_RNAME)))++;
-        }
-
         dropped: {}
     }
 }
@@ -787,18 +750,6 @@ bool sam_piz_filter_up_to_v13_stuff (VBlockP vb, DictId dict_id, int item, bool 
         if (snip_len && *snip == v13_SNIP_COPY_BUDDY)
             sam_piz_set_buddy_v13(vb);
         *filter_ret_value = true;
-        return true;
-    }
-
-    // collect_coverage: set buddy_line_i here, since we don't reconstruct QNAME
-    // note: we always load buddy, to prevent a situation when in some lines it is consumed
-    // and other lines, which have buddy, it is not consumed because the field that consumes it is skipped
-    else if (dict_id.num == _SAM_QNAME && flag.collect_coverage) {
-        STR(snip);
-        LOAD_SNIP(SAM_QNAME);
-        if (snip_len && *snip == v13_SNIP_COPY_BUDDY)
-            sam_piz_set_buddy_v13(vb);
-        *filter_ret_value = false; // don't reconstruct QNAME
         return true;
     }
 
@@ -829,19 +780,8 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
             return false; // don't reconstruct QUAL
     }
     
-    // collect_coverage: rather than reconstructing optional, reconstruct SAM_FQ_AUX that just consumes MC:Z if it exists
-    else if (CONTAINER_IS(SAM_AUX)) {
-        if (flag.collect_coverage) {
-            if      (CTX(SAM_FQ_AUX    )->is_loaded) reconstruct_from_ctx (vb, SAM_FQ_AUX,     0, false); // filter_repeats is set in the AUX container since v14
-            else if (CTX(SAM_FQ_AUX_OLD)->is_loaded) reconstruct_from_ctx (vb, SAM_FQ_AUX_OLD, 0, false);
-            else ABORT0 ("Neither SAM_FQ_AUX or SAM_FQ_AUX_OLD are loaded");
-
-            return false; // don't reconstruct AUX
-        }
-
-        else
-            VB_SAM->aux_con = con;
-    }
+    else if (CONTAINER_IS(SAM_AUX)) 
+        VB_SAM->aux_con = con;
 
     // --qname-only: skip reconstructing everything but QNAME, BUDDY, EOL
     else if (CONTAINER_IS(SAM_TOPLEVEL) && flag.qname_only &&

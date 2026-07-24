@@ -736,56 +736,6 @@ batch_sam_bam_translations()
     done
 }
 
-#xxx bug 1287 verify_coverage_has_24_chromosomes()
-# {
-#     local count=`$genocat $output --coverage | grep chr | wc -l`
-#     local expecting=24
-#     if (( count != expecting )); then
-#         echo --coverage $1: expecting $expecting chromosomes to have coverage but count=$count
-#         exit 1
-#     fi
-# }
-
-# batch_coverage_idxstats()
-# {
-#     batch_print_header
-
-#     # Test --coverage, --idxstats : not testing correctness, only that it doesn't crash
-#     # note: we have these files in both sam and bam versions generated with samtools
-#     local files=(special.buddy.bam 
-#                  special.depn.bam        # depn/prim with/without QUAL
-#                  special.NA12878.bam 
-#                  special.pacbio.ccs.bam  # unaligned SAM/BAM with no SQ records
-#                  special.human2.bam
-#                  special.collated.bam)
-#     local file
-#     for file in ${files[@]}; do
-#         $genozip -Xf $TESTDIR/$file -o $output               || exit 1
-#         $genocat $output --idxstats > $OUTDIR/$file.idxstats || exit 1
-#         $genocat $output --coverage > $OUTDIR/$file.coverage || exit 1
-#     done
-
-#     # rudimentary regression tests for coverage
-#     local T=$TESTDIR/deep.human2-38
-
-#     $genozip -Xf $T.R1.il1m.fq.gz -o $output -e $GRCh38 || exit 1
-#     verify_coverage_has_24_chromosomes "FASTQ without bamass"
-
-#     $genozip -Xf $T.R1.il1m.fq.gz --bamass $T.sam -o $output -e $GRCh38 || exit 1
-#     verify_coverage_has_24_chromosomes "FASTQ with bamass"
-
-#     $genozip -Xf $T.R1.fasta.gz -o $output -e $GRCh38 || exit 1
-#     verify_coverage_has_24_chromosomes "FASTA (FAF) without bamass"
-
-#     $genozip -Xf $T.R1.fasta.gz --bamass $T.sam -o $output -e $GRCh38 || exit 1
-#     verify_coverage_has_24_chromosomes "FASTA (FAF) with bamass"
-
-#     $genozip -Xf $T.sam -o $output -e $GRCh38 || exit 1
-#     verify_coverage_has_24_chromosomes "SAM"
-
-#     cleanup
-# }
-
 batch_qname_flavors()
 {
     batch_print_header
@@ -3243,7 +3193,7 @@ case $GENOZIP_TEST in
 56)  batch_make_reference              ;;
 57)  batch_headerless_wrong_ref        ;;
 58)  batch_replace                     ;;
-59)  ;; # batch_coverage_idxstats           ;;
+59)  ;; 
 60)  batch_qname_flavors               ;;
 61)  batch_piz_no_license              ;;
 62)  batch_sendto                      ;;

@@ -143,13 +143,6 @@ typedef struct {
     uint32_t seq_len;             /* PIZ - last calculated seq_len (as defined by each data_type) */\
     uint32_t longest_seq_len;     /* ZIP/PIZ SAM/BAM/FASTQ: largest seq_len of textual SEQ in this VB. Transmitted through SectionHeaderVbHeader.longest_seq_len */\
     \
-    /* regions & filters */ \
-    \
-    /* PIZ: used by --show-coverage and --show-sex */ \
-    Buffer coverage;              /* number of bases of each contig - exluding 'S' CIGAR, excluding reads flagged as Duplicate, Seconday arnd Failed filters */ \
-    Buffer read_count;            /* number of mapped reads of each contig for show-coverage/idxstats (for show-coverage - excluding reads flagged as Duplicate, Seconday arnd Failed filters) */\
-    Buffer unmapped_read_count;   \
-    \
     /* crypto stuff */\
     Buffer spiced_pw;             /* used by crypt_generate_aes_key() */\
     int bi;                       /* used by AES */ \

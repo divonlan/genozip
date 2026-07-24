@@ -225,8 +225,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     if (IS_REF_EXTERNAL && !flag.dont_load_ref_file && !ref_is_external_loaded()) {
         ASSINP0 (!IS_REF_EXTERNAL || !flag.show_ref_seq, "--show-ref-seq cannot be used on a file that requires a reference file: use genocat --show-ref-seq on the reference file itself instead");
 
-        if (!flag.genocat_no_reconstruct || 
-            (flag.collect_coverage && Z_DT(FASTQ))) { // in collect_coverage with FASTQ we read the non-data sections of the reference
+        if (!flag.genocat_no_reconstruct) {
             RESET_VALUE (z_file); // actually, read the reference first
             ref_load_external_reference (NULL);
             RESTORE_VALUE (z_file);
@@ -697,9 +696,6 @@ static void main_load_reference (rom filename, bool is_first_file, bool is_last_
 
     // no need to load the reference if not needed (unless its genocat of the reference file itself)
     if (flag.dont_load_ref_file && dt != DT_REF) return;
-
-    // no need to load the reference if just collecting coverage except FASTQ for which we need the contigs
-    if (flag.collect_coverage && dt != DT_FASTQ) return;
 
     RESET_VALUE (txt_file); // save and reset - for use by reference loader
 

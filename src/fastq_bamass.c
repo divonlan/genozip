@@ -1220,11 +1220,6 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
     // set vb_bamass_cigar, vb->seq_len, vb->ref_consumed
     fastq_bamass_recon_cigar (vb);
 
-    if (flag.collect_coverage) {
-        fastq_update_coverage_aligned (vb);
-        goto done;
-    }
-
     if (vb->R1_vb_i) // R2 
         fastq_piz_R1_test_aligned (vb); // set r1_is_aligned
 
@@ -1333,7 +1328,6 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
     Ltxt = BNUMtxt (recon);
     nonref_ctx->next_local = BNUM (nonref_ctx->local, nonref);
 
-done:
     buf_free (vb->scratch); 
     buf_free (vb_bamass_cigar);
     if (flag.debug) buf_free (bitmap_ctx->piz_is_set); 

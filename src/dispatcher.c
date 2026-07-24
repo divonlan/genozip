@@ -435,7 +435,7 @@ void dispatcher_recycle_vbs (Dispatcher d, bool release_vb)
     if (d->processed_vb) {
 
         if (release_vb) { 
-            // WORKAROUND to bug 343: there is a race condition of unknown cause if flag.no_writer_thread=true (eg --coverage, --count) crashes
+            // WORKAROUND to bug 343: there is a race condition of unknown cause if flag.no_writer_thread=true (eg --count) crashes
             if (flag.no_writer_thread && !flag.test && TASK_IS_PIZ) usleep (1000); 
             vb_release_vb (&d->processed_vb); // cleanup vb and get it ready for another usage (without freeing memory)
         }

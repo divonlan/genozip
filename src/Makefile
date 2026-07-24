@@ -36,7 +36,7 @@ ifeq ($(architecture),Darwin arm64)
 endif
 
 ifndef OBJDIR
-	fail := $(error "Architecture unsupported or could not be identified: $(architecture)") 
+	fail := $(error Architecture unsupported or could not be identified: architecture="$(architecture)" OS="$(OS)") 
 endif
 
 ifdef BUILD_PREFIX # conda 
@@ -168,7 +168,7 @@ MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arc
 		  codec_smux.c codec_oq.c																				\
 	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c 			\
 		  vblock.c regions.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c					\
-		  version.c huffman.c user_message.c b250.c qname_filter.c coverage.c txtheader.c
+		  version.c huffman.c user_message.c b250.c qname_filter.c txtheader.c
 		  
 ZLIB_SRCS  = zlib/zutil.c zlib/deflate.c zlib/trees.c
 
@@ -200,7 +200,7 @@ INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtf
             buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 		\
             crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
 		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h tip.h deep.h filename.h stats.h multiplexer.h local_type.h 		\
-		 	reference.h ref_private.h refhash.h refhash_friend.h ref_iupacs.h aligner.h mutex.h mgzip.h coverage.h threads.h error.h 		\
+		 	reference.h ref_private.h refhash.h refhash_friend.h ref_iupacs.h aligner.h mutex.h mgzip.h threads.h error.h 					\
 			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h writer_private.h zriter.h bases_filter.h genols.h 		\
 			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h sam_friend.h me23.h fasta.h fasta_friend.h gff.h bed.h locs.h			\
 			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h								\

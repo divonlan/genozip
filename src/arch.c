@@ -285,6 +285,37 @@ double arch_get_physical_mem_size (void)
     return mem_size;
 }
 
+uint64_t arch_get_shmmax(void) 
+{
+    uint64_t shmmax = 0;
+
+#if defined __linux__
+    ASSERTNOTINUSE (evb->scratch);
+    file_get_file (evb, "/proc/sys/kernel/shmmax", &evb->scratch, "scratch", 1 KB, VERIFY_ASCII, true);
+    shmmax = atoll (B1STc(evb->scratch));
+    buf_free (evb->scratch);
+
+#elif defined __APPLE__
+    int mib[3] = { CTL_KERN, KERN_SYSV, KERN_SYSV_SHMMAX }; // macOS groups System V IPC under "kern.sysv"
+    size_t len = sizeof (shmmax);
+    sysctl (mib, 3, &shmmax, &len, NULL, 0);
+
+#elif defined _WIN32
+    // Windows has no fixed SHMMAX constraint; it is bound by the system commit limit.
+    PERFORMANCE_INFORMATION pi = { .cb = sizeof(PERFORMANCE_INFORMATION) } ;
+    
+    if (GetPerformanceInfo(&pi, sizeof(pi))) 
+        shmmax = (uint64_t)pi.CommitLimit * (uint64_t)pi.PageSize; // the absolute ceiling of virtual memory pages the system can allocate across RAM + Pagefile without running dry. 
+    else {    
+        MEMORYSTATUSEX statex = { .dwLength = sizeof (statex) };
+        if (GlobalMemoryStatusEx (&statex)) 
+            shmmax = statex.ullTotalPhys;
+    }
+    
+#endif
+
+    return shmmax;
+}
 
 StrText arch_get_filesystem_type (FileP file)
 {

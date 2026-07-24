@@ -31,6 +31,7 @@ extern uint64_t arch_time (void);
 extern Timestamp arch_timestamp (void);
 extern bool arch_is_process_alive (uint32_t pid);
 extern uint64_t arch_get_max_resident_set (void);
+extern uint64_t arch_get_shmmax (void);
 extern bool wget_available (void);
 extern bool curl_available (void);
 extern rom get_distribution (void);

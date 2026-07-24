@@ -166,11 +166,6 @@ typedef struct File {
     // TXT_FILE: accounting for truncation when --truncate-partial-last-line is used
     uint32_t last_truncated_line_len;  // ZIP: bytes truncated due to incomplete final line. note that if file is BGZF, then this truncated data is contained in the final intact BGZF blocks, after already discarding the final incomplete BGZF block
 
-    // TXT_FILE PIZ: data used in genocat --coverage and --idxstats
-    Buffer coverage;
-    Buffer read_count;
-    Buffer unmapped_read_count;
-
     // TXT_FILE PIZ: genounzip of a BAM
     Buffer bai_stats;
     Buffer bai_chunks;

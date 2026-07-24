@@ -18,7 +18,6 @@
 #include "profiler.h"
 #include "stats.h"
 #include "reconstruct.h"
-#include "coverage.h"
 #include "writer.h"
 #include "threads.h"
 #include "endianness.h"
@@ -616,11 +615,6 @@ DataType piz_read_global_area (void)
 
         // case: reading reference file
         if (flag.reading_reference) {
-
-            // when reading the reference for genocat --coverage/idxstats, don't need the actual REF sections 
-            if (is_genocat && (flag.show_coverage || flag.idxstats)) 
-                goto done;  
-
             bool ref_loaded_from_disk = !flag.dont_load_ref_file && ref_load_stored_reference();
 
             // load the IUPACs list of the reference (rare non-ACGT "bases")
@@ -728,9 +722,6 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
 
     if (txt_file) 
         txt_file->txt_data_so_far_single_0 += BGEN32 (h.recon_size); // cumulative expected recon size without piz-side modifications
-
-    if (ok_to_compute && for_reconstruction && flag.collect_coverage) 
-        coverage_initialize (vb);
 
     COPY_TIMER (piz_read_one_vb); 
 
@@ -1000,12 +991,9 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     dispatcher_end_task (dispatcher); 
     progress_finalize_component_time ("Done", DIGEST_NONE);
         
-    // --coverage and --idxstats: output results
-    if (txt_file && !flag_loading_auxiliary) {
-        if (flag.show_coverage) coverage_show_coverage();
-        if (flag.idxstats) coverage_show_idxstats();
-        if (flag.count == CNT_TOTAL) iprintf ("%"PRIu64"\n", num_nondrop_lines);
-    }
+    // --count: output results
+    if (txt_file && !flag_loading_auxiliary && flag.count == CNT_TOTAL) 
+        iprintf ("%"PRIu64"\n", num_nondrop_lines);
 
     if (is_genocat || (z_file->num_txts_so_far == z_file->num_txt_files)) // genocat always produces exactly one txt file 
         dispatcher_finish (&dispatcher, NULL, !is_last_z_file || flag.test,

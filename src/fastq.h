@@ -157,7 +157,6 @@ extern struct Multiplexer2 *fastq_get_illum_v_mux (VBlockP vb);
 // PIZ Stuff
 extern bool fastq_piz_initialize (CompIType comp_i);
 extern void fastq_piz_header_init (CompIType comp_i);
-extern void fastq_piz_process_recon (VBlockP vb);
 extern void fastq_piz_after_vb_header (VBlockP vb);
 extern bool fastq_piz_init_vb (VBlockP vb, ConstSectionHeaderVbHeaderP header);
 CONTAINER_FILTER_FUNC (fastq_piz_filter);
