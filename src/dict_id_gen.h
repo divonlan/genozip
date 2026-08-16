@@ -1294,6 +1294,8 @@ typedef enum { VCF_CHROM, VCF_POS, VCF_MATE_POS, VCF_ID, VCF_REFALT, VCF_MATE_CH
     [INFO_DP] = { { _INFO_DP }, TAG(DP) }, \
     [INFO_SF] = { { _INFO_SF }, TAG(SF) }, \
     [INFO_MQ] = { { _INFO_MQ }, TAG(MQ) }, \
+    [INFO_MQ0] = { { _INFO_MQ0 }, TAG(MQ0) }, \
+    [INFO_NS] = { { _INFO_NS }, TAG(NS) }, \
     [INFO_DP4] = { { _INFO_DP4 }, TAG(DP4) }, \
     [INFO_DP4_RF] = { { _INFO_DP4_RF }, TAG(DrfP4) }, \
     [INFO_DP4_RR] = { { _INFO_DP4_RR }, TAG(DrrP4) }, \
