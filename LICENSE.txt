@@ -47,7 +47,8 @@ Other words and terms in this License shall be interpreted as their usual meanin
 a software product.
 
 2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non
--transferrable, non-sublicensable, revokable copyright license to use Genozip on Your Computers, if
+-transferrable, non-sublicensable, revokable copyright license and the right to use Genozip and
+Genozip Limited's patented and/or patent-pending technology embodied in it, on Your Computers, if
 you meet the conditions attached to any of the License Types a through g below, for the limited
 purpose attached to that particular License Type, and subject to the terms and conditions of this
 License agreement:
@@ -243,5 +244,5 @@ STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.87
+Genozip license version: 15.0.88
 

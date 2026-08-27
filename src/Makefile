@@ -669,7 +669,7 @@ $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 	@echo '  (2) Click Build'
 	@echo '  (3) Exit the UI (close the window)'
 	@rm -f ../installers/genozip-installer.exe
-	@("../../../../Program Files (x86)/solicus/InstallForge/bin/ifbuilderenvx86.exe" ; exit 0)
+	@("/c/Program Files (x86)/solicus/InstallForge/bin/ifbuilderenvx86.exe" ; exit 0)
 
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
