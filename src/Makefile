@@ -88,6 +88,16 @@ ifdef linux_x86
 	# 1. not compatable with valgrind - comment out if using valgrind 
 	# 2. Run with: setarch x86_64 -R genozip-debug ... (see internal-docs/address-sanitizer)
 	# DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 
+
+# need old gcc linked to an old sysroot(=glibc) for older Linux machines
+# up to 15.0.79 used distribution-gcc.8.5 (generate with: conda create -n distribution gcc_linux-64=8.5.0)
+# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 
+# starting 15.0.88 distribution-gcc.16.1-sysroot.2.17 (see "development environment.txt")
+# To see the glibc version genozip requires: 'objdump -T genozip | grep GLIBC_' (the highest version listed)
+# note: comment the following line if targeting the local machine
+CC=/home_local_fs/divon/miniforge3/envs/distribution_gcc-16.1_sysroot-2.17/bin/x86_64-conda-linux-gnu-gcc
+WSL_GCC=$(CC)
+
 endif
 
 ifdef osx_arm64
@@ -121,14 +131,6 @@ ifdef x86_64
 # 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
 	CFLAGS   += -march=haswell 
 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
-endif
-
-# need old gcc linked to an old sysroot(=glibc) for older Linux machines
-# up to 15.0.79 used distribution-gcc.8.5 (generate with: conda create -n distribution gcc_linux-64=8.5.0)
-# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 
-# starting 15.0.88 distribution-gcc.16.1-sysroot.2.17 (see "development environment.txt")
-# To see the glibc version genozip requires: 'objdump -T genozip | grep GLIBC_' (the highest version listed)
-WSL_GCC = /home_local_fs/divon/miniforge3/envs/distribution_gcc-16.1_sysroot-2.17/bin/x86_64-conda-linux-gnu-gcc
 
 DEV_DIR  = ../../genozip
 TEST_DIR = $(DEV_DIR)/private/test
@@ -137,6 +139,8 @@ UTILS    = $(DEV_DIR)/private/utils
 RELEASES = $(DEV_DIR)/private/releases
 DATA     = $(DEV_DIR)/data
 LATEST_SRC = ../../genozip-latest/src
+
+endif
 
 SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
 		  htscodecs igzip igzip/aarch64 igzip/x86_64 igzip/noarch
