@@ -642,18 +642,18 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (4) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
 
 windows/genozip.exe: CFLAGS += $(OPTFLAGS)
-# windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.InstallForge.o 
-windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.MicrosoftStore.o 
+#windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.MicrosoftStore.o 
+windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.InstallForge.o 
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-# windows/genounzip.exe windows/genocat.exe windows/genols.exe: windows/genozip.exe 
-# 	@echo Generating $@
-# 	@cp $< $@
+windows/genounzip.exe windows/genocat.exe windows/genols.exe: windows/genozip.exe 
+	@echo Generating $@
+	@cp $< $@
 
-# windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
-# 	@echo Generating $@
-# 	@./genozip$(EXE) --license=txt,60 > $@
+windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
+	@echo Generating $@
+	@./genozip$(EXE) --license=txt,60 > $@
 
 windows/genozip-installer.ifp: windows/genozip-installer.template.ifp windows/generate-ifp.sh windows/genozip.exe ../LICENSE.txt
 	@echo "Generating $@"
