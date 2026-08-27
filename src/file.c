@@ -31,6 +31,7 @@
 #include "huffman.h"
 #include "tip.h"
 #include "arch.h"
+#include "license.h"
 
 // globals
 FileP z_file   = NULL;
@@ -322,7 +323,6 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
     if (file->data_type == DT_NONE) { 
         if (flag.multiple_files || tar_zip_is_tar()) {
             if (filename_has_ext (file->name, ".genozip")) {
-            
                 // case: --tar - include .genozip files verbatim
                 if (tar_zip_is_tar()) {
                     tar_copy_file (file->name, file->name);
@@ -343,6 +343,20 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
         }
     }
 
+    // user requested to skip exotic compressed-files: zip, bz2 and/or xz
+    else if ((flag.skip_zip && filename_has_ext (file->name, ".zip")) ||
+             (flag.skip_bz2 && filename_has_ext (file->name, ".bz2")) ||
+             (flag.skip_xz  && filename_has_ext (file->name, ".xz"))) {
+        // case --tar: - copy verbatim
+        if (tar_zip_is_tar()) {
+            tar_copy_file (file->name, file->name);
+            ASSWRET (false, true, "Copied %s to the tar file", file_printname(file));
+        }
+        // skip zip, bz2 and/or xz files 
+        else 
+            ASSWRET (false, true, "Skipping %s", file_printname(file));
+    }
+
     // index files - best not to compress as BGZF / CRAM blocks might shift after genounzip
     else if (file->type == BAI || file->type == CRAI || file->type == CSI || file->type == TBI || file->type == GZI) {
         ASSWRET (!flag.skip_index, true, "Skipping %s - an index file", file_printname(file));
@@ -355,7 +369,7 @@ static bool file_open_txt_read_test_valid_dt (ConstFileP file)
             TIP ("It is best NOT to compress %s as re-indexing is usually required after genounzip. Consider using --skip-index. %s", 
                  file->name, WEBSITE_INDEXING);
     }
-
+    
     return false; // all good - no need to skip this file
 }
 
@@ -481,8 +495,11 @@ FileP file_open_txt_read (rom filename)
         is_file_exists = file_exists (filename);
         error = strerror (errno);
 
-        if (is_file_exists) 
+        if (is_file_exists) { 
             file->disk_size = file_get_size (filename);
+
+            license_enforce_file_size (file->disk_size);
+        }
     }
 
     // return null if genozip input file size is known to be 0, so we can skip it. note: file size of url might be unknown
@@ -780,7 +797,8 @@ FileP file_open_z_read (rom filename)
             stat_errno = errno;
         }
 
-        if ((sb.st_mode & S_IFMT) != S_IFREG) cause=7; // not regular file
+        if (!cause && (sb.st_mode & S_IFMT) != S_IFREG) 
+            cause=7; // not regular file
 
         if (!cause) {
             file->os_file = fopen (disk_filename, READ);
@@ -1248,7 +1266,7 @@ void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
 
     buf_alloc (vb, buf, 0, size + add_string_terminator, char, 1, buf_name);
 
-    FILE *file = is_stdin ? stdin : fopen (filename, "rb");
+    FILE *file = is_stdin ? stdin : fopen (filename, READ);
     ASSINP (file, "cannot open \"%s\": %s", filename, strerror (errno));
 
     buf->len = fread (buf->data, 1, size, file);
@@ -1289,7 +1307,7 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
     file_remove (filename, true);
     file_remove (tmp_filename, true);
 
-    FILE *file = fopen (tmp_filename, "wb");
+    FILE *file = fopen (tmp_filename, WRITE);
     if (!file) return false;
 
     // save file name in put_data_tmp_filenames, to be deleted in case of aborting by file_put_data_abort
@@ -1372,10 +1390,10 @@ PutLineFn file_put_line (VBlockP vb, STRp(line), rom msg)
     file_put_data (fn.s, STRa(line), 0);
 
     if (IS_PIZ)
-        WARN ("\n"_FYI"%s line=%s line_in_file(1-based)=%"PRId64". Dumped %s (dumping first occurance only)", 
+        WARN ("\n%s line=%s line_in_file(1-based)=%"PRId64". Dumped %s (dumping first occurance only)", 
                 msg, line_name(vb).s, writer_get_txt_line_i (vb, vb->line_i), fn.s);
     else
-        WARN ("\n"_FYI"%s line=%s vb_size=%u MB. Dumped %s", msg, line_name(vb).s, (int)(segconf.vb_size >> 20), fn.s);
+        WARN ("\n%s line=%s vb_size=%u MB. Dumped %s", msg, line_name(vb).s, (int)(segconf.vb_size >> 20), fn.s);
 
     return fn;
 }

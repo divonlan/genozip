@@ -138,7 +138,7 @@ typedef struct Context {
         Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL with PACB or TMPL codecs, iq:Z
         Buffer template;           // ZIP: zctx (QUAL+1): CODEC_TMPL 
         Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
-        Buffer longr_state;        // ZIP: Used by LONGR codec on QUAL contexts
+        Buffer longr_state;        // PIZ: Used by LONGR codec on QUAL contexts
         Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
         Buffer normalize_buf;      // ZIP: used by DOMQ codec on QUAL contexts
         
@@ -211,7 +211,6 @@ typedef struct Context {
         WordIndex prev_wi;         // PIZ SAM_RNAME, SAM_RNEXT: previous line's word index
         bool please_calc;          // PIZ SAM_BIN: signal sam_cigar_special_CIGAR to calculate BIN value
         struct {                   // SAM_QUAL, OPTION_OQ_Z, FASTQ_QUAL: 
-            bool longr_bins_calculated; // ZIP zctx: codec_longr: were LONGR bins calculated in segconf
             bool domq_has_diverse; // ZIP vctx, DOMQ codec internal use
             bool tmpl_calculated;  // ZIP zctx: TMPL codec - template calculated 
         };

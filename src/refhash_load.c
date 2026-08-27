@@ -135,7 +135,7 @@ void refhash_load (void)
                                  refhash_uncompress_one_vb, 
                                  NO_CALLBACK);
     
-        if (flag.show_cache) iprint0 ("show-cache: done reading refhash from disk\n");
+        if (flag.show_cache) iprintf ("%sdone reading refhash from disk\n", _SHOW_CACHE);
     }
 
     // calculate in-memory digest of loaded genome, and compare it to the value calculated by
@@ -148,7 +148,7 @@ void refhash_load (void)
 
         START_TIMER;
 
-        if (flag.show_cache) iprintf ("show-cache: calculating refhash digest %s\n", ref_cache_is_cached() ? "(done only due to --show-cache)" : "");
+        if (flag.show_cache) iprintf ("%scalculating refhash digest %s\n", _SHOW_CACHE, ref_cache_is_cached() ? "(done only due to --show-cache)" : "");
 
         DigestAlg alg = ref_get_genome_digest_alg();
 
@@ -162,12 +162,12 @@ void refhash_load (void)
                    digest_alg_name(alg), digest_display_(digest, alg).s, digest_display_(refhash_digest, alg).s);
         }
 
-        if (flag.show_cache) iprint0 ("show-cache: verified refhash digest\n");
+        if (flag.show_cache) iprintf ("%sverified refhash digest\n", _SHOW_CACHE);
 
         COPY_TIMER_EVB (refhash_load_digest);
     }
     else
-        if (flag.show_cache) iprintf ("show-cache: loaded refhash without verifying digest (version %s)\n", STRver(ref_ver).s);
+        if (flag.show_cache) iprintf ("%sloaded refhash without verifying digest (version %s)\n", _SHOW_CACHE, STRver(ref_ver).s);
 
     refhash_buf.count = true; // loaded
 }
@@ -203,7 +203,7 @@ void refhash_destroy (void)
     if (refhash_buf.type == BUF_UNALLOCATED) return;
 
     if (flag.show_cache && refhash_buf.type == BUF_SHM) 
-        iprint0 ("show-cache: destroy rehash_buf attached to shm\n");
+        iprintf ("%sdestroy rehash_buf attached to shm\n", _SHOW_CACHE);
 
     buf_destroy (refhash_buf);
 

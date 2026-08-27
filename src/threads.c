@@ -232,7 +232,7 @@ ThreadId threads_create (void (*func)(VBlockP), VBlockP vb)
     // release all data (inc. VB initialization data) to be visible to the new thread
     __atomic_thread_fence (__ATOMIC_RELEASE); 
 
-    // set thread stack size: Mac fails without this (in reconstruct and also in longr zip)
+    // set thread stack size: Mac fails without this (in reconstruct)
     pthread_attr_t tattr;
     int err;
     ASSERT (!(err = pthread_attr_init(&tattr)), "pthread_attr_init: %s", strerror (err)); // initialized with default attributes
@@ -340,11 +340,16 @@ void threads_cancel_other_threads (void)
     
     // give time for all threads to terminate. note: we don't use pthread_join() here because it can hang (e.g. if thread is waiting on a mutex)
 #ifndef _WIN32
-    usleep (500000);
+    usleep (300000);
 #endif
 
     mutex_unlock (threads_mutex);
 
     if (!threads_am_i_main_thread())
         pthread_cancel_safe (main_thread); // now that all compute threads are canceled, won't hang on a thread_join
+
+    // more time...
+#ifndef _WIN32
+    usleep (200000);
+#endif
 }

@@ -551,13 +551,13 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
     uint64_t txt_index = vb->txt_data.len;
 
     // top up gz_data
-    if (txt_file->gz_data.len32 < IGZIP_CHUNK) 
-        txtfile_fread (txt_file, NULL, NULL, (int32_t)IGZIP_CHUNK - (int32_t)txt_file->gz_data.len32, &txt_file->disk_so_far);
+    if (state->avail_in < IGZIP_CHUNK) 
+        txtfile_fread (txt_file, NULL, NULL, (int32_t)IGZIP_CHUNK - (int32_t)state->avail_in, &txt_file->disk_so_far);
 
     { START_TIMER
     state->next_in   = B8(txt_file->gz_data, next_in_before);
     state->avail_in  = BAFT8(txt_file->gz_data) - state->next_in;
-    state->next_out  = BAFT8 (vb->txt_data);
+    state->next_out  = BAFT8(vb->txt_data);
     state->avail_out = max_bytes;
 
     // case: happens in blocked-GZ: in the previous call to this function we read the entire GZ-block, 
@@ -981,9 +981,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
             }
 
             else  {
-                START_TIMER;
-                final_unconsumed_len = (DT_FUNC(txt_file, unconsumed)(vb, MAX_(bb->txt_index, 0))); // note: bb->txt_index might be negative if part of this bb was consumed by the previous VB
-                COPY_TIMER (txtfile_get_unconsumed_callback);
+                final_unconsumed_len = DT_FUNC(txt_file, unconsumed)(vb, MAX_(bb->txt_index, 0)); // note: bb->txt_index might be negative if part of this bb was consumed by the previous VB
 
                 if (final_unconsumed_len >= 0) {
                     if (final_unconsumed_len && flag.truncate && txt_file->no_more_blocks) 
@@ -997,11 +995,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
 
     // case: full line not detected in all gz-compressed data: test remaining txt_data including passed-down data from previous VB
     // case: codec is not BGZIP (i.e. it is NONE, GZ or BZ2) and hence already fully uncompressed
-    {
-    START_TIMER;
-    final_unconsumed_len = (DT_FUNC(vb, unconsumed)(vb, 0));
-    COPY_TIMER (txtfile_get_unconsumed_callback);
-    }
+    final_unconsumed_len = DT_FUNC(vb, unconsumed)(vb, 0);
 
     // case: truncate entire VB (requested by fastq_unconsumed in case this R2 VB doesn't have an R1 counterpart and we are allowed to truncate)
     if (final_unconsumed_len == UNCONSUMED_TRUNCATE_VB) {
@@ -1066,6 +1060,7 @@ done:
         Ltxt -= final_unconsumed_len; 
     }
 
+    COPY_TIMER (txtfile_get_unconsumed_to_pass_to_next_vb);
     return final_unconsumed_len >= 0; // false means more data is needed
 }
 
@@ -1335,7 +1330,8 @@ void txtfile_read_vblock (VBlockP vb)
             // case 2: cannot find matching QNAME in R2
             else { 
                 my_vb_size *= 1.25;
-                ASSERT (my_vb_size <= ABSOLUTE_MAX_VBLOCK_MEMORY, "%s: VBlock too big, > %s, when trying to grow vb", VB_NAME, str_size(ABSOLUTE_MAX_VBLOCK_MEMORY).s);
+                ASSERT (my_vb_size <= ABSOLUTE_MAX_VBLOCK_MEMORY, "%s: VBlock too big, > %s, when trying to grow vb (effective_codec=%s max_block_size=%u bytes_requested=%u Ltxt=%u gz_blocks.len=%u no_more_blocks=%u flag.truncate=%u IS_R2=%u unconsumed_txt=%u)", 
+                        VB_NAME, str_size(ABSOLUTE_MAX_VBLOCK_MEMORY).s, codec_name (txt_file->effective_codec), max_block_size, bytes_requested, Ltxt, vb->gz_blocks.len32, txt_file->no_more_blocks, flag.truncate, IS_R2, txt_file->unconsumed_txt.len32);
                 continue;
             }
         }

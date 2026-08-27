@@ -1245,7 +1245,7 @@ static inline ContainerP sam_seg_array_one_ctx_get_con (VBlockSAMP vb, ContextP 
 
 // an array - all elements go into a single item context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
 void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, DictId dict_id, uint8_t type, 
-                            rom array, int/*signed*/ array_len, // SAM: comma separated array ; BAM : arrays original width and machine endianity
+                            rom array, int/*signed*/ array_len,       // SAM: comma separated array ; BAM : arrays original width and machine endianity
                             ArrayItemCallback callback,               // optional - call back with array (with dl as param)
                             PizSpecialReconstructor length_predictor) // optional - SPECIAL function for predicting repeats
 {   
@@ -1741,12 +1741,12 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_bam,
 
         case _OPTION_dt_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_dt_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
         case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
-        case _OPTION_st_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
-        
+        case _OPTION_st_Z: COND (TECH(PACBIO) || MP(DORADO) || MP(GUPPY), seg_add_to_local_string (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+                           
         case _OPTION_zm_i: COND(segconf.sam_has_zm_by_Q1NAME, sam_seg_pacbio_zm (vb, numeric.i, add_bytes));
 
-        // case _OPTION_ql_Z: _OPTION_qt_Z: // better off as snips that QUAL-like context
-
+        // case _OPTION_ql_Z: _OPTION_qt_Z: // better off as snips than QUAL-like context
+        
         // Illumina DRAGEN fields
         case _OPTION_sd_f: COND (MP(DRAGEN), sam_dragen_seg_sd_f (vb, dl, STRa(value), numeric, add_bytes));
         case _OPTION_ga_Z: COND (MP(DRAGEN), sam_dragen_seg_ga_Z (vb, STRa(value), add_bytes));

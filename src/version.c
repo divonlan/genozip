@@ -29,7 +29,7 @@ bool version_is_devel (void)
 {
     rom exe = arch_get_executable().s;
     return (strstr (exe, "divon/genozip") || strstr (exe, "divon\\genozip")) && 
-            !strstr (exe, "releases") && !strstr (exe, "latest");
+            !strstr (exe, "releases") && !strstr (exe, "latest") && !strstr (exe, "windows");
 }
 
 Version code_version (void)
@@ -279,6 +279,8 @@ void version_print_notice_if_has_newer (void)
             if (dist_is_installforge()) 
                 iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
             
+            //xxx if (dist_is_ms_store()) 
+            //     iprintf ("You can install the latest version from here: %s\n", GITHUB_WINDOWS_INSTALLER);
 #else
             if (dist_is_conda() &&
                 str_query_user_yn ("Do you want to update Genozip now?", QDEF_YES))

@@ -506,9 +506,9 @@ static void VARIANT_TYPE_prediction (VBlockVCFP vb, pSTRp(prediction), bool use_
                  VARIANT_TYPE_ref_confirms_hmer (vb, STRa(ALTi(alt_i)->alt), use_reference))
             count_hmers++;
     
-    if (count_snps == N_ALTS)                    { *prediction = "snp";         *prediction_len = STRLEN("snp");         }
-    else if (count_hmers + count_snps == N_ALTS) { *prediction = "h-indel";     *prediction_len = STRLEN("h-indel");     }
-    else                                         { *prediction = "non-h-indel"; *prediction_len = STRLEN("non-h-indel"); } 
+    if (count_snps == N_ALTS)                    { *prediction = "snp";         *prediction_len = strlen("snp");         }
+    else if (count_hmers + count_snps == N_ALTS) { *prediction = "h-indel";     *prediction_len = strlen("h-indel");     }
+    else                                         { *prediction = "non-h-indel"; *prediction_len = strlen("non-h-indel"); } 
 }
 
 void vcf_seg_INFO_VARIANT_TYPE (VBlockVCFP vb, ContextP ctx, STRp(vt))

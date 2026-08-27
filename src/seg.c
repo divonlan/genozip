@@ -151,53 +151,34 @@ void seg_lookup_with_length_other (VBlockP vb, ContextP ctx, DictId other_dict_i
 }
 
 rom seg_get_next_item (VBlockP vb, rom str, int *str_len, 
-                       GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
+                       bool newline, bool tab, // expected separators
                        unsigned *len, 
                        char *separator,  // optional out
-                       bool *has_13,     // out - only modified if '\r' detected ; only needed if newline=GN_SEP
+                       bool *has_13,     // out - only modified if '\r' detected ; required iff newline=true
                        rom item_name)
 {
     START_TIMER;
-
-    rom c, after;
-    for (c = str, after = str + *str_len; c < after; c++) 
-        if (*c <= ' ') // this "if" saves significant time vs going directly to the "switch" 
-            switch (*c) {
-                case ' '  : if      (space   == GN_SEP     ) goto sep_found; 
-                            else if (space   == GN_FORBIDEN) goto not_found;
-                            break;
-                        
-                case '\t' : if      (tab     == GN_SEP     ) goto sep_found; 
-                            else if (tab     == GN_FORBIDEN) goto not_found;
-                            break;
-
-                case '\n' : if      (newline == GN_SEP     ) goto sep_found; 
-                            else if (newline == GN_FORBIDEN) goto not_found;
-                            break;
-
-                default   : break;
-            }
-
-not_found: // no sep found in entire string, or forbidden separator encountered
-    ABOSEG ("while segmenting %s: expecting a %s%s%s in \"%.1000s\"", 
-            item_name,
-            newline==GN_SEP ? "NEWLINE " : "", tab==GN_SEP ? "TAB " : "", space==GN_SEP ? "\" \" " : "", 
-            str);
     
-sep_found:
-    *len = c - str;
-    if (separator) *separator = *c;
+    rom tab_p = tab     ? memchr (str, '\t', *str_len) : 0;
+    rom nl_p  = newline ? memchr (str, '\n', tab_p ? (tab_p-str) : *str_len) : 0; // note: if we already found a tab - we only search for a newline before it
+    
+    rom sep = nl_p ? nl_p : tab_p; // note: if both tab_p and nl_p exists, then nl_p is first
+
+    ASSSEG (sep, "while segmenting %s: expecting a %s%s in \"%.*s\"", 
+            item_name, (newline ? "NEWLINE " : ""), (tab ? "TAB " : ""), MIN_(*str_len, 1000), str);
+
+    *len = sep - str;
+    if (separator) *separator = *sep;
     *str_len -= *len + 1;
 
     // check for Windows-style '\r\n' end of line 
-    if (c != str && *c == '\n' && *(c-1) == '\r') {
-        ASSERTNOTNULL (has_13);
+    if (sep != str && *sep == '\n' && sep[-1] == '\r') {
         (*len)--;
         *has_13 = true;
     }
 
     COPY_TIMER (seg_get_next_item);
-    return str + *len + 1 + (*c == '\n' && has_13 && *has_13); // beyond the separator
+    return str + *len + 1 + (*sep == '\n' && *has_13); // beyond the separator
 }
 
 // returns first character after current line
@@ -208,21 +189,20 @@ rom seg_get_next_line (VBlockP vb, rom str,
 {
     START_TIMER;
 
-    rom after = str + *remaining_len;
-    for (rom s=str; s < after; s++)
-        if (*s == '\n') {
-                *len = s - str;
-                *remaining_len -= *len + 1;
+    rom s = memchr (str, '\n', *remaining_len);
+    if (s) {
+        *len = s - str;
+        *remaining_len -= *len + 1;
 
-                // check for Windows-style '\r\n' end of line 
-                if (s > str && s[-1] == '\r') {
-                    (*len)--;
-                    *has_13 = true;
-                }
-
-                COPY_TIMER (seg_get_next_line);
-                return str + *len + *has_13 + 1; // beyond the separator
+        // check for Windows-style '\r\n' end of line 
+        if (s > str && s[-1] == '\r') {
+            (*len)--;
+            *has_13 = true;
         }
+
+        COPY_TIMER (seg_get_next_line);
+        return str + *len + *has_13 + 1; // beyond the separator
+    }
     
     ASSSEG (*remaining_len, "missing %s field", item_name);
 
@@ -231,7 +211,8 @@ rom seg_get_next_line (VBlockP vb, rom str,
             item_name, MIN_(*remaining_len, 1000), str);
 
     // we have no newline, but check if last character is a \r
-    *has_13 = (after > str) && (after[-1] == '\r');
+    rom after = str + *remaining_len;
+    *has_13 = (after[-1] == '\r');
     *len = *remaining_len - *has_13;
     *remaining_len = 0;
 
@@ -994,15 +975,15 @@ bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
 
 void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes) 
 { 
+    LocalType lt = (lookup_type == LOOKUP_WITH_LENGTH) ? LT_BLOB : LT_STRING;
+    
     if (ctx->ltype == LT_SINGLETON)
-        ctx->ltype = LT_STRING; // initialize
+        ctx->ltype = lt; // initialize
 
-    ASSERT (ctx->ltype == LT_STRING, "%s: Expecting %s.ltype=LT_STRING but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
-#ifdef DEBUG
-    ASSERT (lookup_type==LOOKUP_NONE || lookup_type==LOOKUP_SIMPLE, "%s: expecting LOOKUP_NONE or LOOKUP_SIMPLE in ctx=%s", LN_NAME, ctx->tag_name);
-#endif
+    ASSERT (ctx->ltype == lt, "%s: Expecting %s.ltype=%s but found %s", 
+            LN_NAME, ctx->tag_name, lt_name (lt), lt_name (ctx->ltype));
 
-    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), true, lookup_type, false, add_bytes); 
+    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), lookup_type != LOOKUP_WITH_LENGTH, lookup_type, false, add_bytes); 
 }
 
 bool seg_add_to_local_string_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat)
@@ -1481,6 +1462,15 @@ static void zip_modify_verify_shrinkage (VBlockP vb, int32_t shrinkage_by_vb)
     }
 }
 
+static void zip_set_num_lines (VBlockP vb)
+{
+    vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set 
+                    : segconf_running  ? 10              // initial number to be increased within the loop: a low number of avoid memory overallocation for PacBio arrays etc 
+                    : IS_R2            ? fastq_get_R1_num_lines (vb)
+                    : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
+                    :                    1;  // eg DT_GNRIC
+}
+
 // --optimize: re-write VB before digest and seg
 void zip_modify (VBlockP vb)
 {
@@ -1490,10 +1480,7 @@ void zip_modify (VBlockP vb)
     ASSERT (vb->lines.len <= vb->txt_data.len, "%s: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
             VB_NAME, vb->lines.len, vb->txt_data.len); // 64 bit test in case of memory corruption
 
-    // set estimated number of lines
-    vb->lines.len32 = IS_R2            ? fastq_get_R1_num_lines (vb)
-                    : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
-                    :                    1;              // eg DT_GNRIC
+    zip_set_num_lines (vb); // set estimated number of lines
 
     vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
     
@@ -1520,7 +1507,7 @@ void zip_modify (VBlockP vb)
         rom next_line = DTP(zip_modify) (vb, line, remaining_txt_len);
 
         if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i && !DTP(seg_modifies)) {
-            file_put_line (vb, line, next_line - line, "Line biopsy:");
+            file_put_line (vb, line, next_line - line, _FYI "Line biopsy:");
             exit_ok;
         }
 
@@ -1583,7 +1570,7 @@ void zip_modify (VBlockP vb)
 }
 
 // split each lines in this VB to its components
-uint32_t seg_all_data_lines (VBlockP vb)
+void seg_all_data_lines (VBlockP vb)
 {
     START_TIMER;
     ASSERTNOTNULL (vb);
@@ -1597,13 +1584,8 @@ uint32_t seg_all_data_lines (VBlockP vb)
     ASSERT (!Ltxt || vb->reread_prescription.len || *BLSTtxt == '\n' || !DTP(vb_end_nl), "%s: %s txt_data unexpectedly doesn't end with a newline. Ltxt=%u Last 10 chars: \"%.10s\". If you expect this file to be truncated, use --truncate.", 
             VB_NAME, dt_name(vb->data_type), Ltxt, Btxt (Ltxt - MIN_(10,Ltxt)));
     
-    // set estimated number of lines
-    vb->lines.len32 = vb->lines.len32  ? vb->lines.len32 // already set in zip_modify
-                    : segconf_running  ? 10              // low number of avoid memory overallocation for PacBio arrays etc 
-                    : IS_R2            ? str_count_char (STRb(vb->txt_data), '\n') / 4 // fastq_seg_initialize verifes that it is the same as R1
-                    : segconf.line_len ? MAX_(1, Ltxt / segconf.line_len)
-                    :                    1;              // eg DT_GNRIC
-
+    zip_set_num_lines (vb); // set estimated number of lines
+    
     vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
     
     ContextP debug_lines_ctx = NULL;
@@ -1718,5 +1700,4 @@ uint32_t seg_all_data_lines (VBlockP vb)
     if (flag.debug_or_test) buflist_test_overflows(vb, __FUNCTION__); 
 
     COPY_TIMER (seg_all_data_lines);
-    return remaining_txt_len;
 }

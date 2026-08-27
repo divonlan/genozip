@@ -6,6 +6,9 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
 #include "sam_private.h"
 #include "random_access.h"
 #include "aligner.h"
@@ -931,7 +934,7 @@ uint32_t sam_zip_get_seq_len (VBlockP vb, uint32_t line_i)
     return DATA_LINE (line_i)->SEQ.len;
 }
 
-// used by codec_longr, codec_homp, codec_pacb and codec_smux
+// used by codec_homp, codec_pacb, codec_smux, codec_t0
 COMPRESSOR_CALLBACK_DT (sam_zip_seq) 
 {
     VBlockSAMP vb = (VBlockSAMP)vb_;
@@ -1521,18 +1524,78 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     // if l_seq is odd, 0 the next byte that will be half of our last result byte
     if (l_seq % 2) *BAFTtxt = 0; 
 
+    uint32_t out_len = (l_seq + 1) / 2, i=0;
+    uint8_t *in=(uint8_t *)recon, *out=in; 
+
+    // NOTE: SAM string is assumed to contain only valid SAM characters. Invalid characters mapping to BAM is undefined.
+#ifdef __x86_64__  // note: AVX2 support enforced by arch_initialize. cuts time by 20-50%  
+
+    // lookup table indexed by lower nibble (ASCII & 0x0F)
+    const __m256i lut_lo = _mm256_setr_epi8 (
+        // low 128-bit lane (indices 0 to 15)
+        0x00, // Index  0: Placeholder -> BAM 0x00
+        0x01, // Index  1: 'A' (0x41)   -> BAM 0x01 (1)
+        0x0E, // Index  2: 'B' (0x42)   -> BAM 0x0E (14)
+        0x02, // Index  3: 'C' (0x43)   -> BAM 0x02 (2)
+        0x00, // Index  4: 'D'/'T' collision slot
+        0x00, // Index  5: Collision slot
+        0x07, // Index  6: 'V' (0x56)   -> BAM 0x07 (7)
+        0x04, // Index  7: 'G' (0x47)   -> BAM 0x04 (4)
+        0x0B, // Index  8: 'H' (0x48)   -> BAM 0x0B (11)
+        0x0A, // Index  9: 'Y' (0x59)   -> BAM 0x0A (10)
+        0x00, // Index 10: Placeholder -> BAM 0x00
+        0x0C, // Index 11: 'K' (0x4B)   -> BAM 0x0C (12)
+        0x00, // Index 12: Placeholder -> BAM 0x00
+        0x00, // Index 13: '='/'M' collision slot
+        0x0F, // Index 14: 'N' (0x4E)   -> BAM 0x0F (15)
+        0x00, // Index 15: Placeholder -> BAM 0x00
+
+        // high 128-bit lane (identical duplicate) 
+        0x00, 0x01, 0x0E, 0x02, 0x00, 0x00, 0x07, 0x04,
+        0x0B, 0x0A, 0x00, 0x0C, 0x00, 0x00, 0x0F, 0x00
+    );
+
+    const __m256i mask_lo = _mm256_set1_epi8 (0x0F);
+    const __m256i mul_nibbles = _mm256_set1_epi16 (0x0110); 
+
+    // process 32 ASCII bases -> 16 output BAM bytes per loop iteration
+    for (; i + 16 <= out_len; i += 16, in += 32, out += 16) {
+        __m256i raw = _mm256_loadu_si256 ((const __m256i*)in); // unaligned load
+
+        // Map non-colliding low-nibble characters
+        __m256i translated = _mm256_shuffle_epi8 (lut_lo, _mm256_and_si256(raw, mask_lo));
+
+        // Override explicit low-nibble collisions
+        translated = _mm256_blendv_epi8 (translated, _mm256_set1_epi8(0x03), _mm256_cmpeq_epi8(raw, _mm256_set1_epi8('M')));
+        translated = _mm256_blendv_epi8 (translated, _mm256_set1_epi8(0x05), _mm256_cmpeq_epi8(raw, _mm256_set1_epi8('R')));
+        translated = _mm256_blendv_epi8 (translated, _mm256_set1_epi8(0x06), _mm256_cmpeq_epi8(raw, _mm256_set1_epi8('S')));
+        translated = _mm256_blendv_epi8 (translated, _mm256_set1_epi8(0x08), _mm256_cmpeq_epi8(raw, _mm256_set1_epi8('T')));
+        translated = _mm256_blendv_epi8 (translated, _mm256_set1_epi8(0x09), _mm256_cmpeq_epi8(raw, _mm256_set1_epi8('W')));
+        translated = _mm256_blendv_epi8 (translated, _mm256_set1_epi8(0x0D), _mm256_cmpeq_epi8(raw, _mm256_set1_epi8('D')));
+
+        // pack nibbles: (Even_Byte * 16) + (Odd_Byte * 1)
+        __m256i packed16 = _mm256_maddubs_epi16 (translated, mul_nibbles);
+
+        // extract 128-bit lanes and narrow 16-bit integers to 8-bit bytes
+        __m128i lo_lane = _mm256_castsi256_si128 (packed16);
+        __m128i hi_lane = _mm256_extracti128_si256 (packed16, 1);
+        __m128i packed8 = _mm_packus_epi16 (lo_lane, hi_lane);
+
+        // store 16 bytes in-place
+        _mm_storeu_si128 ((__m128i*)out, packed8); // unaligned store
+    }
+#endif
+
     // the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
     static alignas(64) const uint8_t sam2bam_seq_map[256] = { 
         ['=']=0x0, ['A']=0x1, ['C']=0x2, ['M']=0x3, ['G']=0x4, ['R']=0x5, ['S']=0x6, ['V']=0x7,                                                       
         ['T']=0x8, ['W']=0x9, ['Y']=0xa, ['H']=0xb, ['K']=0xc, ['D']=0xd, ['B']=0xe, ['N']=0xf 
     };
 
-    uint8_t *in=(uint8_t *)recon, *out=in; 
-    uint32_t out_len = (l_seq + 1) / 2;
-    
-    for (uint32_t i=0; i < out_len; i++, out++, in += 2) 
-        *out = (sam2bam_seq_map[in[0]] << 4) | sam2bam_seq_map[in[1]]; // note: invalid characters are encoded as 0 (piz doesn't verify)
-    
+    // remaining tail bytes (or all bytes if not using AVX2)
+    for (; i < out_len; i++, out++, in += 2)
+        *out = (sam2bam_seq_map[in[0]] << 4) | sam2bam_seq_map[in[1]];
+
     Ltxt = Ltxt - l_seq + out_len;
 
     done: 

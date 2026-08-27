@@ -3,10 +3,21 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
+15.0.88 27/8/2026
+- New option: genozip --assess-reference assesses whether a reference file is suitable for compressing a paritcular file (FASTQ/BAM) (Enterprise/Premium). See https://www.genozip.com/reference#assess-reference
+- New option: genocat --unlock allows Premium license holder to unlock a file compressed with --sendto, after which anyone can access it
+- In-RAM reference caching now works for Mac too.
+- New options: genozip --skip-zip, --skip-bz2 and --skip-xz skip compressing ZIP, BZ2 or XZ files respectively, or if combined with --tar: include them in the tar file verbatim. 
+- ONT: Modest improvements in compression of Nanopore FASTQ and BAM files
+- Diagnositcs: New: genozip --no-OQ: SAM/BAM: don't use the advanced method for compressing the OQ:Z field
+               genozip --telemetry=field. Send 6 values of the field to telemetry
+               Canceled: --force-longr, --no-longr
+- bug fixes
+
 15.0.87 15/7/2026
 - Genozip for Windows now available on conda 
 - Minor bug fixes
-
+ 
 15.0.86 23/6/2026
 - Bug fixes
 - Minor compression improvement for BQSR-generationed BAM files

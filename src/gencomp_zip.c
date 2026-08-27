@@ -933,7 +933,7 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
     Ltxt = 0;
 
     // open a file handle private to this VB
-    FILE *fp = fopen (txt_file->name, "rb");
+    FILE *fp = fopen (txt_file->name, READ);
     ASSERT (fp, "%s: Failed to open %s for rereading depn lines: %s", VB_NAME, txt_file->name, strerror(errno));
 
     stream_set_inheritability (fileno (fp), false); // Windows: allow file_remove in case of --replace

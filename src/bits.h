@@ -75,9 +75,6 @@
 // Round a number up to the nearest number that is a power of two (fixed by Divon)
 #define roundup2pow(x) ((__builtin_popcountll(x)==1) ? (x) : ((__typeof(x))1 << (64 - leading_zeros(x))))
 
-#define rot32(x,r) (((x)<<(r)) | ((x)>>(32-(r)))) // note: use __builtin_stdc_rotate_right instead
-#define rot64(x,r) (((x)<<(r)) | ((x)>>(64-(r))))
-
 // A bitmask is a value with the (nbits) lower bits set to 1, and the remaining bits set to 0: caller is certain nbits > 0 (saves a branch)
 #define bitmask_(nbits, type) ((type)~(type)0 >> (sizeof(type)*8-(nbits)))
 #define bitmask8_(nbits)  bitmask_(nbits, uint8_t)
@@ -197,13 +194,13 @@ extern void bits_set_region (BitsP bits, uint64_t start, uint64_t len);
 #define bits_clear_region(bits,start,len) bits_clear_region_do (bits, start, len, __FUNCLINE)
 extern void bits_clear_region_do (BitsP bits, uint64_t start, uint64_t len, rom func, unsigned code_line);
 
-extern void bits_bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit, uint32_t num_bits);
+extern void bits_bit_to_byte (uint8_t *restrict dst, ConstBitsP src_bits, uint64_t src_bit, uint32_t num_bits);
 
 // create words - if the word is not aligned to the bitmap word boundaries, and hence spans 2 bitmap words, 
-// we take the MSb's from the left word and the LSb's from the right word, to create shift_1 
+// we take the MSb's from the left word and the LSb's from the right word 
 static inline uint64_t _bits_combined_word (uint64_t word_a, uint64_t word_b, int shift)
 {
-#if defined(__x86_64__) || defined(_M_X64)
+#ifdef __x86_64__
     __asm__ ("shrdq %2, %1, %0" // single-cycle hardware Shift Right Double instruction
              : "+r" (word_a)
              : "r" (word_b), "cJ" ((char)shift));

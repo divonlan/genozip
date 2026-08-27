@@ -23,7 +23,7 @@
 #define IS_BZ2(codec)   ((codec)==CODEC_BZ2)
 #define IS_NONE(codec)  ((codec)==CODEC_NONE)
 #define IS_MGZIP(codec) codec_args[codec].is_mgzip // multi-block gzip
-#define IS_GZIP(codec)  (IS_MGZIP(codec) || IS_GZ(codec))
+#define IS_GZIP(codec)  (IS_MGZIP(codec) || IS_GZ(codec) || (codec)==CODEC_BAM/*if testing src_codec*/)
 
 // note on MGSP: "gz block" in the comments below means, for MGSP, a group of gz blocks.
 #define IS_IN_SYNC(codec)          (IS_MGZF(codec) || IS_MGSP(codec) || IS_EMVL(codec) || IS_EMFL(codec)) // codecs in which R1 and R2 gz blocks are guaranteed to contain whole, and precisely matching reads. Therefore, R2 gz-decompression can delegated to compute threads without further checks.
@@ -140,5 +140,5 @@ extern void show_gz (rom filename);
 extern void dump_gz_block (rom filename);
 
 // private within mgzip*.c
-extern rom NON_EXACT_ERROR;
+extern rom NON_EXACT_ERROR, NON_EXACT_NOT_GZ;
 extern const FlagsMgzip bgzf_recompression_levels[1+MAX_FLAG_BGZF];

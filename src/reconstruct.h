@@ -19,7 +19,7 @@ typedef struct { char s[100]; } PizDisQname;
 extern PizDisQname piz_dis_qname (VBlockP vb); // for ASSPIZ
 
 extern StrText1K piz_advise_biopsy (VBlockP vb);
-extern StrText1K piz_advise_biopsy_line (CompIType comp_i, VBIType vblock_i, LineIType line_i, rom filename);
+extern StrText4K piz_advise_biopsy_line (CompIType comp_i, VBIType vblock_i, LineIType line_i, rom filename);
 
 // assert piz
 extern noreturn void error_asspiz (VBlockP vb, FUNCLINE, rom format, ...);

@@ -100,13 +100,13 @@ uint64_t aligner_prefetch_gpos (VBlockP vb, Bits𐤐 seq, uint64_t base_i, bool 
     if (gpos_bytes == 4)
         __builtin_prefetch (B32(refhash_buf, hash), 0/*read-only*/, 1/*locality: cache just in L3*/);
 
-    if (gpos_bytes == 5) {
-        char *addr = (char *)B40(refhash_buf, hash);
+    else { // gpos_bytes == 5
+        uint40_t *addr = B40(refhash_buf, hash);
         __builtin_prefetch (addr, 0, 1);
  
         // case: refhash entry spans two cache lines - prefetch the second one too (applicable to 1/16 of 5-byte words)
-        if (CPU_CACHE_LINE (addr) != CPU_CACHE_LINE (addr + 4)) 
-            __builtin_prefetch (addr + 4, 0, 1);
+        if (CPU_CACHE_LINE (&addr->lo) != CPU_CACHE_LINE (&addr->hi))
+            __builtin_prefetch (addr + 1, 0, 1);
     }
 
     return hash;

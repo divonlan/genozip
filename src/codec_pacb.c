@@ -187,7 +187,7 @@ COMPRESS (codec_pacb_compress)
 
         if (!score_len) continue; // compressed by another method
 
-        uint8_t np0 = (max_np > 1) ? MIN_(sam_zip_get_np (vb, line_i), max_np) - 1 : 0; // notes: np0 is 0-based np, i.e. (np-1) ; np0 is always 0 for FASTQ and CLR
+        uint8_t np0 = (max_np > 1) ? MAX_(1, MIN_(sam_zip_get_np (vb, line_i), max_np)) - 1 : 0; // notes: np0 is 0-based np, i.e. (np-1) ; np0 is always 0 for FASTQ and CLR. "MAX_(1," since 15.0.88
 
         channel_i_p = calc_channels_one_line (vb, line_i, np0, IS_SPACE(score), channel_i_p, lens);
     }
@@ -281,7 +281,10 @@ CODEC_RECONSTRUCT (codec_pacb_reconstruct)
         ctx->is_initialized = true;
     }
 
-    int32_t np = (max_np > 1) ? codec_pacb_piz_get_np (vb) : 1;
+    int32_t np = (max_np <= 1) ? 1
+               : VER2(15,88)   ? MAX_(codec_pacb_piz_get_np (vb), 1)
+               :                 codec_pacb_piz_get_np (vb);
+
     uint8_t np0 = MIN_(np, max_np) - 1;
 
     // arrays of the "next" score in each channel, and "after" for each channel 

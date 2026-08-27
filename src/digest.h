@@ -55,7 +55,7 @@ typedef union {
 
 extern Digest digest_snapshot (const DigestState *ctx, rom msg);
 extern Digest digest_txt_header (BufferP data, Digest piz_expected_digest, CompIType comp_i);
-extern bool digest_one_vb (VBlockP vb, bool is_compute_thread, BufferP data);
+extern bool digest_one_vb (VBlockP vb, bool is_compute_thread, BufferP data, uint32_t start);
 extern void digest_piz_verify_one_txt_file (unsigned txt_file_i);
 extern bool digest_piz_has_it_failed (void);
 

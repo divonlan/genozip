@@ -28,7 +28,7 @@ static rom license_text[] = {
 
     "Other words and terms in this License shall be interpreted as their usual meaning in the context of a software product.",
 
-    "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license to use Genozip on Your Computers, if you meet the conditions attached to any of the License Types a through g below, for the limited purpose attached to that particular License Type, and subject to the terms and conditions of this License agreement:",
+    "2. Grant of copyright license. Licensor hereby grants to You a limited non-exclusive, non-transferrable, non-sublicensable, revokable copyright license and the right to use Genozip and Genozip Limited's patented and/or patent-pending technology embodied in it, on Your Computers, if you meet the conditions attached to any of the License Types a through g below, for the limited purpose attached to that particular License Type, and subject to the terms and conditions of this License agreement:",
     
     "   a. Standard, Enterprise or Premium License: Using Genozip Executables for any legal purpose, if the license was purchased and paid for, and for the duration that it is in effect. In addition, for Premium License only: Distributing Genozip Executables directly to others (e.g., via email or a private download link). Such distribution does not grant a license to use the software; each recipient must be independently licensed under this Section 2 (such as under a Decompression License) to run it.",
 

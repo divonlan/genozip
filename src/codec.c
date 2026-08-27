@@ -180,7 +180,7 @@ static SORTER (codec_assign_sorter)
 //    For vb=1, this is called while holding the vb=1 lock, so that for all such contexts that appear in vb=1, they are
 //    guaranteed to be tested only once. For contexts that make a first appearance in a later VB, parallel VBs might test
 //    in parallel. A bit wasteful, but no harm.
-// 2. For "specific" codecs (DOMQUAL, LONGR...), subordinate contexts generated during compression of the primary
+// 2. For "specific" codecs (DOMQUAL, PACB...), subordinate contexts generated during compression of the primary
 //    context (compression runs after codec_assign_best_codec is completed already) - those codecs explicitly call us to get the
 //    codec for the subordinate context. Multiple of the early VBs may call in parallel, but future VBs will receive
 //    the codec during cloning    
@@ -412,7 +412,6 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
 
     if (forced_codec)  
         switch (forced_codec) {
-            case CODEC_LONGR : codec_longr_comp_init (vb, did_i, true);           break;
             case CODEC_SMUX  : codec_smux_comp_init  (vb, did_i, callback, true); break;
             case CODEC_PACB  : codec_pacb_comp_init  (vb, did_i, callback, true); break;
             case CODEC_HOMP  : codec_homp_comp_init  (vb, did_i, callback, true); break; 
@@ -426,8 +425,6 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
 
     else if (!no_seq_dependency && codec_pacb_comp_init (vb, did_i, callback, false));
     
-    else if (!no_seq_dependency && codec_longr_comp_init (vb, did_i, false));
-
     else if (!no_seq_dependency && codec_homp_comp_init (vb, did_i, callback, false)); // only if Ultima, it might succeed. takes precedence of DOMQ
 
     else if (!no_seq_dependency && codec_smux_comp_init (vb, did_i, callback, false));
@@ -477,7 +474,6 @@ void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec)
         (strcmp (flag.show_time, "compressor_domq"  ) && codec==CODEC_DOMQ)  || 
         (strcmp (flag.show_time, "compressor_ulti"  ) && codec==CODEC_HOMP)  || 
         (strcmp (flag.show_time, "compressor_pbwt"  ) && codec==CODEC_PBWT)  || 
-        (strcmp (flag.show_time, "compressor_longr" ) && codec==CODEC_LONGR) || 
         (strcmp (flag.show_time, "compressor_smux"  ) && codec==CODEC_SMUX)  || 
         (strcmp (flag.show_time, "compressor_pacb"  ) && codec==CODEC_PACB)  || 
         (strcmp (flag.show_time, "compressor_t0"    ) && codec==CODEC_T0)    || 
@@ -503,12 +499,11 @@ void codec_qual_show_stats (void)
 
     int32_t other = z_file->num_lines - domq - divr - homp - pacb - longr - normq; // allow negative to catch bugs
 
-    iprintf ("\nQUAL codec stats (# lines): DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) LONGR=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%d (%.1f%%)\n",
+    iprintf ("\nQUAL codec stats (# lines): DOMQ=%u (%.1f%%) DIVR=%u (%.1f%%) HOMP=%u (%.1f%%) PACB=%u (%.1f%%) NORMQ=%u (%.1f%%) other=%d (%.1f%%)\n",
              domq,  percent (domq,  z_file->num_lines), 
              divr,  percent (divr,  z_file->num_lines), 
              homp,  percent (homp,  z_file->num_lines), 
              pacb,  percent (pacb,  z_file->num_lines), 
-             longr, percent (longr, z_file->num_lines), 
              normq, percent (normq, z_file->num_lines), 
              other, percent (other, z_file->num_lines));
 

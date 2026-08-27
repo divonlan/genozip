@@ -408,7 +408,7 @@ void sections_show_header (SectionHeaderUnionP header,
                       digest_display (h->digest).s, digest_display (h->digest_header).s, 
                       SEC_TAB, codec_name (h->src_codec), GET_UINT24(h->OLD_gz_size_3LSB), 
                       sections_dis_flags (f, st, dt, is_r2).s, TXT_FILENAME_LEN, h->txt_filename);
-        else
+        else if (!VER2(15,84))
             snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
                       "%ssrc_codec=%s OLD_gz_size_3LSB=%u %s txt_filename=\"%.*s\" flav_prop=(has_seq_len,consensus,mated,cnn,tokenized)=[[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u]]\n",
                       SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
@@ -418,6 +418,17 @@ void sections_show_header (SectionHeaderUnionP header,
                       h->flav_prop[0].has_seq_len, h->flav_prop[0].is_consensus, h->flav_prop[0].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[0].cnn]).s, h->flav_prop[0].is_tokenized,
                       h->flav_prop[1].has_seq_len, h->flav_prop[1].is_consensus, h->flav_prop[1].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[1].cnn]).s, h->flav_prop[1].is_tokenized,
                       h->flav_prop[2].has_seq_len, h->flav_prop[2].is_consensus, h->flav_prop[2].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[2].cnn]).s, h->flav_prop[2].is_tokenized);
+        else
+            snprintf (str, sizeof (str), "\n%stxt_data_size=%"PRIu64" txt_header_size=%"PRIu64" lines=%"PRIu64" max_lines_per_vb=%u digest=%s digest_header=%s\n" 
+                      "%ssrc_codec=%s OLD_gz_size_3LSB=%u %s txt_filename=\"%.*s\" flav_prop=(has_seq_len,consensus,mated,cnn,tokenized)=[[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u],[%u,%u,%u,'%s',%u]]\n",
+                      SEC_TAB, BGEN64 (h->txt_data_size), v12 ? BGEN64 (h->txt_header_size) : 0, BGEN64 (h->txt_num_lines), BGEN32 (h->max_lines_per_vb), 
+                      digest_display (h->digest).s, digest_display (h->digest_header).s, 
+                      SEC_TAB, codec_name (h->src_codec), GET_UINT24(h->OLD_gz_size_3LSB),
+                      sections_dis_flags (f, st, dt, is_r2).s, TXT_FILENAME_LEN, h->txt_filename,
+                      h->flav_prop[0].has_seq_len, h->flav_prop[0].is_consensus, h->flav_prop[0].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[0].cnn]).s, h->flav_prop[0].is_tokenized,
+                      h->flav_prop[1].has_seq_len, h->flav_prop[1].is_consensus, h->flav_prop[1].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[1].cnn]).s, h->flav_prop[1].is_tokenized,
+                      h->flav_prop[2].has_seq_len, h->flav_prop[2].is_consensus, h->flav_prop[2].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[2].cnn]).s, h->flav_prop[2].is_tokenized,
+                      h->flav_prop[3].has_seq_len, h->flav_prop[3].is_consensus, h->flav_prop[3].is_mated, char_to_printable((char[])CNN_TO_CHAR[h->flav_prop[3].cnn]).s, h->flav_prop[3].is_tokenized);
 
         break;
     }

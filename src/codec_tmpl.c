@@ -92,7 +92,7 @@ void codec_tmpl_segconf_finalize (VBlockP vb, Did did_i, LocalGetLineCB get_line
             subdicts[i] = sub_dict_id (tmpl_dict_id, template[i]);
             
             // create zctx
-            ContextP vctx = ctx_get_ctx (vb, subdicts[i]);
+            Context *vctx = ctx_get_ctx (vb, subdicts[i]);
             ctx_get_zctx_from_vctx (vctx, true, false);
         }
     
@@ -126,7 +126,7 @@ bool codec_tmpl_comp_init (VBlockP vb, Did qual_did_i, bool force)
     ctx->local_dep = DEP_L1; 
 
     for_buf (DictId, dict_id_p, zctx->subdicts) { // a bit redundant, as each value may appear many times, but no harm
-        ContextP subctx   = ctx_get_ctx (vb, *dict_id_p);
+        Context *subctx   = ctx_get_ctx (vb, *dict_id_p); // not ContextP with restrict
         subctx->ltype     = LT_SUPP; // data used by codec - not reconstructed directly
         subctx->local_dep = DEP_L2;
         subctx->lcodec    = CODEC_BSC;
@@ -153,7 +153,7 @@ COMPRESS (codec_tmpl_compress)
     ASSERTNOTNULL(template);
 
     char *chan_p[94] = {};
-    ContextP subctxs[94] = {};
+    Context *subctxs[94] = {}; // not ContextP with restruct
 
     // allocate channel buffers (maximum - assuming all reads are template_len)
     const DictId *subdicts = B(DictId, zctx->subdicts, zctx->subdicts.len32 - template_len);
@@ -193,7 +193,7 @@ COMPRESS (codec_tmpl_compress)
             subctxs[q]->local.len32 = BNUM (subctxs[q]->local, chan_p[q]);
 
             // update accounting (doing it in Z, because already merged)
-            ContextP sub_zctx = ctx_get_zctx_from_vctx (subctxs[q], false, false);
+            Context *sub_zctx = ctx_get_zctx_from_vctx (subctxs[q], false, false);
             ASSERTNOTNULL (sub_zctx);
 
             add_relaxed (sub_zctx->txt_len, subctxs[q]->local.len32);
@@ -225,17 +225,17 @@ CODEC_RECONSTRUCT (codec_tmpl_reconstruct)
     uint32_t template_len = (vb->comp_i == FQ_COMP_R2 && flag.pair) ? segconf.std_seq_lR2 : segconf.std_seq_len;
 
     if (!ctx->is_initialized) {
-        buf_alloc_exact (vb, ctx->channel_data, template_len, ContextP, "channel_data"); 
+        buf_alloc_exact (vb, ctx->channel_data, template_len, Context */*not ContextP with restrict*/, "channel_data"); 
         
         const DictId *subdicts = B(DictId, zctx->subdicts, vb->comp_i * segconf.std_seq_len); // note: whether or not we are R2, all previous component's template length is std_seq_len
 
-        for_buf (ContextP, subctx, ctx->channel_data)
+        for_buf (ContextP, subctx, ctx->channel_data) 
             *subctx = ECTX(*subdicts++);
 
         ctx->is_initialized = true;
     }
 
-    ARRAY (ContextP, subctx, ctx->channel_data);
+    ARRAY (Context *, subctx, ctx->channel_data); // not ContextP with restict
 
     char *next_recon = BAFTtxt;
 

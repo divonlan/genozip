@@ -24,6 +24,18 @@
 #pragma GCC diagnostic ignored "-Wmicrosoft-anon-tag" // a clang warning
 #endif
 
+#ifdef _WIN32 // Windows-only code (greek letters than visually resemble "win")
+#define ωιη(x) x
+#else
+#define ωιη(x) 
+#endif
+
+#ifdef __x86_64__
+#define χ64(x) x
+#else
+#define χ64(x)
+#endif
+
 #define UNUSED __attribute__((unused))
 
 // we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
@@ -578,7 +590,7 @@ static inline uint64_t fibonacci (uint64_t n, int n_bits) { return ((n * 1140071
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
 #define STRinc(x,n)        ({ typeof(n) my_n = (n)/*eval once*/; x += my_n; x##_len -= my_n; })
 #define STRdec(x,n)        ({ typeof(n) my_n = (n)/*eval once*/; x -= my_n; x##_len += my_n; })
-#define STRLEN(string_literal) ((unsigned)(sizeof string_literal - 1))
+#define STRLEN(x) (sizeof(x)-1) // length of constant strings excluding final \0. Allows \0 midstring which strlen doesn't 
 #define _S(x) x, STRLEN(x)
 #define _8(x) (bytes)x, STRLEN(x)
 #define STRBw(buf,txtword) Bc ((buf), (txtword).index), (txtword).len // used with TxtWord

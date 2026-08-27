@@ -19,6 +19,8 @@
 #pragma GENDICT_PREFIX REF
 #pragma GENDICT REF_CONTIG=DTYPE_FIELD=CONTIG 
 
+#define _SHOW_CACHE "⚡ "
+
 // reference sequences - 
 // Thread safety: "ref" is set atomically as the last set in initialization. If its set, then it is correct and will never change. If it appears to be
 // not set yet, it is necesarry to lock the mutex and test again, and initialize if still not set.

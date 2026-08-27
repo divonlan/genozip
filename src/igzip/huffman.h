@@ -33,6 +33,8 @@
 #include "igzip_lib.h"
 #include "unaligned.h"
 
+#pragma GCC diagnostic ignored "-Warray-bounds" // divon: silence warning from gcc 16
+
 #if __x86_64__  || __i386__ || _M_X64 || _M_IX86
 #ifdef _MSC_VER
 # include <intrin.h>

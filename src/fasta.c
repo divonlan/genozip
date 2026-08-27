@@ -148,6 +148,7 @@ static inline int fasta_is_end_of_contig (VBlockP vb, uint32_t first_i,
 // returns the length of the data at the end of vb->txt_data that will not be consumed by this VB is to be passed to the next VB
 int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i)
 {
+    START_TIMER;
     ASSERTNOTZERO (Ltxt);
 
     int32_t last_i = Ltxt-1;
@@ -165,8 +166,10 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i)
         
             // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
             // everything following to the next VB
-            if (data_found && txt[i]==DC && txt[i-1]=='\n') 
+            if (data_found && txt[i]==DC && txt[i-1]=='\n') {
+                COPY_TIMER (fasta_unconsumed);
                 return Ltxt - i;
+            }
 
             if (!data_found && (txt[i] != '\n' && txt[i] != '\r')) data_found = true; // anything, except for empty lines, is considered data
         }
@@ -195,10 +198,12 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i)
             else if (is_entire_vb && i+1 < Ltxt &&
                      txt[i+1] != ';' && txt[i+1] != '>' && txt[i+1] != '@') { // partial line isn't a Description or a Comment, hence its a Sequence
                 ((VBlockFASTAP)vb)->vb_has_no_newline = true;
+                COPY_TIMER (fasta_unconsumed);
                 return 0;                
             }
                 
             last_i = i;
+            COPY_TIMER (fasta_unconsumed);
             return Ltxt-1 - i;
         }
     }
@@ -642,7 +647,7 @@ rom fasta_seg_txt_line (VBlockP vb_, rom line, uint32_t remaining_txt_len, bool 
     if (*line == DC && (vb->last_line == FASTA_LINE_SEQ || vb->last_line == FASTA_LINE_COMMENT))
         fasta_seg_desc_line (vb, line, line_len, has_13);
 
-    // case: comment line - stored in the comment buffer
+    // case: comment line or empty line - stored in the comment buffer
     else if (*line == ';' || !line_len) 
         fast_seg_comment_line (vb, STRa(line), has_13);
 

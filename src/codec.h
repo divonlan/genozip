@@ -98,7 +98,7 @@ typedef struct {
 /* zfile codecs - compound - QUAL */ \
 [CODEC_DOMQ   ] = { 0, 0, "DOMQ", "+",      codec_domq_compress,      USE_SUBCODEC,             codec_domq_reconstruct,    codec_complex_est_size,  }, \
 [CODEC_PBWT   ] = { 0, 0, "PBWT", "+",      codec_pbwt_compress,      codec_pbwt_uncompress,    codec_pbwt_reconstruct,    codec_complex_est_size   }, \
-[CODEC_LONGR  ] = { 0, 0, "LNGR", "+",      codec_longr_compress,     USE_SUBCODEC,             codec_longr_reconstruct,   codec_longr_est_size     }, \
+[CODEC_LONGR  ] = { 0, 0, "LNGR", "+",      NA1,                      USE_SUBCODEC,             codec_longr_reconstruct,   NA4                      }, /* LONGR used for compressing Nanopore QUAL. Compression discontinued 15.0.88, uncompression retained for backcomp */ \
 [CODEC_NORMQ  ] = { 0, 0, "NRMQ", "+",      codec_normq_compress,     USE_SUBCODEC,             codec_normq_reconstruct,   codec_complex_est_size,  }, \
 [CODEC_HOMP   ] = { 0, 0, "HOMP", "+",      codec_homp_compress,      USE_SUBCODEC,             codec_homp_reconstruct,    codec_complex_est_size,  }, \
 [CODEC_PACB   ] = { 0, 0, "PACB", "+",      codec_pacb_compress,      USE_SUBCODEC,             codec_pacb_reconstruct,    codec_trivial_size,      }, \
@@ -120,7 +120,7 @@ extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compres
                      codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_pbwt_compress, 
                      codec_RANB_compress, codec_RANW_compress, codec_RANb_compress, codec_RANw_compress, 
                      codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress,
-                     codec_longr_compress, codec_normq_compress, codec_homp_compress, codec_t0_compress,
+                     codec_normq_compress, codec_homp_compress, codec_t0_compress,
                      codec_pacb_compress, codec_smux_compress, codec_oq_compress, codec_tmpl_compress;
 
 extern CodecUncompress codec_bz2_uncompress, codec_lzma_uncompress, codec_acgt_uncompress, codec_xcgt_uncompress,
@@ -135,7 +135,7 @@ extern CodecReconstruct codec_domq_reconstruct, codec_pbwt_reconstruct,
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_domq_est_size,
                         codec_RANB_est_size, codec_RANW_est_size, codec_RANb_est_size, codec_RANw_est_size, 
                         codec_ARTB_est_size, codec_ARTW_est_size, codec_ARTb_est_size, codec_ARTw_est_size,
-                        codec_complex_est_size, codec_trivial_size, codec_longr_est_size;
+                        codec_complex_est_size, codec_trivial_size;
 
 // non-codec-specific functions
 extern void codec_initialize (void);
@@ -212,11 +212,6 @@ static inline bool codec_pacb_smux_is_qual (DictId dict_id) { return !memcmp (&d
 extern bool codec_tmpl_maybe_used (Did did_i);
 extern void codec_tmpl_segconf_finalize (VBlockP vb, Did did_i, LocalGetLineCB get_line_cb);
 extern bool codec_tmpl_comp_init (VBlockP vb, Did qual_did_i, bool force);
-
-// LONGR stuff
-extern bool codec_longr_maybe_used (VBlockP vb, Did did_i);
-extern bool codec_longr_comp_init (VBlockP vb, Did qual_did_i, bool force);
-extern void codec_longr_segconf_calculate_bins (VBlockP vb, ContextP ctx, LocalGetLineCB callback);
 
 // OQ stuff
 extern bool codec_oq_comp_init (VBlockP vb);

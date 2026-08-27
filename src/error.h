@@ -8,4 +8,5 @@
 
 #pragma once
 
-void error_initialize (int argc, char *argv[]);
+extern void error_initialize (int argc, char *argv[]);
+extern void error_print_call_stack (void);

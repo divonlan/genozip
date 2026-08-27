@@ -14,7 +14,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <process.h>
-#include <fcntl.h> // for _O_BINARY
+#include <fcntl.h> // for O_BINARY
 #else // non-Windows
 #include <sys/ioctl.h>
 #include <sys/wait.h>
@@ -82,7 +82,7 @@ bool stream_exec_is (StreamP stream, rom exec_name)
 static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip)
 {
 #ifdef _WIN32
-    ASSERT (!_pipe (fds, pipe_size, _O_BINARY), "failed to create pipe: %s", strerror (errno));
+    ASSERT (!_pipe (fds, pipe_size, O_BINARY), "failed to create pipe: %s", strerror (errno));
 
 #else // Not Windows
     ASSERT (!pipe (fds), "failed to create pipe: %s (errno=%u)", strerror (errno), errno);
@@ -91,7 +91,7 @@ static void stream_pipe (int *fds, uint32_t pipe_size, bool is_stream_to_genozip
     
 #ifdef __linux__
     // lower pipe size requested to the maximum allowed system size (fcntl will return EPERM if size is larger than limit)
-    FILE *pipe_max_size_file = fopen ("/proc/sys/fs/pipe-max-size", "rb");
+    FILE *pipe_max_size_file = fopen ("/proc/sys/fs/pipe-max-size", READ);
     if (pipe_max_size_file) {
         char max_pipe_size_str[30] = {};
         size_t bytes = fread (max_pipe_size_str, 1, 29, pipe_max_size_file);

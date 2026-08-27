@@ -67,10 +67,10 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsigned 
     // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
     // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
     else if (NM_is_integer && nm == predicted_by_MD && 
-               (segconf.NM_after_MD            || // case 1: MD is reconstructed before NM so peek is fast
-                IS_REF_INTERNAL                || // case 2: prediction against SEQ performs poorly
-                predicted_by_SEQ != nm         || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
-                flag.best))                       // case 4: the user request the best method
+               (segconf.NM_after_MD    || // case 1: MD is reconstructed before NM so peek is fast
+                IS_REF_INTERNAL        || // case 2: prediction against SEQ performs poorly
+                predicted_by_SEQ != nm || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
+                flag.best))               // case 4: user requested the best method
         seg_special1 (VB, SAM_SPECIAL_NM, 'm', ctx, add_bytes);  // 'm' type since v14
 
     // method 2: copy from SA Group. DEPN or PRIM line. Note: in DEPN, nm already verified in sam_sa_seg_depn_find_sagroup to be as in SA alignment
@@ -134,7 +134,9 @@ void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xm, int16_t idx
 
 void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsigned add_bytes)
 {
-    ContextP ctx = CTX (OPTION_nM_i);
+    decl_ctx (OPTION_nM_i);
+
+    dl->nM = nm; 
 
     // case: in paired files, its expected to be the same value as the mate
     if (segconf.is_paired && !IS_DEPN(vb)) 

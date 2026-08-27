@@ -397,15 +397,34 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (STRp(chrom_name),
             ref_contig_index = *B32(gref.ctgs.by_LN, index_i);
     } 
 
-    // if its not found, we ignore it. sequences that have this chromosome will just be non-ref
     if (ref_contig_index == WORD_INDEX_NONE) {
         if (IS_ZIP && !has_dup_len) { // no warning if this is merely a dup_len 
-            if (IS_REF_EXT_STORE) 
-                WARN_ONCE (_WRN "header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. Genozip will try its best to compress anyway.\n"_TIP" If Genozip fails, use the same reference file used to created this %s, or use --reference instead of %s",
-                           txt_file->basename, STRf(chrom_name), gref.filename, z_dt_name(), OT("REFERENCE", "E"));
-            else
-                WARN_ONCE (_FYI "Header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. If the file contains many %ss with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
-                           txt_file->basename, STRf(chrom_name), gref.filename, DTPT(line_name));
+            char msg[strlen (txt_file->basename) + strlen (gref.filename) + chrom_name_len + 100];
+            snprintf (msg, sizeof msg, "Header of %s has contig \"%.*s\"%s (and maybe others, too), missing in %s",
+                      txt_file->basename, STRf(chrom_name), cond_int (*hdr_LN, " of length ", *hdr_LN), gref.filename);
+
+            // case: missing a major contig (longer than 1 Mb)
+            if (*hdr_LN && *hdr_LN > 1000000) { // if updating threshold, update here too: www.genozip.com/reference#assess
+                if (flag.assess_reference) {
+                    if (!flag.explicit_quiet) iprintf ("%s\n", msg);
+                    exit(1); // 1 indicates "reference doesn't fit" - it is not an error, so not using exit_on_error
+                }
+ 
+                if (!segconf.missing_header_contig_warning) 
+                    WARN (_WRN/*major contig missing*/ "%s. To achieve good compression, switch to the correct reference file, or compress without a reference file at all.", msg);
+            }
+            
+            // if short, sequences that have this contig will just be non-ref
+            else if (!segconf.missing_header_contig_warning) {
+                if (IS_REF_EXT_STORE) 
+                    WARN (_FYI "%s. Genozip will try its best to compress anyway.\n"_TIP" If Genozip fails, use the same reference file used to created this %s, or use --reference instead of %s",
+                          msg, z_dt_name(), OT("REFERENCE", "E"));
+                else
+                    WARN (_FYI/*minor contig missing*/ "%s. If the file contains many %ss with this contig, it might compress a bit less than when using a reference file that contains all contigs.",
+                          msg, DTPT(line_name));
+            }
+
+            segconf.missing_header_contig_warning = true; // note: not WARN_ONCE because we want to test for every input file
         }
         return WORD_INDEX_NONE;
     }
@@ -419,9 +438,17 @@ WordIndex ref_contigs_ref_chrom_from_header_chrom (STRp(chrom_name),
         // case: file header specifies length - it must be the same as the reference
         else if (*hdr_LN != ref_LN && IS_ZIP) { // note: in PIZ, the REF_INTERNAL contigs might differ in length from the header contigs
             rom ref_contig_name = ref_contigs_get_name (ref_contig_index, NULL); // might be different that chrom_name if it matches an alt_name
-        
-            ASSINP (false, "Error: wrong reference file - different contig length: in %s \"%.*s\" has LN=%"PRIu64", but in %s \"%s\" has LN=%"PRId64, 
-                    txt_name, STRf(chrom_name), *hdr_LN, gref.filename, ref_contig_name, ref_LN);
+
+            char msg[strlen (txt_name) + strlen(ref_contig_name) + strlen (gref.filename) + chrom_name_len + 200];
+            snprintf (msg, sizeof(msg)-1, "Wrong reference file - different contig length: in %s \"%.*s\" has LN=%"PRIu64", but in %s \"%s\" has LN=%"PRId64, 
+                      txt_name, STRf(chrom_name), *hdr_LN, gref.filename, ref_contig_name, ref_LN);
+
+            if (flag.assess_reference) {
+                if (!flag.explicit_quiet) iprintf ("%s\n", msg);
+                exit(1); // 1 indicates "reference doesn't fit" - it is not an error, so not using exit_on_error
+            }
+            
+            ASSINP (false, _ERR "%s", msg);
         }
     }
 
@@ -437,7 +464,7 @@ void ref_contigs_verify_same_contig_as_ref (rom cram_filename, STRp(chrom_name),
     WordIndex ref_contig_index = ref_contigs_get_by_name (STRa(chrom_name), false, SOFT_FAIL); 
         
     // if its not found, error, as samtools might hang
-    ASSINP (ref_contig_index != WORD_INDEX_NONE, "header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. ",
+    ASSINP (ref_contig_index != WORD_INDEX_NONE, _ERR "header of %s has contig \"%.*s\" (and maybe others, too), missing in %s. ",
             cram_filename, STRf(chrom_name), gref.filename);
 
     if (hdr_LN) { // 0 if header doesn't specify LN

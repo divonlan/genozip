@@ -56,7 +56,7 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), bool d
         segconf.nonbio_type = NONBIO_10xGen; // optimistically - we will decide finally based on aligner results
 
     bool aligner_ok = flag.aligner_available && seq_len && !segconf.is_long_reads && 
-                      (!segconf_running || IS_NONBIO(10xGen));
+                      (!segconf_running || IS_NONBIO(10xGen) || flag.assess_reference);
     bool is_excess_aligned;
     bool am_i_R2 = false;
 

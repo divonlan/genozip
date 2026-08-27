@@ -7,7 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include <math.h>
-#if defined(__x86_64__) || defined(_M_X64)
+#ifdef __x86_64__
 #include <immintrin.h>
 #endif
 #include "context.h"

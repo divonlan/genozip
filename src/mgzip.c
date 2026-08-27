@@ -498,7 +498,7 @@ static GzStatus mgzip_block_verify_header (FileP file, // option 1
 // read and uncompress the last two bgzf blocks of a file. Used for testing a BAM has unmapped aligments.
 bool bgzf_read_and_uncomp_final_block (rom filename, qSTRp(uncomp))
 {
-    FILE *fp = fopen (filename, "rb");
+    FILE *fp = fopen (filename, READ);
     if (!fp) return false;
 
     uint8_t comp[BGZF_MAX_BLOCK_SIZE + BGZF_EOF_LEN];
@@ -1276,12 +1276,12 @@ static void bgzf_show_compress (VBlockP vb, int32_t gz_blk_i/*# of block in file
 static void bgzf_failed_exact_verification (void)
 {
     if (flag.bgzf == BGZF_EXACT_STRICT) 
-        ABORTINP ("%s (technical details: library=%s) %s", 
-                  NON_EXACT_ERROR, bgzf_lib_name_level (txt_file->mgzip_flags).s, WEBSITE_GZ);
+        ABORTINP ("%s %s (technical details: library=%s) %s", 
+                  z_file->basename, NON_EXACT_ERROR, bgzf_lib_name_level (txt_file->mgzip_flags).s, WEBSITE_GZ);
 
     flag.bgzf = BGZF_EXACT_FAILED; // no point continuing to test + avoid full-file verification and error message
     
-    WARN (_FYI "%s A different gz-recompression method was used.", NON_EXACT_ERROR);
+    WARN (_FYI "%s %s A different gz-recompression method was used.", z_file->basename, NON_EXACT_ERROR);
 }
 
 static void bgzf_failed_exact_verification_one_block (VBlockP vb, const BgzfBlockPiz *restrict block, uint32_t this_block_digest, STRp(gz_data))
@@ -1594,7 +1594,7 @@ void show_gz (rom filename)
     uint64_t file_size = file_get_size (filename), file_remaining=file_size, offset=0;
     ASSINP (file_size, "Error: file is empty: %s", filename);
 
-    FILE *fp = fopen (filename, "rb");
+    FILE *fp = fopen (filename, READ);
     ASSERT (fp, "Failed to open %s: %s", filename, arch_str_error());
 
     buf_alloc (evb, &evb->z_data, 0, MIN_(100 MB, file_size), char, 0, "z_data");
@@ -1771,7 +1771,7 @@ void dump_gz_block (rom filename)
     uint64_t file_size = file_get_size (filename);
     ASSINP (file_size, "Error: file is empty: %s", filename);
 
-    FILE *fp = fopen (filename, "rb");
+    FILE *fp = fopen (filename, READ);
     ASSERT (fp, "WARNING: Failed to open %s. fopen: %s", filename, strerror (errno));
 
     char data[64 KB];

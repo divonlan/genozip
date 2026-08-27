@@ -148,7 +148,10 @@ void profiler_add_evb_and_print_report (void)
         PRINT (mgzip_read_block_no_bsize, 4);
         PRINT (mgzip_uncompress_during_read, 4);
         PRINT (fastq_txtfile_sync_to_R1_by_num_lines, 2);
-        PRINT (txtfile_get_unconsumed_callback, 2);
+        PRINT (txtfile_get_unconsumed_to_pass_to_next_vb, 2);
+        PRINT (bam_unconsumed, 3);
+        PRINT (fastq_unconsumed, 3);
+        PRINT (fasta_unconsumed, 3);
         PRINT (mgzip_copy_unconsumed_blocks, 2);
         PRINT (zriter_write, 1);
         PRINT (bgzf_io_thread, 1);
@@ -286,11 +289,11 @@ void profiler_add_evb_and_print_report (void)
         PRINT (compressor_rans,  2);
         PRINT (compressor_arith, 2);
         PRINT (compressor_domq,  2);
+        PRINT (codec_domq_normalize_qual, 3);
         PRINT (compressor_normq, 2);
         PRINT (compressor_acgt,  2);
         PRINT (compressor_xcgt,  2);
         PRINT (compressor_pbwt,  2);
-        PRINT (compressor_longr, 2);
         PRINT (compressor_homp,  2);
         PRINT (compressor_t0,    2);
         PRINT (compressor_pacb,  2);
@@ -463,7 +466,6 @@ void profiler_add_evb_and_print_report (void)
             PRINT (compressor_normq, 2);
             PRINT (compressor_acgt,  2);
             PRINT (compressor_pbwt,  2);
-            PRINT (compressor_longr, 2);
             PRINT (compressor_homp,  2);
             PRINT (compressor_pacb,  2);
             PRINT (compressor_smux,  2);

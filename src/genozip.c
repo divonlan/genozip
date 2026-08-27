@@ -110,27 +110,6 @@ static rom help_footer[] = {
 rom report_support (void) { return "Please report this to " EMAIL_SUPPORT ". "; }
 rom report_support_if_unexpected (void) { return "\nIf this is unexpected, please contact "EMAIL_SUPPORT".\n"; }
 
-rom command_name (void) // see CommandType
-{
-    switch (flag.command) {
-        case ZIP           : return "ZIP";
-        case PIZ           : return "PIZ";
-        case LIST          : return "LIST";
-        case VERSION       : return "VERSION";
-        case HELP          : return "HELP";
-        case LICENSE       : return "LICENSE";
-        case SHOW_HEADERS  : return "SHOW_HEADERS";
-        case SHOW_BAI      : return "SHOW_BAI";
-        case SHOW_GZ       : return "SHOW_GZ";
-        case GENERATE_IL1M : return "GENERATE_IL1M";
-        case DUMP_GZ_BLOCK : return "DUMP_GZ_BLOCK";
-        case SHOW_FLAVOR   : return "SHOW_FLAVOR";
-        case RM_CACHE      : return "RM_CACHE";
-        case NO_COMMAND    : return "NO_COMMAND";
-        default            : return "InvalidCommand";
-    }
-}
-
 static void main_print_help (bool explicit)
 {
     static rom *texts[NUM_EXE_TYPES] = { help_genozip, help_genounzip, help_genocat, help_genols }; // same order as ExeType
@@ -363,6 +342,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.debug_latest  ? "--debug-latest"   : SKIP_ARG,
                                       flag.show_deep     ? "--show-deep"      : SKIP_ARG, // note: --show-bamass is an alias to --show-deep
                                       flag.no_cache      ? "--no-cache"       : SKIP_ARG,
+                                      flag.show_cache    ? "--show-cache"     : SKIP_ARG,
                                       flag.sendto        ? "--sendto"         : SKIP_ARG,
                                       flag.sendto        ? sendto_str         : SKIP_ARG,
                                       flag.license_filename ? "--licfile"     : SKIP_ARG,
@@ -414,6 +394,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.debug_latest)  argv[argc++] = "--debug-latest";
         if (flag_show_deep)     argv[argc++] = "--show-deep";
         if (flag.no_cache)      argv[argc++] = "--no-cache";
+        if (flag.show_cache)    argv[argc++] = "--show-cache";
         if (!flag.debug)        argv[argc++] = "--check-latest"; // we're not coming, so PIZ will check-latest and print tip
 
         if (flag.sendto) {      argv[argc++] = "--sendto"; 

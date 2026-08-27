@@ -20,15 +20,15 @@
         write, zriter_write, piz_read_one_vb, vb_get_vb, segconf_calculate,\
         compressor_domq, compressor_acgt, compressor_xcgt, mgzip_uncompress_during_read, igzip_uncompress_during_read, \
         piz_get_line_subfields, b250_zip_generate, zip_generate_local, zip_compress_ctxs, ctx_merge_in_vb_ctx, wait_for_merge,\
-        zfile_uncompress_section, zfile_uncompress_ref_section, codec_assign_best_codec, compressor_pbwt, compressor_longr, compressor_homp, compressor_t0, \
+        zfile_uncompress_section, zfile_uncompress_ref_section, codec_assign_best_codec, compressor_pbwt, compressor_homp, compressor_t0, \
         compressor_rans, compressor_arith, compressor_normq, compressor_pacb, compressor_smux, compressor_oq, compressor_tmpl, \
-        codec_domq_reconstruct, codec_domq_reconstruct_dom_run, codec_domq_reconstruct_divr, codec_domq_reconstruct_runs, codec_domq_piz_get_denorm, \
+        codec_domq_reconstruct, codec_domq_reconstruct_dom_run, codec_domq_reconstruct_divr, codec_domq_reconstruct_runs, codec_domq_piz_get_denorm, codec_domq_normalize_qual,     \
         codec_longr_reconstruct, codec_homp_reconstruct, codec_tmpl_reconstruct, \
         codec_t0_reconstruct, codec_pacb_reconstruct, codec_smux_reconstruct, codec_oq_reconstruct, \
         reconstruct_vb, buf_alloc_main, buf_alloc_compute, buf_destroy_do_do_main, buf_destroy_do_do_compute, buf_overlay_do, buf_trim_do, \
         buf_free_main, buf_free_compute, buflist_add_buf, buflist_remove_buf, \
         dispatcher_recycle_vbs, sections_create_index, \
-        txtfile_discover_specific_gz, txtfile_read_header, txtfile_read_vblock, txtfile_get_unconsumed_callback, fastq_txtfile_sync_to_R1_by_num_lines, \
+        txtfile_discover_specific_gz, txtfile_read_header, txtfile_read_vblock, txtfile_get_unconsumed_to_pass_to_next_vb, fastq_txtfile_sync_to_R1_by_num_lines, \
         txtfile_read_block_mgzip, txtfile_read_block_zlib, txtfile_read_block_igzip, txtfile_read_block_bz2, \
         bgzf_io_thread, bgzf_compute_thread, bgzf_writer_thread, mgzip_uncompress_vb, mgzip_copy_unconsumed_blocks, mgzip_read_block_with_bsize, \
         bgzf_compress_one_block, bgzf_uncompress_one_prescribed_block, bgzf_compress_tbi, \
@@ -50,7 +50,7 @@
         sam_deep_zip_merge, sam_piz_con_item_cb, sam_piz_deep_compress, sam_piz_deep_add_qname, sam_piz_deep_add_seq, sam_piz_deep_add_qual,\
         sam_piz_deep_finalize_ents, sam_piz_deep_grab_deep_ents, fastq_seg_find_deep, \
         scan_index_qnames_preprocessing, sam_piz_sam2fastq_QUAL, sam_piz_sam2bam_QUAL,\
-        fastq_read_R1_data, piz_read_all_ctxs, fastq_seg_get_lines, fastq_seg_SEQ, \
+        fastq_read_R1_data, fastq_unconsumed, piz_read_all_ctxs, fastq_seg_get_lines, fastq_seg_SEQ, \
         fastq_seg_deep, fastq_deep_seg_find_subseq, fastq_seg_DESC, fastq_seg_saux, fastq_seg_deep_consume_unique_matching_ent,\
         fastq_bamass_populate, bamass_read_one_vb, bamass_append_z_ents, bamass_link_entries, bamass_generate, bamass_link,\
         bamass_generate_bamass_ents, fastq_bamass_seg_SEQ, fastq_special_SEQ_by_bamass, fastq_seg_find_bamass, bamass_after_link_entries,\
@@ -69,13 +69,14 @@
         zip_write_global_area, zip_finalize, \
         piz_read_global_area, ref_load_stored_reference, reference_re_digest_genome, dict_io_read_all_dictionaries, dict_io_build_word_lists, \
         ref_read_multiple_ranges, ref_uncompress_multiple_ranges, vb_release_vb_do, vb_destroy_vb, buflist_free_vb, buflist_compact,\
-        sam_load_groups_add_one_prim_vb, sam_load_groups_move_comp_to_zfile, sam_load_groups_move_comp_to_zfile_idle, \
+        bam_unconsumed, sam_load_groups_add_one_prim_vb, sam_load_groups_move_comp_to_zfile, sam_load_groups_move_comp_to_zfile_idle, \
         sam_load_groups_add_qnames, sam_load_groups_add_flags, sam_load_groups_add_seq, sam_load_groups_add_seq_pack, sam_load_groups_add_qual, sam_load_groups_add_cigars, \
         sam_load_groups_add_SA_alns, sam_load_groups_add_solo_data, sam_load_groups_add_grps, \
         sam_zip_calculate_max_conc_writing_vbs, sam_reconstruct_SEQ_vs_ref, sam_reconstruct_SEQ_get_textual_ref, aligner_reconstruct_seq, sam_piz_sam2bam_SEQ,\
         sam_piz_special_SEQ, reconstruct_SEQ_copy_saggy, sam_piz_special_MD, \
         writer_main_loop, writer_create_plan, gencomp_piz_initialize_vb_info, gencomp_piz_update_reading_list, gencomp_piz_vb_to_plan, \
         sam_bismark_piz_update_meth_call, sam_gencomp_trim_memory, \
+        fasta_unconsumed, \
         zip_handle_unique_words_ctxs, random_access_merge_in_vb, \
         random_access_finalize_entries, random_access_compress, ctx_compress_counts, zfile_compress_genozip_header,\
         ref_compress_ref, ref_compress_one_range, ref_copy_compressed_sections_from_reference_file, ref_uncompact_ref, \

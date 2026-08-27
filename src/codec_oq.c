@@ -29,6 +29,10 @@
 
 bool codec_oq_comp_init (VBlockP vb)
 {
+    if (flag.no_OQ) return false; // user doesn't want the OQ codec
+
+    if (CTX(SAM_BADQUAL)->local.len) return false; // this VB's QUAL contains bad QUAL values (very rare) - we can't use the OQ codec
+
     // verify that OQ can be segged against QUAL (i.e. QUAL exists iff OQ exists)
     for_line {
         ZipDataLineSAM𐤐 dl = DATA_LINE (line_i);
@@ -61,14 +65,12 @@ COMPRESS (codec_oq_compress)
     int32_t count_q[NUM_OQ_CTXS] = {};
     for_line {   
         ZipDataLineSAM𐤐 dl = DATA_LINE (line_i);
+        if (!dl->OQ) continue; // no OQ this line
+
         txtSTR (qual, dl->QUAL);
 
-        for (uint32_t i=0; i < qual_len; i++) {
-            #ifdef DEBUG // note: codecs that are destructive to QUAL data (DOMQ, NORMQ...) must set QUAL context to local_dep >= DEP_L1
-            ASSERT (IS_QUAL_SCORE(qual[i]), "%s/%u: Invalid QUAL[%u]=%d", VB_NAME, line_i, i, qual[i]);
-            #endif
+        for (uint32_t i=0; i < qual_len; i++) 
             count_q[(int)qual[i] - 33]++; // BAM note: qual in txt_data has been already converted to SAM values in bam_rewrite_qual
-        }
     }
 
     char *next[NUM_OQ_CTXS] = {};
@@ -87,6 +89,8 @@ COMPRESS (codec_oq_compress)
     // second pass - seg OQ into channels - mux by QUAL
     for_line {   
         ZipDataLineSAM𐤐 dl = DATA_LINE (line_i);
+        if (!dl->OQ) continue; // no OQ this line
+
         txtSTR (qual, dl->QUAL);
         rom oq = Btxt(dl->OQ);
         uint32_t oq_len = dl->SEQ.len;

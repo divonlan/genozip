@@ -160,10 +160,15 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t add_line_numbers   : 1; 
     uint64_t add_seq            : 1;        
     uint64_t truncate           : 1; // allow truncated file - compress only available full lines. note: we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
-
+    uint64_t unlock             : 1; // unlock genozip file locked with --sendto
+    
     // ZIP options
     uint64_t explicitly_generic : 1; // user explicitly set the type to generic
     enum { BIND_NONE, BIND_FQ_PAIR, BIND_SAM, BIND_DEEP } bind : 2; // ZIP: cases where we have more than one txt_file bound in a z_file
+    uint64_t skip_zip           : 1; // user requested to not re-compress .zip / .bz2 / .xz files with genozip
+    uint64_t skip_bz2           : 1; 
+    uint64_t skip_xz            : 1; 
+    uint64_t assess_reference   : 1;
     
     // PIZ: data-modifying genocat options for showing only a subset of the file, or otherwise modify the file 
     uint64_t header_one         : 1; // how to handle the txt header
@@ -267,10 +272,10 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t force_PLy          : 1; // VCF: accessed during segconf initialization
     uint64_t no_domqual         : 1;
     uint64_t no_pacb            : 1;
-    uint64_t no_longr           : 1;
     uint64_t no_homp            : 1;
     uint64_t no_smux            : 1;
     uint64_t no_tmpl            : 1;
+    uint64_t no_OQ              : 1;
     uint64_t no_lzma            : 1;
     uint64_t no_bgzf            : 1;
     uint64_t no_faf             : 1;
@@ -372,7 +377,8 @@ typedef struct __attribute__((gcc_struct)) {
            dump_b250_δ,      // argument of --dump-b250-one
            dump_local_δ,     // argument of --dump-local-one
            debug_seg_δ,      // argument of --debug-seg
-           show_containers_δ;// argument of --show-containers
+           show_containers_δ,// argument of --show-containers
+           tele_show_δ;      // argument of --tele-show
     rom show_one_dict;       // argument of --show-dict-one
 
     DeepHash debug_deep_hash;// qname, seq, qual hashes
@@ -486,3 +492,7 @@ static inline bool flag_is_set_(int flag_without_dict, DictId flag_with_dict, Di
 #define flag_is_δ(f, dict)   flag_is_set_(0, flag.f##_δ, (dict))      // checks only the dict_id (not the "all" option)
 
 #define HAS_DEBUG_SEG(ctx) flag_is_set (debug_seg, ctx->dict_id)
+
+extern rom _command_name (CommandType cmd);
+static inline rom command_name (void)         { return _command_name (flag.command);    }
+static inline rom primary_command_name (void) { return _command_name (primary_command); }

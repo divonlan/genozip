@@ -136,6 +136,7 @@ static int32_t bam_unconsumed_scan_backwards (rom bam_data, uint64_t bam_data_le
 // if first_i > 0, we attempt to heuristically detect the start of a BAM alignment.
 int32_t bam_unconsumed (VBlockP vb, uint32_t first_i)
 {
+    START_TIMER;
     ASSERTNOTZERO (Ltxt);
 
     int32_t result;
@@ -148,6 +149,7 @@ int32_t bam_unconsumed (VBlockP vb, uint32_t first_i)
     else
         result = bam_unconsumed_scan_backwards (Btxt(first_i), Ltxt - first_i, NULL); 
 
+    COPY_TIMER (bam_unconsumed);
     return result; // if UNCONSUMED_NEED_MORE_DATA - we will be called again with more data
 }
 

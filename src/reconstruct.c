@@ -434,9 +434,9 @@ static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), Va
 
         else // beyond 32b uint
             switch (snip[1] - '0') { // snip[1] is type
-                case 0: memcpy (&format[9], PRIu64, STRLEN(PRIu64)); break;
-                case 1: memcpy (&format[9], PRIx64, STRLEN(PRIx64)); break;
-                case 2: memcpy (&format[9], PRIX64, STRLEN(PRIX64)); break;
+                case 0: memcpy (&format[9], PRIu64, strlen(PRIu64)); break;
+                case 1: memcpy (&format[9], PRIx64, strlen(PRIx64)); break;
+                case 2: memcpy (&format[9], PRIX64, strlen(PRIX64)); break;
             }
 
         bool has_zero_x = snip_len == 4 && snip[3] == 'x'; // since 15.0.8

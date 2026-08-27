@@ -311,6 +311,7 @@ static inline bool is_last_qname (VBlockFASTQP vb, STRp(qname), STRp(pair_qname)
 int32_t fastq_unconsumed (VBlockP vb_, 
                           uint32_t first_i) // the smallest index in txt_data for which txt_data is populated (the rest might still in uncompressed MGZIP blocks) 
 {
+    START_TIMER;
     VBlockFASTQP vb = (VBlockFASTQP)vb_;
     ASSERTNOTZERO (Ltxt);
 
@@ -377,6 +378,7 @@ int32_t fastq_unconsumed (VBlockP vb_,
                     if (vb->R2_lowest_read == 0 && (vb->R2_highest_read == -1 || vb->R2_highest_read == read_bnum) &&
                         n != 4) { // not edge case where vb has only 1 line
                         vb->R2_highest_read = highest_read_in_this_call; // the highest read we've considered
+                        COPY_TIMER (fastq_unconsumed);
                         return -1; // all current txt_data has been considered and matching QNAME not found, read more data from disk please
                     }
 
@@ -387,6 +389,7 @@ int32_t fastq_unconsumed (VBlockP vb_,
                 
                 // everything after the last full read goes to the next VB
                 ASSERTNOTNULL (lines[min_lines]);
+                COPY_TIMER (fastq_unconsumed);
                 return BAFTtxt - lines[min_lines];   // number of "unconsumed" characters remaining in txt_data after the last line of this read
             }
             
@@ -399,6 +402,7 @@ int32_t fastq_unconsumed (VBlockP vb_,
         ABORTINP ("%s: Examined %d textual lines at the end of the VB and could not find a valid read, it appears that this is not a valid %s file (tech=%s). Last %u lines examined:\n[0]=\"%.*s\"\n[1]=\"%.*s\"\n[2]=\"%.*s\"\n[3]=\"%.*s\"\n[4]=\"%.*s\"\n",
                   VB_NAME, n, DT_NAME, tech_name (segconf.tech), MIN_(n, 5), STRfi(line,0), STRfi(line,1), STRfi(line,2), STRfi(line,3), STRfi(line,4));
 
+    COPY_TIMER (fastq_unconsumed);
     return UNCONSUMED_NEED_MORE_DATA; 
 }
 
@@ -706,6 +710,25 @@ bool fastq_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
         dict_id.num == _FASTQ_NONBIO_BC2;
 }
 
+static noreturn void fastq_segconf_assess_reference (VBlockP vb)
+{
+    double aligned_percent = percent (vb->num_aligned, vb->lines.len);
+
+    if (!flag.explicit_quiet) {
+        if (segconf.is_long_reads)    
+            iprint0 (_FYI "Not applicable: Genozip can't utilize reference files for compressing long-read FASTQs.\n");
+        
+        else if (segconf.nonbio_type) 
+            iprint0 (_FYI "Not applicable: This FASTQ is non-biological (e.g. Barcodes, UMIs etc), a reference file won't help here.\n");
+        
+        else 
+            iprintf (_FYI "Based on the first %u reads of %s: the estimated percent of reads covered by %s is %1.1f%%\n", 
+                     vb->lines.len32, txt_name, ref_get_filename(), aligned_percent); 
+    }
+
+    exit (aligned_percent < 90); // 0 (good reference) if >=90%, 1 otherwise. Note: don't use exit_ok / exit_on_error
+}
+
 void fastq_segconf_finalize (VBlockP vb)
 {
     if (!flag.deep) { // in Deep, this is a SAM file and SAM segconf gets to decide these
@@ -727,6 +750,10 @@ void fastq_segconf_finalize (VBlockP vb)
         !segconf.nonbio_type && // not already found to be another type of nonbiological
         !flag.pair) // note: if paired, we test R2 in segconf_calculate_nonfirst_FASTQ
         fastq_segconf_check_if_Parse (vb);
+
+    // after determining if long reads or nonbio
+    if (flag.assess_reference)
+        fastq_segconf_assess_reference (vb); // doesn't return
 
     // if no reference, test if fastq is multiseq
     if (!flag.reference && !flag.fast && !segconf.nonbio_type) 
@@ -767,9 +794,6 @@ void fastq_segconf_finalize (VBlockP vb)
 
     if (codec_pacb_maybe_used (FASTQ_QUAL)) 
         codec_pacb_segconf_finalize (vb);
-
-    if (codec_longr_maybe_used (vb, FASTQ_QUAL)) 
-        codec_longr_segconf_calculate_bins (vb, CTX(FASTQ_QUAL + 1), fastq_zip_qual);
 
     if (codec_tmpl_maybe_used (FASTQ_QUAL)) 
         codec_tmpl_segconf_finalize (vb, FASTQ_QUAL, fastq_zip_qual);
@@ -1004,6 +1028,10 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
 {
     START_TIMER;
 
+    // in FASTA, but not FASTQ, extra newlines are permitted
+    if (*line == '\n' && FAF) 
+        RESTART ("--no-faf", "Encountered extra newlines between sequences%s", ""); 
+    
     ASSSEG0 (*line != '\n', "Invalid FASTQ file format: unexpected newline");
 
     ASSSEG (*line == DC, "Invalid FASTQ file format: expecting description line to start with '%c' but it starts with %c", DC, *line);     
@@ -1066,7 +1094,7 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
     }
 
     // get SEQ line
-    rom after = seg_get_next_item (VB, *seq, &remaining, GN_SEP, GN_IGNORE, GN_IGNORE, seq_len, NULL, &has_13[1], "SEQ");
+    rom after = seg_get_next_item (VB, *seq, &remaining, true, false, seq_len, NULL, &has_13[1], "SEQ");
 
     // case FASTA as FASTQ: no Line3 and no QUAL
     if (FAF) goto done;
@@ -1118,7 +1146,7 @@ static rom fastq_seg_get_lines (VBlockFASTQP vb, rom line, int32_t remaining,
     }
 
     // get QUAL line
-    after = seg_get_next_item (VB, *qual, &remaining, GN_SEP, GN_FORBIDEN, GN_IGNORE, qual_len, NULL, &has_13[3], "QUAL"); 
+    after = seg_get_next_item (VB, *qual, &remaining, true, false, qual_len, NULL, &has_13[3], "QUAL"); 
 
     ASSSEG (*qual_len == *seq_len, "Invalid FASTQ file format: sequence_len=%u and quality_len=%u. Expecting them to be the same.\nSEQ = %.*s\nQUAL= %.*s",
             *seq_len, *qual_len, STRf(*seq), STRf(*qual));

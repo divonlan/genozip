@@ -83,7 +83,8 @@ void refhash_make_initialize (void)
     gpos_bytes = max_gpos < NO_HASH_ENT32 ? 4 : 5; // either up to 4 Gps or up to 1 Tbp
 
     refhash_calc_bits_per_hash_out();
-
+    
+    hash_hits_by_entry.can_be_big = true; // supress warning    
     buf_alloc_exact_zero (evb, hash_hits_by_entry, ref_hash_len, uint8_t, "hash_hits_by_entry");
 }
 

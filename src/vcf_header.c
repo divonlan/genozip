@@ -280,12 +280,12 @@ static bool vcf_header_zip_parse_one_line (STRp(line), void *unused1, void *unus
 
     // keywords that designate programs
     #define ISPROG(s)       \
-    else if (LINEIS (s)) stats_add_one_program (&line[STRLEN(s)], line_len-STRLEN(s)-1) // without the \n
+    else if (LINEIS (s)) stats_add_one_program (&line[strlen(s)], line_len-strlen(s)-1) // without the \n
 
     #define ISGATK(s,sep) /* start after ## and terminate string at sep */\
     else if (LINEIS (s)) ({  \
         char str[100];      \
-        snprintf (str, 100, "GATK.%.*s", MIN_(30, (int)strcspn (&line[STRLEN(s)], sep " \t\n\r")), &line[STRLEN(s)]); \
+        snprintf (str, 100, "GATK.%.*s", MIN_(30, (int)strcspn (&line[strlen(s)], sep " \t\n\r")), &line[strlen(s)]); \
         stats_add_one_program (str, strlen (str)); \
     })
 

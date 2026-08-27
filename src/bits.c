@@ -12,6 +12,9 @@
 // without attribution or restrictions. There are no warranties and there may be bugs."
 
 #include <stdarg.h>
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
 #include "genozip.h"
 #include "endianness.h"
 #include "bits.h"
@@ -515,24 +518,39 @@ void bits_overlay (BitsP overlaid_bits, BitsP regular_bits, uint64_t start, uint
                              .nbits  = nbits };
 } 
 
-// convert a bit array to a byte array of values 0-1
-void bits_bit_to_byte (uint8_t *dst, ConstBitsP src_bits, uint64_t src_bit, uint32_t num_bits)
+// convert a bit array to a byte array of values 0/1
+void bits_bit_to_byte (uint8_t *restrict dst, ConstBitsP src_bits, uint64_t src_bit, uint32_t num_bits)
 {
     ASSERT (src_bit + num_bits <= src_bits->nbits, "Expecting src_bit=%"PRIu64" + num_bits=%u) <= nbits=%"PRIu64,
             src_bit, num_bits, src_bits->nbits);
 
-    uint64_t *src_word_p = &src_bits->words[src_bit >> 6];
-    uint64_t src_word = *src_word_p;
-    uint8_t next_bit = src_bit & 63;
+    while (num_bits) {
+        uint64_t word = _get_word (src_bits, src_bit);
+        uint32_t n = MIN_(num_bits, 64);
+        const uint32_t consumed = n;
 
-    for (uint32_t i=0; i < num_bits; i++) {
-        *dst++ = (src_word >> next_bit) & 1;
-        
-        if (++next_bit == 64) {
-            next_bit = 0;
-            src_word_p++;
-            src_word = *src_word_p;
+        while (n >= 8) {
+#ifdef __x86_64__
+            // deposit the 8(=popcount(2nd arg)) LSb of word into the bit locations indicated by the 2nd arg, which happen to be the LSb of each byte of the output word - effectively creating an uint8_t[8] array of 0/1
+            *(unaligned_uint64_t *)dst = _pdep_u64 (word, 0x0101010101010101ULL); 
+#else
+            for (uint32_t i=0; i < 8; i++)
+                dst[i] = (word >> i) & 1;
+#endif
+            dst += 8;
+            word >>= 8;
+            n -= 8;
         }
+
+        // up to 7 tail bits
+        while (n) {
+            *dst++ = word & 1;
+            word >>= 1;
+            n--;
+        }
+
+        src_bit  += consumed;
+        num_bits -= consumed;
     }
 }
 

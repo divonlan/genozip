@@ -82,10 +82,10 @@ static StrText1K stats_subs_seps_in_name (rom name)
     // similar escaping as in segconf_get_qual_histo
     while (*name) {
         switch (*name) {
-            case ','  : memcpy (next, "⸲",    STRLEN("⸲"));     next += STRLEN("⸲");     break; // Unicode "Turned Comma"
-            case ';'  : memcpy (next, "；",   STRLEN("；"));   next += STRLEN("；");    break; // Unicode "Full-width" semicolon
-            case '\\' : memcpy (next, "\\\\", STRLEN("\\\\")); next += STRLEN("\\\\"); break; // a backslash must be escaped (can exist in channel context names of long muteces)
-            case '"'  : memcpy (next, "\\\"", STRLEN("\\\"")); next += STRLEN("\\\""); break;
+            case ','  : memcpy (next, "⸲",    strlen("⸲"));     next += strlen("⸲");     break; // Unicode "Turned Comma"
+            case ';'  : memcpy (next, "；",   strlen("；"));   next += strlen("；");    break; // Unicode "Full-width" semicolon
+            case '\\' : memcpy (next, "\\\\", strlen("\\\\")); next += strlen("\\\\"); break; // a backslash must be escaped (can exist in channel context names of long muteces)
+            case '"'  : memcpy (next, "\\\"", strlen("\\\"")); next += strlen("\\\""); break;
             default   : *next++ = *name;
         }
         name++;
@@ -100,13 +100,16 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
     int need_sep=0;
 
     for (StatsByLine *s=sbl, *after=sbl + num_stats; s < after; s++) {
-        ContextP zctx = (s->my_did_i != DID_NONE) ? ZCTX(s->my_did_i) : NULL;
+        ContextP zctx = (s->my_did_i != DID_NONE && s->name[0]) ? ZCTX(s->my_did_i) : NULL;
+
+        uint64_t typeless_dnum = (zctx && zctx->dict_id.num) ? dict_id_typeless (zctx->dict_id).num : 1/*arbitrary number not likely to be a real dict_id*/;
 
         if (s->pc_hash_occupancy > 100 || // > 100%
-            (zctx && zctx->nodes.len > 1000000 && z_file->num_lines / zctx->nodes.len < 16)) { // more than 10% of num_lines (and at least 1M nodes)
-             
+            (zctx && zctx->nodes.len > 1000000 && z_file->num_lines / zctx->nodes.len < 16) || // more than 10% of num_lines (and at least 1M nodes)
+            (typeless_dnum == flag.tele_show_δ.num)) { // user request to send this field to telemetry
+            
             // in case of an over-populated hash table, we send the first 3 and last 3 words in the dictionary, which will help debugging the issue
-            bufprintf (evb, &exceptions, "%s%s,%s,%s,%u%%", 
+            bufprintf (evb, &exceptions, "%s%s,%s,%s,%u%%",
                        need_sep++ ? ";" : "", s->name, s->type, s->hash.s, (int)s->pc_hash_occupancy);
             
             uint32_t n_words = zctx->nodes.len32; // note: this can be a low number despite pc_hash_occupancy being large - if words ended up as singletons
@@ -115,16 +118,18 @@ static void stats_calc_hash_occ (StatsByLine *sbl, unsigned num_stats)
                 STR(snip);
                 ctx_get_z_snip_ex (zctx, words[i], pSTRa(snip));
                 
-                char *s = str_snip_ex (DT_NONE, STRa(snip), false).s; 
-                int s_len = strlen (s);
+                StrText16K s = str_snip_ex (DT_NONE, STRa(snip), false); 
+                s = str_to_telemetry_json (s.s, strlen (s.s));
                 
-                #define MAX_LEN_EXECP_SNIP 100 // limit chars per snip
+                int s_len = strlen (s.s);
+                
+                #define MAX_LEN_EXECP_SNIP (2 KB) // limit chars per snip
                 if (s_len > MAX_LEN_EXECP_SNIP) {  
-                    s[MAX_LEN_EXECP_SNIP] = 0; 
+                    s.s[MAX_LEN_EXECP_SNIP] = 0; 
                     s_len = MAX_LEN_EXECP_SNIP;
                 }
 
-                bufprintf (evb, &exceptions, ",%s", str_replace_letter (STRa(s), ',', -127)); 
+                bufprintf (evb, &exceptions, ",%s", s.s);
             }
         }
     }
@@ -633,7 +638,9 @@ static void stats_output_file_metadata (void)
     }
     
     if (!flag.make_reference && z_file->num_lines) {
-        bufprintf (evb, &features, "segconf.line_len=%u;", segconf.line_len); 
+        if (segconf.R1_line_len) bufprintf (evb, &features, "segconf.line_len=%u+%u;", segconf.R1_line_len, segconf.line_len); 
+        else                     bufprintf (evb, &features, "segconf.line_len=%u;", segconf.line_len); 
+
         if      (segconf.std_seq_lR2) bufprintf (evb, &features, "segconf.std_seq_len=%u+%u;", segconf.std_seq_len, segconf.std_seq_lR2); 
         else if (segconf.std_seq_len) bufprintf (evb, &features, "segconf.std_seq_len=%u;", segconf.std_seq_len); 
     }

@@ -264,8 +264,14 @@ static rom txtheader_piz_get_filename (const SectionHeaderTxtHeader *header,
 {
     // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
     #define C(cdc) (header->src_codec == CODEC_##cdc)
+
+    if ((flag.bgzf == BGZF_EXACT || flag.bgzf == BGZF_EXACT_STRICT) && !IS_GZIP(header->src_codec)) {
+        WARN (_FYI "%s %s", z_file->basename, NON_EXACT_NOT_GZ);
+        flag.bgzf = BGZF_EXACT_FAILED; // source code is not .gz so cannot reconstruct .gz exactly by definition
+    }
+
     bool has_gzip = (flag.bgzf == BGZF_NOT_INITIALIZED) ? (IS_GZIP(header->src_codec) || C(BZ2) || C(XZ) || C(ZIP)) // note: similar logic to in mgzip_piz_calculate_mgzip_flags
-                :                                         (flag.bgzf != 0);
+                  :                                       (IN_RANGX(flag.bgzf, 0, BGZF_MAX_LEVEL) || (flag.bgzf == BGZF_EXACT || flag.bgzf == BGZF_EXACT_STRICT));
     #undef C
 
     bool has_gz_ext = has_gzip && 

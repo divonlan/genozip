@@ -24,7 +24,7 @@ ContigPkgP sam_hdr_contigs = NULL; // If no contigs in header: BAM: empty struct
 HdSoType sam_hd_so = HD_SO_UNKNOWN;
 HdGoType sam_hd_go = HD_GO_UNKNOWN;
 static Buffer sam_deep_tip = {};
-
+static bool short_header_contig_missing_in_reference = false; // used for --assess-reference
 static rom map_sigs[] = SAM_MAPPER_SIGNATURE;
 
 uint32_t sam_num_header_contigs (void)
@@ -54,9 +54,15 @@ static void sam_header_add_contig (STRp(contig_name), PosType64 LN, void *out_re
     WordIndex ref_index;
 
     // case: we have a reference, we use the reference chrom_index    
-    if (flag.reference & REF_ZIP_LOADED) 
+    if (flag.reference & REF_ZIP_LOADED) {
         ref_index = ref_contigs_ref_chrom_from_header_chrom (STRa(contig_name), &LN); // also verifies LN
 
+        if (flag.assess_reference) {
+            if (ref_index == WORD_INDEX_NONE)  // short contig missing (if long contig is missing ref_contigs_ref_chrom_from_header_chrom would exit already)
+                short_header_contig_missing_in_reference = true;
+            return;
+        }
+    }
     else // internal
         ref_index = sam_hdr_contigs->contigs.len32;
 
@@ -353,10 +359,8 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
 
     for (int i=1; i < ARRAY_LEN(map_sigs); i++) // skip 0=unknown
         if (strstr (first_PG, map_sigs[i]) &&   // scans subset of header containing all PG lines
-            (!segconf.sam_mapper || strlen (map_sigs[i]) > strlen(map_sigs[segconf.sam_mapper]))) { // first match or better match (eg "bwa-mem2" is a better match than "bwa")
-            segconf.sam_mapper = i;
-            break;
-        }
+            (!segconf.sam_mapper || strlen (map_sigs[i]) > strlen(map_sigs[segconf.sam_mapper])))  // first match or better match (eg "bwa-mem2" is a better match than "bwa")
+            segconf.sam_mapper = i; // note: don't break, continue as perhaps a better match will come
 
     if (MP(STAR) && strstr (first_PG, "--solo")) segconf.star_solo = true;
 
@@ -367,8 +371,8 @@ static void sam_header_zip_inspect_PG_lines (BufferP txt_header)
     if (MP(DRAGEN) && flag.deep) {
         rom fastq_n_quality = strstr (first_PG, "fastq-n-quality: "); // minimum Phread quality of 'N' bases, default 2. see: https://support.illumina.com/content/dam/illumina-support/help/Illumina_DRAGEN_Bio_IT_Platform_v3_7_1000000141465/Content/SW/Informatics/Dragen/SoftwareInpNBase_fDG.htm
         rom fastq_offset    = strstr (first_PG, "fastq-offset: ");    // offset of byte value vs phred. default 33.
-        int fastq_n_quality_value = fastq_n_quality ? atoi (fastq_n_quality + STRLEN("fastq-n-quality: ")) : 0;
-        int fastq_offset_value    = fastq_offset    ? atoi (fastq_offset + STRLEN("fastq-offset: ")) : 0;
+        int fastq_n_quality_value = fastq_n_quality ? atoi (fastq_n_quality + strlen("fastq-n-quality: ")) : 0;
+        int fastq_offset_value    = fastq_offset    ? atoi (fastq_offset + strlen("fastq-offset: ")) : 0;
         if (fastq_n_quality_value && fastq_offset_value) {
             segconf.deep_N_sam_score = fastq_n_quality_value + fastq_offset_value;
 
@@ -521,6 +525,13 @@ static void sam_header_inspect_SQ_lines (VBlockP txt_header_vb, BufferP txt_head
         COPY_TIMER_EVB (sam_header_add_contig);
 
         contigs_create_index (sam_hdr_contigs, SORT_BY_NAME); // used by sam_sa_add_sa_group and by bai_get_line_sam
+    }
+
+    if (flag.assess_reference) {
+        // if we reach here, no long contigs are missing, but possibly some short ones are
+        iprint0 (short_header_contig_missing_in_reference ? "Reference file is not identical to contigs listed in the SAM header, but is close enough\n"
+                                                          : "Reference file contains all contigs listed in the SAM header\n");
+        exit (0); // Reference file is good. Note: don't use exit_ok 
     }
 
     COPY_TIMER_EVB (sam_header_inspect_SQ_lines);

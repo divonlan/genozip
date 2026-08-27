@@ -58,10 +58,10 @@ static inline StrText4K str_to_printable_(STRp(in)) { // for bound-length short 
     return s;
 }
 
-extern uint32_t str_to_printable_json (STR𐤐(in), char *restrict s, int s_len);
-static inline StrText4K str_to_printable_json_(STRp(in)) { // for bound-length short texts
-    StrText4K s;
-    str_to_printable_json (STRa(in), s.s, sizeof (s.s));
+extern uint32_t str_to_telemetry_json_(STR𐤐(in), char *restrict s, int s_len);
+static inline StrText16K str_to_telemetry_json (STRp(in)) { // for bound-length short texts
+    StrText16K s;
+    str_to_telemetry_json_ (STRa(in), s.s, sizeof (s.s));
     return s;
 }
 
@@ -150,18 +150,7 @@ extern char *str_revcomp (char *dst_seq, rom src_seq, uint32_t seq_len);
 static inline char *str_revcomp_in_place (STRc(seq)) { return str_revcomp (seq, seq, seq_len); }
 extern char *str_revcomp_ACGT (char *dst_seq, rom src_seq, uint32_t seq_len);
 
-// count the number of occurances of a character in a string
-static inline uint32_t str_count_char (rom str, uint32_t len, char c)
-{
-    if (!str) return 0;
-    
-    uint32_t count=0;
-    rom after = str + len;
-    while (str < after)
-        if (*str++ == c) count++;
-
-    return count;
-}
+extern uint32_t str_count_char (STR𐤐(str), char c);
 
 static inline uint32_t str_count_mismatches (rom str1, rom str2, uint32_t len)
 {
@@ -170,25 +159,6 @@ static inline uint32_t str_count_mismatches (rom str1, rom str2, uint32_t len)
         if (str1[i] != str2[i]) count++;
 
     return count;
-}
-
-// true if entire string is a single character
-static inline bool str_is_monochar (STRp(str))
-{
-    char mono = str_len ? str[0] : 0;
- 
-    for (uint32_t i=1; i < str_len; i++)
-        if (str[i] != mono) return false;
-    
-    return true;
-}
-
-static inline bool str_is_monochar_(STRp(str), char mono)
-{
-    for (uint32_t i=0; i < str_len; i++)
-        if (str[i] != mono) return false;
-    
-    return true;
 }
 
 static inline unsigned homopolymer_len (STRp(seq), uint32_t start)
@@ -295,12 +265,15 @@ extern bool str_is_utf8 (STRp(str));
 static inline bool str_is_no_ws(STRp(str))     { for (uint32_t i=0; i<str_len; i++) if (!IS_NON_WS(str[i]))     return false; return true; } 
 static inline bool str_is_ACGT(STRp(str), uint32_t *bad_i) { for (uint32_t i=0; i<str_len; i++) if (!IS_ACGT(str[i])) { if(bad_i) *bad_i = i; return false; } return true; } 
 static inline bool str_is_ACGTN(STRp(str))     { for (uint32_t i=0; i<str_len; i++) if (!IS_ACGTN(str[i]))      return false; return true; } 
-static inline bool str_is_qual_scores(STRp(str)){for (uint32_t i=0; i<str_len; i++) if (!IS_QUAL_SCORE(str[i])) return false; return true; } 
 
 extern bool str_is_in_range (STRp(str), char first_c, char last_c);
-static inline bool str_is_upper (STRp(str))    { return str_is_in_range (STRa(str), 'A', 'Z'); }
-static inline bool str_is_lower (STRp(str))    { return str_is_in_range (STRa(str), 'a', 'z'); }
-static inline bool str_is_numeric(STRp(str))   { return str_is_in_range (STRa(str), '0', '9'); } // numeric - leading zeros ok
+static inline bool str_is_qual_scores(STRp(str)) { return str_is_in_range (STRa(str), '!', '~'); }
+static inline bool str_is_upper (STRp(str))      { return str_is_in_range (STRa(str), 'A', 'Z'); }
+static inline bool str_is_lower (STRp(str))      { return str_is_in_range (STRa(str), 'a', 'z'); }
+static inline bool str_is_numeric(STRp(str))     { return str_is_in_range (STRa(str), '0', '9'); } // numeric - leading zeros ok
+
+extern bool str_is_monochar_(STRp(str), uint8_t mono);
+static inline bool str_is_monochar (STRp(str))   { return str_is_monochar_(STRa(str), str_len ? (uint8_t)str[0] : 0); }
 
 extern uint32_t str_pack_bases (uint8_t *restrict packed, STR𐤐(bases), bool revcomp);
 extern uint32_t str_unpack_bases (char *restrict bases, bytes𐤐 packed, uint32_t num_bases);

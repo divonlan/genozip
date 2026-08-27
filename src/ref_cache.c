@@ -35,30 +35,80 @@ bool ref_cache_is_populating (void) { return gref.cache_state == CACHE_POPULATIN
 
 #define NO_SHM ((void *)-1)
 
-#ifdef _WIN32
+#ifdef USE_SYSV_SHM
+
+#define CACHE_ITERATOR_CB(func) bool func (uint32_t ref_i, int shmid, RefCache *cache)
+
+#elif defined USE_POSIX_SHM
+
+#include <sys/mman.h>
+#include <dirent.h>
+#include "file.h"
+
+#define SHM_NAME_DIR "/tmp/genozip-cache"
+#define SHM_NAME_PREFIX "/genozip-cache-"
+
+#define CACHE_ITERATOR_CB(func) bool func (uint32_t ref_i, uint64_t cache_id, RefCache *cache)
+
+static StrText ref_cache_posix_get_shm_name (uint64_t cache_id)
+{
+    StrText s;
+    snprintf (s.s, sizeof(s)-1, "%s%016"PRIx64, SHM_NAME_PREFIX, cache_id); // POSIX SHM names must begin with '/' and otherwise contain no '/'.
+
+    return s;
+}
+
+static StrText ref_cache_get_posix_shm_registry_name (rom shm_name)
+{
+    StrText s;
+    snprintf (s.s, sizeof(s), "%s/%s", SHM_NAME_DIR, shm_name + STRLEN (SHM_NAME_PREFIX));
+
+    return s;
+}
+
+static void ref_cache_posix_touch_registry (rom shm_name)
+{
+    // add to shm_name registry
+    mkdir (SHM_NAME_DIR, 0777); // ignore errors
+    rom registry_name = ref_cache_get_posix_shm_registry_name (shm_name).s;
+
+    int fd = open (registry_name, O_CREAT | O_WRONLY, 0666); // ignore errors
+    if (fd >= 0) close (fd);
+
+    struct timespec times[2] = { { .tv_nsec = UTIME_OMIT }, { .tv_nsec = UTIME_NOW } };
+    utimensat (AT_FDCWD, registry_name, times, 0); // update mtime to now (ignore errors)  
+}
+
+#else // Windows
 #define CACHE_ITERATOR_CB(func) bool func (uint32_t ref_i, int pid)
 
 // messages genozip -> holder process (Windows)
 #define MSG_LIST      "List" 
 #define MSG_TERMINATE "Terminate"
 
-#else
-#define CACHE_ITERATOR_CB(func) bool func (uint32_t ref_i, int shmid, RefCache *cache)
 #endif
+
 typedef CACHE_ITERATOR_CB ((*RefCacheIteratorCallback));
 
-
+// make ref cache read-only, and ready to use by cache consumers
 static RefCacheState ref_cache_set_ready (void)
 {
     void *old_attachment = gref.cache;
 
     // re-attach as read-only first attach new, then detach old, to prevent cache from being deleted if marked for removal
-#ifndef _WIN32  
+#ifdef USE_SYSV_SHM  
     gref.cache = shmat (gref.cache_shm, NULL, SHM_RDONLY); // sometimes fails in Mac, bug 1095
     if (gref.cache != NO_SHM) 
         ASSERT (!shmdt (old_attachment), "shmdt failed: %s", strerror (errno));
     else
         WARN (_WRN "shmat (read-only) failed: %s. shm remains RW. No harm.", strerror (errno)); 
+
+#elif defined USE_POSIX_SHM
+    gref.cache = mmap (NULL, gref.cache->shm_size, PROT_READ, MAP_SHARED, gref.cache_shm, 0);
+
+    ASSERT (gref.cache != MAP_FAILED, "mmap (read-only) failed: %s", strerror (errno));
+
+    ASSERT (!munmap (old_attachment, gref.cache->shm_size), "munmap failed: %s", strerror (errno));
 
 #else
     gref.cache = MapViewOfFile (gref.cache_shm, FILE_MAP_READ, 0, 0, 0);
@@ -67,7 +117,8 @@ static RefCacheState ref_cache_set_ready (void)
     ASSERT (UnmapViewOfFile (old_attachment), "UnmapViewOfFile failed: %s", str_win_error());
 #endif
 
-    if (flag.show_cache) iprintf ("show-cache: cache of %s: attached read-only + detached read-write. READY.\n", gref.filename);
+    if (flag.show_cache) 
+        iprintf ("%scache of %s: attached read-only + detached read-write. READY.\n", _SHOW_CACHE, gref.filename);
 
     // for data integrity: the only place we set the state to CACHE_READY is here, after attaching as read-only
     return (gref.cache_state = CACHE_READY); 
@@ -137,7 +188,7 @@ bool ref_cache_initialize_genome (void)
     uint64_t shm_size = sizeof (RefCache) + genome_size + refhash_size;
     uint32_t holder_pid = 0;
 
-#ifndef _WIN32
+#ifdef USE_SYSV_SHM  
     uint64_t shmmax = arch_get_shmmax();
 
     // verify that shm_size is not too big
@@ -179,11 +230,86 @@ bool ref_cache_initialize_genome (void)
              "%sshmget (%s key=0x%08x size=%"PRIu64" shmmax=%s) failed: %s.%s", FAIL_MSG,
              gref.filename, key, shm_size, str_size (shmmax).s, strerror(errno), tip);
 
-    if (flag.show_cache) iprintf ("show-cache: shmget of shm id %u\n", gref.cache_shm);
+    if (flag.show_cache) iprintf ("%sshmget of shm id %u\n", _SHOW_CACHE, gref.cache_shm);
 
     if (gref.cache_shm != CACHE_SHM_NONE) {
         gref.cache = shmat (gref.cache_shm, NULL, 0);
         ASSGOTO (gref.cache != (void*)-1, "%sshmat (%s) failed: %s.%s", FAIL_MSG, gref.filename, strerror(errno), tip);
+    }
+
+#elif defined USE_POSIX_SHM
+    struct stat st;
+    ASSGOTO (stat (gref.filename, &st) >= 0, "%sstat (%s) failed: %s", FAIL_MSG, gref.filename, strerror(errno));
+
+    gref.cache_id = fibonacci (st.st_ino + 20010802/*salt*/, 31);
+
+    rom shm_name = ref_cache_posix_get_shm_name (gref.cache_id).s;
+
+    bool cache_did_not_exist = false;
+
+    if (flag.removing_cache) {
+        gref.cache_shm = shm_open (shm_name, O_RDWR, 0); // open existing 
+
+        if (gref.cache_shm < 0) {
+            cache_did_not_exist = (errno == ENOENT);
+
+            ASSGOTO (cache_did_not_exist, "%sshm_open (%s name=%s) failed: %s.%s",
+                     FAIL_MSG, gref.filename, shm_name, strerror (errno), tip);
+        }
+    }
+
+    else {
+        gref.cache_shm = shm_open (shm_name, O_RDWR | O_CREAT | O_EXCL,  // O_EXCL makes creation atomic with respect to other processes.
+                                   0600 | (st.st_mode & 066)); // RW for me, RW for group, other copied from reference file
+        if (gref.cache_shm >= 0) {
+            cache_did_not_exist = true;
+
+            // set shm size
+            ASSGOTO (ftruncate (gref.cache_shm, (off_t)shm_size) == 0, "%sftruncate (%s name=%s size=%"PRIu64") failed: %s",
+                     FAIL_MSG, gref.filename, shm_name, shm_size, strerror(errno));
+        }
+
+        else if (errno == EEXIST) {
+            gref.cache_shm = shm_open (shm_name, O_RDWR, 0);
+
+            ASSGOTO (gref.cache_shm >= 0, "%sshm_open existing (%s name=%s) failed: %s.%s",
+                     FAIL_MSG, gref.filename, shm_name, strerror(errno), tip);
+        }
+
+        else 
+            ASSGOTO (false, "%sshm_open (%s name=%s size=%"PRIu64") failed: %s.%s",
+                     FAIL_MSG, gref.filename, shm_name, shm_size, strerror(errno), tip);
+
+        ref_cache_posix_touch_registry (shm_name);
+    }
+
+    // verify that an existing segment has exactly the expected size.
+    if (!cache_did_not_exist && gref.cache_shm >= 0) {
+        struct stat shm_st = {};
+
+        // POSIX shm size are rounded up to page size
+        uint64_t page_size = (uint64_t)getpagesize();
+        shm_size = ((shm_size + page_size - 1) / page_size) * page_size; // round up to next page
+        
+        ASSGOTO (fstat (gref.cache_shm, &shm_st) == 0, "%sfstat (%s name=%s) failed: %s",
+                 FAIL_MSG, gref.filename, shm_name, strerror(errno));
+
+        ASSGOTO ((uint64_t)shm_st.st_size == shm_size, "%sshm_size=%"PRIu64" != size of existing shm segment=%"PRIu64,
+                 FAIL_MSG, shm_size, (uint64_t)shm_st.st_size);
+    }
+
+    if (flag.show_cache)
+        iprintf ("%s%s shm_open %s (%s)\n", _SHOW_CACHE, primary_command_name(), 
+                 shm_name, cache_did_not_exist ? "populated from file" : "existing");
+
+    if (gref.cache_shm >= 0) {
+        gref.cache = mmap (NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, gref.cache_shm, 0);
+
+        ASSGOTO (gref.cache != MAP_FAILED, "%smmap (%s name=%s size=%"PRIu64") failed: %s.%s",
+                 FAIL_MSG, gref.filename, shm_name, shm_size, strerror(errno), tip);
+    
+        if (cache_did_not_exist)
+            memset (gref.cache, 0, sizeof (RefCache)); // initialize header, don't worry about the rest - we are going to populated it with the genome and ref_hash
     }
 
 #else // Windows
@@ -194,7 +320,8 @@ bool ref_cache_initialize_genome (void)
     
         ASSGOTO (gref.cache_shm, "%sCreateFileMapping (%s, size=%"PRIu64" shmmax=%s) failed: %s.%s", FAIL_MSG,
                  gref.filename, shm_size, str_size (arch_get_shmmax()).s, str_win_error(), tip);
-        if (flag.show_cache) iprintf ("show-cache: CreateFileMapping %s\n", gref.filename);
+        if (flag.show_cache) 
+            iprintf ("%sCreateFileMapping %s\n", _SHOW_CACHE, gref.filename);
     }
     else { 
         gref.cache_shm = OpenFileMappingA (FILE_MAP_WRITE, false, gref.filename);
@@ -202,7 +329,9 @@ bool ref_cache_initialize_genome (void)
 
         ASSERT (gref.cache_shm || cache_did_not_exist, "%sOpenFileMapping (%s) failed: %s.%s", FAIL_MSG,
                 gref.filename, str_win_error(), tip);
-        if (flag.show_cache) iprintf ("show-cache: OpenFileMapping %s: %s\n", gref.filename, str_win_error());
+        
+        if (flag.show_cache) 
+            iprintf ("%sOpenFileMapping %s: %s\n", _SHOW_CACHE, gref.filename, str_win_error());
     }
 
     // if we just created new shm, also created the holder process
@@ -238,7 +367,7 @@ bool ref_cache_initialize_genome (void)
         exit_ok;
     }
 
-    if (flag.show_cache) iprint0 ("show-cache: shmat read-write\n");
+    if (flag.show_cache) iprintf ("%sattach read-write\n", _SHOW_CACHE);
 
     uint64_t now = arch_timestamp() / 1000000000; // convert nanosec to seconds
     uint64_t expected = 0;
@@ -270,21 +399,25 @@ bool ref_cache_initialize_genome (void)
 
         __atomic_thread_fence (__ATOMIC_RELEASE); 
 
-        if (flag.show_cache) iprint0 ("show-cache: POPULATING\n");
+        if (flag.show_cache) iprintf ("%sPOPULATING\n", _SHOW_CACHE);
     }
 
     gref.genome = &gref.genome_buf;
 
 cache_ok:
     buf_attach_bits_to_shm (evb, &gref.genome_buf, gref.cache->genome_data, gref.genome_nbases * 2, "genome_buf");
-    if (flag.show_cache) iprintf ("show-cache: attached genome_buf (%"PRIu64" bases) to %s shm\n", gref.genome_nbases, gref.cache_state == CACHE_READY ? "READONLY" : "READWRITE");
+    if (flag.show_cache) 
+        iprintf ("%sattached genome_buf (%"PRIu64" bases) to %s shm\n", 
+                 _SHOW_CACHE, gref.genome_nbases, gref.cache_state == CACHE_READY ? "READONLY" : "READWRITE");
 
     // attach the cache data (read-write if CACHE_POPULATING - we will switch to read-only in ref_cache_done_populating; read-only if CACHE_READY)
     if (refhash_exists()) {
         buf_attach_to_shm (evb, &refhash_buf, gref.cache->genome_data + genome_size, refhash_size, "refhash_buf");
         refhash_buf.len = refhash_size;
         
-        if (flag.show_cache) iprintf ("show-cache: attached refhash_buf (len=%"PRIu64") to %s shm\n", refhash_buf.len, gref.cache_state == CACHE_READY ? "READONLY" : "READWRITE");
+        if (flag.show_cache)    
+            iprintf ("%sattached refhash_buf (len=%"PRIu64") to %s shm\n", 
+                     _SHOW_CACHE, refhash_buf.len, gref.cache_state == CACHE_READY ? "READONLY" : "READWRITE");
     }
     
     return true;
@@ -301,7 +434,9 @@ void ref_cache_done_populating (void)
 {
     ASTORE (is_populated, (bool)true); // immutable once set
     ASTORE (creator_pid, (uint32_t)0); 
-    if (flag.show_cache) iprint0 ("show-cache: done populating shm\n");
+    
+    if (flag.show_cache) 
+        iprintf ("%sdone populating shm\n", _SHOW_CACHE);
 
     ref_cache_set_ready();
 }
@@ -320,7 +455,84 @@ unsigned ref_cache_iterator (RefCacheIteratorCallback (callback), bool dormant_o
 {
     unsigned count = 0;
 
-#ifdef _WIN32
+#ifdef USE_SYSV_SHM
+
+#ifdef __linux__
+    ASSERTNOTINUSE (evb->scratch);
+    file_get_file (evb, "/proc/sysvipc/shm", &evb->scratch, "scratch", 1 MB, VERIFY_ASCII, false);
+
+    str_split_by_lines (evb->scratch.data, evb->scratch.len, 1000);
+
+    for (int i=1; i < n_lines; i++) { // note: skipping first line - its a header
+        if (line_lens[i] < 20) continue; 
+
+        char *shmid_str = (char *)&lines[i][11];
+        uint32_t shmid_str_len = 10;
+        shmid_str[10] = 0;
+        str_trim (qSTRa(shmid_str));
+
+        int shmid = atoi (shmid_str);
+
+#else // other Unixes
+    // brute-force scan for valid shm_id's... surely there is a better way
+    for (int shmid = 0; shmid <= 1 MB; shmid++) { 
+#endif // Linux or other Unixes
+
+        // filter out non-dormant if needed. note: must test for dormancy before attaching!
+        if (dormant_only) { 
+            struct shmid_ds ds = {};
+            if (shmctl (shmid, IPC_STAT, &ds) == -1) continue; // fail silently
+
+            time_t ago = time(0) - MAX_(ds.shm_atime, ds.shm_dtime);
+
+            if (ago < 60 * 60 * 24) // not dormant (attached or detached in the past 24 hours)
+                continue;
+        }
+
+        RefCache *cache = shmat (shmid, NULL, SHM_RDONLY);
+        if ((cache != NO_SHM) && (cache->magic == GENOZIP_MAGIC)) 
+            count += callback (count, shmid, cache);
+        
+        shmdt (cache);
+    }
+
+#elif defined USE_POSIX_SHM
+    DIR *dir = opendir (SHM_NAME_DIR);
+
+    struct dirent *entry;
+    while (dir && (entry = readdir(dir))) 
+        if (strlen (entry->d_name) == 16 && str_is_hexlo (entry->d_name, 16)) {
+            char shm_name[64];
+            snprintf (shm_name, sizeof (shm_name)-1, "%s%s", SHM_NAME_PREFIX, entry->d_name);
+
+            // filter out non-dormant if needed
+            if (dormant_only) { 
+                rom register_name = ref_cache_get_posix_shm_registry_name (shm_name).s;
+                struct stat st;
+
+                if (stat (register_name, &st) != 0 || // stat failed
+                    time (NULL) - st.st_mtime <= 24 * 60 * 60) // modified in past 24 hours
+                    continue;
+            }
+            
+            int fd;
+            RefCache *cache;
+            if (((fd = shm_open (shm_name, O_RDONLY, 0)) > 0) &&
+                ((cache = mmap (NULL, sizeof (RefCache), PROT_READ, MAP_SHARED, fd, 0)))) {
+
+                count += callback (count, strtoll (entry->d_name, NULL, 16), cache);
+
+                munmap (cache, sizeof (RefCache));
+                close (fd);
+            }
+
+            else  // actually, this segment doesn't exist - update registry
+                file_remove (ref_cache_get_posix_shm_registry_name (shm_name).s, true);
+        }
+
+    if (dir) closedir (dir);        
+
+#else // Windows
     // find and terminate all holder process
     DWORD pids[16384], size; //  a large number
     ASSERT (EnumProcesses (pids, sizeof (pids), &size), "EnumProcesses failed: %s", str_win_error());
@@ -343,48 +555,7 @@ unsigned ref_cache_iterator (RefCacheIteratorCallback (callback), bool dormant_o
         if (strstr (filename, "genozip") || strstr (filename, "genounzip") || strstr (filename, "genocat")) 
             count += callback (count, pids[pid_i]);
     }
-
-#else
-
-#ifdef __linux__
-    ASSERTNOTINUSE (evb->scratch);
-    file_get_file (evb, "/proc/sysvipc/shm", &evb->scratch, "scratch", 1 MB, VERIFY_ASCII, false);
-
-    str_split_by_lines (evb->scratch.data, evb->scratch.len, 1000);
-
-    for (int i=1; i < n_lines; i++) { // note: skipping first line - its a header
-        if (line_lens[i] < 20) continue; 
-
-        char *shmid_str = (char *)&lines[i][11];
-        uint32_t shmid_str_len = 10;
-        shmid_str[10] = 0;
-        str_trim (qSTRa(shmid_str));
-
-        int shmid = atoi (shmid_str);
-
-#else // Mac and Unixes
-    // brute-force scan for valid shm_id's... surely there is a better way
-    for (int shmid = 0; shmid <= 1 MB; shmid++) { 
-#endif // mac & unix
-
-        // filter out non-dormant if needed. note: must test for dormancy before attaching!
-        if (dormant_only) { 
-            struct shmid_ds ds = {};
-            if (shmctl (shmid, IPC_STAT, &ds) == -1) continue; // fail silently
-
-            time_t ago = time(0) - MAX_(ds.shm_atime, ds.shm_dtime);
-
-            if (ago < 60 * 60 * 24) // not dormant (attached or detached in the past 24 hours)
-                continue;
-        }
-
-        RefCache *cache = shmat (shmid, NULL, SHM_RDONLY);
-        if ((cache != NO_SHM) && (cache->magic == GENOZIP_MAGIC)) 
-            count += callback (count, shmid, cache);
-        
-        shmdt (cache);
-    }
-#endif // not windows
+#endif
 
     return count;
 }
@@ -428,26 +599,36 @@ static bool ref_cache_msg_holder_process (int pid, rom request, StrText1K *respo
 }
 #endif
 
-
+#include "error.h"
 static CACHE_ITERATOR_CB(do_remove)
 {
     rom name;
 
-#ifdef _WIN32
-    StrText1K response;
-    bool success = ref_cache_msg_holder_process (pid, MSG_TERMINATE, &response);
-    name = response.s;
-#else
-    bool success = (shmctl (shmid, IPC_RMID, NULL) != -1); 
-    ASSERTW (success, _WRN "shmctl failed: %s", strerror (errno));
+#ifdef USE_SYSV_SHM
+    ASSRET (shmctl (shmid, IPC_RMID, NULL) >= 0, false, _WRN "shmctl failed: %s", strerror (errno));
 
     name = cache->ref_basename;
+
+#elif defined USE_POSIX_SHM
+    rom shm_name = ref_cache_posix_get_shm_name (cache_id).s;
+
+    ASSRET (!shm_unlink (shm_name), false, _WRN "shm_unlink (%s) failed: %s", shm_name, strerror (errno));    
+    
+    rom registry_name = ref_cache_get_posix_shm_registry_name (shm_name).s;
+    file_remove (registry_name, true);
+    
+    name = cache->ref_basename;
+
+#else // Windows
+    StrText1K response;
+    ASSRET (ref_cache_msg_holder_process (pid, MSG_TERMINATE, &response), false, "failed to get ref_cache from holder process pid=%u", pid);
+    name = response.s;
 #endif
 
     if (IS_RM_CACHE || flag.show_cache)
-        WARN (_FYI "Unloaded reference cache \"%s\"", name);
+        iprintf ("%sunloaded reference cache \"%s\"\n", IS_RM_CACHE ? _FYI : _SHOW_CACHE, name);
 
-    return success;
+    return true;
 }
 
 void ref_cache_remove_do (bool cache_exists, bool verbose)
@@ -455,8 +636,10 @@ void ref_cache_remove_do (bool cache_exists, bool verbose)
     ASSINP (cache_exists, "There is currently no cache for reference file %s", gref.filename);
     if (!gref.cache) return; // fail silently (could happen with --no-cache)
 
-#ifndef _WIN32    
+#ifdef USE_SYSV_SHM
     do_remove (0, gref.cache_shm, gref.cache);
+#elif defined USE_POSIX_SHM
+    do_remove (0, gref.cache_id, gref.cache);    
 #else // Windows  
     do_remove (0, gref.cache->holder_pid);    
 #endif
@@ -474,23 +657,12 @@ void ref_cache_remove_all (RefCacheRemoveType rm_type)
     
     unsigned n_removed = ref_cache_iterator (do_remove, rm_type == REF_CACHE_REMOVE_DORMANT);
     
-    WARN_IF (!n_removed && rm_type == REF_CACHE_REMOVE_ALL, "No in-memory cached reference files found", NULL);
+    WARN_IF (!n_removed && rm_type == REF_CACHE_REMOVE_ALL, _FYI "No in-memory cached reference files found", NULL);
 }
 
 static CACHE_ITERATOR_CB (do_list)
 {
-#ifdef _WIN32
-    if (ref_i == 0) // first reference
-        iprint0 ("pid    size         loaded               name\n");
-
-    StrText1K response;
-    if (!ref_cache_msg_holder_process (pid, MSG_LIST, &response))
-        return false;
-
-    iprintf ("%s", response.s);
-    return true;
-    
-#else
+#ifdef USE_SYSV_SHM
     if (ref_i == 0) // first reference
         iprint0 ("shmid  owner     perm size         loaded               name\n");
 
@@ -500,11 +672,37 @@ static CACHE_ITERATOR_CB (do_list)
     StrText time_str = {};
     struct tm *time_info = localtime ((time_t *)&cache->creation_ts); // assumes time_t is 64 bit
     strftime (time_str.s, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", time_info);
+
+    struct passwd *pw = getpwuid (ds.shm_perm.uid);
+
     iprintf ("%-5u  %-8s  %03o  %-11"PRIu64"  %19s  %s  %s\n", 
-             shmid, getpwuid (ds.shm_perm.uid)->pw_name, ds.shm_perm.mode & 0777, cache->shm_size,
+             shmid, (pw ? pw->pw_name : "?"), ds.shm_perm.mode & 0777, cache->shm_size,
              time_str.s, cache->ref_basename, (cache->is_populated ? "" : " NOT READY"));
-    return true;
+
+#elif defined USE_POSIX_SHM
+   if (ref_i == 0)
+        iprint0 ("cache_id          size         loaded               name\n");
+
+    StrText time_str = {};
+    struct tm *time_info = localtime ((time_t *)&cache->creation_ts); // assumes time_t is 64 bit
+    strftime (time_str.s, sizeof(time_str)-1, "%Y-%m-%d %H:%M:%S", time_info);
+
+    iprintf ("%016"PRIx64"  %-11"PRIu64"  %19s  %s  %s\n",
+             cache_id, cache->shm_size, time_str.s, cache->ref_basename, 
+             cache->is_populated ? "" : "NOT READY");
+
+#else // Windows
+    if (ref_i == 0) // first reference
+        iprint0 ("pid    size         loaded               name\n");
+
+    StrText1K response;
+    if (!ref_cache_msg_holder_process (pid, MSG_LIST, &response))
+        return false;
+
+    iprintf ("%s", response.s);
 #endif
+
+    return true;
 }
 
 void ref_cache_ls (void)
@@ -520,9 +718,14 @@ void ref_cache_detach (void)
         gref.genome_buf.type == BUF_SHM || refhash_buf.type == BUF_SHM) // actually detach only when both genome_buf and refhash are freed
         return;
 
-#ifndef _WIN32 
+#ifdef USE_SYSV_SHM
     shmdt (gref.cache);
-#else
+
+#elif defined USE_POSIX_SHM
+    munmap (gref.cache, gref.cache->shm_size);
+    close (gref.cache_shm);
+
+#else // Windows
     UnmapViewOfFile (gref.cache);
     CloseHandle (gref.cache_shm);
 #endif
@@ -531,7 +734,8 @@ void ref_cache_detach (void)
     gref.cache_shm = 0;
     gref.cache_state = CACHE_INITITAL;
 
-    if (flag.show_cache) iprint0 ("show-cache: detached shm\n");
+    if (flag.show_cache) 
+        iprintf ("%sdetached shm\n", _SHOW_CACHE);
 }
 
 rom cache_state_name (RefCacheState cs)

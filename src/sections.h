@@ -174,7 +174,7 @@ typedef struct {
     uint64_t recon_size;                      // data size of reconstructed file (note: for MAIN VBs in SAM gencomp, this excludes any PRIM/DEPN lines)
     uint64_t genozip_minor_ver : 14;          // populated since 15.0.28. 10 bits until 15.0.59 (Little Endian!)
     uint64_t is_modified       : 1;           // ZIP modified the txt_data (e.g. --optimize). Since 15.0.60      
-    uint64_t private_file      : 1;           // this file can only be uncompressed by user with the specified license_hash (15.0.30)
+    uint64_t private_file      : 1;           // file created with --sendto: it can only be uncompressed by user with the specified license_hash (15.0.30)
     uint64_t num_lines_bound   : 48;          // number of lines in a bound file. "line" is data_type-dependent. For FASTQ, it is a read.
     uint32_t num_sections;                    // number sections in this file (including this one)
     union {
@@ -194,7 +194,7 @@ typedef struct {
     uint8_t  password_test[16];               // short encrypted block - used to test the validy of a password
 #define FILE_METADATA_LEN 72
     char     created[FILE_METADATA_LEN];      // nul-terminated metadata
-    Digest   license_hash;                    // MD5(license_num)
+    Digest   license_hash;                    // MD5(license_num). See info in zfile_compress_genozip_header
 #define REF_FILENAME_LEN 256
     union {
     char ref_filename[REF_FILENAME_LEN];      // external reference filename, nul-terimated. ref_filename[0]=0 if there is no external reference. DT_CHAIN (up to 15.0.41): LUFT reference filename.
@@ -335,8 +335,8 @@ typedef struct {
 #define TXT_FILENAME_LEN 256
     char     txt_filename[TXT_FILENAME_LEN];// filename of this single component. without path, 0-terminated. always in base form like .vcf or .sam, even if the original is compressed .vcf.gz or .bam
     uint64_t txt_header_size;          // size of header in original txt file before any zip-side modifications. note: use Σdata_uncompress_len(fragᵢ) for the size after zip-size modifications (v12)
-    QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ. properties of QNAME flavor (v15) 
-    char unused[44];
+    QnameFlavorProp flav_prop[NUM_QTYPES]; // SAM/BAM/FASTQ. properties of QNAME flavor (v15). NUM_QTYPES=3 until 15.0.83, and =4 since 15.0.84
+    char unused[44];                   // added 15.0.84
 } SectionHeaderTxtHeader, *SectionHeaderTxtHeaderP; 
 
 typedef struct {
@@ -452,7 +452,7 @@ typedef struct {
 typedef struct {
     SectionHeader;
     union {
-    uint64_t first_ent : 40;   // first_ent of this block with refhsah_buf (little endian!) (in units of gpos_bytes) (15.0.81)
+    uint64_t first_ent : 40;   // first_ent of this block with refhash_buf (little endian!) (in units of gpos_bytes) (15.0.81)
     uint64_t unused    : 24;
     struct { // up to 15.0.80
     uint8_t num_layers;        // total number of layers (always 4)
@@ -584,7 +584,7 @@ typedef union {
 typedef const struct SectionEnt {
     uint64_t offset;            // offset of this section in the file
     union {                     // Section-Type-specific field
-        DictId dict_id;         // DICT, LOCAL, B250 or COUNT sections
+        DictId dict_id;         // used for dicted sections (see IS_DICTED_SEC)
         struct {
             uint32_t num_lines; // VB_HEADER sections - number of lines in this VB (SAM MAIN: excluding gencomp lines).
             uint32_t unused;    // this was "deep_num_lines" v15-15.0.63, but never accessed in piz
@@ -689,8 +689,8 @@ extern StrText comp_name_(CompIType comp_i);
 #define IS_LOCAL(sec)      ((sec)->st == SEC_LOCAL)
 #define IS_B250(sec)       ((sec)->st == SEC_B250)
 
-#define IS_DICTED_SEC(st) ((st)==SEC_B250 || (st)==SEC_LOCAL || (st)==SEC_DICT || (st)==SEC_COUNTS || (st) == SEC_SUBDICTS || (st) == SEC_HUFFMAN)
-#define IS_VB_SEC(st)     ((st)==SEC_VB_HEADER || (st)==SEC_B250 || (st)==SEC_LOCAL)
-#define IS_TXT_SEC(st)    ((st)==SEC_TXT_HEADER || (st)==SEC_GZ_ISIZES || (st)==SEC_GZ_DIGESTS || (st)==SEC_RECON_PLAN)
-#define IS_COMP_SEC(st)   (IS_VB_SEC(st) || IS_TXT_SEC(st))
-#define IS_FRAG_SEC(st)   ((st)==SEC_DICT || (st)==SEC_TXT_HEADER || (st)==SEC_RECON_PLAN || (st)==SEC_REFERENCE || (st)==SEC_REF_IS_SET || (st)==SEC_REF_HASH) // global sections fragmented with a dispatcher, and hence use vb_i 
+#define IS_DICTED_SEC(st) (0b010010100001110000000000 & (1<<(st))) // SEC_B250, SEC_LOCAL, SEC_DICT, SEC_COUNTS, SEC_SUBDICTS, SEC_HUFFMAN
+#define IS_VB_SEC(st)     (0b000000000001101000000000 & (1<<(st))) // SEC_VB_HEADER, SEC_B250, SEC_LOCAL
+#define IS_TXT_SEC(st)    (0b100000011000000100000000 & (1<<(st))) // SEC_TXT_HEADER, SEC_GZ_ISIZES, SEC_GZ_DIGESTS, SEC_RECON_PLAN
+#define IS_COMP_SEC(st)   (0b100000011001101100000000 & (1<<(st))) // IS_VB_SEC || IS_TXT_SEC
+#define IS_FRAG_SEC(st)   (0b000000010000010100001110 & (1<<(st))) // SEC_DICT, SEC_TXT_HEADER, SEC_RECON_PLAN, SEC_REFERENCE, SEC_REF_IS_SET, SEC_REF_HASH : global sections fragmented with a dispatcher, and hence use vb_i 

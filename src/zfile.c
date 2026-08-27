@@ -936,7 +936,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
                 z_name, z_dt_name(), dt_name (data_type));
 
     ASSINP (h->encryption_type != ENC_NONE || !has_password() || Z_DT(REF), 
-            "password provided, but file %s is not encrypted", z_name);
+            _ERR "password provided, but file %s is not encrypted", z_name);
 
     ASSERT (VER(15) || BGEN32 (h->v14_compressed_offset) == st_header_size (SEC_GENOZIP_HEADER),
             "invalid genozip header of %s - expecting compressed_offset to be %u in genozip_version=%u but found %u", 
@@ -950,7 +950,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
         crypt_do (evb, h->password_test, sizeof(h->password_test), 0, SEC_NONE, true); // decrypt password test
 
         ASSINP (!memcmp (h->password_test, PASSWORD_TEST, sizeof(h->password_test)),
-                "password is wrong for file %s", z_name);
+                _ERR "password is wrong for %s", z_name);
     }
 
     z_file->num_txt_files = VER(14) ? h->num_txt_files : BGEN32 (h->v13_num_components);
@@ -983,7 +983,7 @@ bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP out_header, FailType
     bool has_section_list = true; 
     if (!z_file->section_list.param) { // not already initialized in a previous call to this function
         
-        has_section_list = license_piz_prepare_genozip_header (h, IS_LIST || (IS_SHOW_HEADERS && flag.force));
+        has_section_list = license_piz_prepare_genozip_header (h, &sec, IS_LIST || (IS_SHOW_HEADERS && flag.force));
 
         if (has_section_list) {
             zfile_uncompress_section (evb, h, &z_file->section_list, "z_file->section_list", 0, SEC_GENOZIP_HEADER);

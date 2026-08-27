@@ -36,9 +36,7 @@
 #define BL_SET_REMOVED(bl_ent) bl_ent = ((BufferP)((uint64_t)(bl_ent) | 1))
 #define BL_IS_REMOVED(bl_ent)  ((uint64_t)(bl_ent) & 1) 
 
-#ifdef _WIN32
-static HANDLE heap;
-#endif
+ωιη (static HANDLE heap;)
 
 void buf_increment_user_count (BufferP buf)
 {

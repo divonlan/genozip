@@ -22,6 +22,7 @@ ifeq ($(OS),Windows_NT)
 	OBJDIR=$(OBJDIR_WINDOWS)
 	architecture := Windows $(shell uname -m)
 	WSL=wsl
+	CFLAGS += -D_FILE_OFFSET_BITS=64
 endif
 
 ifeq ($(architecture),Linux x86_64)
@@ -124,11 +125,10 @@ endif
 
 # need old gcc linked to an old sysroot(=glibc) for older Linux machines
 # up to 15.0.79 used distribution-gcc.8.5 (generate with: conda create -n distribution gcc_linux-64=8.5.0)
-# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 (generated with: conda create -n distribution-gcc.12.4-sysroot.2.17 gcc_linux-64=12.4.0 gxx_linux-64=12.4.0 sysroot_linux-64=2.17)
+# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 
+# starting 15.0.88 distribution-gcc.16.1-sysroot.2.17 (see "development environment.txt")
 # To see the glibc version genozip requires: 'objdump -T genozip | grep GLIBC_' (the highest version listed)
-WSL_GCC = /home_local_fs/divon/miniconda3/envs/distribution-gcc.12.4-sysroot.2.17/bin/x86_64-conda-linux-gnu-gcc 
-
-WSL_GCC_DEFAULT = /home_local_fs/divon/miniconda3/bin/gcc
+WSL_GCC = /home_local_fs/divon/miniforge3/envs/distribution_gcc-16.1_sysroot-2.17/bin/x86_64-conda-linux-gnu-gcc
 
 DEV_DIR  = ../../genozip
 TEST_DIR = $(DEV_DIR)/private/test
@@ -304,7 +304,7 @@ ifdef Windows # link MingW DLLs staticly (order is important!)
 endif
 
 ifdef linux_x86
-	LDFLAGS += -lrt -fuse-ld=gold -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
+	LDFLAGS += -lrt -fuse-ld=lld -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
 endif
 
 ifdef osx 
@@ -587,7 +587,7 @@ genozip-latest.exe:
 	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; cd secure; git pull; cd -; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $(LATEST_SRC)/genozip.exe ../../genozip/private/releases/genozip-$(version).exe ; ln -sf $(LATEST_SRC)/genozip.exe $@ ; fi )
 
 genozip-latest:
-	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC_DEFAULT) make genozip-latest  # make -j doesn't work well on WSL - filesystem clock issues (try: hwclock -s)
+	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC) make -j genozip-latest
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
@@ -642,17 +642,18 @@ conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld
 	@echo "  (4) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
 
 windows/genozip.exe: CFLAGS += $(OPTFLAGS)
-windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.InstallForge.o 
+# windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.InstallForge.o 
+windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.MicrosoftStore.o 
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-windows/genounzip.exe windows/genocat.exe windows/genols.exe: windows/genozip.exe 
-	@echo Generating $@
-	@cp $< $@
+# windows/genounzip.exe windows/genocat.exe windows/genols.exe: windows/genozip.exe 
+# 	@echo Generating $@
+# 	@cp $< $@
 
-windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
-	@echo Generating $@
-	@./genozip$(EXE) --license=txt,60 > $@
+# windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
+# 	@echo Generating $@
+# 	@./genozip$(EXE) --license=txt,60 > $@
 
 windows/genozip-installer.ifp: windows/genozip-installer.template.ifp windows/generate-ifp.sh windows/genozip.exe ../LICENSE.txt
 	@echo "Generating $@"

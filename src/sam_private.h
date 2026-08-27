@@ -605,7 +605,6 @@ extern void sam_zip_report_monochar_inserts (void);
 
 // BAM sequence format
 extern const char bam_base_codes[16];
-extern void sam_seq_to_bam (STRp (seq_sam), Buffer *seq_bam_buf);
 extern rom bam_seq_display (bytes seq, uint32_t seq_len);
 extern uint32_t sam_seq_copy (char *dst, rom src, uint32_t src_start_base, uint32_t n_bases, bool revcomp, bool is_bam_format);
 

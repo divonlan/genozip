@@ -48,9 +48,10 @@ static SamTlenType sam_seg_predict_TLEN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, b
         else if (sam_has_mate) 
             approx_mate_ref_consumed = DATA_LINE (vb->mate_line_i)->ref_consumed; // most of the time we're lucky and this is our mate
 
-        // if no MC and no mate, approximate mate's ref_consumed as this line's ref_consumed
+        // if no MC:Z and no mate, approximate mate's ref_consumed as this line's ref_consumed
+        // note: in RNA files, this heuristic is often wrong because ref_consumed includes CIGAR Ns (introns) that are not expected to be the same on both mates. (bug 1295)
         else 
-            approx_mate_ref_consumed = vb->ref_consumed;
+            approx_mate_ref_consumed = vb->ref_consumed; 
 
         prediction = pnext_pos_delta + approx_mate_ref_consumed;
     }

@@ -50,7 +50,7 @@ void segconf_test_multiseq (VBlockP vb, Did nonref)
 
     segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 6); // expecting ~4 for unrelated sequences and >10 for multiseq
 
-    if (segconf.multiseq) 
+    if (segconf.multiseq && !flag.no_lzma) 
         ctx_segconf_set_hard_coded_lcodec (nonref, CODEC_LZMA); 
 }
 
@@ -406,50 +406,53 @@ static void segconf_calculate_nonfirst_FASTQ (void)
 {
     VBlockP vb = NULL;
 
-    // check for a non-biological file (i.e. sequences are only barcodes etc)
-    if (flag.deep_num_fastqs < 3/*0 if not deep*/ && !FAF && !segconf.is_long_reads) {
-            
-        uint64_t save_vb_size = segconf.vb_size;
-        int save_pair = flag.pair;
+    uint64_t save_vb_size = segconf.vb_size;
+    int save_pair = flag.pair;
 
-        flag.pair = NOT_PAIRED;
-        segconf.vb_size = segconf.line_len * 1000; // ~1000 reads, based on "line" length of R1 
-        segconf.running = true;
+    flag.pair = NOT_PAIRED;
+    segconf.vb_size = segconf.line_len * 1000; // ~1000 reads, based on "line" length of R1 
+    segconf.running = true;
 
-        vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, TASK_SEGCONF);
-        txtfile_read_vblock (vb);
+    vb = vb_initialize_nonpool_vb (VB_ID_SEGCONF, txt_file->data_type, TASK_SEGCONF);
+    txtfile_read_vblock (vb);
 
-        if (!segconf.is_long_reads && save_pair == PAIR_R2 && !segconf.nonbio_type) {
-            fastq_segconf_index_R2_lines (vb); // mini-seg: only populated vb->lines
-            fastq_segconf_check_if_Parse (vb);
-        }
-        
-        flag.pair       = save_pair;
-        segconf.vb_size = save_vb_size;
-        segconf.running = false;
-    }
+    fastq_segconf_index_R2_lines (vb); // mini-seg: only populated vb->lines
+    
+    // set when segconf R2, but not R3+ in deep    
+    if (!segconf.R1_line_len) segconf.R1_line_len = segconf.line_len; 
+
+    // calculate average line length
+    segconf.line_len = (vb->lines.len32 ? ((double)Ltxt / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines)
+    
+    // grow or shrink VB vs R1, depending on change in read length
+    segconf.vb_size = (double)save_vb_size * (segconf.R1_line_len ? ((double)segconf.line_len / (double)segconf.R1_line_len) : 1);
+    
+    // check for R2 being a non-biological file (i.e. sequences are only barcodes etc) (but not in deep with 3+ FASTQs)
+    if (flag.deep_num_fastqs <= 2/*0 if not deep*/ && !FAF && !segconf.is_long_reads && !segconf.nonbio_type/*if R1 was non-bio so R2 is bio for sure*/)
+        fastq_segconf_check_if_Parse (vb); 
 
     if (txt_file->discover_during_segconf)
         segconf_discover_fastq_gz();
     else if (vb)
         buf_insert (evb, txt_file->unconsumed_txt, char, 0, B1STtxt, Ltxt, "txt_file->unconsumed_txt");
     
-    segconf.running = true;
+    flag.pair = save_pair; // needed for codec_tmpl_segconf_finalize
 
-    if (codec_tmpl_maybe_used (FASTQ_QUAL)) {
-        if (!vb->lines.len) fastq_segconf_index_R2_lines (vb); // mini-seg: only populated vb->lines if not already done
-    
+    if (codec_tmpl_maybe_used (FASTQ_QUAL)) {    
         ctx_clone (vb);
         
         ZCTX(FASTQ_QUAL)->qual_codec = CODEC_UNKNOWN;
         codec_tmpl_segconf_finalize (vb, FASTQ_QUAL, fastq_zip_qual);
     }
 
+    if (segconf.deep_paired_qname) // Deep/bamass with exactly 2 FASTQs, and since skipped, this is the 2nd FASTQ
+        segconf.deep_is_last = !segconf.deep_is_last;
+
     segconf.running = false;
     vb_destroy_vb (&vb);
 
-    if (segconf.deep_paired_qname) // Deep/bamass with exactly 2 FASTQs, and since skipped, this is the 2nd FASTQ
-        segconf.deep_is_last = !segconf.deep_is_last;
+    if (flag.pair == PAIR_R2)
+        txt_file->est_num_lines = z_file->comp_num_lines[flag.deep ? SAM_COMP_FQ00 : FQ_COMP_R1]; // for progress: more accurate based on lines, as we know the expected number of lines precisely
 
     if (Z_DT(FASTQ) && IS_R1)
         fastq_zip_after_segconf_alloc_r1_z_bufs();
@@ -498,7 +501,7 @@ void segconf_calculate (void)
     // segment this VB
     ctx_clone (vb);
     
-    uint32_t remaining_txt_len = seg_all_data_lines (vb);
+    seg_all_data_lines (vb);
 
     // in segconf, seg_initialize might change the data_type and realloc the segconf vb (eg FASTA->FASTQ)
     vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
@@ -543,7 +546,7 @@ void segconf_calculate (void)
 
     segconf_set_vb_size (vb, save_vb_size);
 
-    segconf.line_len = (vb->lines.len32 ? ((double)(Ltxt - remaining_txt_len) / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines)
+    segconf.line_len = (vb->lines.len32 ? ((double)Ltxt / (double)vb->lines.len32) : 500) + 0.999; // get average line length (rounded up ; arbitrary 500 if the segconf data ended up not having any lines)
     
     // limitations: only pre-defined field
     for (Did did_i=0; did_i < DTF(num_fields); did_i++) {
@@ -752,10 +755,10 @@ StrText segconf_get_qual_histo (QualHistType qht)
 
         // similar escaping as in stats_subs_seps_in_name
         switch (segconf.qual_histo[qht][i].q + '!') {
-            case ';'  : memcpy (next, "；",   STRLEN("；"));   next += STRLEN("；");   break; // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
-            case '='  : memcpy (next, "≐",    STRLEN("≐"));   next += STRLEN("≐");    break; 
-            case '\\' : memcpy (next, "\\\\", STRLEN("\\\\")); next += STRLEN("\\\\"); break; 
-            case '"'  : memcpy (next, "\\\"", STRLEN("\\\"")); next += STRLEN("\\\""); break; 
+            case ';'  : memcpy (next, "；",   strlen("；"));   next += strlen("；");   break; // Unicode ；and ≐ (in UTF-8) to avoid breaking spreadsheet
+            case '='  : memcpy (next, "≐",    strlen("≐"));   next += strlen("≐");    break; 
+            case '\\' : memcpy (next, "\\\\", strlen("\\\\")); next += strlen("\\\\"); break; 
+            case '"'  : memcpy (next, "\\\"", strlen("\\\"")); next += strlen("\\\""); break; 
             default   : *next++ = segconf.qual_histo[qht][i].q + '!';
         }
     }

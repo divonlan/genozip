@@ -536,7 +536,7 @@ static void zip_compress_one_vb (VBlockP vb)
 
     // calculate the digest contribution of this VB, and the digest snapshot of this VB
     if (zip_need_digest) 
-        digest_one_vb (vb, true, NULL); // serializes VBs in order if MD5
+        digest_one_vb (vb, true, NULL, 0); // serializes VBs in order if MD5
 
     // allocate memory for the final compressed data of this vb. allocate 1/8 of the
     // vb size on the (uncompressed) txt file - this is normally plenty. if not, we will realloc downstream
@@ -698,9 +698,8 @@ static void zip_complete_processing_one_vb (VBlockP vb)
 uint64_t zip_get_target_progress (void)
 {
     static uint64_t target_progress=0;
-    if ((Z_DT(FASTQ) && !IS_R2) ||   // note: if 2nd of a FASTQ file pair - we leave the target as it was in the first file as seggable_size is not calculated for the 2nd file
-        (flag.deep && flag.zip_comp_i <= SAM_COMP_FQ00) ||
-        (!flag.deep && !Z_DT(FASTQ))) {
+    if (!flag.deep || 
+        (flag.zip_comp_i <= SAM_COMP_FQ00 || flag.pair == PAIR_R2)) { // not R2+ FASTQs in a non-paired deep file: we have neither est_seggable_size nor est_num_lines, so we leave target as is
 
         int64_t progress_unit = txt_file->est_num_lines ? txt_file->est_num_lines : txt_file->est_seggable_size; 
 

@@ -105,7 +105,7 @@ static void error_print_call_stack_do (CONTEXT thread_ctx)
 
 //     SymSetOptions (SymGetOptions() | SYMOPT_LOAD_LINES);
 
-// #ifdef _M_X64 // most modern Intel and AMD processors
+// #ifdef __x86_64__ // most modern Intel and AMD processors
 //     DWORD image_file = IMAGE_FILE_MACHINE_AMD64;
 //     STACKFRAME64 sf = { .AddrPC     = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rip },
 //                         .AddrStack  = { .Mode = AddrModeFlat, .Offset = thread_ctx.Rsp },
@@ -149,11 +149,11 @@ static void error_print_call_stack_do (CONTEXT thread_ctx)
 //     SymCleanup (process);
 }
 
-static void error_print_call_stack (void) 
+void error_print_call_stack (void) 
 {
     fflush (stdout); fflush (stderr);
 
-#if defined _M_X64 || defined _M_IA64
+#if defined __x86_64__ || defined __aarch64__
     CONTEXT current_thread_ctx = { .ContextFlags = CONTEXT_FULL };
     RtlCaptureContext (&current_thread_ctx); // note: GetThreadContext() doesn't work for the current thread
 
@@ -186,7 +186,7 @@ static void error_init_signal_handlers (void)
 
 extern bool am_i_submit (void);
 
-static void error_print_call_stack (void) 
+void error_print_call_stack (void) 
 {
     DO_ONCE {
         fflush (stdout); fflush (stderr);
@@ -235,7 +235,7 @@ static noreturn void signal_handler_INT (int signum)
 }
 
 // signal handler of SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGSYS
-static void noreturn signal_handler_bug (int signum) 
+static noreturn void signal_handler_bug (int signum) 
 {
     if (catch_msg) {
         progress_newline(); 
@@ -339,8 +339,6 @@ static void error_free_all (void)
     vb_destroy_pool (POOL_BGZF, true);
     vb_destroy_vb (&evb);
 }
-
-extern rom command_name (void);
 
 noreturn void error_exit (bool show_stack, bool is_error) 
 {

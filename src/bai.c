@@ -263,11 +263,11 @@ static inline rom bai_get_line_vcf (rom next, rom after_vb,
 
     // If there is an END (=rlen), use it
     PosType32 end, svlen;
-    if (     (info = strstr (flds[INFO], "END="))   && (info[-1]=='\t' || info[-1]==';') && (end   = atoi (info + STRLEN("END="))) && end-1 >= *pos)
+    if (     (info = strstr (flds[INFO], "END="))   && (info[-1]=='\t' || info[-1]==';') && (end   = atoi (info + strlen("END="))) && end-1 >= *pos)
         MAXIMIZE (*ref_consumed, 1+ ((end-1/*0-based*/) - *pos)); // both start and end position are counted
 
     // if no END, check for SVLEN
-    else if ((info = strstr (flds[INFO], "SVLEN=")) && (info[-1]=='\t' || info[-1]==';') && (svlen = atoi (info + STRLEN("SVLEN="))))
+    else if ((info = strstr (flds[INFO], "SVLEN=")) && (info[-1]=='\t' || info[-1]==';') && (svlen = atoi (info + strlen("SVLEN="))))
         MAXIMIZE (*ref_consumed, ABS(svlen)); // absolute value per VCF spec 4.5 §3
 
     // TO DO maximize also with FORMAT/LEN (bug 1229)
@@ -991,7 +991,7 @@ void bai_write (void)
 
     file_remove (filename, true);
 
-    FILE *fp = fopen (filename, "wb");
+    FILE *fp = fopen (filename, WRITE);
     ASSRET (fp,, "WARNING: Failed to write %s. fopen: %s", filename, strerror (errno));
 
     ARRAY_alloc (uint64_t, n_chunks_in_rname,      num_bai_contigs,  true,  evb->codec_bufs[0], evb, "codec_bufs[0]");

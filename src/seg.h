@@ -17,10 +17,9 @@
 typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } SegError;
 
 extern void zip_modify (VBlockP vb);
-extern uint32_t seg_all_data_lines (VBlockP vb); 
+extern void seg_all_data_lines (VBlockP vb); 
 
-typedef enum { GN_FORBIDEN, GN_SEP, GN_IGNORE } GetNextAllow;
-extern rom seg_get_next_item (VBlockP vb, rom str, int *str_len, GetNextAllow newline, GetNextAllow tab, GetNextAllow space,
+extern rom seg_get_next_item (VBlockP vb, rom str, int *str_len, bool newline, bool tab,
                               unsigned *len, char *separator, bool *has_13, // out
                               rom item_name);
 extern rom seg_get_next_line (VBlockP vb, rom str, int *str_len, unsigned *len, bool must_have_newline, bool *has_13 /* out */, rom item_name);
@@ -280,7 +279,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_NEXT_ITEM(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (VB, field_start, &len, GN_FORBIDEN, GN_SEP, GN_IGNORE, &field_len, &separator, NULL, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, false, true, &field_len, &separator, NULL, #f); \
     FIELD (f)
 
 #define SEG_NEXT_ITEM(f) \
@@ -289,7 +288,7 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_LAST_ITEM(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_FORBIDEN, GN_IGNORE, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, true, false, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_LAST_ITEM(f) \
@@ -298,47 +297,18 @@ extern ContextP seg_mux_get_channel_ctx (VBlockP vb, Did did_i, MultiplexerP mux
 
 #define GET_MAYBE_LAST_ITEM(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_SEP, GN_IGNORE, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, true, true, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_MAYBE_LAST_ITEM(f)  \
     GET_MAYBE_LAST_ITEM (f); \
     seg_by_did (VB, field_start, field_len, f, field_len+1)
 
-// SPACE separator between fields
-
-#define GET_NEXT_ITEM_SP(f) \
-    field_start = next_field; \
-    next_field = seg_get_next_item (VB, field_start, &len, GN_FORBIDEN, GN_SEP, GN_SEP, &field_len, &separator, NULL, #f); \
-    FIELD (f)
-
-#define SEG_NEXT_ITEM_SP(f) \
-    GET_NEXT_ITEM_SP (f); \
-    seg_by_did (VB, field_start, field_len, f, field_len+1); 
-
-#define GET_LAST_ITEM_SP(f)  \
-    field_start = next_field; \
-    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_FORBIDEN, GN_FORBIDEN, &field_len, &separator, has_13, #f); \
-    FIELD (f)
-
-#define SEG_LAST_ITEM_SP(f)  \
-    GET_LAST_ITEM_SP (f); \
-    seg_by_did (VB, field_start, field_len, f, field_len+1)
-
-#define GET_MAYBE_LAST_ITEM_SP(f)  \
-    field_start = next_field; \
-    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_SEP, GN_SEP, &field_len, &separator, has_13, #f); \
-    FIELD (f)
-
-#define SEG_MAYBE_LAST_ITEM_SP(f)  \
-    GET_MAYBE_LAST_ITEM_SP (f); \
-    seg_by_did (VB, field_start, field_len, f, field_len+1)
-
 // NEWLINE separator
 
 #define GET_NEXT_ITEM_NL(f) \
     field_start = next_field; \
-    next_field = seg_get_next_item (VB, field_start, &len, GN_SEP, GN_IGNORE, GN_IGNORE, &field_len, &separator, has_13, #f); \
+    next_field = seg_get_next_item (VB, field_start, &len, true, false, &field_len, &separator, has_13, #f); \
     FIELD (f)
 
 #define SEG_EOL(f,account_for_ascii10) ({ seg_by_did (VB, *(has_13) ? "\r\n" : "\n", 1 + *(has_13), (f), (account_for_ascii10) + *(has_13)); })

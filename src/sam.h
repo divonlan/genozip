@@ -156,6 +156,9 @@
 #pragma GENDICT FASTQ_AUX_parent_read_id=DTYPE_2=parent_read_id 
 #pragma GENDICT FASTQ_AUX_start_time=DTYPE_2=start_time 
 
+// Nanopore Dorado tags: https://software-docs.nanoporetech.com/dorado/latest/basecaller/sam_spec/?h=tags#polyat-tags
+//#pragma GENDICT OPTION_st_Z=DTYPE_2=st:Z     // (overlap). read start time (in UTC). Guppy format: 2022-05-25T04:49:07Z ; Dorado format: 2025-03-13T22:11:46.264+00:00
+
 // -----------------------------------------------------------------------------------------------------------
 // End of common contexts of FASTQ and SAM
 // -----------------------------------------------------------------------------------------------------------
@@ -207,7 +210,7 @@
 #pragma GENDICT OPTION_NH_i=DTYPE_2=NH:i     // Number of reported alignments that contain the query in the current record
 #pragma GENDICT OPTION_IH_i=DTYPE_2=IH:i     // Query hit total count. Novoalign: Number of stored alignments in SAM that contains the query in the current record. Only present if there is more than one alignment reported for the read (i.e. IH <= NH)
 #pragma GENDICT OPTION_HI_i=DTYPE_2=HI:i     // Query hit index ∈[1,NH]
-#pragma GENDICT OPTION_NM_i=DTYPE_2=NM:i     // Edit distance to the reference
+#pragma GENDICT OPTION_NM_i=DTYPE_2=NM:i     // Edit distance to the reference (mismatches + indels)
 #pragma GENDICT OPTION_PQ_i=DTYPE_2=PQ:i     // Phred likelihood of the template, conditional on the mapping locations of both/all segments being correct.
 #pragma GENDICT OPTION_SM_i=DTYPE_2=SM:i     // Template-independent mapping quality
 #pragma GENDICT OPTION_TC_i=DTYPE_2=TC:i     // The number of segments in the template
@@ -367,7 +370,7 @@
 
 // STAR aligner tags. Source: https://raw.githubusercontent.com/alexdobin/STAR/master/doc/STARmanual.pdf
 // full list according to the source code Parameters.h:  NH,HI,AS,NM,MD,nM,jM,jI,RG,XS,rB,vG,vA,vW,ha,ch,MC,CR,CY,UR,UY,CB,UB,GX,GN,gx,gn,sM,sS,sQ,cN
-#pragma GENDICT OPTION_nM_i=DTYPE_2=nM:i     // the number of mismatches per (paired) alignment, not to be confused with NM, which is the number of mismatches in each mate.
+#pragma GENDICT OPTION_nM_i=DTYPE_2=nM:i     // the number of mismatches per (paired) alignment, excluding indels, not to be confused with NM, which is the number of mismatches+indels just in this alignment.
 #pragma GENDICT OPTION_jM_B_c=DTYPE_2=jM:B:c // jM:B:c,M1,M2,... intron motifs for all junctions (i.e. N in CIGAR): 0: non-canonical; 1: GT/AG, 2: CT/AC, 3: GC/AG, 4: CT/GC, 5: AT/AC, 6: GT/AT. If splice junctions database is used, and a junction is annotated, 20 is added to its motif value.
 #pragma GENDICT OPTION_jI_B_i=DTYPE_2=jI:B:i // jI:B:i,Start1,End1,Start2,End2,... Start and End of introns for all junctions (1-based).
 #pragma GENDICT OPTION_rB_B_i=DTYPE_2=rB:B:i // alignment block read/genomic coordinates
@@ -500,7 +503,7 @@
 #pragma GENDICT OPTION_ws_i=DTYPE_2=ws:i     // per-read: Start of first base of the query (‘qs’) in approximate raw frame count since start of movie. For a CCS read, the start of the first base of the first incorporated subread.
 #pragma GENDICT OPTION_we_i=DTYPE_2=we:i     // per-read: Start of last base of the query (‘qe - 1’) in approximate raw frame count since start of movie. For a CCS read, the start of the last base of the last incorporated subread.
 #pragma GENDICT OPTION_zm_i=DTYPE_2=zm:i     // per-read: ZMW hole number
-#pragma GENDICT OPTION_np_i=DTYPE_2=np:i     // per-read: NumPasses (1 for subreads, variable for CCS—encodes number of complete passes of the insert)
+#pragma GENDICT OPTION_np_i=DTYPE_2=np:i     // per-read: NumPasses (1 for subreads, variable for CCS—encodes number of complete passes of the insert, 0 for various failure situations in CCS)
 #pragma GENDICT OPTION_ec_f=DTYPE_2=ec:f     // per-read: Effective coverage for CCS reads, the average subread coverage across all windows (only present in CCS reads)
 #pragma GENDICT OPTION_rq_f=DTYPE_2=rq:f     // per-read: Float in [0, 1] encoding expected accuracy
 #pragma GENDICT OPTION_sn_B_f=DTYPE_2=sn:B:f // per-read: 4 floats for the average signal-to-noise ratio of A, C, G, and T (in that order) over the HQRegion

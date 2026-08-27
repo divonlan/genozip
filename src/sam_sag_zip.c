@@ -93,13 +93,18 @@ void sam_set_sag_type (void)
     // Note that STAR uses NH:i for secondary and SA:Z for supplamentary. We choose to gencomp for
     // secondaries as they are usually more numerous that supplamentaries (bug 1148).
     // we identify a PRIM as a line that is (1) not supp/secondary (2) has NH >= 2
-    else if (segconf.HI_has_two_plus && segconf_has(OPTION_NH_i))
+    else if ((segconf.HI_has_two_plus || MP(STAR)) && segconf_has(OPTION_HI_i) && segconf_has(OPTION_NH_i))
         segconf.sag_type = segconf.has_barcodes ? SAG_BY_SOLO : SAG_BY_NH; 
 
     // SAG_BY_SA: the preferd Sag method - by SA:Z
     // we identify a PRIM line - if it (1) has SA:Z and (2) supp/secondary flags are clear
     else if (segconf.sam_has_SA_Z || segconf_has(OPTION_SA_Z)) 
         segconf.sag_type = SAG_BY_SA;
+
+    // SAG_BY_NH: we have NH and HI but in segconf all HI=1, and no SA:Z is found. 
+    // Speculatively, choose SAG_BY_NH. Scenario seen in some STAR files.
+    else if (segconf_has(OPTION_NH_i) && segconf_has(OPTION_HI_i))
+        segconf.sag_type = SAG_BY_NH;
 
     // SAG_BY_CC: cases where there is NH, but no HI or SA, and all lines in a SAG have NH>=2, and, 
     // except the last line in the SAG, also have CC and CP.

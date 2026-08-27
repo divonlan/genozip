@@ -346,6 +346,8 @@ static void codec_domq_show_normalized_qual_histogram (VBlockP vb, ContextP qual
 // called during compress: normalizes qual (for each line segment, using the normalization table for its dom)
 static void codec_domq_normalize_qual (VBlockP vb, ContextP qual_ctx, ContextP domqruns_ctx)
 {
+    START_TIMER;
+
     ARRAY (uint8_t, normalize, normalize_buf);
 
     for_buf2 (DomqLine, ql, line_i, ql_buf) {
@@ -363,6 +365,8 @@ static void codec_domq_normalize_qual (VBlockP vb, ContextP qual_ctx, ContextP d
 
     if (flag.show_qual) 
         codec_domq_show_normalized_qual_histogram (vb, qual_ctx, domqruns_ctx);
+
+    COPY_TIMER (codec_domq_normalize_qual);
 }
 
 static inline void codec_domq_add_runs (BufferP qdomruns_buf, uint32_t runlen)

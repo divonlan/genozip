@@ -132,7 +132,7 @@ COMPRESS (codec_acgt_compress)
 
     bits_clear_excess_bits_in_top_word (packed, false); // for good measure (V15)
 
-    // case: no exception basess after all
+    // case: no exception bases after all
     if (buf_is_zero (&nonref_x_ctx->local)) {
         has_x = false;  
         header->flags.ctx.acgt_no_x = true; 
@@ -156,6 +156,7 @@ COMPRESS (codec_acgt_compress)
     // original order, and improves compression ratio by about 2%
     LTEN_bits (packed);
 
+    // note: we ignore --no-lzma here, becuase ACGT codec counts on LZMA, and it is fast on this data 
     nonref_ctx->lcodec = header->sub_codec = (vb->scratch.len32 * sizeof (uint64_t) >= MIN_LEN_FOR_COMPRESSION) ? CODEC_LZMA : CODEC_NONE;
     
     compress_sub: {

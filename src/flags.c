@@ -226,7 +226,7 @@ static void flags_set_dict_(rom optarg, rom option_name, DictId *flag_with_dict)
     if (optarg) 
         *flag_with_dict = dict_id_make (optarg, strlen (optarg), DTYPE_PLAIN); 
     
-    else if (flag_with_dict == &flag.show_codec_δ)
+    else if (flag_with_dict == &flag.show_codec_δ) // no dict given = show all dicts
         flag.show_codec = true;
         
     else if (flag_with_dict == &flag.show_b250_δ)
@@ -351,9 +351,10 @@ static void flag_set_telemetry (rom optarg)
     else if (str_case_compare (optarg, "file", NULL))
         flag.telemetry = TELEMETRY_FILE;
 
-    else
-        ABORTINP ("--telemetry: invalid argument \"%s\". "_TIP"Use --telemetry or --telemetry=FILE. %s", 
-                  optarg, WEBSITE_TELEMETRY);
+    else {
+        flag.telemetry = TELEMETRY_FILE; // with field, always emit to file too 
+        flags_set_dict (optarg, &flag.tele_show_δ); // explicitly send 6 examples of a named field
+    }
 }
 
 static void flag_set_deep (rom optarg)
@@ -537,6 +538,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _il {"interleaved",      optional_argument, 0, 29                     } // both --interleave and --interleaved will be accepted
         #define _e  {"reference",        required_argument, 0, 'e'                    }
         #define _E  {"REFERENCE",        required_argument, 0, 'E'                    }
+        #define _eA {"assess-reference", no_argument,       &fint.assess_reference, 1 }
         #define _b  {"bytes",            no_argument,       &fint.ls_bytes,         1 }
         #define _LC {"cache",            no_argument,       &fint.ls_cache,         1 }
         #define _me {"make-reference",   optional_argument, 0, 160                    }
@@ -675,9 +677,9 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _dQ {"no-domq",          no_argument,       &fint.no_domqual,       1 }  
         #define _dC {"no-pacb",          no_argument,       &fint.no_pacb,          1 }  
         #define _dH {"no-homp",          no_argument,       &fint.no_homp,          1 }  
-        #define _dO {"no-longr",         no_argument,       &fint.no_longr,         1 }  
         #define _dU {"no-smux",          no_argument,       &fint.no_smux,          1 }  
         #define _dE {"no-tmpl",          no_argument,       &fint.no_tmpl,          1 }  
+        #define _do {"no-OQ",            no_argument,       &fint.no_OQ,            1 }  
         #define _dz {"no-lzma",          no_argument,       &fint.no_lzma,          1 }  
         #define _dI {"no-bai",           no_argument,       &fint.no_index,         1 }  
         #define _dT {"no-tbi",           no_argument,       &fint.no_index,         1 }  
@@ -685,11 +687,13 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _SI {"skip-index",       no_argument,       &fint.skip_index,       1 }  
         #define _fQ {"force-domq",       no_argument,       &fint.force_qual_codec, CODEC_DOMQ  }  
         #define _fC {"force-pacb",       no_argument,       &fint.force_qual_codec, CODEC_PACB  }  
-        #define _fO {"force-longr",      no_argument,       &fint.force_qual_codec, CODEC_LONGR }  
         #define _fS {"force-smux" ,      no_argument,       &fint.force_qual_codec, CODEC_SMUX  }  
         #define _fE {"force-tmpl" ,      no_argument,       &fint.force_qual_codec, CODEC_TMPL  }  
         #define _fH {"force-homp" ,      no_argument,       &fint.force_qual_codec, CODEC_HOMP  }  
         #define _fN {"force-normq",      no_argument,       &fint.force_qual_codec, CODEC_NORMQ }  
+        #define _Xz {"skip-zip",         no_argument,       &fint.skip_zip,         1 }  
+        #define _Xb {"skip-bz2",         no_argument,       &fint.skip_bz2,         1 }  
+        #define _Xx {"skip-xz",          no_argument,       &fint.skip_xz,          1 }  
         #define _dl {"debug-lines",      no_argument,       &fint.debug_lines,      1 }  
         #define _dc {"verify-codec",     no_argument,       &fint.verify_codec,     1 }          
         #define _oe {"echo",             optional_argument, &fint.echo,             1 }
@@ -704,6 +708,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _bl {"biopsy-line",      required_argument, 0, 137,                   }
         #define _sk {"skip-segconf",     no_argument,       &fint.skip_segconf,     1 }
         #define _TL {"truncate",         no_argument,       &fint.truncate,         1 }
+        #define _UL {"unlock",           no_argument,       &fint.unlock,           1 }
         #define _VV {"check-latest",     no_argument,       &fint.check_latest,     1 }
         #define _DV {"debug-latest",     no_argument,       &fint.debug_latest,     1 }
         #define _Dp {"debug-peek",       no_argument,       &fint.debug_peek,       1 }
@@ -726,10 +731,10 @@ void flags_init_from_command_line (int argc, char **argv)
         
         typedef struct option Option;
         const Option *long_options = 
-            is_genozip   ? (Option[]){ _lg, _i, _I, _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nc,_nu,  _V, _z,                                                                                 _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,           _sd, _sT,      _sN, _sb, _IS, _Sb, _Dz, _Ie, _lc, _lh, _lH,      _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr,      _UM, _su,      _so, _gz, _sv, _sn, _pn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _gn, _dr, _dR, _dP, _dG, _dN, _dF, _RR, _DF, _dQ, _fl, _dH, _Hh, _dO, _dC, _fQ, _fC, _fO, _fS, _fH, _fN, _dU, _dE, _dz, _dl, _dc, _dg,      _dh,_dS, _dI, _dT, _ND, _SI, _bS, _iS, _tS, _9, _88, _pe, _Np, _fa, _bs, _lm,                        _nh, _rg, _rG,                          _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Sc, _AL, _Ad, _sI, _cn,                          _s6,          _oe, _al, _as, _Lf, _dd, _T, _TT, _TL, _wM, _wm, _WM, _WB, _WT, _bi, _bB, _bl, _sk, _VV, _DV,      _Dh, _Ds, _sp, _Du, _De, _DD, _DP, _BA, _SH, _Dd, _ba,      _to, _ts, _hc, _dv, _dA, _TR, _NE, _Sd, _St, _um,      _fP, _nF, _nS, _nI, _gg, _rs, _00 } 
-          : is_genounzip ? (Option[]){ _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t,      _DL,      _nc,      _V, _z,                                                                                 _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS,      _sG, _sd, _sT, _sS,      _sb, _IS,                _lc, _lh, _lH,      _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _SR,      _su,                _sv, _sn, _pn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,      _dM,           _dR,                                              _Hh,                                         _dU,           _dl, _dc,                    _dI, _dT,                _iS, _tS,                         _bs, _lm,                                       _sR, _pR,                _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _Ad, _sI, _cn, _cN,                     _s6,          _oe,           _Lf, _dd, _T, _TT,                                                   _VV, _DV, _Dp,           _sp,           _DD,                _Dd, _ba,      _to, _ts,      _dv, _dA, _TR, _NE,      _St,      _np,                          _rs, _00 }
-          : is_genocat   ? (Option[]){ _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,                         _nc,      _V, _z, _zr, _zR, _zb, _zB, _zs, _zS, _za, _zA, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _H4, _Gt, _So, _Io, _iu, _GT, _sL, _ss, _SS, _se, _sG, _sd, _sT, _sS,      _sb, _IS,                _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _SR,      _su, _sO,           _sv, _sn, _pn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,      _dM,           _dR,                                              _Hh,                                                             _dc,      _ds,                                                                          _lm, _fs, _g, _gw, _n, _nt, _nH,           _sR, _pR,      _sC, _pC, _hC, _rA, _rI, _pI, _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _Ad, _sI, _cn, _cN, _pg, _PG, _ct, _vl, _s6,          _oe, _al,           _dd, _T,                                                                  _Dp,           _sp,           _DD,                _Dd, _ba, _DT,                _dv,      _TR, _NE,                _np,                          _rs, _00 }
-          : is_genols    ? (Option[]){ _lg,             _f, _h,        _l, _L1, _L2, _q,                                       _V,                                                                                                      _p,                                                                                                                                                                                                                                                    _st, _sm,                                                                                                        _dm,                          _dt,                                                                                                                                                                                                                                                                                                                                       _sM,                                                                                 _b, _LC, _oe,                _dd, _T,                                                                                 _sp,           _DD,                                              _dv,           _NE,                                              _rs, _00 }
+            is_genozip   ? (Option[]){ _lg, _i, _I, _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nc,_nu,  _V, _z,                                                                                 _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,           _sd, _sT,      _sN, _sb, _IS, _Sb, _Dz, _Ie, _lc, _lh, _lH,      _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr,      _UM, _su,      _so, _gz, _sv, _sn, _pn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _gn, _dr, _dR, _dP, _dG, _dN, _dF, _RR, _DF, _dQ, _fl, _dH, _Hh, _dC, _fQ, _fC, _fS, _fH, _fN, _dU, _dE, _do, _dz, _dl, _dc, _dg,      _dh,_dS, _dI, _dT, _ND, _SI, _bS, _iS, _tS, _9, _88, _pe, _Np, _fa, _bs, _lm,                        _nh, _rg, _rG,                          _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Sc, _AL, _Ad, _sI, _cn,                          _s6,          _oe, _al, _as, _Lf, _dd, _T, _TT, _TL,      _wM, _wm, _WM, _WB, _WT, _bi, _bB, _bl, _sk, _VV, _DV,      _Dh, _Ds, _sp, _Du, _De, _DD, _DP, _BA, _SH, _Dd, _ba,      _to, _ts, _hc, _dv, _dA, _TR, _NE, _Sd, _St, _um,      _fP, _nF, _nS, _nI, _gg, _rs, _Xz, _Xb, _Xx, _eA, _00 } 
+          : is_genounzip ? (Option[]){ _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t,      _DL,      _nc,      _V, _z,                                                                                 _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS,      _sG, _sd, _sT, _sS,      _sb, _IS,                _lc, _lh, _lH,      _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _SR,      _su,                _sv, _sn, _pn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,      _dM,           _dR,                                              _Hh,                               _dU,                _dl, _dc,                    _dI, _dT,                _iS, _tS,                         _bs, _lm,                                       _sR, _pR,                _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _Ad, _sI, _cn, _cN,                     _s6,          _oe,           _Lf, _dd, _T, _TT,                                                        _VV, _DV, _Dp,           _sp,           _DD,                _Dd, _ba,      _to, _ts,      _dv, _dA, _TR, _NE,      _St,      _np,                          _rs,                     _00 }
+          : is_genocat   ? (Option[]){ _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,                         _nc,      _V, _z, _zr, _zR, _zb, _zB, _zs, _zS, _za, _zA, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _H4, _Gt, _So, _Io, _iu, _GT, _sL, _ss, _SS, _se, _sG, _sd, _sT, _sS,      _sb, _IS,                _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _SR,      _su, _sO,           _sv, _sn, _pn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,      _dM,           _dR,                                              _Hh,                                                        _dc,      _ds,                                                                          _lm, _fs, _g, _gw, _n, _nt, _nH,           _sR, _pR,      _sC, _pC, _hC, _rA, _rI, _pI, _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _Ad, _sI, _cn, _cN, _pg, _PG, _ct, _vl, _s6,          _oe, _al,           _dd, _T,           _UL,                                                        _Dp,           _sp,           _DD,                _Dd, _ba, _DT,                _dv,      _TR, _NE,                _np,                          _rs,                     _00 }
+          : is_genols    ? (Option[]){ _lg,             _f, _h,        _l, _L1, _L2, _q,                                       _V,                                                                                                      _p,                                                                                                                                                                                                                                                    _st, _sm,                                                                                                        _dm,                          _dt,                                                                                                                                                                                                                                                                                                                                       _sM,                                                                            _b, _LC, _oe,                _dd, _T,                                                                                      _sp,           _DD,                                              _dv,           _NE,                                              _rs,                     _00 }
           :                NULL;
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -837,7 +842,7 @@ verify_command:
             case 29  : flag_set_interleaved (optarg); break;
             case 132 : flag_set_show_containers (optarg); break; 
             case 133 : flag.debug_seg=1;
-                       flags_set_dict (optarg, &flag.debug_seg_δ); break;
+                       if (optarg) flags_set_dict (optarg, &flag.debug_seg_δ); break;
             case 134 : biopsy_init (optarg);        ; break;
             case 135 : flag.show_gheader = optarg ? atoi(optarg) : 1; break; // =1 show gheader as in file, =2 show shows section list after possible modiciation by writer_create_plan 
             case 136 : flag.show_sag = optarg ? atoi(optarg)+1 : -1; break;   //-1=show all, >=1 - show grp_i=show_sag-1 
@@ -1068,6 +1073,7 @@ void flags_zip_verify_dt_specific (DataType dt)
     
     // FASTQ
     FLAG_ONLY_FOR_3DTs(SAM, FASTQ, FASTA, pair, "pair"); // note: SAM because supported with --deep
+    FLAG_ONLY_FOR_3DTs(SAM, BAM, FASTQ, assess_reference, "assess-reference");
 
     // VCF
     FLAG_ONLY_FOR_DT(VCF, add_line_numbers, "add-line-numbers");
@@ -1276,7 +1282,7 @@ void flags_update (unsigned num_files, rom *filenames)
         flag.show_reference || flag.show_digest || flag.show_contigs || flag.show_ranges || flag.show_snips || flag.show_compress ||
         flag.show_alleles || flag.show_vblocks || flag.show_codec || flag.show_codec_δ.num || flag.show_cache || flag_debug_gencomp || flag.show_qual || flag.show_aligner ||
         flag.show_buddy || flag.debug_peek || flag.show_aliases || (flag.show_index && IS_PIZ) || flag.count || flag.biopsy || flag.show_is_exactable ||
-        flag.show_sec_gencomp || flag.show_recon_plan || flag.show_reading_list || flag.show_isizes || flag.show_uncompress ||
+        flag.show_sec_gencomp || flag.show_recon_plan || flag.show_reading_list || flag.show_isizes || flag.show_uncompress || flag.assess_reference ||
         flag.show_deep == SHOW_DEEP_ALL)
         flag.quiet=true; // don't show progress or warnings
 
@@ -1285,7 +1291,7 @@ void flags_update (unsigned num_files, rom *filenames)
 
     // note: must be here and not in flags_update_zip_one_file, so its before the z_file creation
     flag.zip_no_z_file = IS_ZIP && 
-                         (flag.seg_only || zip_is_biopsy || flag.show_segconf_has || flag.show_bam || flag.show_bai || flag.show_is_exactable);
+                         (flag.seg_only || zip_is_biopsy || flag.show_segconf_has || flag.show_bam || flag.show_bai || flag.show_is_exactable || flag.assess_reference);
 
     flag.multiple_files = (num_files > 1);
 
@@ -1364,6 +1370,8 @@ void flags_update_zip_one_file (void)
     ASSINP (!flag.test_i || flag.test || flag.no_test || flag.debug || flag.make_reference || flag.zip_no_z_file || zip_is_biopsy, 
             "When running with %s one of: --test, --no-test, --debug, --make-reference must be set", GENOZIP_TEST);
 
+    ASSINP0 (!flag.assess_reference || IS_REF_LOADED_ZIP, "--assess-reference requires --reference");
+
     flag.bind = flag.deep                         ? BIND_DEEP    // one SAM/BAM (1-3 components) and one or more FASTQs
               : (dt == DT_FASTQ && flag.pair)     ? BIND_FQ_PAIR // FQ_COMP_R1 and FQ_COMP_R2 components
               : (dt == DT_FASTA && flag.pair)     ? BIND_FQ_PAIR // FAF with --pair
@@ -1371,11 +1379,12 @@ void flags_update_zip_one_file (void)
               :                                     BIND_NONE;
 
     // if biopsy, we seg only for speed. current limitation: in paired files we do the whole thing. TO DO: fix this.
-    if (flag_has_biopsy_line && flag.bind != BIND_FQ_PAIR)
+    if ((flag_has_biopsy_line && flag.bind != BIND_FQ_PAIR)
+      || flag.show_bam || flag.show_bai || flag.analyze_ins)
         flag.seg_only = true;
 
     if (flag.show_bam || flag.show_bai || flag.analyze_ins) 
-        flag.seg_only = flag.xthreads = flag.quiet = true; 
+        flag.xthreads = flag.quiet = true; 
 
     flag.skip_segconf |= flag.add_seq; // --add-seq implies --skip-segconf
 
@@ -1984,3 +1993,25 @@ void flags_restore (Flags *save_flag)
     for (; src < after; src++, dst++)
         if (*src != *dst) *dst = *src;
 }
+
+rom _command_name (CommandType cmd)
+{
+    switch (cmd) {
+        case ZIP           : return "ZIP";
+        case PIZ           : return "PIZ";
+        case LIST          : return "LIST";
+        case VERSION       : return "VERSION";
+        case HELP          : return "HELP";
+        case LICENSE       : return "LICENSE";
+        case SHOW_HEADERS  : return "SHOW_HEADERS";
+        case SHOW_BAI      : return "SHOW_BAI";
+        case SHOW_GZ       : return "SHOW_GZ";
+        case GENERATE_IL1M : return "GENERATE_IL1M";
+        case DUMP_GZ_BLOCK : return "DUMP_GZ_BLOCK";
+        case SHOW_FLAVOR   : return "SHOW_FLAVOR";
+        case RM_CACHE      : return "RM_CACHE";
+        case NO_COMMAND    : return "NO_COMMAND";
+        default            : return "InvalidCommand";
+    }
+}
+

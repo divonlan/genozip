@@ -92,7 +92,7 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based (if MAI
 
         // case: writer_main_loop->gencomp_piz_vb_to_plan is constantly changing z_file->recon_plan so we can't inspect it
         if (!flag.debug) {
-            WARN_ONCE (_TIP"Rerun with --debug to calculate txt_line_i.%s in the following error message", "");
+            WARN_ONCE (_TIP "Re-run with --debug to calculate line_in_file (=txt_line_i).%s in the following error message", "");
             return -999;
         } 
     }
@@ -264,6 +264,7 @@ static void writer_init_txt_header_info (void)
         && DTPZ(txt_header_required) // not HDR_NONE
         && (!Z_DT(SAM) || comp_i == SAM_COMP_MAIN); // For SAM/BAM, show the txt_header only of MAIN, not PRIM/DEPN and (deep) FASTQ components           
 
+        // this is an extra comment line to avoid two mutex_initialize on same line number
         if (comp->needs_write && !flag.no_writer_thread) {
             // mutex: locked:    here (at initialization)
             //        waited on: writer thread, wanting the data
@@ -1241,8 +1242,10 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
 
             case PLAN_TXTHEADER:   
                 // case strict: SAM header might be just part of the first BGZF block - delay its bgzf-compression to after the first VB
-                if (IS_PIZ_EXACT) 
+                if (IS_PIZ_EXACT) {
                     buf_copy (wvb, &wvb->txt_data, &v->vb->txt_data, char, 0, 0, "txt_data");
+                    if (do_digest_v) wvb->txt_data.next = wvb->txt_data.len; // where data VB data starts (for digest) - because txt_header was already digested in txtheader_piz_read_and_reconstruct()
+                }
                 else
                     writer_flush_vb (dispatcher, v->vb, true, false); // write the txt header in its entirety
                 
@@ -1257,7 +1260,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
             case PLAN_FULL_VB:   
                 // note: normally digest calculation is done in the compute thread in piz_reconstruct_one_vb, but in
                 // case of an unmodified VB that inserts lines from gencomp VBs, we do it here, as we re-assemble the original VB
-                if (do_digest_v) digest_one_vb (v->vb, false, NULL); 
+                if (do_digest_v) digest_one_vb (v->vb, false, NULL, 0); 
 
                 if (!flag.downsample) {
 
@@ -1281,12 +1284,14 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
 
             case PLAN_END_OF_VB: { // done with VB - free the memory (happens after a series of "default" line range entries)
                 v->vb->lines.len32 = wvb->lines.len32; // for correct digest error printing
-                bool needs_flush = do_digest_v ? digest_one_vb (v->vb, false, &wvb->txt_data) : true;
+
+                bool needs_flush = do_digest_v ? digest_one_vb (v->vb, false, &wvb->txt_data, wvb->txt_data.next) : true;
 
                 // note: if we're digesting gencomp VBs, we dont flush wvb when finishing a non-digestable VB (eg PRIM/DEPN in SAM/BAM)
                 if (needs_flush || i == z_file->recon_plan.len-1/*final VB*/) {
                     writer_flush_vb (dispatcher, wvb, false, false); // flush remaining unflushed lines of this VB
                     wvb->lines.len32 = 0;
+                    wvb->txt_data.next = 0; // txt_header data, if there was any, was flushed
                 }
                 
                 writer_release_vb (v);

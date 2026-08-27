@@ -23,6 +23,13 @@ typedef enum { CACHE_INITITAL, CACHE_READY/*shm read-only*/, CACHE_POPULATING/*s
 #define CACHE_STATE_NAMES { "INITIAL", "READY", "POPULATING", "NONE" }
 extern rom cache_state_name (RefCacheState cs);
 
+// how to store ref cache
+#ifdef __APPLE__ // note: on Mac, SysV shm is very tiny by default, so we use POSIX shm
+#define USE_POSIX_SHM 
+#elif !defined(_WIN32) 
+#define USE_SYSV_SHM 
+#endif
+
 // a reference cache is a shared memory segment consisting of a RefCache struct, followed by the genome, follewed by the refhash
 typedef struct RefCache { 
     uint32_t magic;               // set to GENOZIP_MAGIC - used to detect whether this shm segment is a Genozip reference cache
@@ -86,10 +93,14 @@ typedef struct RefStruct {
 
     // reference cache
     RefCacheState cache_state;
-#ifndef _WIN32
+#ifdef USE_SYSV_SHM
     #define CACHE_SHM_NONE -1
     int cache_shm;
-#else
+#elif defined USE_POSIX_SHM
+    #define CACHE_SHM_NONE -1
+    int cache_shm;   // file descriptor 
+    uint64_t cache_id; // numeric value derived from reference file inode
+#else // Windows
     #define CACHE_SHM_NONE NULL
     void *cache_shm; // Windows HANDLE is defined as void *
 #endif

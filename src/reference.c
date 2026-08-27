@@ -321,7 +321,7 @@ void ref_destroy_genome (void)
 void ref_destroy_reference (void)
 {
     if (flag.show_cache && gref.genome_buf.type == BUF_SHM) 
-        iprint0 ("show-cache: destroy genome_buf attached to shm\n");
+        iprintf ("%sdestroy genome_buf attached to shm\n", _SHOW_CACHE);
 
     buflist_sort (evb, false);
 
@@ -787,7 +787,7 @@ bool ref_load_stored_reference (void)
                                  ref_uncompress_multiple_ranges, 
                                  NO_CALLBACK);
 
-        if (flag.show_cache) iprint0 ("show-cache: done reading genome from disk\n");
+        if (flag.show_cache) iprintf ("%sdone reading genome from disk\n", _SHOW_CACHE);
     }
 
     // calculate in-memory digest of loaded genome, and compare it to the value calculated by
@@ -812,7 +812,7 @@ bool ref_load_stored_reference (void)
             }
         }
         else
-            if (flag.show_cache) iprint0 ("show-cache: verified genome digest\n");
+            if (flag.show_cache) iprintf ("%sverified genome digest\n", _SHOW_CACHE);
     }
 
     // if we're populating the cache, also load refhash (even if not needed for compressing current file)
@@ -829,13 +829,13 @@ bool ref_load_stored_reference (void)
 
         // re-attach to read-only shm
         buf_attach_bits_to_shm (evb, &gref.genome_buf, gref.cache->genome_data, gref.genome_nbases * 2, "genome_buf");
-        if (flag.show_cache) iprintf ("show-cache: re-attached genome_buf (%"PRIu64" bases) to READONLY shm\n", gref.genome_nbases);
+        if (flag.show_cache) iprintf ("%sre-attached genome_buf (%"PRIu64" bases) to READONLY shm\n", _SHOW_CACHE, gref.genome_nbases);
         reoverlay_ranges_on_loaded_genome (delta_bytes); 
         
         if (refhash_exists()) {
             buf_attach_to_shm (evb, &refhash_buf, gref.cache->genome_data + gref.genome_buf.size, refhash_buf.len, "refhash_buf");
             refhash_buf.len = refhash_buf.size;
-            if (flag.show_cache) iprintf ("show-cache: re-attached refhash_buf (len=%"PRIu64") to READONLY shm\n", refhash_buf.len);
+            if (flag.show_cache) iprintf ("%sre-attached refhash_buf (len=%"PRIu64") to READONLY shm\n", _SHOW_CACHE, refhash_buf.len);
         }
     }
 
@@ -846,7 +846,7 @@ bool ref_load_stored_reference (void)
 
         memcpy (B1ST8(gref.genome_buf), gref.cache->genome_data, gref.genome_buf.nwords * sizeof(uint64_t));
 
-        if (flag.show_cache) iprint0 ("show-cache: REF_EXT_STORE: allocating genome_buf and copying genome from shm into it\n");
+        if (flag.show_cache) iprintf ("%sREF_EXT_STORE: allocating genome_buf and copying genome from shm into it\n", _SHOW_CACHE);
 
         // re-overlay the ranges on the writeable copy of the genome
         reoverlay_ranges_on_loaded_genome (gref.genome_buf.data - gref.cache->genome_data); 
@@ -1188,7 +1188,7 @@ static void ref_compress_one_range (VBlockP vb)
     if (r) LTEN_bits (&r->ref);
 
     h.section_type          = SEC_REFERENCE;
-    h.codec                 = (flag.make_reference || flag.fast) ? CODEC_RANB : CODEC_LZMA; // LZMA compresses a bit better, but RANS decompresses *much* faster, so better for reference files
+    h.codec                 = (flag.make_reference || flag.fast || flag.no_lzma) ? CODEC_RANB : CODEC_LZMA; // LZMA compresses a bit better, but RANS decompresses *much* faster, so better for reference files
     h.data_uncompressed_len = r ? BGEN32 (r->ref.nwords * sizeof (uint64_t)) : 0;
     h.num_bases             = r ? BGEN32 (r->ref.nbits / 2) : 0; // less than ref_size(r) if compacted
     comp_compress (vb, NULL, &vb->z_data, &h, r ? (char *)r->ref.words : NULL, NO_CALLBACK, "SEC_REFERENCE");
@@ -1571,12 +1571,12 @@ static void reoverlay_ranges_on_loaded_genome (int64_t delta_bytes)
             r->ref.words += delta_bytes / sizeof (uint64_t);
 
 
-    if (flag.show_cache) iprint0 ("show-cache: reoverlaying ranges after genome address changed\n");
+    if (flag.show_cache) iprintf ("%sreoverlaying ranges after genome address changed\n", _SHOW_CACHE);
 }
 
 static void overlay_ranges_on_loaded_genome (RangesType type)
 {
-    if (flag.show_cache) iprint0 ("show-cache: overlaying ranges on genome\n");
+    if (flag.show_cache) iprintf ("%soverlaying ranges on genome\n", _SHOW_CACHE);
 
     // overlay all chromosomes (range[i] goes to chrom_index=i) - note some chroms might not have a contig in 
     // which case their range is not initialized
@@ -1822,7 +1822,8 @@ void ref_verify_organism (VBlockP vb)
 {
     double percent_aligned = percent (vb->num_aligned + (VB_DT(FASTQ) ? fastq_get_num_deeped (vb): 0), vb->lines.len32);
 
-    if (percent_aligned < 80)
-        TIP ("Only %2.1f%% of the %s reads processed so far match the reference file. Using a reference file more representative of the organism(s) in the data will result in much better compression (tested: %s).", 
-             percent_aligned, str_int_commas (vb->lines.len32).s, VB_NAME);
+    WARN_IF (percent_aligned < 80, 
+             _WRN "Only %2.1f%% of the %s reads processed so far match the reference file. Using a reference file more representative of the organism(s) in the data will result in much better compression (tested: %s).\n\n"
+             _TIP "A reference file may be assessed for its fit for the data with --assess-reference. See: %s", 
+             percent_aligned, str_int_commas (vb->lines.len32).s, VB_NAME, WEBSITE_ASSESS_REF);
 }

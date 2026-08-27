@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 uap5 rescap">
+
+  <Identity
+    Name="GenozipLimited.Genozip"
+    Publisher="CN=4F406691-CDCB-43F8-AA42-ACE5EDD01EDD"
+    Version="__VERSION__.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Genozip</DisplayName>
+    <PublisherDisplayName>Genozip Limited</PublisherDisplayName>
+    <Logo>StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily
+      Name="Windows.Desktop"
+      MinVersion="10.0.17763.0"
+      MaxVersionTested="10.0.__WINDOWS_BUILD__.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+
+    <!-- Main Genozip application -->
+    <Application
+        Id="genozip"
+        Executable="genozip.exe"
+        EntryPoint="Windows.FullTrustApplication">
+
+      <uap3:VisualElements
+          DisplayName="genozip"
+          Description="Compress genomic files including FASTQ, BAM, VCF"
+          BackgroundColor="transparent"
+          Square150x150Logo="Square150x150Logo.png"
+          Square44x44Logo="Square44x44Logo.png"
+          AppListEntry="default"
+          VisualGroup="Genozip" />
+
+      <Extensions>
+        <!-- Command-line aliases -->
+        <uap5:Extension Category="windows.appExecutionAlias">
+          <uap5:AppExecutionAlias>
+            <uap5:ExecutionAlias Alias="genozip.exe" />
+            <uap5:ExecutionAlias Alias="genounzip.exe" />
+            <uap5:ExecutionAlias Alias="genocat.exe" />
+            <uap5:ExecutionAlias Alias="genols.exe" />
+          </uap5:AppExecutionAlias>
+        </uap5:Extension>
+      </Extensions>
+
+    </Application>
+
+    <Application
+        Id="genounzip"
+        Executable="genounzip.exe"
+        EntryPoint="Windows.FullTrustApplication">
+
+      <uap3:VisualElements
+          DisplayName="genounzip"
+          Description="Genozip Decompressor"
+          BackgroundColor="transparent"
+          Square150x150Logo="Square150x150Logo.png"
+          Square44x44Logo="Square44x44Logo.png"
+          AppListEntry="default"
+          VisualGroup="Genozip" />
+
+      <Extensions>
+
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="genozip">
+
+            <uap:SupportedFileTypes>
+              <uap:FileType>.genozip</uap:FileType>
+            </uap:SupportedFileTypes>
+
+            <uap:DisplayName>Genozip Compressed File</uap:DisplayName>
+            <uap:Logo>genozip.png</uap:Logo>
+
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+      </Extensions>
+
+    </Application>
+
+    <Application
+        Id="genocat"
+        Executable="genocat.exe"
+        EntryPoint="Windows.FullTrustApplication">
+
+      <uap3:VisualElements
+          DisplayName="genocat"
+          Description="View and subset .genozip files"
+          BackgroundColor="transparent"
+          Square150x150Logo="Square150x150Logo.png"
+          Square44x44Logo="Square44x44Logo.png"
+          AppListEntry="default"
+          VisualGroup="Genozip" />
+
+    </Application>
+
+    <Application
+        Id="genols"
+        Executable="genols.exe"
+        EntryPoint="Windows.FullTrustApplication">
+
+      <uap3:VisualElements
+          DisplayName="genols"
+          Description="View metadata of .genozip files"
+          BackgroundColor="transparent"
+          Square150x150Logo="Square150x150Logo.png"
+          Square44x44Logo="Square44x44Logo.png"
+          AppListEntry="default"
+          VisualGroup="Genozip" />
+
+    </Application>
+
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+</Package>

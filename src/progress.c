@@ -41,12 +41,12 @@ static void progress_update_status (rom prefix, rom status)
     #define eraser "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
     #define spaces "                                                                                                                                                                "
 
-    ASSERT (STRLEN(eraser) == STRLEN(spaces), "eraser.len=%u != spaces.len=%u", STRLEN(eraser), STRLEN(spaces)); // will be optimized out
+    ASSERT (strlen(eraser) == strlen(spaces), "eraser.len=%u != spaces.len=%u", strlen(eraser), strlen(spaces)); // will be optimized out
     
     if (prefix && prefix[0]) 
         iprintf ("%s", prefix);
 
-    iprintf ("%.*s%.*s%.*s%s", MIN_(last_len, STRLEN(eraser)), eraser, MIN_(last_len, STRLEN(spaces)), spaces, last_len, eraser, status);
+    iprintf ("%.*s%.*s%.*s%s", (int)MIN_(last_len, strlen(eraser)), eraser, (int)MIN_(last_len, strlen(spaces)), spaces, last_len, eraser, status);
 
     last_len = strlen (status);
 

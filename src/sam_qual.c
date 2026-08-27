@@ -349,10 +349,9 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(qual)/*always text
         dl->dont_compress_QUAL = true; // don't compress this line
     }
 
-    // 1. if we suspect entire file might be qual-less, seg as snip (without adding local) so that would become 
-    // all-the-same in that. If we might have mixed qual/no-qual in the file, we add to local to not add entropy to b250
-    // 2. LONGR codec can't handle missing QUAL
-    else if (!IS_PRIM(vb) && dl->no_qual && (!segconf.nontrivial_qual || codec_longr_maybe_used (VB, SAM_QUAL))) {
+    // If we suspect entire file might be qual-less, seg as snip (without adding local), hopefully all-the-same. 
+    // If we might have mixed qual/no-qual in the file, we add to local to not add entropy to b250
+    else if (!IS_PRIM(vb) && dl->no_qual && !segconf.nontrivial_qual) {
         seg_special1 (VB, SAM_SPECIAL_QUAL, '*', qual_ctx, add_bytes); 
         dl->dont_compress_QUAL = true; // don't compress this line
         goto done;

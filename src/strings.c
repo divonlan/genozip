@@ -8,7 +8,7 @@
 
 #include <time.h>
 #include <math.h>
-#if defined(__x86_64__) || defined(_M_X64)
+#ifdef __x86_64__
 #include <immintrin.h>
 #endif
 #include "genozip.h"
@@ -125,20 +125,23 @@ uint32_t str_to_printable (STR𐤐(in), char *restrict s, int s_len)
     return s - start;
 }
 
-uint32_t str_to_printable_json (STR𐤐(in), char *restrict s, int s_len)
+uint32_t str_to_telemetry_json_(STR𐤐(in), char *restrict s, int s_len)
 {
     char *start = s;
 
     for (uint32_t i=0; i < in_len && s_len > 6; i++) // 6 = 5 characters + nul
         switch (in[i]) {
-            case 32 ... '"' - 1 : case '"'+1 ... '\\'-1: case '\\'+1 ... 126:
-                           *s++ = in[i];           ; s_len -= 1; break;
+            case ' '   ... '"'-1 : 
+            case '"'+1 ... ','-1 : 
+            case ','+1 ... '\\'-1: 
+            case '\\'+1 ... 126  : *s++ = in[i];   ; s_len -= 1; break;
             case '\t'    : memcpy (s, "\\\\t", 3)  ; s_len -= 3; break;
             case '\n'    : memcpy (s, "\\\\n", 3)  ; s_len -= 3; break;
             case '\r'    : memcpy (s, "\\\\r", 3)  ; s_len -= 3; break;
             case '\b'    : memcpy (s, "\\\\b", 3)  ; s_len -= 3; break;
             case '\\'    : *s++ = '\\'; *s++ = '\\'; s_len -= 2; break;
             case '"'     : *s++ = '\\'; *s++ = '"' ; s_len -= 2; break;
+            case ','     : memcpy (s, "，", 3)     ; s_len -= 3; break; // full-width comman (U+FF0C = UTF8 0xEFBC8C) because spreadsheet interprets comma as "move down one cell"
             case 0 ... 7 : *s++ = '\\'; *s++ = '\\'; *s++ = '0' + in[i] ; s_len -= 3; break;
             default      : *s++ = '\\'; *s++ = '\\'; *s++ = 'x' ; 
                            *s++ = NUM2HEXDIGIT((uint8_t)in[i] >> 4); 
@@ -585,8 +588,41 @@ bool str_get_float (STR𐤐(float_str),
 
 bool str_is_in_range (rom str, uint32_t str_len, char first_c, char last_c)
 {
-    for (rom after = str + str_len; str < after ; str++)
-        if (!IN_RANGX(*str, first_c, last_c)) return false;
+    ASSERT (first_c <= last_c, "expecting first_c=%u <= last_c=%u", first_c, last_c);
+
+#ifdef __x86_64__  // note: AVX2 support enforced by arch_initialize (about 40% faster)  
+    if (str_len >= 32) {
+        __m256i v_min = _mm256_set1_epi8 (first_c),
+                v_max = _mm256_set1_epi8 (last_c),
+                v_bytes, v_hi_out, v_lo_out, v_out;
+
+        // check one 32-byte "word" a time 
+        for (uint32_t i=0; i < str_len - 32; i += 32) {
+            v_bytes  = _mm256_loadu_si256 ((const __m256i*)&str[i]); // unaligned load
+            v_hi_out = _mm256_subs_epu8 (v_bytes, v_max);    // non-zero if byte > last_c
+            v_lo_out = _mm256_subs_epu8 (v_min, v_bytes);    // non-zero if byte < first_c
+            v_out    = _mm256_or_si256 (v_hi_out, v_lo_out); // combine out-of-range flags
+
+            if (!_mm256_testz_si256 (v_out, v_out)) return false;     // fail if any byte is non-zero
+        }
+
+        // final 32 bytes (partially overlaps previous 32B unless str_len is a multiple of 32)
+        v_bytes  = _mm256_loadu_si256 ((const __m256i*)&str[str_len-32]); 
+        v_hi_out = _mm256_subs_epu8 (v_bytes, v_max);    
+        v_lo_out = _mm256_subs_epu8 (v_min, v_bytes);    
+        v_out    = _mm256_or_si256 (v_hi_out, v_lo_out); 
+
+        if (!_mm256_testz_si256 (v_out, v_out)) return false;     
+    }
+
+    else
+#endif
+
+    // case: no AVX2 or str_len<32
+    for (uint32_t i=0; i < str_len; i++) 
+        if (!IN_RANGX(str[i], first_c, last_c)) 
+            return false;
+
     return true;
 }
 
@@ -725,51 +761,62 @@ rom str_split_by_tab_do (STR𐤐(str),
                          bool enforce_msg)
 {
     // IMPORTANT: restrict: since flds[] elements do actually alias str, they should never be dereferenced!
-
     ASSERTNOTNULL (str);
     ASSERTNOTZERO (*n_flds);
+    rom orig_str = str;
 
-    flds[0] = str;
-    uint32_t fld_i = 1; 
-    uint32_t str_i;
-    bool my_has_13;
+    rom newline = memchr (str, '\n', str_len);
+    ASSSPLIT (newline, "Line not terminated by newline. str_len=%u str(first 1000)=\"%.*s\"", str_len, MIN_(1000, str_len), str);
 
-    for (str_i=0 ; str_i < str_len ; str_i++) {
-        char c = str[str_i]; 
-        if (c == '\t') {
-            if (fld_i >= *n_flds)  // excess
-                ASSSPLIT (ignore_excess, "expecting up to %u fields but found more. str_len=%u str(first 1000)=\"%.*s\"", *n_flds, str_len, MIN_(1000, str_len), str);
-            else
-                flds[fld_i++] = &str[str_i+1];
+    bool my_has_13 = (newline > str) && newline[-1] == '\r';
+    newline -= my_has_13;
+    uint32_t fld_i, max_flds=*n_flds;
+
+    χ64 (const __m256i v_tab = _mm256_set1_epi8('\t');)
+
+    for (fld_i = 0; str <= newline && fld_i < max_flds; fld_i++) {
+        flds[fld_i] = str; // Record field start pointer FIRST
+        rom end_of_field, s=str;
+
+#ifdef __x86_64__
+        // AVX2: scan 32 bytes at a time
+        while (newline - s >= 32) {
+            __m256i chunk = _mm256_loadu_si256 ((const __m256i *)s);
+            uint32_t mask = (uint32_t)_mm256_movemask_epi8 (_mm256_cmpeq_epi8 (chunk, v_tab));
+
+            if (mask != 0) {
+                end_of_field = s + __builtin_ctz (mask);
+                goto end_of_field_found;
+            }
+            
+            s += 32;
         }
+#endif
 
-        else if (c == '\r') {
-            ASSSPLIT (str_i+1 < str_len && str[str_i+1] == '\n', "encountered a \\r without a following \\n. str_i=%u str_len=%u str(first 1000)=\"%.*s\" last_20_until_str_i=%s", 
-                      str_i, str_len, MIN_(1000, str_len), str, str_to_printable_(&str[str_i-MIN_(str_i,20)+1], MIN_(str_i,20)).s);
-            my_has_13 = true;
-            break;
-        }
+        // no AVX2, or remaining < 32B
+        rom tab = memchr (s, '\t', newline - s);
+        end_of_field = tab ? tab : newline;
 
-        else if (c == '\n') {
-            my_has_13 = false;
-            break;
-        }
+    χ64 (end_of_field_found:)
+        fld_lens[fld_i] = end_of_field - str;
+        str = end_of_field + 1; 
     }
 
-    ASSSPLIT (str_i < str_len, "Line not terminated by newline. str_len=%u str(first 1000)=\"%.*s\"", str_len, MIN_(1000, str_len), str);
+    // case: we found max_flds items without consumed entire str
+    ASSSPLIT (ignore_excess || str == newline+1/*str fully consumed*/,
+              "expecting up to %u fields but found more. str_len=%u str(first %u)=\"%.*s\"", 
+              max_flds, str_len, MIN_(1000, str_len), MIN_(1000, str_len), orig_str);
 
-    for (uint32_t i=0; i < fld_i-1; i++)    
-        fld_lens[i] = flds[i+1] - flds[i] - 1; 
-        
-    fld_lens[fld_i-1] = &str[str_i] - flds[fld_i-1];
-
-    ASSSPLIT (!exactly || fld_i == *n_flds, "expecting %u fields but found more. str=\"%.*s\"", *n_flds, str_len, str);
+    // case: we consumed all of str, but found less than max_fields
+    ASSSPLIT (!exactly || fld_i == max_flds, 
+              "expecting %u fields but found only %u. str=\"%.*s\"", 
+              max_flds, fld_i, str_len, orig_str);
 
     *n_flds = fld_i;
 
     if (has_13) *has_13 = my_has_13;
 
-    return &str[str_i + 1 + my_has_13]; // byte after \n
+    return newline + my_has_13 + 1; // byte after \n
 }
 
 // get up to n_lines from str. ignores subsequent lines.
@@ -1473,37 +1520,97 @@ uint32_t str_unpack_bases (char *restrict dst, bytes𐤐 packed, uint32_t num_ba
 // Note: only worth calling if str_len is usually >32, and there is a reasonable chance of true. Otherwise use str_is_monochar.
 bool str_is_zero (STR𐤐(str))
 {
-#if defined(__AVX2__) // 32 bytes at a time
-    uint32_t num_words = str_len / sizeof(__m256i); // 32 byte "words"
-
-    if (num_words) {
+    // case: AVX2 and str_len >= 32
+#ifdef __x86_64__   // note: AVX2 support enforced by arch_initialize   
+    if (str_len >= 32) {
         __m256i *data = (__m256i *)str;
-        for (uint32_t i=0; i < num_words; i++) {
+        
+        for (uint32_t i=0; i < (str_len-1) / sizeof(__m256i); i++) { // e.g. if str_len==32, we don't use this loop only the final comparison
             __m256i word = _mm256_loadu_si256 (&data[i]); // Load 32 bytes from memory (unaligned)
             if (!_mm256_testz_si256(word, word)) // _mm256_testz_si256 is true if (word & word)==0, i.e. if word==0
                 return false;
         }
 
-        // final word (note: there is a 1/32 chance this test is redundant, but this is still less overhead than adding an if statement to avoid this redundancy)
-        __m256i word = _mm256_loadu_si256 ((__m256i *)(str + str_len) - 1); // 32B which partially (or rarely, fully) overlap already tested last word
+        // final word 
+        __m256i word = _mm256_loadu_si256 ((const __m256i *)(str + str_len - sizeof(__m256i))); // 32B which might overlap already tested last word
         return _mm256_testz_si256(word, word); 
     }
+#endif
 
-#else // 8 bytes a time
-    uint32_t num_words = str_len / sizeof(uint64_t);
-
-    if (num_words) {
+    // case: str_len is 8 to 31
+    if (str_len >= 8) {
         unaligned_uint64_t *data = (unaligned_uint64_t *)str; // note: buf->data is always word aligned
-        for (uint32_t i=0; i < num_words; i++) 
+        for (uint32_t i=0; i < (str_len-1) / sizeof(uint64_t); i++) // e.g. if str_len==8, we don't use this loop only the final comparison 
             if (data[i] != 0) 
                 return false;
 
         // final word
-        return *(unaligned_uint64_t *)(str + str_len - sizeof(uint64_t)) == 0; // 8B which partially (or rarely, fully) overlap already tested last word
+        return *(unaligned_uint64_t *)(str + str_len - sizeof(uint64_t)) == 0; // 8B which might overlap already tested last word
+    }
+
+    // scalar if str_len <= 7
+    for (uint32_t i=0; i < str_len; i++)
+        if (str[i]) return false;
+
+    return true;
+}
+
+// we don't use AVX2, because usually the result is false and detected in the first few bytes
+bool str_is_monochar_(STRp(str), uint8_t mono) 
+{
+    if (str_len >= 8) {
+        uint64_t mono64 = (uint64_t)mono * 0x0101010101010101ULL; // 8 bytes of mono
+
+        unaligned_uint64_t *data = (unaligned_uint64_t *)str; // note: buf->data is always word aligned
+        for (uint32_t i=0; i < (str_len-1) / sizeof(uint64_t); i++) // e.g. if str_len==8, we don't use this loop only the final comparison 
+            if (data[i] != mono64) 
+                return false;
+
+        // final word
+        return *(unaligned_uint64_t *)(str + str_len - sizeof(uint64_t)) == mono64; // 8B which might overlap already tested last word
+    }
+
+    // scalar if str_len <= 7
+    for (uint32_t i=0; i < str_len; i++)
+        if ((uint8_t)str[i] != mono) return false;
+
+    return true;
+}
+
+// count the number of occurances of a character in a string
+uint32_t str_count_char (STR𐤐(str), char c)
+{
+    uint32_t count=0, i=0;
+
+#ifdef __x86_64__   // AVX2 support enforced by arch_initialize
+    // full words of 32B with AVX2
+    if (str_len >= 32) {
+        const __m256i vc256 = _mm256_set1_epi8 (c); // 32 bytes of c
+
+        for (; i + sizeof(__m256i) <= str_len; i += sizeof(__m256i)) {
+            __m256i word = _mm256_loadu_si256 ((const __m256i *)(str + i));
+            __m256i eq   = _mm256_cmpeq_epi8 (word, vc256);
+
+            count += __builtin_popcount ((uint32_t)_mm256_movemask_epi8 (eq));
+        }
+    }
+
+    // remaining 16B with SSE
+    if (str_len >= i + sizeof(__m128i)) {
+        const __m128i vc128 = _mm_set1_epi8 (c); // 16 bytes of c
+
+        __m128i word = _mm_loadu_si128 ((const __m128i *)(str + i));
+        __m128i eq   = _mm_cmpeq_epi8 (word, vc128);
+
+        count += __builtin_popcount ((uint32_t)_mm_movemask_epi8 (eq));
+
+        i += sizeof(__m128i);
     }
 #endif
 
-    // num_words==0 - fallback to byte loop
-    else
-        return str_is_monochar_(STRa(str), 0);
+    // 0 to 15 remaining characters (or all for non-x86)
+    for (; i < str_len; i++)
+        count += (str[i] == c);
+
+    return count;
 }

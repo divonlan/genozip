@@ -125,10 +125,9 @@ void arch_initialize (rom my_argv0)
 {
     argv0 = my_argv0;
 
-    // if code was compiled with AVX2, verify that the runtime machine has it
-#if defined(__AVX2__) 
-    ASSINP0 (__builtin_cpu_supports("avx2"), "Genozip, running on Intel/AMD CPUs, requires AVX2 support");
-#endif
+    // We require AVX2 support in x86
+    χ64 (ASSINP0 (__builtin_cpu_supports("avx2"), "Genozip, running on Intel/AMD CPUs, requires AVX2 support");)
+    χ64 (ASSINP0 (__builtin_cpu_supports("bmi2"), "Genozip, running on Intel/AMD CPUs, requires BMI2 support");)
 
     rom slash = strrchr (argv0, '/');
     if (!slash && flag.is_windows) slash = strrchr (argv0, '\\');
@@ -177,8 +176,8 @@ void arch_initialize (rom my_argv0)
     arch_set_locale();
 
 #ifdef _WIN32
-    _setmode(_fileno(stdin),  _O_BINARY);
-    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stdin),  O_BINARY);
+    _setmode(_fileno(stdout), O_BINARY);
 
     arch_add_to_windows_path();
 #endif
@@ -254,7 +253,7 @@ double arch_get_physical_mem_size (void)
     if (mem_size) return mem_size;
 
 #ifdef __linux__    
-    FILE *fp = fopen ("/proc/meminfo", "rb");
+    FILE *fp = fopen ("/proc/meminfo", READ);
     if (!fp) return 0;
 
     char meminfo[100] = {}; // note: can't use a Buffer because called from a signal handler - we don't know which is the running thread
@@ -296,9 +295,9 @@ uint64_t arch_get_shmmax(void)
     buf_free (evb->scratch);
 
 #elif defined __APPLE__
-    int mib[3] = { CTL_KERN, KERN_SYSV, KERN_SYSV_SHMMAX }; // macOS groups System V IPC under "kern.sysv"
     size_t len = sizeof (shmmax);
-    sysctl (mib, 3, &shmmax, &len, NULL, 0);
+    ASSERT (sysctlbyname ("kern.sysv.shmmax", &shmmax, &len, NULL, 0) == 0,
+                          "sysctlbyname(kern.sysv.shmmax) failed: %s", strerror(errno));
 
 #elif defined _WIN32
     // Windows has no fixed SHMMAX constraint; it is bound by the system commit limit.

@@ -59,9 +59,9 @@ Digest digest_do (rom data, uint64_t data_len, DigestAlg alg, rom show_digest_ms
 {
     Digest digest;
     switch (alg) {
-        case DIGEST_ADLER : digest = (Digest){ .adler32 = BGEN32 (adler32 (1, STRa(data))) }; break;
-        case DIGEST_XXH3  : digest = (Digest){ .xxh3   = BGEN64 (XXH3_64bits (STRa(data))) }; break;
-        case DIGEST_MD5   : digest = md5_do (STRa(data));                                     break;
+        case DIGEST_ADLER : digest = (Digest){ .adler32 = BGEN32 (adler32 (1, STRa(data)))  }; break;
+        case DIGEST_XXH3  : digest = (Digest){ .xxh3    = BGEN64 (XXH3_64bits (STRa(data))) }; break;
+        case DIGEST_MD5   : digest = md5_do (STRa(data));                                      break;
         default           : ABORT ("Invalid digest alg=%d", alg);
     }
 
@@ -242,12 +242,18 @@ static void digest_piz_verify_one_vb (VBlockP vb,
 
 // ZIP and PIZ: called by compute thread to calculate MD5 or Adler32 of one VB - possibly serializing VBs using a mutex
 bool digest_one_vb (VBlockP vb, bool is_compute_thread, 
-                    BufferP txt_data) // if NULL, txt_data digested is vb->txt_data (if not NULL: this might be PIZ of a SAM MAIN vb with integrated PRIM and DEPN lines)
+                    BufferP txt_data, // if NULL, txt_data digested is vb->txt_data (if not NULL: this might be PIZ of a SAM MAIN vb with integrated PRIM and DEPN lines)
+                    uint32_t start)   // start of VB txt with txt_data (might have the txt_header before)
 {
     #define WAIT_TIME_USEC 1000
     #define DIGEST_TIMEOUT (30*60) // 30 min
 
     if (!txt_data) txt_data = &vb->txt_data;
+
+    if (start) {
+        txt_data->data += start;
+        txt_data->len  -= start;
+    }
 
     bool digestable = gencomp_comp_eligible_for_digest(vb);
 
@@ -286,6 +292,11 @@ bool digest_one_vb (VBlockP vb, bool is_compute_thread,
 
         if (is_compute_thread)
             serializer_unlock (z_file->digest_serializer);
+    }
+
+    if (start) { // restore
+        txt_data->data -= start;
+        txt_data->len  += start;
     }
 
     return digestable;

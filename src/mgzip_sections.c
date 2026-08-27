@@ -152,16 +152,16 @@ void mgzip_set_is_exactable (FileP file, bool is_exactable, rom reason_why_not)
 // PIZ SIDE - setting up BGZF for a particular txt file
 //-----------------------------------------------------
 
-rom NON_EXACT_ERROR = "file cannot be gz-recompressed with the exact same gz-compression as the original file.";
-static rom NON_EXACT_NOT_GZ = "file cannot be gz-recompressed with the exact same gz-compression because original file was not gz-compressed";
+rom NON_EXACT_ERROR  = "cannot be gz-recompressed with the exact same gz-compression as the original file.";
+rom NON_EXACT_NOT_GZ = "cannot be gz-recompressed with the exact same gz-compression because original file was not gz-compressed";
 
 static FlagsMgzip bgzf_load_isizes (CompIType comp_i, bool is_CODEC_NONE, bool show_only) 
 {
     Section sec = sections_get_comp_GZ_ISIZES_sec (comp_i);
     if (!sec) ignore: {
-        ASSINP (flag.bgzf != BGZF_EXACT_STRICT, "%s %s", is_CODEC_NONE ? NON_EXACT_NOT_GZ : NON_EXACT_ERROR, WEBSITE_GZ);
+        ASSINP (flag.bgzf != BGZF_EXACT_STRICT, _ERR "%s %s %s", z_file->basename, is_CODEC_NONE ? NON_EXACT_NOT_GZ : NON_EXACT_ERROR, WEBSITE_GZ);
         
-        ASSERTW (show_only, "%s Using default gz-recompression.", is_CODEC_NONE ? NON_EXACT_NOT_GZ : NON_EXACT_ERROR);
+        if (!show_only) WARN (_FYI "%s %s Using default gz-recompression.", z_file->basename, is_CODEC_NONE ? NON_EXACT_NOT_GZ : NON_EXACT_ERROR);
 
         flag.bgzf = BGZF_EXACT_FAILED; // so bai_initialize does write an index file after all
         goto fallback; // this component doesn't contain a BGZF section
@@ -289,7 +289,7 @@ FlagsMgzip mgzip_piz_calculate_mgzip_flags (CompIType comp_i, Codec src_codec)
     // case: genounzip without explicit filename, and no --bgzf: default compression or no compression
     else
         // note: for bz2, xz, and zip - we reconstruct as gz too. better choice than plain.
-        mgzip_flags = (IS_GZIP(src_codec) || C(BAM) || C(BZ2) || C(XZ) || C(ZIP)) ? bgzf_recompression_levels[BGZF_DEFAULT_LEVEL] : bgzf_no_recompression; // note: similar logic to txtheader_piz_get_filename
+        mgzip_flags = (IS_GZIP(src_codec) || C(BZ2) || C(XZ) || C(ZIP)) ? bgzf_recompression_levels[BGZF_DEFAULT_LEVEL] : bgzf_no_recompression; // note: similar logic to txtheader_piz_get_filename
     
     // case: user wants to see this section header, despite not needing BGZF data
     if (!mgzip_section_was_read && (flag.only_headers == SEC_GZ_ISIZES+1 || (flag.only_headers && flag_show_sec_headers(SEC_GZ_ISIZES))))

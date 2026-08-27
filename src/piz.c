@@ -127,24 +127,25 @@ StrText1K piz_advise_biopsy (VBlockP vb)
                                   flag.test ? " --test" : "", vb_size.s, original_filename);
     else
         snprintf (s.s, sizeof(s), "To see the same data in the original file:\n"
-                                "genozip --biopsy %u%s %.768s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+                                  "genozip --biopsy %u%s %.768s%s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
                 standalone_vb_i, vb_size.s, original_filename,
                 (DTP(txt_header_required) != HDR_NONE ? " (optionally add: --no-header)" : ""));
 
     return s;
 }
 
-StrText1K piz_advise_biopsy_line (CompIType comp_i, // if COMP_NONE, we will look it up
-                                    VBIType vblock_i, LineIType line_i, 
-                                    rom filename) // optional
+StrText4K piz_advise_biopsy_line (CompIType comp_i, // if COMP_NONE, we will look it up
+                                  VBIType vblock_i, LineIType line_i, 
+                                  rom filename) // optional
 {
     if (!filename) 
         filename = piz_get_filename_by_comp_i (comp_i, vblock_i).s;
 
-    StrText1K s;
-    snprintf (s.s, sizeof(s), "genozip --biopsy-line %u/%u%.20s%.20s%s %.768s",  // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+    StrText4K s;
+    snprintf (s.s, sizeof(s), "genozip --biopsy-line %u/%u%.20s%.20s%s%s %.768s", 
               piz_get_standalone_vb_i (comp_i, vblock_i), line_i, // vb_i if genozip is run on this file alone
               // note: segconf.vb_size is only available since v14. For older files, look it up with genocat --stats.
+              Z_DT(SAM)/*includes BAM*/ ? " --no-gencomp" : "",
               cond_int (segconf.vb_size/*0 if IS_VB_SIZE_BY_MGZIP*/ && !(segconf.vb_size % (1 MB)), " -B", (unsigned)(segconf.vb_size >> 20)), 
               cond_int (segconf.vb_size && (segconf.vb_size % (1 MB)), " -B", (int)segconf.vb_size),
               segconf.vb_size && (segconf.vb_size % (1 MB)) ? "B" : "",
@@ -411,7 +412,7 @@ static void piz_reconstruct_one_vb (VBlockP vb)
     // note: if we have generated components from which lines might be inserted into the VB - we verify in writer instead 
     // note: for Deep with gencomp - the SAM components are verified in writer, while the FASTQ components are verified here.
     if (piz_need_digest && (!z_has_gencomp || VB_DT(FASTQ)) && !(flag.deep_fq_only && !VB_DT(FASTQ)))
-        digest_one_vb (vb, true, NULL); // LOOKING FOR A DEADLOCK BUG? CHECK HERE
+        digest_one_vb (vb, true, NULL, 0); // LOOKING FOR A DEADLOCK BUG? CHECK HERE
 
     // unhoard a bunch of memory that is not needed during the stage phase, and also not during the next read stage
     for_vctx_that (vctx->is_loaded) {

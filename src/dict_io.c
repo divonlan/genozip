@@ -390,7 +390,7 @@ void dict_io_read_all_dictionaries (void)
 
 StrText16K str_snip_ex (DataType dt, STRp(snip), bool add_quote)
 {
-    StrText16K s;
+    StrText16K s = {};
     int s_len=0;
 
     if (dt == DT_NONE)

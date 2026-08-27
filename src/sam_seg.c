@@ -671,10 +671,10 @@ void sam_segconf_set_by_MP (void)
     segconf.MD_NM_by_unconverted = MP(BISMARK) || MP(DRAGEN) || MP(BSBOLT) || MP(GEM3) || MP(BSSEEKER2);
 
     segconf.is_bwa            = MP(BWA) || MP(bwa) || MP(BSBOLT) || MP(CPU) || MP(BWA_MEM2) || MP(PARABRICKS); // aligners based on bwa
-    segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2);   // aligners based on minimap2
+    segconf.is_minimap2       = MP(MINIMAP2) || MP(WINNOWMAP) || MP(PBMM2) || MP(DORADO) || MP(GUPPY);   // aligners based on minimap2
     segconf.is_bowtie2        = MP(BOWTIE2) || MP(HISAT2) || MP(TOPHAT) || MP(BISMARK) || MP(BSSEEKER2); // aligners based on bowtie2
 
-    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC) || MP(CRDNA); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
+    segconf.sam_has_SA_Z      = segconf.is_bwa || segconf.is_minimap2 || MP(NGMLR) || MP(DRAGEN) || MP(NOVOALIGN) || MP(ULTIMA) || MP(ISAAC) || MP(CRDNA) || MP(STAR); /*|| MP(LONGRANGER); non-standard SA:Z format (POS is off by 1, main-field NM is missing) */ 
     
     segconf.sam_has_BWA_XA_Z  = (segconf.is_bwa || MP(GEM3) || MP(GEM2SAM) || MP(DELVE) || 
                                  MP(DRAGEN) || MP(ULTIMA) || MP(CRDNA) || MP(CRATAC)) ? yes 
@@ -935,9 +935,6 @@ void sam_segconf_finalize (VBlockP vb_)
     if (codec_pacb_maybe_used (SAM_QUAL)) 
         codec_pacb_segconf_finalize (VB);
     
-    if (codec_longr_maybe_used (VB, SAM_QUAL))
-        codec_longr_segconf_calculate_bins (VB, CTX(SAM_QUAL + 1), sam_zip_qual);
-
     if (TECH(ELEMENT)) { // perhaps this should be NORMQ with sub BSC?
         ZCTX(SAM_QUAL)->qual_codec = (flag.fast ? CODEC_ARTB : CODEC_BSC);
         ctx_segconf_set_hard_coded_lcodec (SAM_QUAL, ZCTX(SAM_QUAL)->qual_codec);
@@ -1752,7 +1749,7 @@ bool sam_seg_test_biopsy_line (VBlockP vb, STRp (line))
     if (segconf_running) return false; // we need to let segconf run normally, so we get the correct VB size
 
     if (flag.biopsy_line.line_i == vb->line_i && flag.biopsy_line.vb_i == vb->vblock_i) {
-        PutLineFn fn = file_put_line (VB, STRa (line), "Line biopsy:");
+        PutLineFn fn = file_put_line (VB, STRa (line), _FYI "Line biopsy:");
 
         if (TXT_DT(BAM)) TIP ("To view the dumped BAM line use:\n   genozip --show-bam %s", fn.s);
         exit_ok;

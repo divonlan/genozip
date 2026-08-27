@@ -1640,7 +1640,7 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, int32_t len, char *ne
     // 0 or more samples (note: we don't use str_split, because samples could be very numerous)
     for (vb->sample_i=0 ; separator != '\n'; vb->sample_i++) {
         sample = next_field;
-        next_field = (char *)seg_get_next_item (VB, sample, &len, GN_SEP, GN_SEP, GN_IGNORE, &sample_len, &separator, has_13, "sample-subfield");
+        next_field = (char *)seg_get_next_item (VB, sample, &len, true, true, &sample_len, &separator, has_13, "sample-subfield");
 
         ASSVCF (sample_len, "Error: invalid VCF file - expecting sample data for sample_i=%u, but found a tab character", 
                 vb->sample_i);

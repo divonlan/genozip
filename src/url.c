@@ -83,8 +83,7 @@ static StreamP url_open (StreamP parent_stream, rom url, rom user, rom password,
                  && !(post && flag.is_windows)       // for Windows, we prepare post_data_filename in curl-specific filename format
                  && wget_available();                // note: wget is not supported for Windows (see wget_available)
         
-    if (flag.telemetry && flag.debug)
-        iprintf (_FYI "Launching URL stream with %s\n", use_wget ? "wget" : "curl");
+    WARN_IF (flag.telemetry && flag.debug, _FYI "Launching URL stream with %s\n", use_wget ? "wget" : "curl");
 
     if (use_wget)
         stream = stream_create (
@@ -93,18 +92,19 @@ static StreamP url_open (StreamP parent_stream, rom url, rom user, rom password,
             DEFAULT_PIPE_SIZE, 0, 0, 0, 0,
             "URL", "wget", 
             "--quiet", 
-            get_txt    ? "--tries=50"    : SKIP_ARG, // max nubmer of re-connects (except if server returns Connection Refused or File Not Found)
-            get_txt    ? "--waitretry=1" : SKIP_ARG, // wait this number of seconds before retrying 
-            get_txt    ? "--continue"    : SKIP_ARG, // upon restarting after connection drop, continue from where we left off, if the server supports it (re-fetching from scratch if not)
-            (!get_txt) ? "--timeout=10"  : SKIP_ARG, 
-            post       ? "--post-data"   : SKIP_ARG,
-            post       ? post            : SKIP_ARG,
-            user       ? "--user"        : SKIP_ARG,
-            user       ? user            : SKIP_ARG,
-            password   ? "--password"    : SKIP_ARG,
-            password   ? password        : SKIP_ARG,
-            head_only  ? "--spider"      : SKIP_ARG,
-            head_only  ? "--server-response"                       : SKIP_ARG,
+            get_txt    ? "--tries=50"           : SKIP_ARG, // max nubmer of re-connects (except if server returns Connection Refused or File Not Found)
+            get_txt    ? "--waitretry=1"        : SKIP_ARG, // wait this number of seconds before retrying 
+            get_txt    ? "--continue"           : SKIP_ARG, // upon restarting after connection drop, continue from where we left off, if the server supports it (re-fetching from scratch if not)
+            (!get_txt) ? "--timeout=10"         : SKIP_ARG, 
+            post       ? "--post-data"          : SKIP_ARG,
+            post       ? post                   : SKIP_ARG,
+            user       ? "--user"               : SKIP_ARG,
+            user       ? user                   : SKIP_ARG,
+            password   ? "--auth-no-challenge"  : SKIP_ARG, // without this option, wget tries to connect without user/pw, gets 401 Unauthorized, and then tries again with user/pw
+            password   ? "--password"           : SKIP_ARG,
+            password   ? password               : SKIP_ARG,
+            head_only  ? "--spider"             : SKIP_ARG,
+            head_only  ? "--server-response"    : SKIP_ARG,
             head_only  ? "--output-document=/dev/null"             : "--output-document=/dev/stdout", 
             post       ? "--header=Content-Type: application/json" : SKIP_ARG,
             async_post ? "--header=x-fc-invocation-type: Async"    : SKIP_ARG,
@@ -300,8 +300,8 @@ rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size)
     } 
         
     rom len_start = NULL;
-    if      ((len_start = strstr (response, "content-length:"))) len_start += STRLEN("content-length:");
-    else if ((len_start = strstr (response, "Content-Length:"))) len_start += STRLEN("Content-Length:");
+    if      ((len_start = strstr (response, "content-length:"))) len_start += strlen("content-length:");
+    else if ((len_start = strstr (response, "Content-Length:"))) len_start += strlen("Content-Length:");
 
     // Case: we got the file length - file exists even if we didn't get an HTTP status (eg because URL is not http)
     if (len_start) {
@@ -363,9 +363,7 @@ static void url_read_string_do (rom url, rom user, rom password,
     if (!exit_code) 
         return; // curl/wget itself is good - we may have or not an error in "error" from the server or in case of no connection
 
-#ifdef _WIN32
-    if (exit_code == ENFILE) return; // we didn't read all the data on the pipe - that's ok
-#endif
+    ωιη (if (exit_code == ENFILE) return;) // Windows: we didn't read all the data on the pipe - that's ok
 
     // case: for non-HTTP urls (eg ftp:// file://) or for HTTP urls where the error occurred before connecting
     // to the webserver (eg bad url) the error comes in stderr, and curl exit code is non-0.

@@ -85,7 +85,7 @@ void tar_initialize (BufferP input_files_buf)
 
     ASSINP (flag.force || !file_exists (tar_name), "file %s already exists, use --force (or -f) to overwrite", tar_name);
 
-    tar_file = fopen (tar_name, flag.pair ? "wb+" : "wb"); // if --pair, when compressing pair2, we go back and read pair1
+    tar_file = fopen (tar_name, flag.pair ? WRITEREAD : WRITE); // if --pair, when compressing pair2, we go back and read pair1
     ASSINP (tar_file, "cannot create tar file %s: %s", tar_name, strerror (errno)); 
 
     if (flag.is_linux && license_allow_distribution()) {
@@ -358,7 +358,7 @@ void tar_copy_file (rom fn_on_disk, rom fn_in_tar)
 
     tar_open_file (fn_on_disk, fn_in_tar);
 
-    FILE *src_file = fopen (fn_on_disk, "rb");
+    FILE *src_file = fopen (fn_on_disk, READ);
 
     #define BLOCK_SIZE (1 MB)
     char *data = MALLOC (BLOCK_SIZE);

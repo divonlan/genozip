@@ -243,12 +243,15 @@ static inline void container_verify_line_integrity (VBlockP vb, ContextP debug_l
     if (seg_hash != piz_hash) {
         flag.quiet = false;
         
-        PutLineFn fn = file_put_line (vb, recon_start, recon_len, "\nFailed line integrity check");
+        PutLineFn fn = file_put_line (vb, recon_start, recon_len, _ERR "Failed line integrity check");
 
         if (OUT_DT(BAM) || OUT_DT(CRAM))
-            iprintf (_TIP "To view the dumped BAM line with:\n   genozip --show-bam %s", fn.s); // not using TIP() as it allows only one tip
+            iprintf (_TIP "To view the dumped BAM line with:\n   genozip --show-bam %s\n", fn.s); // not using TIP() as it allows only one tip
 
-        TIP ("To extract the original line for comparison use:\n   %s", piz_advise_biopsy_line (vb->comp_i, vb->vblock_i, vb->line_i, NULL).s);
+        if (!z_has_gencomp)
+            iprintf (_TIP "To extract the original line for comparison use:\n   %s\n", piz_advise_biopsy_line (vb->comp_i, vb->vblock_i, vb->line_i, NULL).s);
+        else
+            iprint0 (_TIP "To locate the corresponding line in the original file, re-run and add --no-gencomp\n");
 
         // show data-type-specific information about defective line
         DT_FUNC (vb, piz_xtra_line_data)(vb);
@@ -910,14 +913,14 @@ StrText16K container_to_json (ContainerP con, STRp (prefixes))
 {
     if (!con.h) return (StrText16K){ "NULL" };
 
-    StrText16K s;
+    StrText16K s = {};
     int s_len = 0;
     
     uint32_t num_items = con_nitems (con);
 
     SNPRINTF (s, "{ \"repeats\": %s, \"num_items\": %u, \"flags\": %s, \"repsep\": [ '%.5s', '%.5s' ], \"items\": [ ",
               (con.h->repeats == CON_REPEATS_IS_SEQ_LEN?"SEQ_LEN" : con.h->repeats == CON_REPEATS_IS_SPECIAL?"SPECIAL" : str_int_s (con.h->repeats).s),
-              num_items,container_flags(con.h).s,
+              num_items, container_flags(con.h).s,
               char_to_printable (con.h->repsep[0]).s, char_to_printable(con.h->repsep[1]).s);
     
     for (unsigned i=0; i < num_items; i++)

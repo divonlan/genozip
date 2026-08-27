@@ -59,6 +59,8 @@ meta.yaml
 gz-block.*
 src/windows/genozip-installer.ifp
 src/windows/LICENSE.for-installer.txt
+src/windows/msix
+*.msix
 src/mac/darwinpkg/Library/genozip/*
 !src/mac/darwinpkg/Library/genozip
 src/mac/Resources/*
@@ -131,3 +133,4 @@ out
 vgcore.*
 P226339*
 invocations*
+wget-log

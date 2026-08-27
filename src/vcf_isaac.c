@@ -81,7 +81,7 @@ int vcf_isaac_info_channel_i (VBlockP vb)
 {
     STRlast (filter, VCF_FILTER);
 
-    #define FILT(f) str_issame_(STRa(filter), f, STRLEN(f)) 
+    #define FILT(f) str_issame_(STRa(filter), f, strlen(f)) 
     return FILT("PASS") || FILT("LowGQX") || FILT("HighDPFRatio") || FILT("LowGQX;HighDPFRatio");
 }
 

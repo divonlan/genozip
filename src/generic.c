@@ -138,9 +138,9 @@ SPECIAL_RECONSTRUCTOR (generic_piz_TOPLEVEL)
     return NO_NEW_VALUE;
 }
 
-StrText4K generic_get_magic (void)
+StrText16K generic_get_magic (void)
 {
-    StrText4K s = str_to_printable_json_(magic, strnlen (magic, MAGIC_SIZE));
+    StrText16K s = str_to_telemetry_json (magic, strnlen (magic, MAGIC_SIZE));
     int s_len = strlen(s.s);
     
     memmove (&s.s[2], s.s, s_len);
@@ -153,9 +153,9 @@ StrText4K generic_get_magic (void)
     return s;
 }
 
-StrText4K generic_get_ext (void)
+StrText16K generic_get_ext (void)
 {
-    return str_to_printable_json_(ext, strlen (ext));
+    return str_to_telemetry_json (ext, strlen (ext));
 }
  
 // to be called from segconf of other data types, if it is discovered that the file is not actually of that data type

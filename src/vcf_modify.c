@@ -437,7 +437,7 @@ static char *vcf_optimize_samples (VBlockVCFP vb, STRp(format), rom samples, rom
         unsigned sample_len;
         int remaining = after - samples;
         char sep;
-        samples = (char *)seg_get_next_item (VB, samples, &remaining, GN_SEP, GN_SEP, GN_IGNORE, &sample_len, &sep, has_13, "sample-subfield");
+        samples = (char *)seg_get_next_item (VB, samples, &remaining, true, true, &sample_len, &sep, has_13, "sample-subfield");
 
         str_split (sample, sample_len, n_fmts, ':', sf, false);
         if (!n_sfs) { // possibly a split error, don't analyze here, seg will, just keep as is

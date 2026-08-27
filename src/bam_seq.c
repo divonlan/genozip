@@ -7,10 +7,9 @@
 //   under penalties specified in the license.
 
 #include "sam_private.h"
-
-// the characters "=ACMGRSVTWYHKDBN" are mapped to BAM 0->15, in this matrix we add 0x80 as a validity bit. All other characters are 0x00 - invalid
-static const uint8_t sam2bam_seq_map[256] = { ['=']=0x80, ['A']=0x81, ['C']=0x82, ['M']=0x83, ['G']=0x84, ['R']=0x85, ['S']=0x86, ['V']=0x87, 
-                                              ['T']=0x88, ['W']=0x89, ['Y']=0x8a, ['H']=0x8b, ['K']=0x8c, ['D']=0x8d, ['B']=0x8e, ['N']=0x8f };
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
 
 const char bam_base_codes[16] = "=ACMGRSVTWYHKDBN";
 
@@ -25,33 +24,6 @@ rom bam_seq_display (bytes seq, uint32_t l_seq) // caller should free memory
 
     str[l_seq] = 0;
     return str;
-}
-
-// called from sam_zip_prim_ingest_vb, somewhat similar to sam_piz_sam2bam_SEQ
-void sam_seq_to_bam (STRp (seq_sam), BufferP seq_bam_buf)
-{
-    uint8_t *seq_bam = BAFT8 (*seq_bam_buf);
-    uint32_t seq_bam_len = (seq_sam_len+1)/2;
-
-    for (uint32_t i=0; i < seq_bam_len; i++, seq_bam++, seq_sam += 2) {
-        uint8_t base[2] = { sam2bam_seq_map[(uint8_t)seq_sam[0]], sam2bam_seq_map[(uint8_t)seq_sam[1]] };
-        
-        // check for invalid characters 
-        for (unsigned b=0; b < 2; b++)
-            if (!base[b] && !(b==1 && (i+1)*2 > seq_sam_len)) {
-                ASSINP (false, "Invalid base: invalid character encountered in sequence: '%c' (ASCII %u). position %u SEQ(first 1000 bases)=\"%s\"", 
-                        base[b], base[b], i*2+b, str_to_printable_(seq_sam, MIN_(1000,seq_sam_len)).s);
-                base[b] = 0x0f;
-            }
-
-        *seq_bam = (base[0] << 4) | (base[1] & 0x0f);
-    }
-
-    // if number of bases is odd, zero the last, unused, base
-    if (seq_bam_len & 1) 
-        seq_bam[seq_bam_len-1] &= 0xf0;
-
-    seq_bam_buf->len += seq_bam_len;
 }
 
 // re-writes BAM format SEQ into textual SEQ
@@ -79,11 +51,48 @@ void bam_seq_to_sam (VBlockP vb, bytes𐤐 bam_seq,
         save = *BAFTc(*out); // this is the byte we will overwrite, and recover it later. possibly, the fence if the buffer is empty;
     }
     
-    unaligned_uint16_t *restrict next = (unaligned_uint16_t *)BAFTc(*out);
+    unaligned_uint16_t *restrict sam_seq = (unaligned_uint16_t *)BAFTc(*out);
+    uint32_t num_bytes = (seq_len + 1) / 2;
+    uint32_t i=0;
 
-    for (uint32_t i=0; i < (seq_len+1) / 2; i++) 
-        *next++ = (uint16_t)bam_base_codes[bam_seq[i] >> 4]
-                | ((uint16_t)bam_base_codes[bam_seq[i] & 0xf] << 8);
+#ifdef __x86_64__  // note: AVX2 support enforced by arch_initialize   
+    const __m256i bam_base_codes_m256i = _mm256_setr_epi8 (
+        '=', 'A', 'C', 'M', 'G', 'R', 'S', 'V', 'T', 'W', 'Y', 'H', 'K', 'D', 'B', 'N',
+        '=', 'A', 'C', 'M', 'G', 'R', 'S', 'V', 'T', 'W', 'Y', 'H', 'K', 'D', 'B', 'N'
+    );
+
+    const __m256i mask_low = _mm256_set1_epi8 (0x0F);
+
+    // process 32 BAM bytes (64 bases) per iteration
+    for (; i + 32 <= num_bytes; i += 32) {
+        __m256i raw = _mm256_loadu_si256 ((const __m256i*)(bam_seq + i)); // unaligned load
+
+        // extract high (first base) and low (second base) nibbles
+        __m256i high_nibbles = _mm256_and_si256 (_mm256_srli_epi16(raw, 4), mask_low);
+        __m256i low_nibbles  = _mm256_and_si256 (raw, mask_low);
+
+        // hardware vector lookup
+        __m256i ascii_first  = _mm256_shuffle_epi8 (bam_base_codes_m256i, high_nibbles);
+        __m256i ascii_second = _mm256_shuffle_epi8 (bam_base_codes_m256i, low_nibbles);
+
+        // interleave (unpacking in 128-bit lanes)
+        __m256i unp_lo = _mm256_unpacklo_epi8 (ascii_first, ascii_second); // Lane0-Lo, Lane1-Lo
+        __m256i unp_hi = _mm256_unpackhi_epi8 (ascii_first, ascii_second); // Lane0-Hi, Lane1-Hi
+
+        // re-align 128-bit lanes into continuous 256-bit sequential order
+        __m256i out0 = _mm256_permute2x128_si256 (unp_lo, unp_hi, 0x20); // Lane0-Lo | Lane0-Hi
+        __m256i out1 = _mm256_permute2x128_si256 (unp_lo, unp_hi, 0x31); // Lane1-Lo | Lane1-Hi
+
+        // store 64 bases (32x uint16_t words) - unaligned
+        _mm256_storeu_si256 ((__m256i*)(sam_seq + i), out0);
+        _mm256_storeu_si256 ((__m256i*)(sam_seq + i + 16), out1);
+    }
+#endif
+
+    // remaining tail bytes (or all bytes if not using AVX2): 2 bases at a time
+    for (; i < num_bytes; i++)
+        sam_seq[i] =  (uint16_t)bam_base_codes[bam_seq[i] >> 4]
+                   | ((uint16_t)bam_base_codes[bam_seq[i] & 0x0F] << 8);
 
     if (start_mid_byte) {
         *BAFTc(*out) = save;

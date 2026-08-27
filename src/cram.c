@@ -238,7 +238,7 @@ void cram_inspect_file (FileP file)
 
     #define CRAM_INSPECTION_SIZE (8 MB)
 
-    FILE *fp = fopen (file->name, "rb");
+    FILE *fp = fopen (file->name, READ);
     if (!fp) return;
 
     ASSERTNOTINUSE (evb->scratch);
