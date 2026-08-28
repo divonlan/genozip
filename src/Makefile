@@ -308,7 +308,11 @@ ifdef Windows # link MingW DLLs staticly (order is important!)
 endif
 
 ifdef linux_x86
-	LDFLAGS += -lrt -fuse-ld=lld -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
+	LDFLAGS += -lrt -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
+ifndef BUILD_PREFIX # not conda
+# fast, multi-threaded linker, comment out if needed
+LDFLAGS += -fuse-ld=lld
+endif 
 endif
 
 ifdef osx 
@@ -666,6 +670,10 @@ windows/genozip-installer.ifp: windows/genozip-installer.template.ifp windows/ge
 WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt windows/genozip.ico windows/genozip-installer.ifp
 
 # this must be run ONLY has part of "make distribution" or else versions will be out of sync
+$(INSTALLERS)/genozip-installer.exe.build:
+	@echo "Making Windows installer by invoking a seperate make process with -j"
+	make -j $(INSTALLERS)/genozip-installer.exe
+
 $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) 
 	@echo 'Creating Windows installer'
 	@echo 'WINDOWS: Using the UI:'
@@ -675,9 +683,11 @@ $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 	@rm -f ../installers/genozip-installer.exe
 	@("/c/Program Files (x86)/solicus/InstallForge/bin/ifbuilderenvx86.exe" ; exit 0)
 
+# Windows rule for making Linux build by running WSL
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
+	@echo "Calling WSL to Make for genozip-linux-x86_64.tar"
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC) make $(INSTALLERS)/genozip-linux-x86_64.tar # make -j doesn't work well on WSL - filesystem clock issues
+	@$(SCRIPTS)/run-on-wsl.sh CC=$(WSL_GCC) make -j $(INSTALLERS)/genozip-linux-x86_64.tar # in the past, make -j didn't work well on WSL - filesystem clock issues
 
 # get Mac files: ../installers/genozip-osx-arm.tar and objdir.mac/secure/license.o
 $(INSTALLERS)/genozip-osx-arm.tar : $(C_SRCS) $(ARM_ASM_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
@@ -715,7 +725,7 @@ finalize-distribution:
 distribution: initialize-build-distribution increment-version ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
               $(INSTALLERS)/genozip-osx-arm.tar 			\
 			  $(INSTALLERS)/genozip-linux-x86_64.tar.build	\
-			  $(INSTALLERS)/genozip-installer.exe 			\
+			  $(INSTALLERS)/genozip-installer.exe.build		\
               push-build conda/.conda-timestamp genozip-latest.exe genozip-latest finalize-distribution
 
 # license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed

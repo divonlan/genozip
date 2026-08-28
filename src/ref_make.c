@@ -19,7 +19,7 @@
 #include "digest.h"
 
 SPINLOCK (make_ref_spin);
-#define MAKE_REF_NUM_RANGES 1000000 // should be more than enough (in GRCh38 we have 6389)
+#define MAKE_REF_NUM_RANGES (64 MB) // should be more than enough (in GRCh38 we have 6389. all-organism is several tens of millions).
 
 static Buffer contig_metadata = {}; // contig header of each contig, except for chrom name
 
@@ -46,14 +46,27 @@ void ref_make_seg_initialize (VBlockP vb)
     COPY_TIMER (seg_initialize);
 }
 
+bool ref_make_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
+{
+    // possibly lots of contigs for large multi-organism reference
+    return dict_id.num == _REF_CONTIG;
+}
+
 // called from ref_make_create_range, returns the range for this fasta VB. note that we have exactly one range per VB
 // as txtfile_read_vblock makes sure we have only one full or partial contig per VB (if flag.make_reference)
 static Range *ref_make_ref_get_range (VBIType vblock_i)
 {
-    // access ranges.len under the protection of the mutex
+    // access gref.ranges.len under the protection of the mutex
     spin_lock (make_ref_spin);
-    gref.ranges.len32 = MAX_(gref.ranges.len32, vblock_i); // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
-    ASSERT (gref.ranges.len <= MAKE_REF_NUM_RANGES, "reference file too big - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
+    
+    if (vblock_i > gref.ranges.len32) { // note that this function might be called out order (called from ref_make_create_range - FASTA ZIP compute thread)
+        ASSERT (vblock_i <= MAKE_REF_NUM_RANGES, "FASTA has too many sequences - number of ranges exceeds %u", MAKE_REF_NUM_RANGES);
+    
+        // note: we initialize ranges only when needed, allowing allocating a very large gref.ranges of memory that will usually not be used so not committed not waste RAM
+        memset (BAFT(Range, gref.ranges), 0, sizeof (Range) * (vblock_i - gref.ranges.len32));
+        gref.ranges.len32 = vblock_i;
+    }
+    
     spin_unlock (make_ref_spin);
 
     return B(Range, gref.ranges, vblock_i-1);
@@ -96,11 +109,12 @@ void ref_make_ref_init (void)
 {
     ASSERT0 (flag.make_reference, "Expecting flag.make_reference=true");
 
+    // note: allocate but don't initialize - allowing a very large MAKE_REF_NUM_RANGES without wasting RAM. 
+    // Initialization is done when needed in ref_make_ref_get_range
+    gref.ranges.can_be_big = true;
     buf_alloc (evb, &gref.ranges, 0, MAKE_REF_NUM_RANGES, Range, 1, "ranges"); // must be allocated by main thread as its evb
     gref.ranges.rtype = RT_MAKE_REF;
     
-    buf_zero (&gref.ranges);
-
     spin_initialize (make_ref_spin);
 
     serializer_initialize (make_ref_merge_serializer);

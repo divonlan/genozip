@@ -98,6 +98,7 @@ extern void ref_compress_ref (void);
 extern bool is_ref (STRp(data), bool *need_more);
 extern void ref_make_ref_init (void);
 extern void ref_make_seg_initialize (VBlockP vb);
+extern bool ref_make_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 extern void ref_consume_ref_fasta_global_area (void);
 extern void ref_make_create_range (VBlockP vb);
 extern void ref_make_after_compute (VBlockP vb);

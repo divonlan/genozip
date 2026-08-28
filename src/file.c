@@ -1218,6 +1218,14 @@ uint64_t file_get_size (rom filename)
     return st.st_size;
 }
 
+uint64_t file_get_size_or_0 (rom filename)
+{
+    struct stat64 st;
+    int ret = stat64(filename, &st);
+
+    return ret ? 0 : st.st_size; // 0 if error
+}
+
 bool file_is_dir (rom filename)
 {
     ASSERTNOTNULL (filename);
