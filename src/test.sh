@@ -1005,6 +1005,15 @@ batch_developer_limitations()
     cleanup
 }
 
+batch_licfile()
+{
+    batch_print_header
+
+    $genozip -fXo $output $TESTDIR/minimal.bam --licfile $LICENSESDIR/genozip_license.v71.Enterprise || exit 1
+
+    cleanup
+}
+
 # Test 23andMe translations
 # note: only runs it to see that it doesn't crash, doesn't validate results
 batch_23andMe_translations()
@@ -3265,24 +3274,25 @@ case $GENOZIP_TEST in
 65)  batch_user_message_permissions    ;;
 66)  batch_password_permissions        ;;
 67)  batch_developer_limitations       ;;
-68)  batch_genocat_backcomp_recon_plan ;;
-69)  batch_reference_backcomp          ;;
-70)  batch_v15_ref_interoperability    ;;
-71)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-72)  batch_real_world_backcomp 12.0.42 ;; 
-73)  batch_real_world_backcomp 13.0.21 ;; 
-74)  batch_real_world_backcomp 14.0.33 ;; 
-75)  batch_real_world_backcomp latest  ;;
-76)  batch_basic basic.vcf     latest  ;;
-77)  batch_basic basic.bam     latest  ;;
-78)  batch_basic basic.sam     latest  ;;
-79)  batch_basic basic.fq      latest  ;;
-80)  batch_basic basic.fa      latest  ;;
-81)  batch_basic basic.bed     latest  ;;
-82)  batch_basic basic.gvf     latest  ;;
-83)  batch_basic basic.gtf     latest  ;;
-84)  batch_basic basic.me23    latest  ;;
-85)  batch_basic basic.generic latest  ;;
+68)  batch_licfile                     ;;
+69)  batch_genocat_backcomp_recon_plan ;;
+70)  batch_reference_backcomp          ;;
+71)  batch_v15_ref_interoperability    ;;
+72)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
+73)  batch_real_world_backcomp 12.0.42 ;; 
+74)  batch_real_world_backcomp 13.0.21 ;; 
+75)  batch_real_world_backcomp 14.0.33 ;; 
+76)  batch_real_world_backcomp latest  ;;
+77)  batch_basic basic.vcf     latest  ;;
+78)  batch_basic basic.bam     latest  ;;
+79)  batch_basic basic.sam     latest  ;;
+80)  batch_basic basic.fq      latest  ;;
+81)  batch_basic basic.fa      latest  ;;
+82)  batch_basic basic.bed     latest  ;;
+83)  batch_basic basic.gvf     latest  ;;
+84)  batch_basic basic.gtf     latest  ;;
+85)  batch_basic basic.me23    latest  ;;
+86)  batch_basic basic.generic latest  ;;
 * ) break; # break out of loop
 
 esac

@@ -501,6 +501,7 @@ genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
 	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 ../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
+	@echo "Making Windows just to make LICENSE.txt. Invoking a seperate make process with -j"
 	@$(MAKE) -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
 	@echo Generating $@
 	@./genozip$(EXE) --license=txt,100 > $@
