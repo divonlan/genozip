@@ -40,7 +40,8 @@ ifndef OBJDIR
 	fail := $(error Architecture unsupported or could not be identified: architecture="$(architecture)" OS="$(OS)") 
 endif
 
-ifdef BUILD_PREFIX # conda 
+# ------ Stuff that is only on conda-forge ------
+ifdef BUILD_PREFIX # conda-forge
 	ifdef Windows
 		CC ?= gcc 
 		CXX ?= g++
@@ -50,27 +51,58 @@ ifdef BUILD_PREFIX # conda
 
 	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
 
-else # not conda
+# ------ Stuff that is only on local ------
+else 
+	GENOZIP_HOME  = ../../genozip
+	LATEST_SRC    = ../../genozip-latest/src
+	TEST_DIR      = $(GENOZIP_HOME)/private/test
+	SCRIPTS       = $(GENOZIP_HOME)/private/scripts
+	UTILS         = $(GENOZIP_HOME)/private/utils
+	RELEASES      = $(GENOZIP_HOME)/private/releases
+	PUBLIC        = $(GENOZIP_HOME)/publice
+	GCC_BIN       = /home_local_fs/divon/miniforge3/envs/distribution_gcc-16.1_sysroot-2.17/bin
+
 	ifdef DISTRIBUTION # custom destribution, run eg: DISTRIBUTION=special make genozip
 		DISTOBJ = $(OBJDIR)/distribution.$(DISTRIBUTION).o 
 	else
 		DISTOBJ = $(OBJDIR)/distribution.github.o # note: matches the name in version.c 
 	endif
 
-	ifdef GCC 
-		CC=$(GCC) 
+	ifeq ($(wildcard $(GCC_BIN)),) # path not found
+		CC ?= gcc 
+		CXX ?= g++
 	else
-		CC=gcc
+		# need old gcc linked to an old sysroot(=glibc) for older Linux machines
+		# up to 15.0.79 used distribution-gcc.8.5 (generate with: conda create -n distribution gcc_linux-64=8.5.0)
+		# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 
+		# starting 15.0.88 distribution-gcc.16.1-sysroot.2.17 (see "development environment.txt")
+		# To see the glibc version genozip requires: 'objdump -T genozip | grep GLIBC_' (the highest version listed)
+		CC ?= $(GCC_BIN)/x86_64-conda-linux-gnu-gcc
+		CXX ?= $(GCC_BIN)/x86_64-conda-linux-gnu-g++
 	endif
 
-	ifdef GXX 
-		CXX=$(GXX) 
-	else
-		CXX=g++
+	ifdef linux_x86 # Linux but not conda
+		# fast, multi-threaded linker, comment out if needed
+		LDFLAGS += -fuse-ld=lld
+	endif 
+
+	ifdef osx_arm64 # Mac but not conda
+		CFLAGS += -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk 
 	endif
+
 endif 
 
+# ------ Stuff that is both on conda-forge and local ------
+
+LDFLAGS    += -lpthread -lm 
+CFLAGS     += -Wall -Wstrict-aliasing=2 -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions
+CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc 
+OPTFLAGS   += -O3 
+DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
+
 ifdef Windows
+	EXE = .exe
+	LDFLAGS := -static -static-libgcc -static-libstdc++ $(LDFLAGS) -lIPHLPAPI -lUrlmon -lDbgHelp # link MingW DLLs staticly (order is important!)
 	AS := nasm
 	x86_64 := 1
 	ASFLAGS := -f win64 -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512 # note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
@@ -81,6 +113,8 @@ ifdef linux_x86
 	AS := nasm
 	x86_64 := 1
 	ASFLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
+	LDFLAGS += -lrt -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
+
 	# DEBUGFLAGS += -fsanitize=undefined 
 	# DEBUGFLAGS += -fsanitize=thread -Dsanitize_thread=1
 	
@@ -88,15 +122,6 @@ ifdef linux_x86
 	# 1. not compatable with valgrind - comment out if using valgrind 
 	# 2. Run with: setarch x86_64 -R genozip-debug ... (see internal-docs/address-sanitizer)
 	# DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 
-
-# need old gcc linked to an old sysroot(=glibc) for older Linux machines
-# up to 15.0.79 used distribution-gcc.8.5 (generate with: conda create -n distribution gcc_linux-64=8.5.0)
-# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 
-# starting 15.0.88 distribution-gcc.16.1-sysroot.2.17 (see "development environment.txt")
-# To see the glibc version genozip requires: 'objdump -T genozip | grep GLIBC_' (the highest version listed)
-# note: comment the following line if targeting the local machine
-CC=/home_local_fs/divon/miniforge3/envs/distribution_gcc-16.1_sysroot-2.17/bin/x86_64-conda-linux-gnu-gcc
-WSL_GCC=$(CC)
 
 endif
 
@@ -106,10 +131,8 @@ ifdef osx_arm64
 	AS = $(CC) -D__ASSEMBLY__ -c
 	DEBUGFLAGS_AS = -g 
 	DEBUGFLAGS += -fsanitize=address -Dsanitize_address -fsanitize=undefined
+
 	# clang flags
-ifndef BUILD_PREFIX # not conda 
-	CFLAGS += -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk 
-endif
 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
 	ARCHS = arm64
 	VALID_ARCHS = arm64 
@@ -119,27 +142,12 @@ ifndef AS
 	noarch := 1
 endif
 
-LDFLAGS    += -lpthread -lm 
-CFLAGS     += -Wall -Wstrict-aliasing=2 -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions
-CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc 
-OPTFLAGS   += -O3 
-DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
-
 ifdef x86_64 
 # Switch these comments on these CFLAG/CXXFLAG definitions to build for older machines
 # 	CFLAGS   += -march=nehalem -msse4.1 -msse4.2
 # 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
 	CFLAGS   += -march=haswell 
 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
-
-DEV_DIR  = ../../genozip
-TEST_DIR = $(DEV_DIR)/private/test
-SCRIPTS  = $(DEV_DIR)/private/scripts
-UTILS    = $(DEV_DIR)/private/utils
-RELEASES = $(DEV_DIR)/private/releases
-DATA     = $(DEV_DIR)/data
-LATEST_SRC = ../../genozip-latest/src
-
 endif
 
 SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
@@ -295,6 +303,9 @@ ifeq ($(CC),cl) # Microsoft Visual C
 	$(error Only the gcc and clang compilers are currently supported)
 endif
 
+# ---------------------------------------------------------------------
+# Update MY_SRCS platform-specific sources and objects
+# ---------------------------------------------------------------------
 ifneq ($(wildcard secure/.*),) # "secure" directory exists
 	MY_SRCS += secure/license.c
 	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o
@@ -302,22 +313,8 @@ else
 	LDFLAGS += $(OBJDIR)/secure/license.o
 endif
 
-ifdef Windows # link MingW DLLs staticly (order is important!)
-	EXE = .exe
-	LDFLAGS := -static -static-libgcc -static-libstdc++ $(LDFLAGS) -lIPHLPAPI -lUrlmon -lDbgHelp
-endif
-
-ifdef linux_x86
-	LDFLAGS += -lrt -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
-ifndef BUILD_PREFIX # not conda
-# fast, multi-threaded linker, comment out if needed
-LDFLAGS += -fuse-ld=lld
-endif 
-endif
-
 ifdef osx 
 	MY_SRCS += mac_compat.c
-	LDFLAGS += -rdynamic
 endif
 
 C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) $(BSC_C_SRCS) \
@@ -331,10 +328,6 @@ X86_ASM_SRCS = $(IGZIP_X86_ASM_SRCS)  # note: these are the sources which pass t
 ARM_ASM_SRCS = $(IGZIP_ARM_ASM_SRCS)
 
 ASFLAGS += -I$(IGZIP_ARCH_DIR)
-
-# ifdef linux_x86
-# 	C_SRCS += $(ONION_SRCS)
-# endif
 
 ifdef x86_64
 PLATFORM_DEPS = $(addprefix $(OBJDIR)/,$(X86_ASM_SRCS:.asm=.d)) $(addprefix $(OBJDIR)/,$(X86_SRCS:.c=.d))
@@ -408,14 +401,6 @@ $(OBJDIR)/%.d: %.cpp | $(OBJDIR) # directory is an "order only prerequesite": ht
 $(OBJDIR)/distribution.%.o : distribution.c 
 	@echo "Compiling ($(architecture)) $< to $@"
 	@$(CC) -c -o $@ $< $(CFLAGS) -DDISTRIBUTION=\"$*\"
-
-# $(OBJDIR)/bsc/qlfc_%.o : bsc/qlfc.cpp 
-# 	@echo "Compiling ($(architecture)) $< to $@"
-# 	$(CXX) -c -o $@ $< $(CXXFLAGS) -DLIBBSC_DYNAMIC_CPU_DISPATCH -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_$*
-
-# $(OBJDIR)/bsc/adler32_%.o : bsc/adler32.cpp 
-# 	@echo "Compiling ($(architecture)) $< to $@"
-# 	$(CXX) -c -o $@ $< $(CXXFLAGS) -DLIBBSC_DYNAMIC_CPU_DISPATCH -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_$*
 
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
 	@echo "Compiling ($(architecture)) $<"
@@ -573,7 +558,7 @@ clean-test:
 clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 	@echo Cleaning up
 	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.S *.bad $(DATA)/*.bad *.local genozip.threads-log.* *.b250 vgcore.*
+	@rm -f *.S *.bad $(PUBLIC)/*.bad *.local genozip.threads-log.* *.b250 vgcore.*
 	@rm -R $(OBJDIR)
 	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/,$(SRC_DIRS))
 	@touch $(OBJDIR)/.gitkeep
@@ -584,9 +569,10 @@ clean-dev: clean-installers clean-test # use only in dev - deletes license.o
 		push-build increment-version $(INSTALLERS)/LICENSE.html \
 		genozip-latest genozip-latest.exe
 
+# -----------------------------
 # builds latest for local OS
+# -----------------------------
 
-# currently, I build for conda from my Windows machine so I don't bother supporting other platforms
 ifdef Windows
 
 genozip-latest.exe: 
@@ -595,7 +581,7 @@ genozip-latest.exe:
 	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; cd secure; git pull; cd -; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $(LATEST_SRC)/genozip.exe ../../genozip/private/releases/genozip-$(version).exe ; ln -sf $(LATEST_SRC)/genozip.exe $@ ; fi )
 
 genozip-latest:
-	@$(SCRIPTS)/run-on-wsl.sh GCC=$(WSL_GCC) make -j genozip-latest
+	@$(SCRIPTS)/run-on-wsl.sh CC=$(CC) make -j genozip-latest
 
 # increments minor version, eg. 1.0.1 -> 1.0.2. 
 # To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
@@ -687,7 +673,7 @@ $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS)
 $(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
 	@echo "Calling WSL to Make for genozip-linux-x86_64.tar"
 	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@$(SCRIPTS)/run-on-wsl.sh CC=$(WSL_GCC) make -j $(INSTALLERS)/genozip-linux-x86_64.tar # in the past, make -j didn't work well on WSL - filesystem clock issues
+	@$(SCRIPTS)/run-on-wsl.sh CC=$(CC) make -j $(INSTALLERS)/genozip-linux-x86_64.tar # in the past, make -j didn't work well on WSL - filesystem clock issues
 
 # get Mac files: ../installers/genozip-osx-arm.tar and objdir.mac/secure/license.o
 $(INSTALLERS)/genozip-osx-arm.tar : $(C_SRCS) $(ARM_ASM_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
