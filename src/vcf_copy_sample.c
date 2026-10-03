@@ -64,7 +64,7 @@ void vcf_copy_sample_seg_finalize (VBlockVCFP vb)
     decl_ctx (VCF_COPY_SAMPLE);
 
     // remove VCF_COPY_SAMPLE if no samples were copied
-    if (buf_is_zero (&ctx->local))
+    if (buf_is_zero (&ctx->local, 1))
         ctx->local.len = 0;
 }
 
@@ -199,7 +199,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_COPY_SAMPLE)
                     if (!IS_PERIODi(sf,i)) {
                         int64_t dp;
                         ASSPIZ (str_get_int (STRi(sf,i), &dp), "Expecting FORMAT/DP to be an integer: %.*s", STRfi(sf,i));
-                        ctx_set_last_value (VB, item_ctx, dp);
+                        ctx_set_last_value_in_sample (VB, item_ctx, dp);
                     }
                     // fallthrough
 

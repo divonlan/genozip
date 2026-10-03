@@ -306,7 +306,7 @@ void sam_piz_set_deep_seq (VBlockSAMP vb,
                                   vb->piz_deep_flags.has_cigar = false; \
                                   return; }) // vb->piz_deep_flags.seq_encoding remains the default ZDEEP_SEQ_PACKED
 
-    if (gpos == NO_GPOS) 
+    if (gpos == NO_GPOS)
         NOT_BY_REF(EXPL_SEQ_COPY_VERBATIM);
 
     if (vb->bisulfite_strand)
@@ -314,7 +314,7 @@ void sam_piz_set_deep_seq (VBlockSAMP vb,
 
     ARRAY32 (char, deep_nonref, CTX(SAM_NONREF)->deep_nonref);
 
-    bool used_aligner = ctx_has_value_in_line_(vb, CTX(SAM_STRAND));
+    bool used_aligner = ctx_has_value_in_line (vb, SAM_STRAND);
 
     ASSERT (used_aligner || vb->binary_cigar.len32, "%s: missing cigar", LN_NAME);
 

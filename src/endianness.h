@@ -69,6 +69,17 @@
 #  endif
 #endif
 
+// note: it is safer to use these macros than ifdef __LITTLE_ENDIAN__, as the compiler will fail if endianness.h is not included
+#ifdef __LITTLE_ENDIAN__
+#define ℬ𝒾ℊℰ(x)
+#define ℒ𝒾𝓉ℰ(x) x
+#elif defined __BIG_ENDIAN__
+#define ℬ𝒾ℊℰ(x) x
+#define ℒ𝒾𝓉ℰ(x) 
+#else
+#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined "
+#endif    
+
 #if defined(bswap16) || defined(bswap32) || defined(bswap64)
 #  error "unexpected define!" // freebsd may define these; probably just need to undefine them
 #endif

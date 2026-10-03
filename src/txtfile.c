@@ -37,7 +37,7 @@ StrText txtfile_dump_vb (VBlockP vb, rom base_name, BufferP txt_data)
     
     snprintf (dump_filename.s, sizeof (dump_filename.s), "%u.bad-recon%s", vb->vblock_i, (txt_file ? file_plain_ext_by_dt (txt_file->data_type) : ""));
 
-    if (flag.is_windows) str_replace_letter (dump_filename.s, strlen(dump_filename.s), '/', '\\');
+    𝓌𝒾𝓃 (str_replace_letter (dump_filename.s, strlen(dump_filename.s), '/', '\\');)
 
     if (!txt_data) txt_data = &vb->txt_data;
     buf_dump_to_file (dump_filename.s, txt_data, 1, false, false, false, false);
@@ -90,8 +90,12 @@ void txtfile_fwrite (const void *data, uint32_t size)
     if (bytes < size && errno == EPIPE) exit (EXIT_DOWNSTREAM_LOST);
 
     // error if failed to write to file
-    ASSERT (bytes == size, "Error writing to %s on filesystem=%s - requested %u bytes but wrote only %u: (%u)%s", 
-            txt_file->basename, arch_get_filesystem_type (txt_file).s, size, bytes, errno, arch_str_error());
+    if (bytes != size) {
+        X𝓌𝒾𝓃 (if (errno == ENOMEM) buflist_show_memory (true, 0, 0);)
+
+        ABORT ("Error writing to %s on filesystem=%s - requested %u bytes but wrote only %u: (%u)%s", 
+                txt_file->basename, arch_get_filesystem_type (txt_file).s, size, bytes, errno, arch_str_error());
+    }
 
     txt_file->disk_so_far += bytes;
 }
@@ -174,6 +178,7 @@ static StrText display_gz_xfl (uint8_t xfl)
     return s;
 }
 
+// this goes to --show-gz, telemetry and various error messages
 StrText1K display_gz_header_ex (STR8p(h), bool obscure_fname, uint32_t *out_h_len/*out*/)
 {
     StrText1K s = {};
@@ -246,15 +251,15 @@ StrText1K display_gz_header_ex (STR8p(h), bool obscure_fname, uint32_t *out_h_le
         if (obscure_fname)
             SNPRINTF0 (s, " NAME=<hidden>");
         else
-            SNPRINTF (s, " NAME=\"%s\"", h);
+            SNPRINTF (s, " NAME=%s", h);
         ADVANCE_h (name_len+1);
     }
 
     if (IS_FLAG(flg, 16)) { // FCOMMENT 
-        int comment_len = strnlen ((rom)h, 1 KB);
+        int comment_len = strnlen ((rom)h, 1 KB); // comment expected to be null terminated
         if (h_len < comment_len+1 || comment_len == 1 KB) goto fail; // somewhat safety 
 
-        SNPRINTF (s, " CMNT=\"%s\"", h);
+        SNPRINTF (s, " CMNT=%s", h);
         ADVANCE_h (comment_len+1);
     }
 
@@ -554,7 +559,7 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
     if (state->avail_in < IGZIP_CHUNK) 
         txtfile_fread (txt_file, NULL, NULL, (int32_t)IGZIP_CHUNK - (int32_t)state->avail_in, &txt_file->disk_so_far);
 
-    { START_TIMER
+    { START_TIMER;
     state->next_in   = B8(txt_file->gz_data, next_in_before);
     state->avail_in  = BAFT8(txt_file->gz_data) - state->next_in;
     state->next_out  = BAFT8(vb->txt_data);
@@ -659,7 +664,7 @@ static inline uint32_t txtfile_read_block_bz2 (VBlockP vb, uint32_t max_bytes)
     return bytes_read;
 }
 
-static noreturn void txtfile_dump_comp_txt_data (VBlockP vb, uint32_t this_block_start, FUNCLINE)
+static noreturn void txtfile_dump_comp_txt_data (VBlockP vb, uint32_t this_block_start, Caller caller)
 {
     char dump_fn[strlen(txt_name)+100];
     snprintf (dump_fn, sizeof (dump_fn), "%s.vb-%u.bad-%s.bad-offset-0x%x", 
@@ -668,7 +673,7 @@ static noreturn void txtfile_dump_comp_txt_data (VBlockP vb, uint32_t this_block
     buf_dump_to_file (dump_fn, &vb->comp_txt_data, 1, false, false, true, false);
 
     ABORT ("called from %s:%u: %s: Invalid %s block in: block_comp_len=%u. Entire data of this vblock dumped to %s, bad block stats at offset 0x%x",
-           func, code_line,  VB_NAME, codec_name (txt_file->effective_codec), txt_file->gz_data.comp_len, dump_fn, this_block_start);
+           CALLERf,  VB_NAME, codec_name (txt_file->effective_codec), txt_file->gz_data.comp_len, dump_fn, this_block_start);
 }
 
 // ZIP main thread: add one gz_block to mgzip_isizes and mgzip_starts
@@ -720,7 +725,7 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
 
     if (uncompress) {
         ASSERTISNULL (vb->libdef_decomp_mem);
-        vb->libdef_decomp_mem = libdeflate_alloc_decompressor(vb, __FUNCLINE);
+        vb->libdef_decomp_mem = libdeflate_alloc_decompressor(vb, THIS_CODE_LINE);
     }
 
     int64_t start_uncomp_len = vb->comp_txt_data.uncomp_len;
@@ -759,7 +764,7 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
         // check for corrupt data - at this point we've already confirm the file's codec so not expecting it to change
         else if (status != GZ_SUCCESS) {
             buf_add_more (vb, &vb->comp_txt_data, txt_file->gz_data.data, txt_file->gz_data.comp_len, "comp_txt_data");
-            txtfile_dump_comp_txt_data (vb, this_block_start, __FUNCLINE);
+            txtfile_dump_comp_txt_data (vb, this_block_start, THIS_CODE_LINE);
         }
 
         // add block to list: if we need more data OR if the block is empty (e.g. EOF block)
@@ -825,7 +830,7 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
 
     if (uncompress) {
         buf_free (vb->comp_txt_data); 
-        libdeflate_free_decompressor (&vb->libdef_decomp_mem, __FUNCLINE); // also sets libdef_decomp_mem to NULL
+        libdeflate_free_decompressor (&vb->libdef_decomp_mem, THIS_CODE_LINE); // also sets libdef_decomp_mem to NULL
     }
 
     COPY_TIMER (txtfile_read_block_mgzip);
@@ -850,7 +855,7 @@ int32_t def_is_header_done (bool is_eof)
             // if we have no header, its an error if we require one
             TxtHeaderRequirement req = DTPT (txt_header_required); 
             ASSINP (i || (req != HDR_MUST && !(req == HDR_MUST_0 && evb->comp_i==0)), 
-                    "Error: %s is missing a %s header. "_TIP"Use --input=generic to compress as a generic file.", 
+                    _ERR"%s is missing a %s header. "_TIP"Use --input=generic to compress as a generic file.", 
                     txt_name, dt_name (txt_file->data_type));
 
             return i; // return header length
@@ -960,7 +965,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
     // uncompress one block at a time to see if its sufficient. usually, one block is enough
     if (TXT_IS_MGZIP && vb->comp_txt_data.len) {
         ASSERTISNULL (vb->libdef_decomp_mem);
-        vb->libdef_decomp_mem = libdeflate_alloc_decompressor (vb, __FUNCLINE);
+        vb->libdef_decomp_mem = libdeflate_alloc_decompressor (vb, THIS_CODE_LINE);
 
         for_buf_back (GzBlockZip, bb, vb->gz_blocks) {
             START_TIMER;
@@ -1048,7 +1053,7 @@ static bool txtfile_get_unconsumed_to_pass_to_next_vb (VBlockP vb, bool *R2_vb_t
 
 done:
     if (vb->libdef_decomp_mem)
-        libdeflate_free_decompressor (&vb->libdef_decomp_mem, __FUNCLINE); // also sets libdef_decomp_mem to NULL
+        libdeflate_free_decompressor (&vb->libdef_decomp_mem, THIS_CODE_LINE); // also sets libdef_decomp_mem to NULL
     
     // pass any unconsumed data at the end of txt_data to the next vb
     if (final_unconsumed_len > 0) {
@@ -1214,7 +1219,7 @@ bool txtfile_uncompress_mgzip_at_read (void)
     return segconf_running     // segconf doesn't have a compute thread
         || IS_SHOW_BAI         // uncompressing a TBI file
         || IS_BIOPSY_BYTES
-        || flag.biopsy         
+        || flag.biopsy || flag.biopsy_R1     
         || flag.make_reference // unconsumed callback for make-reference needs to inspect the whole data
         || flag.zip_lines_counted_at_init_vb; // *_zip_init_vb needs to count lines (set at segconf)
 }
@@ -1373,8 +1378,8 @@ void txtfile_read_vblock (VBlockP vb)
 
 done:
     if (flag_is_show_vblocks (TASK_ZIP)) 
-        iprintf ("VB_READ(id=%d) vb=%s Ltxt=%u vb_position_txt_file=%"PRIu64" unconsumed_txt.len=%u is_last_vb_in_txt_file=%s\n", 
-                 vb->id, VB_NAME, Ltxt, vb->vb_position_txt_file, txt_file->unconsumed_txt.len32, TF(vb->is_last_vb_in_txt_file));
+        iprintf ("VB_READ(id=%s) vb=%s Ltxt=%u vb_position_txt_file=%"PRIu64" unconsumed_txt.len=%u is_last_vb_in_txt_file=%s\n", 
+                 dis_vb_id(vb->id).s, VB_NAME, Ltxt, vb->vb_position_txt_file, txt_file->unconsumed_txt.len32, TF(vb->is_last_vb_in_txt_file));
 
     if (always_uncompress) 
         buf_free (vb->comp_txt_data); 

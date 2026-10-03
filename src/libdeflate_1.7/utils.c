@@ -36,19 +36,19 @@
 #  include <stdlib.h>
 #endif
 
-static void *(*libdeflate_malloc_func)(void *, unsigned, unsigned, const char*, uint32_t) = 0; // modified by divon
-static void (*libdeflate_free_func)(void *, void *, const char*, uint32_t) = 0; // modified by divon
+static void *(*libdeflate_malloc_func)(void *, unsigned, unsigned, Caller) = 0; // modified by divon
+static void (*libdeflate_free_func)(void *, void *, Caller) = 0; // modified by divon
 
 void *
-libdeflate_malloc_do(size_t size, void *opaque, const char *func, uint32_t code_line) // function modified by divon
+libdeflate_malloc_do(size_t size, void *opaque, Caller caller) // function modified by divon
 {
-	return (*libdeflate_malloc_func)(opaque, (unsigned)size, 1, func, code_line); 
+	return (*libdeflate_malloc_func)(opaque, (unsigned)size, 1, caller); 
 }
 
 void
-libdeflate_free_do(void *ptr, void *opaque, const char *func, uint32_t code_line) // function modified by divon
+libdeflate_free_do(void *ptr, void *opaque, Caller caller) // function modified by divon
 {
-	(*libdeflate_free_func)(opaque, ptr, func, code_line);
+	(*libdeflate_free_func)(opaque, ptr, caller);
 }
 
 void *
@@ -71,8 +71,8 @@ libdeflate_aligned_free_1_7(void *ptr, void *opaque)
 }
 
 LIBDEFLATEEXPORT void LIBDEFLATEAPI_1_7
-libdeflate_set_memory_allocator_1_7 (void *(*malloc_func)(void *, unsigned, unsigned, const char*, uint32_t), // function modified by divon
-				void (*free_func)(void *, void *, const char*, uint32_t))
+libdeflate_set_memory_allocator_1_7 (void *(*malloc_func)(void *, unsigned, unsigned, Caller), // function modified by divon
+				void (*free_func)(void *, void *, Caller))
 {
 	libdeflate_malloc_func = malloc_func;
 	libdeflate_free_func = free_func;

@@ -47,9 +47,9 @@ typedef struct RefCache {
 
 typedef struct RefStruct {
     // file 
-    rom filename;                 // filename of external reference file
     Digest genome_digest;         // v15: digest of genome as it is loaded to memory. Up to v14: MD5 of original FASTA file (buggy)
     DigestAlg genome_digest_alg;  // for genome_digest: xxh3 or md5 since 15.0.81, alder32 or md5 before
+    rom filename;                 // filename of external reference file
     Version ext_ref_version;      // Genozip version of the external reference file
     bool is_filename_allocated;
     
@@ -57,14 +57,13 @@ typedef struct RefStruct {
     RefChromeStyle chrom_style;
 
     // ZIP and PIZ, internal or external reference ranges. If in ZIP-INTERNAL we have REF_NUM_DENOVO_RANGES Range's - each allocated on demand. In all other cases we have one range per contig.
-    Buffer ranges; 
+    PosType64 genome_nbases;
+
+    alignas(32) Buffer ranges; 
     #define rtype param
     
-    Buffer genome_buf, genome_is_set_buf;
-    BitsP genome,                 // the genome in 2-bit representation. attached to shared memory or allocated privately 
-          genome_is_set;          // 1 bit per reference base, indicates if base is needed for reconstructing current file. 
-
-    PosType64 genome_nbases;
+    Bits genome;                  // the genome in 2-bit representation. attached to shared memory or allocated privately 
+    Bits genome_is_set;           // 1 bit per reference base, indicates if base is needed for reconstructing current file. 
 
     Buffer ref_external_ra;       // Random Access data of the external reference file
     Buffer ref_file_section_list; // Section List of the external reference file

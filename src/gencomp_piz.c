@@ -185,11 +185,16 @@ void gencomp_piz_vb_to_plan (VBlockP vb, int64_t *i, bool remove_previous)
     ASSERTNOTINUSE (scratch_vb->scratch);
     buf_copy (scratch_vb, &scratch_vb->scratch, &z_file->recon_plan, ReconPlanItem, *i+1, 0, "scratch");
 
+    uint64_t start_from = remove_previous ? 0 : *i;
+    z_file->recon_plan.len = start_from;
+    
     // note: we calculated num_gc_vbs in gencomp_piz_initialize_vb_info because it is not possible to calculate the exact
     // num_ending_gc_vbs as gencomp_piz_initialize_vb_info iterates in absoption order, while PLAN_END_OF_VB appears in reconstruction order 
-    buf_alloc (NULL, &z_file->recon_plan, 0, vb->vb_plan.len + (1 + v->num_gc_vbs)/*upper bound on number of PLAN_END_OF_VBs*/ + (remove_previous ? scratch_vb->scratch.len : (z_file->recon_plan.len - 1)), ReconPlanItem, 0, NULL);
-    z_file->recon_plan.len = remove_previous ? 0 : *i;
-    
+    buf_alloc (NULL, &z_file->recon_plan, vb->vb_plan.len 
+                                        + (1 + 2*v->num_gc_vbs) // upper bound on number of PLAN_END_OF_VBs: 2* bc each might also cause an additional PLAN_RANGE
+                                        + scratch_vb->scratch.len, // next VBs 
+               0, ReconPlanItem, CTX_GROWTH, NULL);
+
     // iterators
     uint32_t main_next_line = 0;
     Section gc_vb_sec[2]    = {}; // VB_HEADER section of PRIM/DEPN vb from which we are currently consuming
@@ -207,7 +212,7 @@ void gencomp_piz_vb_to_plan (VBlockP vb, int64_t *i, bool remove_previous)
         if (comp_i == SAM_COMP_MAIN) {
             ASSERT (vpi->n_lines + main_next_line <= vb->lines.len32,
                     "%s: expecting vpi->n_lines=%u + main_next_line=%u <= vb->lines.len32=%u", VB_NAME, vpi->n_lines, main_next_line, vb->lines.len32);
-        
+
             BNXT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
                 .vb_i       = vb->vblock_i,
                 .start_line = main_next_line, 
@@ -233,6 +238,7 @@ void gencomp_piz_vb_to_plan (VBlockP vb, int64_t *i, bool remove_previous)
                 // case: we have consumed all lines from current gc vb - move to next gc vb
                 else if (gc_line_i[c] == gc_vb_sec[c]->num_lines) {
                     // case: this MAIN vb is the last VB (by vb_i, not order of absorption!) that consumes the gc VB, so add a PLAN_END_OF_VB
+    
                     if (VBINFO(gc_vb_sec[c]->vblock_i)->ending_vb == vb->vblock_i) 
                         BNXT (ReconPlanItem, z_file->recon_plan) = (ReconPlanItem){ 
                             .vb_i   = gc_vb_sec[c]->vblock_i,
@@ -273,7 +279,7 @@ void gencomp_piz_vb_to_plan (VBlockP vb, int64_t *i, bool remove_previous)
     };
 
     if (flag.show_recon_plan)
-        recon_plan_show (vb->vblock_i, 0, z_file->recon_plan.len); // recon plan for this MAIN VB only
+        recon_plan_show (vb->vblock_i, start_from, z_file->recon_plan.len - start_from); // recon plan for this MAIN VB only
 
     // return subsequent MAIN VBs to plan
     buf_append_buf (NULL, &z_file->recon_plan, &scratch_vb->scratch, ReconPlanItem, NULL);

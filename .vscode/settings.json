@@ -44,7 +44,8 @@
         "progress.h": "c",
         "pthread.h": "c",
         "numbers": "c",
-        "license.h": "c"
+        "license.h": "c",
+        "Makefile.*": "distribution"
     },
     "cmake.sourceDirectory": "C:/Users/divon/genozip/src/onion",
     "cmake.configureOnOpen": false

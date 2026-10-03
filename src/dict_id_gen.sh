@@ -13,15 +13,16 @@ fi
 #   and subject to penalties specified in the license.
 
 # dict_id_gen.h generation:
-# Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
-# Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
-# Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
+# Step 1: dict_id_gen.sh generates /tmp/dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
+# Step 2: dict_id_gen.sh compiles /tmp/dict_id_gen.c and generate dict_id_gen[.exe]
+# Step 3. dict_id_gen.sh generates /tmp/dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
+# Step 4. copy dict_id_gen.h to src and delete temporary files
 
 # The source information for this script are the GENDICT and GENDICT_PREFIX pragmas in the code
 
 generate_dict_id_gen_c() 
 { 
-cat > dict_id_gen.c << END
+cat > $tmp_c << END
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,15 +84,15 @@ END
         type=${split[1]}
         name=${split[2]}
 
-        printf "    printf (\"#define _%s ((uint64_t)%%\"PRId64\")\\\\n\", dict_id_make (\"%s\", %s, %s).num);\n" $var $name ${#name} $type >> dict_id_gen.c
+        printf "    printf (\"#define _%s ((uint64_t)%%\"PRId64\")\\\\n\", dict_id_make (\"%s\", %s, %s).num);\n" $var $name ${#name} $type >> $tmp_c
     done
 
-    echo "}" >> dict_id_gen.c
+    echo "}" >> $tmp_c
 } # generate_dict_id_gen_c
 
 generate_dict_id_gen_h() 
 { 
-    cat > dict_id_gen.h << END
+    cat > $tmp_h << END
 // ------------------------------------------------------------------
 // dict_id_gen.h
 //   Copyright (C) 2019-2026 Genozip Limited. Patent Pending.
@@ -109,8 +110,8 @@ generate_dict_id_gen_h()
 END
 
     # add field constant definitions to dict_id_gen.h
-    ./$dict_id_gen_exe >> dict_id_gen.h
-    echo >> dict_id_gen.h
+    ./$dict_id_gen_exe >> $tmp_h
+    echo >> $tmp_h
 
     max_fields=0 
 
@@ -119,7 +120,7 @@ END
     for f in ${files[@]} ; do
 
         prefix=`egrep -w "^#pragma GENDICT_PREFIX" $f | head -1 | cut -d" " -f3 | tr -d '\15'`
-        if [ ${#prefix} -eq 0 ]; then echo "dict_id_gen.sh: Error: no GENDICT_PREFIX in $f"; exit 1; fi
+        if [ ${#prefix} -eq 0 ]; then echo "dict_id_gen.sh: ❌ no GENDICT_PREFIX in $f"; exit 1; fi
 
         # note: readarray doesn't work on MacOS :(
         readarray -t vars <<< `egrep -w "^#pragma GENDICT" $f | cut -d" " -f3 | cut -d"=" -f1`
@@ -130,24 +131,24 @@ END
 
         # add enum: typedef enum { REF_CONTIG, ... , NUM_REF_FIELDS } REFFields;
         # add: typedef enum { REF_CONTIG, ... } Fields;
-        printf "typedef enum { " >> dict_id_gen.h
+        printf "typedef enum { " >> $tmp_h
         for v in ${vars[*]}; do
-            echo -n "$v, " >> dict_id_gen.h
+            echo -n "$v, " >> $tmp_h
         done
-        printf "NUM_%s_FIELDS } %sFields;\n\n" $prefix $prefix >> dict_id_gen.h
+        printf "NUM_%s_FIELDS } %sFields;\n\n" $prefix $prefix >> $tmp_h
         
         # add MAPPING: [did_i]={ .num = _##did_i }
-        echo "#define ${prefix}_PREDEFINED { \\"  >> dict_id_gen.h
+        echo "#define ${prefix}_PREDEFINED { \\"  >> $tmp_h
 
         for ((i = 0 ; i < ${#vars[@]} ; i++)); do
-            echo "    [${vars[$i]}] = { { _${vars[$i]} }, TAG(${tags[$i]}) }, \\" >> dict_id_gen.h
+            echo "    [${vars[$i]}] = { { _${vars[$i]} }, TAG(${tags[$i]}) }, \\" >> $tmp_h
         done
 
-        printf "} \n\n" >> dict_id_gen.h
+        printf "} \n\n" >> $tmp_h
     done
 
     # add: MAX_NUM_PREDEFINED
-    printf "#define MAX_NUM_PREDEFINED %u\n\n" $max_fields >> dict_id_gen.h
+    printf "#define MAX_NUM_PREDEFINED %u\n\n" $max_fields >> $tmp_h
 
     # SPECIAL stuff
     IFS=" "
@@ -164,7 +165,7 @@ END
             names="${names}\"$special\", "
         done
 
-        printf "#define ${dt}_SPECIAL_NAMES { ${names}}\n\n" >> dict_id_gen.h
+        printf "#define ${dt}_SPECIAL_NAMES { ${names}}\n\n" >> $tmp_h
     
         # SPECIAL function list
         local specials_str=$(grep "^SPECIAL" $f | cut -d, -f4 | cut -d\) -f1 | tr -d " " | tr "\n" " " )
@@ -175,7 +176,7 @@ END
             names="${names}$special, "
         done
 
-        printf "#define ${dt}_SPECIAL { ${names}}\n\n" >> dict_id_gen.h
+        printf "#define ${dt}_SPECIAL { ${names}}\n\n" >> $tmp_h
 
         local num_specials=$(grep "^SPECIAL" $f | wc -l)
         
@@ -186,12 +187,12 @@ END
             exit 1
         fi
 
-        printf "#define NUM_${dt}_SPECIAL $num_specials\n\n" >> dict_id_gen.h
+        printf "#define NUM_${dt}_SPECIAL $num_specials\n\n" >> $tmp_h
 
         max_num_specials=$(( $num_specials > $max_num_specials ? $num_specials : $max_num_specials))
     done
 
-    printf "#define MAX_NUM_SPECIAL $max_num_specials\n\n" >> dict_id_gen.h
+    printf "#define MAX_NUM_SPECIAL $max_num_specials\n\n" >> $tmp_h
 }
 
 is_windows=`uname|grep -i mingw`
@@ -205,14 +206,20 @@ headers=(`egrep "^#include" data_types.h | cut -d\" -f2`)
 files=(`egrep "^#pragma GENDICT" ${headers[*]} | cut -d: -f1 | uniq`)
 files_with_special=(`egrep "^SPECIAL" ${headers[*]} | cut -d: -f1 | uniq`)
 
+tmp_c=/tmp/dict_id_gen.c
+tmp_h=/tmp/dict_id_gen.h
+
 generate_dict_id_gen_c
 
 # We accept CC as $1, used in conda when called from Makefile
-CC=$1
+CC="$1"
 if [ ${#CC} -eq 0 ]; then CC=/mingw64/bin/gcc; fi
     
-$CC dict_id_gen.c -o $dict_id_gen_exe
+$CC $tmp_c -o $dict_id_gen_exe
 
 generate_dict_id_gen_h 
 
-rm -f dict_id_gen.c
+rm -f $tmp_c $dict_id_gen_exe
+
+# create the file "atomically" only when fully ready, because its dependents in the Makefile are waiting on it
+mv -f $tmp_h dict_id_gen.h 

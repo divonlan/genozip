@@ -279,7 +279,7 @@ static bool segconf_get_zip_txt_modified (bool provisional)
         has_optimize = flag.optimize; // if true, we still don't know if we are really going to optimize
 
     else 
-        for (Did did_i=0; did_i < z_file->ca.num_contexts; did_i++)
+        for (Did did_i=0; did_i < z_file->ca._num_contexts; did_i++)
             if (segconf_optimize (did_i)) {
                 has_optimize = true;
                 break;
@@ -290,6 +290,7 @@ static bool segconf_get_zip_txt_modified (bool provisional)
     return (has_optimize && DTPZ(zip_modify))
         || (flag.add_line_numbers && Z_DT(VCF))
         || (flag.add_seq && Z_DT(SAM))
+        || flag.anonymize
         || flag_has_head  // --head diagnostic option to compress only a few lines of VB=1
         || flag_has_biopsy_line;    
 }
@@ -507,7 +508,7 @@ void segconf_calculate (void)
     vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
 
     // add to all contexts discovered in segconf to z_file->contexts
-    for (Did did_i = z_file->ca.num_contexts; did_i < vb->ca.num_contexts; did_i++) {
+    for (Did did_i = z_file->ca._num_contexts; did_i < vb->ca._num_contexts; did_i++) {
         ContextP zctx = ctx_add_new_zf_ctx_at_init (CTX(did_i)->tag_name, MAX_TAG_LEN-1, CTX(did_i)->dict_id);
         
         ASSERT (zctx, "failed to create zctx for \"%.*s\", perhaps because it exists. did_i=%u", 

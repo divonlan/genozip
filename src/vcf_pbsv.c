@@ -7,6 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
+#include "hash.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 #define _ID0  DICT_ID_MAKEF_8("I0D_VTYP")
@@ -186,7 +187,7 @@ void vcf_seg_pbsv_ID (VBlockVCFP vb, STRp(id))
     mate_id = vcf_pbsv_get_mate_id (STRa(id), &mate_id_len).s;
 
     if (mate_id_len)
-        vcf_seg_BND_mate (vb, STRa(id), STRa(mate_id), crc32 (0, STRa(mate_id))); 
+        vcf_seg_BND_mate (vb, STRa(id), STRa(mate_id), hash_crc32 (STRa(mate_id))); 
     
     if (vcf_has_mate)
         seg_special0 (VB, VCF_SPECIAL_COPY_MATE, CTX(VCF_ID), id_len + 1); // +1 for \t

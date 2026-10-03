@@ -16,7 +16,7 @@
 
 void ref_lock_initialize (void)
 {
-    buf_alloc_exact_zero (evb, gref.genome_muteces, (gref.genome_nbases + GENOME_BASES_PER_MUTEX-1) / GENOME_BASES_PER_MUTEX/*round up*/, Mutex, "genome_nbases");
+    buf_alloc_exact_zero (evb, gref.genome_muteces, (gref.genome_nbases + GENOME_BASES_PER_MUTEX-1) / GENOME_BASES_PER_MUTEX/*round up*/, Mutex, "genome_muteces");
     
     bool show = mutex_is_show ("genome_muteces"); // use --show-mutex=genome_muteces to see these
     if (show) buf_alloc (evb, &gref.genome_mutex_names, 32 * gref.genome_muteces.len, 0, char, 0, "genome_mutex_names");

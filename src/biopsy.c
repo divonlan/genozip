@@ -14,9 +14,9 @@
 #include "website.h"
 #include "strings.h"
 
-static Buffer biopsy_vb_i = { .name = "biopsy_vb_i" };
-static StrText4K biopsy_fn;
-static int biopsy_fn_len = 0;
+static Buffer biopsy_vb_i = {};
+static StrText1K biopsy_fn, biopsy_fn_template;
+static int biopsy_fn_len = 0, biopsy_fn_template_len = 0;
 
 void biopsy_init (rom optarg)
 {
@@ -25,6 +25,8 @@ void biopsy_init (rom optarg)
     ASSINP (n_items > 0, "Invalid biopsy argument: \"%s\", expecting a comma-seperated list of VB numbers, with 0 meaning the txt header", optarg);
 
     if (!item_lens[n_items-1]) n_items--; // remove final empty item in case of terminal ',' 
+
+    biopsy_vb_i.nameר = ר("biopsy_vb_i");
 
     for (int i=0; i < n_items; i++) {
         str_split (items[i], item_lens[i], 2, '-', startend, false);
@@ -53,19 +55,27 @@ void biopsy_init (rom optarg)
         }
     }
 
-    SNPRINTF (biopsy_fn, "%s.biopsy", optarg);
+    SNPRINTF (biopsy_fn_template, "%s.biopsy", optarg);
 
-    flag.biopsy   = true;
-    flag.seg_only = true; // no need to write the genozip file (+ we don't even seg, see zip_compress_one_vb)
+    // If biopsy was set by the user: in R1, biopsy_R1 will be set, and in R2 biopsy. 
+    // This is because in R1 we need to load the reference and compress the file normally (almost - we skip QUAL), so that R2 has the R1 sections it needs.
+    if (flag.pair)
+        flag.biopsy_R1 = true;
+    else {
+        flag.biopsy   = true;
+        flag.seg_only = true; // no need to write the genozip file (+ we don't even seg, see zip_compress_one_vb)
+    }
 }
 
-static void biopsy_compress (void)
+void biopsy_compress (void)
 {
     iprint0 ("Biopsy: compressing biopsy file\n");   
     
     file_gzip (biopsy_fn.s);
     
     iprintf ("Biopsy: Done. Biopsy file is %s\n", biopsy_fn.s);    
+
+    biopsy_fn_len = 0; 
 }
 
 static bool data_exhausted = false;
@@ -76,7 +86,9 @@ void biopsy_data_is_exhausted (void)
 
 void biopsy_take (VBlockP vb)
 {
-    if (!flag.biopsy || !Ltxt) return;
+    if ((!flag.biopsy && !flag.biopsy_R1) 
+        || !Ltxt
+        || (vb->vblock_i == 0 && DTP(txt_header_required) == HDR_NONE)) return;
 
     for_buf2 (int32_t, vb_i, i, biopsy_vb_i)
         if (*vb_i == vb->vblock_i) {
@@ -94,16 +106,16 @@ void biopsy_take (VBlockP vb)
 
     return; // we were not requested to take a biopsy from this vb
 
-start_biopsy: {
+start_biopsy: 
     // modify, if needed, before taking biopsy
-    if (segconf.zip_txt_modified && DTP(zip_modify) && vb->vblock_i != 0 &&
-        !flag.make_reference && Ltxt) { 
-        ctx_clone (vb);
+    if (segconf.zip_txt_modified && DTP(zip_modify) && vb->vblock_i != 0 && Ltxt && !flag.make_reference) 
         zip_modify (vb);
-    }
 
-    DO_ONCE {
-        SNPRINTF (biopsy_fn, "%s", file_plain_ext_by_dt (txt_file->data_type));
+    if (!biopsy_fn_len) {
+        SNPRINTF (biopsy_fn, "%s%s%s", biopsy_fn_template.s, // updates biopsy_fn_len
+                  IS_R1?".R1" : IS_R2?".R2" : "", 
+                  file_plain_ext_by_dt (txt_file->data_type));
+
         file_remove (biopsy_fn.s, true); // remove old file
     }
 
@@ -126,15 +138,22 @@ start_biopsy: {
 
     ASSERT (!fclose (fp), "failed to close biopsy file %s: %s", biopsy_fn.s, strerror (errno)); 
     
+    progress_newline();
     if (vb->vblock_i == 0) iprint0 ("Biopsy: wrote txt_header\n");
     else                   iprintf ("Biopsy: wrote vblock=%s\n", VB_NAME);
 
     // case: biopsy is ready (works only with VB list, not components) - dump it to a file and exit
     if (!biopsy_vb_i.len) { 
         biopsy_compress();
+
+        // case: we have z_file containing R1 data for biopsying R2
+        if (flag.pair) { 
+            file_close (&z_file); 
+            file_remove (BIOPSY_Z_FILE_NAME, true); 
+        }
+
         exit_ok;
     }
-}
 }
 
 bool biopsy_is_done (void)
@@ -156,7 +175,7 @@ void biopsy_finalize (void)
 
 void biopsy_bytes_init (rom optarg)
 {
-    str_split_ints (optarg, strlen(optarg), 2, ',', item, true);
+    str_split_unsigneds (optarg, strlen(optarg), 2, ',', item, true);
 
     ASSINP (n_items == 2, "Invalid biopsy-bytes argument: \"%s\", expecting offset,length within uncompressed file: offset is 0-based. %s", 
             optarg, WEBSITE_DIAGNOSTICS);

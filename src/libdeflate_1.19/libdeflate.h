@@ -56,14 +56,14 @@ struct libdeflate_options;
  * However, different threads may use different compressors concurrently.
  */
 LIBDEFLATEAPI struct libdeflate_compressor *
-libdeflate_alloc_compressor(VBlockP vb, int compression_level, FUNCLINE);
+libdeflate_alloc_compressor(VBlockP vb, int compression_level, Caller caller);
 
 /*
  * Like libdeflate_alloc_compressor(), but adds the 'options' argument.
  */
 LIBDEFLATEAPI struct libdeflate_compressor *
 libdeflate_alloc_compressor_ex(VBlockP vb, int compression_level,
-			       const struct libdeflate_options *options, FUNCLINE);
+			       const struct libdeflate_options *options, Caller caller);
 
 /*
  * libdeflate_deflate_compress() performs raw DEFLATE compression on a buffer of
@@ -156,7 +156,7 @@ libdeflate_gzip_compress_bound(struct libdeflate_compressor *compressor,
  * taken.
  */
 LIBDEFLATEAPI void
-libdeflate_free_compressor(struct libdeflate_compressor *compressor, FUNCLINE);
+libdeflate_free_compressor(struct libdeflate_compressor *compressor, Caller caller);
 
 /* ========================================================================== */
 /*                             Decompression                                  */
@@ -178,13 +178,13 @@ struct libdeflate_options;
  * However, different threads may use different decompressors concurrently.
  */
 LIBDEFLATEAPI struct libdeflate_decompressor *
-libdeflate_alloc_decompressor(VBlockP vb, const char *func, unsigned code_line);
+libdeflate_alloc_decompressor(VBlockP vb, Caller caller);
 
 /*
  * Like libdeflate_alloc_decompressor(), but adds the 'options' argument.
  */
 LIBDEFLATEAPI struct libdeflate_decompressor *
-libdeflate_alloc_decompressor_ex(VBlockP vb, const struct libdeflate_options *options, const char *func, unsigned code_line);
+libdeflate_alloc_decompressor_ex(VBlockP vb, const struct libdeflate_options *options, Caller caller);
 
 /*
  * Result of a call to libdeflate_deflate_decompress(),
@@ -325,7 +325,7 @@ libdeflate_gzip_decompress_ex(struct libdeflate_decompressor *decompressor,
  * is taken.
  */
 LIBDEFLATEAPI void
-libdeflate_free_decompressor(struct libdeflate_decompressor **d, FUNCLINE);
+libdeflate_free_decompressor(struct libdeflate_decompressor **d, Caller caller);
 
 /* ========================================================================== */
 /*                                Checksums                                   */

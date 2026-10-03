@@ -27,8 +27,8 @@
 #include "dispatcher.h"
 
 static Buffer threads = {};
-static Mutex threads_mutex = { .name = "threads_mutex-not-initialized" };
-static Mutex print_call_stack_mutex = { };
+static Mutex threads_mutex = {};
+static Mutex print_call_stack_mutex = {};
 pthread_t main_thread = 0; 
 static pthread_t writer_thread;
 static bool writer_thread_is_set = false;
@@ -36,13 +36,13 @@ static bool writer_thread_is_set = false;
 static Buffer log = {}; // for debugging thread issues, activated with --debug-threads
 static Mutex log_mutex = {};
 
-typedef struct {
-    bool in_use;
-    bool canceled;
+typedef struct { // 24 bytes
     pthread_t pthread;
-    Task task;
     VBIType vb_i;
     VBID vb_id;
+    bool in_use;
+    bool canceled;
+    Task task;
 } ThreadEnt;
 
 rom threads_get_task_name (void)
@@ -120,7 +120,7 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
     bool has_vb = ent->vb_i != (uint32_t)-1;
 
     if (flag_show_threads)  {
-        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        if (has_vb) iprintf ("%s: vb_i=%u vb_id=%s %s thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), ent->vb_i, dis_vb_id(ent->vb_id).s, event, thread_id, (uint64_t)ent->pthread);
         else        iprintf ("%s: %s: thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), event, thread_id, (uint64_t)ent->pthread);
     }
     
@@ -128,7 +128,7 @@ static void threads_log_by_thread_id (ThreadId thread_id, const ThreadEnt *ent, 
         mutex_lock (log_mutex);
         buf_alloc (NULL, &log, 10000, 1000000, char, 2, NULL);
         
-        if (has_vb) bufprintf (NULL, &log, "%s: vb_i=%u vb_id=%d %s thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), ent->vb_i, ent->vb_id, event, thread_id, (uint64_t)ent->pthread);
+        if (has_vb) bufprintf (NULL, &log, "%s: vb_i=%u vb_id=%s %s thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), ent->vb_i, dis_vb_id (ent->vb_id).s, event, thread_id, (uint64_t)ent->pthread);
         else        bufprintf (NULL, &log, "%s: %s thread_id=%d pthread=%"PRIu64"\n", task_name (ent->task), event, thread_id, (uint64_t)ent->pthread);
         mutex_unlock (log_mutex);
     }
@@ -146,18 +146,18 @@ void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event,
 
         if (time_usec) {
             if (vb->compute_thread_id >= 0)
-                iprintf ("%s: vb_i=%d%s%s vb_id=%d %s vb->compute_thread_id=%d pthread=%u compute_thread_time=%s usec\n", 
-                        task_name, vb->vblock_i, COMP, vb->id, event, vb->compute_thread_id, pthread, str_int_commas (time_usec).s);
+                iprintf ("%s: vb_i=%d%s%s vb_id=%s %s vb->compute_thread_id=%d pthread=%u compute_thread_time=%s usec\n", 
+                        task_name, vb->vblock_i, COMP, dis_vb_id(vb->id).s, event, vb->compute_thread_id, pthread, str_int_commas (time_usec).s);
             else
-                iprintf ("%s: vb_i=%d%s%s vb_id=%d %s compute_thread_time=%s usec\n", 
-                        task_name, vb->vblock_i, COMP, vb->id, event, str_int_commas (time_usec).s);
+                iprintf ("%s: vb_i=%d%s%s vb_id=%s %s compute_thread_time=%s usec\n", 
+                        task_name, vb->vblock_i, COMP, dis_vb_id(vb->id).s, event, str_int_commas (time_usec).s);
         } else {
             if (vb->compute_thread_id >= 0)
-                iprintf ("%s: vb_i=%d%s%s vb_id=%d %s vb->compute_thread_id=%d pthread=%u\n", 
-                        task_name, vb->vblock_i, COMP, vb->id, event, vb->compute_thread_id, pthread);
+                iprintf ("%s: vb_i=%d%s%s vb_id=%s %s vb->compute_thread_id=%d pthread=%u\n", 
+                        task_name, vb->vblock_i, COMP, dis_vb_id(vb->id).s, event, vb->compute_thread_id, pthread);
             else
-                iprintf ("%s: vb_i=%d%s%s vb_id=%d %s\n", 
-                        task_name, vb->vblock_i, COMP, vb->id, event);
+                iprintf ("%s: vb_i=%d%s%s vb_id=%s %s\n", 
+                        task_name, vb->vblock_i, COMP, dis_vb_id(vb->id).s, event);
         }
     }
 
@@ -172,11 +172,11 @@ void threads_log_by_vb (ConstVBlockP vb, rom task_name, rom event,
         }
 
         if (time_usec)
-            bufprintf (NULL, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
-                       task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_int_commas (time_usec).s);
+            bufprintf (NULL, &log, "%s: vb_i=%d vb_id=%s %s vb->compute_thread_id=%d pthread=%"PRIu64" compute_thread_time=%s usec\n", 
+                       task_name, vb->vblock_i, dis_vb_id(vb->id).s, event, vb->compute_thread_id, (uint64_t)pthread_self(), str_int_commas (time_usec).s);
         else
-            bufprintf (NULL, &log, "%s: vb_i=%d vb_id=%d %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
-                       task_name, vb->vblock_i, vb->id, event, vb->compute_thread_id, (uint64_t)pthread_self());
+            bufprintf (NULL, &log, "%s: vb_i=%d vb_id=%s %s vb->compute_thread_id=%d pthread=%"PRIu64"\n", 
+                       task_name, vb->vblock_i, dis_vb_id(vb->id).s, event, vb->compute_thread_id, (uint64_t)pthread_self());
 
         mutex_unlock (log_mutex);
     }
@@ -196,7 +196,7 @@ static void *thread_entry_caller (void *vb_)
     // wait for VB initialzation data to be visible to this thread
     __atomic_thread_fence (__ATOMIC_ACQUIRE); 
 
-    TimeSpecType start_time, end_time; 
+    struct timespec start_time, end_time; 
     clock_gettime(CLOCK_REALTIME, &start_time); 
 
     Task task = vb->compute_task; // save, as vb might be released by compute_func
@@ -339,9 +339,7 @@ void threads_cancel_other_threads (void)
                 th[i].canceled = true;
     
     // give time for all threads to terminate. note: we don't use pthread_join() here because it can hang (e.g. if thread is waiting on a mutex)
-#ifndef _WIN32
-    usleep (300000);
-#endif
+    X𝓌𝒾𝓃(usleep (300000));
 
     mutex_unlock (threads_mutex);
 
@@ -349,7 +347,5 @@ void threads_cancel_other_threads (void)
         pthread_cancel_safe (main_thread); // now that all compute threads are canceled, won't hang on a thread_join
 
     // more time...
-#ifndef _WIN32
-    usleep (200000);
-#endif
+    X𝓌𝒾𝓃(usleep (200000));
 }

@@ -23,6 +23,7 @@ extern rom arch_str_error (void);
 extern rom arch_get_os (void);
 extern rom arch_get_scheduler (void);
 extern rom arch_get_glibc (void);
+extern void arch_flush_cpu_cache (void);
 extern StrText4K arch_get_executable (void);
 extern StrText4K arch_get_genozip_executable (void);
 extern rom arch_get_argv0 (void);

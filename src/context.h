@@ -78,12 +78,14 @@ typedef struct { // 8 bytes
 #define CTX_MAX_SNIP_LEN (16 MB - 1ULL)  // (24 bit) maximum length of any snip in a context.dict (excluding its \0 separator) (v14)
 
 // type of elements of zctx->nodes, vctx->ol_nodes and vctx->nodes entries before conversion to WordIndex. 
-typedef struct {              // 12 bytes
+typedef struct CtxNode {              // 12 bytes
     uint64_t char_index : 39; // up to CTX_MAX_DICT_LEN
     uint64_t snip_len   : 24; // up to CTX_MAX_SNIP_LEN
     uint64_t canceled   : 1;  // set if node was canceled (only happens in vctx->nodes)
     uint32_t next;            // linked list - index in buffer of next node in linked list or NO_NEXT (note: in vctx->nodes - this is NOT node_index, since we don't add ol_nodes.len)
-} CtxNode, *CtxNodeP;
+} CtxNode;
+
+ASSERT_SIZEOF (CtxNode, 12);
 
 typedef struct {              // 8 bytes
     uint32_t digest;          // crc32 digest of the singleton
@@ -104,7 +106,7 @@ typedef struct {              // 8 bytes
 // factor in which we grow buffers in CTX upon realloc
 #define CTX_GROWTH 1.75
 
-#define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, __FUNCLINE)
+#define ctx_node_vb(ctx, node_index, snip_in_dict, snip_len) ctx_node_vb_do(ctx, node_index, snip_in_dict, snip_len, THIS_CODE_LINE)
 
 #define node_index_to_word_index(vb, vctx, vb_node_index) /* use with vctx after conversion */  \
     (((vb_node_index) >= (int32_t)(vctx)->ol_nodes.len32)                                       \
@@ -130,7 +132,8 @@ static inline char *last_txt (VBlockP vb, Did did_i) { return last_txtx (vb, CTX
 static inline bool is_last_txt_valid(ContextP ctx) { return ctx->last_txt.index != INVALID_LAST_TXT_INDEX; }
 static inline bool is_same_last_txt(VBlockP vb, ContextP ctx, STRp(str)) { return str_issame_(STRa(str), STRlst_(ctx)); }
 
-static inline void ctx_init_iterator (ContextP ctx) { ctx->iterator.next_b250 = NULL ; ctx->iterator.prev_word_index = -1; ctx->next_local = 0; }
+static inline void ctx_init_iterator  (ContextP ctx) { ctx->iterator       = (SnipIterator){ .prev_word_index = WORD_INDEX_NONE }; }
+static inline void ctx_init_pair_iter (ContextP ctx) { ctx->pair_b250_iter = (SnipIterator){ .prev_word_index = WORD_INDEX_NONE }; }
 
 extern WordIndex ctx_create_node_do (VBlockP vb, ContextP vctx, STR𐤐(snip), bool *restrict is_new);
 extern WordIndex ctx_create_node_is_new (VBlockP vb, Did did_i, STR𐤐(snip), bool *is_new);
@@ -147,8 +150,9 @@ extern uint32_t ctx_get_next_snip_from_local (VBlockP vb, ContextP ctx, pSTRp (s
 extern WordIndex ctx_peek_next_snip (VBlockP vb, ContextP ctx, pSTRp (snip));  
 
 extern WordIndex ctx_search_for_word_index (ContextP ctx, STRp(snip));
+extern void ctx_initialize_vb_non_buffer_fields (VBlockP vb);
 extern void ctx_clone (VBlockP vb);
-extern CtxNode ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, FUNCLINE);
+extern CtxNode ctx_node_vb_do (ConstContextP ctx, WordIndex node_index, rom *snip_in_dict, uint32_t *snip_len, Caller caller);
 extern void ctx_merge_in_vb_ctx (VBlockP vb);
 extern void ctx_update_zctx_txt_len (VBlockP vb, ContextP vctx, int64_t increment);
 extern void ctx_reset_codec_commits (void);
@@ -196,15 +200,15 @@ static inline Did ctx_get_existing_did_i_do (DictId dict_id, ConstContextArrayP 
 #define ctx_get_existing_did_i(vb,dict_id) ctx_get_existing_did_i_do ((dict_id), &(vb)->ca)
 #define zctx_get_existing_did_i(dict_id)   ctx_get_existing_did_i_do ((dict_id), &z_file->ca)
 
-static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id, FUNCLINE)  // returns NULL if context doesn't exist
+static inline ContextP ctx_get_existing_ctx_do (VBlockP vb, DictId dict_id, Caller caller)  // returns NULL if context doesn't exist
 {
     Did did_i = ctx_get_existing_did_i (vb, dict_id); 
-    ASSERT (IN_RANGE((int16_t)did_i, -1, vb->ca.num_contexts), "%s:%u: ECTX: did_i=%d ∉ [-1,%d). dict_id=%s", 
-            func, code_line, did_i, vb->ca.num_contexts, dis_dict_id (dict_id).s); 
+    ASSERT (IN_RANGE((int16_t)did_i, -1, vb->ca._num_contexts), "%s:%u: ECTX: did_i=%d ∉ [-1,%d). dict_id=%s", 
+            CALLERf, did_i, vb->ca._num_contexts, dis_dict_id (dict_id).s); 
 
     return (did_i == DID_NONE) ? NULL : &vb->ca.contexts[did_i]; 
 }
-#define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id), __FUNCTION__, __LINE__)
+#define ECTX(dict_id) ctx_get_existing_ctx_do ((VBlockP)(vb), (DictId)(dict_id), THIS_CODE_LINE)
 
 extern ContextP ctx_get_existing_zctx (DictId dict_id);
 
@@ -212,14 +216,14 @@ extern ContextP ctx_get_zctx_from_vctx (ConstContextP vctx, bool create_if_missi
 
 extern ContextP ctx_add_new_zf_ctx_at_init (STRp(tag_name), DictId dict_id);
 
-extern void ctx_overlay_dictionaries_to_vb (VBlockP vb);
+extern void ctx_superimpose_dictionaries_to_vb (VBlockP vb);
 
 extern void ctx_update_stats (VBlockP vb);
 
 // PIZ - get snip
-extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), FUNCLINE);
-#define ctx_get_snip_by_word_index(ctx,word_index,snip) ctx_get_snip_by_word_index_do ((ctx), (word_index), &snip, &snip##_len, __FUNCLINE)
-#define ctx_get_snip_by_word_index0(ctx,word_index) ctx_get_snip_by_word_index_do ((ctx), (word_index), 0,0, __FUNCLINE)
+extern rom ctx_get_snip_by_word_index_do (ConstContextP ctx, WordIndex word_index, pSTRp(snip), Caller caller);
+#define ctx_get_snip_by_word_index(ctx,word_index,snip) ctx_get_snip_by_word_index_do ((ctx), (word_index), &snip, &snip##_len, THIS_CODE_LINE)
+#define ctx_get_snip_by_word_index0(ctx,word_index) ctx_get_snip_by_word_index_do ((ctx), (word_index), 0,0, THIS_CODE_LINE)
 
 static inline rom ctx_get_words_snip(ConstContextP ctx, WordIndex word_index)  // PIZ
     { return ctx_get_snip_by_word_index0 (ctx, word_index); }
@@ -256,7 +260,7 @@ extern void ctx_dump_binary (VBlockP vb, ContextP ctx, bool local);
 StrText ctx_tag_name_ex (ConstContextP ctx);
 
 // Needed only if we intend to call ctx_set_rollback again without advancing vb->rback_id
-static inline void ctx_unset_rollback (ContextP ctx) { ctx->rback_id = 1; }
+static inline void ctx_unset_rollback (ContextP ctx) { ctx->rback.id = 1; }
 
 extern void ctx_rollback (VBlockP vb, ContextP ctx, bool override_id);
 
@@ -266,21 +270,63 @@ static inline bool ctx_can_have_singletons (ContextP ctx)
 
 // returns true if dict_id was *previously* segged on this line, and we stored a valid last_value (int or float)
 #define ctx_has_value_in_line_(vb, ctx) ((ctx)->last_line_i == (vb)->line_i)
-#define ctx_has_value_in_prev_line_(vb, ctx) ((ctx)->last_line_i != NO_LINE && (ctx)->last_line_i+1 == (vb)->line_i)
+#define ctx_has_value_in_line(vb, did_i) ctx_has_value_in_line_((vb), CTX(did_i))
+#define ctx_has_value_in_prev_line(vb, ctx) ((ctx)->last_line_i != NO_LINE && (ctx)->last_line_i+1 == (vb)->line_i)
 
-static inline bool ctx_has_value_in_line_do (VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
+static inline bool ctx_has_value_in_line_by_dict_id_(VBlockP vb, DictId dict_id, ContextP *p_ctx /* optional out */) 
 { 
     ContextP ctx = ECTX (dict_id);
     if (p_ctx) *p_ctx = ctx;
     return ctx && ctx_has_value_in_line_(vb, ctx);
 }
-#define ctx_has_value_in_line(vb, dict_id, p_ctx) ctx_has_value_in_line_do ((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
+#define ctx_has_value_in_line_by_dict_id(vb, dict_id, p_ctx) \
+    ctx_has_value_in_line_by_dict_id_((VBlockP)(vb), (DictId)(dict_id), (p_ctx))
+
+static inline bool ctx_has_value_in_sample (VBlockP vb, Did did_i) 
+{   
+    decl_ctx (did_i);
+    return ctx_has_value_in_line_(vb, ctx) && ctx->last_sample_i == vb->sample_i; 
+}
+
+static inline bool ctx_has_value_maybe_in_sample (VBlockP vb, Did did_i) 
+{   
+    if (ctx_is_VCF_FORMAT(CTX(did_i))) // branch-prediction will make this nearly-free in non-VCF
+        return ctx_has_value_in_sample (vb, did_i);
+    else
+        return ctx_has_value_in_line (vb, did_i);
+}
+
+#define ctx_get_last_value(ctx) ({ \
+    ASSERT (ctx_has_value_in_line_(vb, (ctx)), "%s: %s has no value in this line", LN_NAME, (ctx)->tag_name); \
+    (ctx)->last_value; \
+})
+
+#define ctx_get_prev_line_value(ctx) ({ \
+    ASSERT (ctx_has_value_in_prev_line(vb, (ctx)), "%s: %s has no value in previous line (last_line_i==%d)", \
+            LN_NAME, (ctx)->tag_name, (ctx)->last_line_i); \
+    (ctx)->last_value; \
+})
 
 static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, ValueType last_value)
 {
     ctx->last_value    = last_value;
     ctx->last_line_i   = vb->line_i;
-    ctx->last_sample_i = vb->sample_i; // used for VCF/FORMAT. otherwise meaningless but harmless.
+}
+
+static inline void ctx_set_last_value_in_sample (VBlockP vb, ContextP ctx, ValueType last_value)
+{
+    ctx->last_value    = last_value;
+    ctx->last_line_i   = vb->line_i;
+    ctx->last_sample_i = vb->sample_i;
+}
+
+static inline void ctx_set_last_value_maybe_in_sample (VBlockP vb, ContextP ctx, ValueType last_value)
+{
+    ctx->last_value    = last_value;
+    ctx->last_line_i   = vb->line_i;
+    
+    if (ctx_is_VCF_FORMAT(ctx))
+        ctx->last_sample_i = vb->sample_i;
 }
 
 #define ENCOUNTERED(line_i) (-(int32_t)(line_i) - 2) 
@@ -288,14 +334,28 @@ static inline void ctx_set_last_value (VBlockP vb, ContextP ctx, ValueType last_
 // set encountered if not already ctx_set_last_value (encounted = seen, but without setting last_value)
 static inline void ctx_set_encountered (VBlockP vb, ContextP ctx)
 {
-    if (ctx->last_line_i != vb->line_i || ctx->last_sample_i != vb->sample_i) // not already ctx_set_last_value in this line/sample
+    if (ctx->last_line_i != vb->line_i) // value is set
         ctx->last_line_i = ENCOUNTERED (vb->line_i); 
+}
 
-    ctx->last_sample_i = vb->sample_i; 
+static inline void ctx_set_encountered_in_sample (VBlockP vb, ContextP ctx)
+{
+    if (ctx->last_line_i != vb->line_i || ctx->last_sample_i != vb->sample_i) { // not already ctx_set_last_value in this line/sample
+        ctx->last_line_i   = ENCOUNTERED (vb->line_i); 
+        ctx->last_sample_i = vb->sample_i; 
+    }
+}
+
+static inline void ctx_set_encountered_maybe_in_sample (VBlockP vb, ContextP ctx)
+{
+    if (ctx_is_VCF_FORMAT(ctx))
+        ctx_set_encountered_in_sample (vb, ctx);
+    else
+        ctx_set_encountered (vb, ctx);
 }
 
 // after calling this, all these are false: ctx_encountered*, ctx_has_value*
-static inline void ctx_unset_encountered (VBlockP vb, ContextP ctx)
+static inline void ctx_unset_encountered (ContextP ctx)
 {
     ctx->last_line_i = LAST_LINE_I_INIT;
 }
@@ -326,24 +386,23 @@ static inline bool ctx_encountered_in_line_by_dict_id (VBlockP vb, DictId dict_i
 
 // note: these macros are good for contexts in VCF/FORMAT or not. Use the *_in_line version in case
 // we are sure its not VCF/FORMAT, they are a bit more efficient.
-static inline bool ctx_encountered (VBlockP vb, Did did_i) 
+static inline bool ctx_encountered_in_sample (VBlockP vb, Did did_i) 
 { 
     decl_ctx (did_i);
     return ctx_encountered_in_line(vb, ctx->did_i) && ctx->last_sample_i == vb->sample_i; 
 }
 
-static inline bool ctx_encountered_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx) 
-    { return ctx_encountered_in_line_by_dict_id (vb, dict_id, p_ctx) && (*p_ctx)->last_sample_i == vb->sample_i; }
-    
-static inline bool ctx_has_value (VBlockP vb, Did did_i) 
-{   
-    decl_ctx (did_i);
-    return ctx_has_value_in_line_(vb, ctx) && ctx->last_sample_i == vb->sample_i; 
+static inline bool ctx_encountered_maybe_in_sample (VBlockP vb, Did did_i) 
+{
+    if (ctx_is_VCF_FORMAT(CTX(did_i)))
+        return ctx_encountered_in_sample (vb, did_i);
+    else
+        return ctx_encountered_in_line (vb, did_i);
 }
 
-static inline bool ctx_has_value_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx) 
-    { return ctx_has_value_in_line_do (vb, dict_id, p_ctx) && (*p_ctx)->last_sample_i == vb->sample_i; }
-
+static inline bool ctx_encountered_in_sample_by_dict_id (VBlockP vb, DictId dict_id, ContextP *p_ctx) 
+    { return ctx_encountered_in_line_by_dict_id (vb, dict_id, p_ctx) && (*p_ctx)->last_sample_i == vb->sample_i; }
+    
 extern uint64_t ctx_get_ctx_group_z_len (VBlockP vb, Did group_did_i);
 
 typedef enum { KR_KEEP, KR_REMOVE } CtxKeepRemove;
@@ -365,13 +424,13 @@ extern void ca_init_d2d_map (ContextArrayP ca);
 extern rom dyn_type_name (DynType dyn_type);
 
 #define for_ctx(ca) /* both ctx and did_i are available to user */ \
-    for (Did did_i=0; did_i < (ca)->num_contexts; did_i++) \
+    for (Did did_i=0; did_i < (ca)->_num_contexts; did_i++) \
         for (ContextP ctx=&(ca)->contexts[did_i]; ctx; ctx=NULL) /* single iteration */
 
-#define for_zctx for (ContextP zctx=z_file->ca.contexts, fc_after=&z_file->ca.contexts[z_file->ca.num_contexts]; zctx < fc_after; zctx++) 
-#define for_vctx for (ContextP vctx=vb->ca.contexts,     fc_after=&vb->ca.contexts[vb->ca.num_contexts];         vctx < fc_after; vctx++) 
+#define for_zctx for (ContextP zctx=z_file->ca.contexts, fc_after=&z_file->ca.contexts[z_file->ca._num_contexts]; zctx < fc_after; zctx++) 
+#define for_vctx for (ContextP vctx=vb->ca.contexts,     fc_after=&vb->ca.contexts[vb->ca._num_contexts];         vctx < fc_after; vctx++) 
 
-#define for_ctx_back(ca) for (ContextP ctx=(ContextP)&(ca)->contexts[(ca)->num_contexts-1]; ctx >= (ca)->contexts ; ctx--)  
+#define for_ctx_back(ca) for (ContextP ctx=(ContextP)&(ca)->contexts[(ca)->_num_contexts-1]; ctx >= (ca)->contexts ; ctx--)  
 
 #define for_ctx_that(ca) for_ctx(ca) if
 #define for_zctx_that for_zctx if

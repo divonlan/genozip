@@ -22,21 +22,20 @@ extern StrText1K piz_advise_biopsy (VBlockP vb);
 extern StrText4K piz_advise_biopsy_line (CompIType comp_i, VBIType vblock_i, LineIType line_i, rom filename);
 
 // assert piz
-extern noreturn void error_asspiz (VBlockP vb, FUNCLINE, rom format, ...);
-#define ASSPIZ(condition, format, ...) ({ if (__builtin_expect (!(condition), 0)) error_asspiz (VB, __FUNCLINE, (format), ##__VA_ARGS__); })
+extern noreturn void error_asspiz (VBlockP vb, Caller caller, rom format, ...);
+#define ASSPIZ(condition, format, ...) ({ if (__builtin_expect (!(condition), 0)) error_asspiz (VB, THIS_CODE_LINE, (format), ##__VA_ARGS__); })
 #define ASSPIZ0(condition, string) ASSPIZ (condition, string, 0)
 #define ASSPIZNOTZERO(n)           ASSPIZ ((n), "%s=0", #n)
-#define ABORT_PIZ(format, ...) error_asspiz (VB, __FUNCLINE, (format), ##__VA_ARGS__)
+#define ABORT_PIZ(format, ...) error_asspiz (VB, THIS_CODE_LINE, (format), ##__VA_ARGS__)
 
 // we allocate txt_data to be OVERFLOW_SIZE (=1MB) beyond needed, if we get 64KB near the edge
 // of that we error here. These is to prevent actual overflowing which will manifest as difficult to trace memory issues
 #define ASSPIZ_NO_TXT_OVERFLOW(format, ...) \
     if (Rtxt < 64 KB) { \
-        DO_ONCE { \
+        DO_ONCE_OR_STALL { \
             rom dump_fn = txtfile_dump_vb (VB, z_name, &vb->txt_data).s; /* call before error_asspiz so error messages don't get mangled */  \
-            error_asspiz (VB, __FUNCLINE, (format), ##__VA_ARGS__); \
+            error_asspiz (VB, THIS_CODE_LINE, (format), ##__VA_ARGS__); \
         } \
-        else stall(); /* one thread prints the error, other threads hang until killed */ \
     }
 
 // goes into ctx->history if not STORE_INT
@@ -53,7 +52,7 @@ typedef struct __attribute__ ((packed)) { // 9 bytes
 extern int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, char sep, ReconType reconstruct, rom func);
 #define reconstruct_from_ctx(vb,did_i,sep,reconstruct) reconstruct_from_ctx_do ((VBlockP)(vb),(did_i),(sep),(reconstruct), __FUNCTION__)
 
-extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), ReconType reconstruct, FUNCLINE);
+extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), ReconType reconstruct, Caller caller);
 
 extern uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len, ReconType reconstruct);
 extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, ReconType reconstruct);
@@ -88,7 +87,6 @@ extern ContextP recon_multi_dict_id_get_ctx_first_time (VBlockP vb, ContextP ctx
 //--------------
 // Peeking
 //--------------
-extern void recon_stack_initialize (void);
 extern void recon_stack_push (VBlockP vb, ContextP ctx);
 extern void recon_stack_pop (VBlockP vb, ContextP ctx, bool is_done_peek);
 
@@ -111,7 +109,8 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 
 // gets snip, snip_len from b250 data
 #define LOAD_SNIP(did_i) ctx_get_next_snip (VB, CTX(did_i), false, &snip, &snip_len) 
-#define PEEK_SNIP(did_i) ctx_peek_next_snip (VB, CTX(did_i), &snip, &snip_len)
+#define PEEK_SNIP_(did_i) ctx_peek_next_snip (VB, CTX(did_i), &snip, &snip_len)
+#define PEEK_SNIP(did_i) STR(snip); PEEK_SNIP_(did_i)
 
 #define NEXT_ERRFMT "%s: not enough data in %s.local: next_local=%u + recon_len=%u > local.len=%u"
 
@@ -155,7 +154,6 @@ typedef bool (*PizReconstructSpecialInfoSubfields) (VBlockP vb, Did did_i, DictI
 #define RECONSTRUCT_str(str) RECONSTRUCT (str, str##_len)
 #define RECONSTRUCT_snip RECONSTRUCT_str(snip)
 #define RECONSTRUCT_SEP(s,len,sep) ({ RECONSTRUCT((s), (len)); RECONSTRUCT1 (sep); })
-#define RECONSTRUCT_TABBED(s,len) RECONSTRUCT_SEP (s, len, '\t')
 #define RECONSTRUCT_BUF(buf) RECONSTRUCT((buf).data,(buf).len32)
 #define RECONSTRUCT_LAST_TXT(ctx) ({ ASSERT_LAST_TXT_VALID(ctx); RECONSTRUCT (last_txtx (vb, (ctx)), (ctx)->last_txt.len); })
 #define RECONSTRUCT_NEXT(ctx,recon_len)                 \

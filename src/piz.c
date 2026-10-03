@@ -39,10 +39,11 @@ TRANSLATOR_FUNC (piz_obsolete_translator)
 // output coordinates of current line (for error printing) - very carefully as we are in an error condition - we can't assume anything
 PizDisCoords piz_dis_coords (VBlockP vb)
 {
-    PizDisCoords out = {};
-    if (DTF(chrom) == DID_NONE || !ctx_has_value (vb, CHROM)) return out;
-    
     ContextP chrom_ctx = CTX(CHROM);
+
+    PizDisCoords out = {};
+    if (DTF(chrom) == DID_NONE || !ctx_has_value_in_line_(vb, chrom_ctx)) return out;
+    
     WordIndex chrom = chrom_ctx->last_value.i;
     if (chrom < 0 || chrom >= chrom_ctx->word_list.len) return out; // not a valid chrom value
 
@@ -52,7 +53,7 @@ PizDisCoords piz_dis_coords (VBlockP vb)
 
     int out_len = snprintf (out.s, sizeof (out.s), " CHROM=\"%.64s\"(%d)", str_to_printable_(STRa(chrom_str)).s, chrom); // with leading space
 
-    if (DTF(pos) == DID_NONE || !ctx_has_value (vb, DTF(pos))) return out;
+    if (DTF(pos) == DID_NONE || !ctx_has_value_in_line (vb, DTF(pos))) return out;
     
     snprintf (&out.s[out_len], sizeof (out.s)-out_len, " POS=%"PRId64, CTX(DTF(pos))->last_value.i);
     return out;
@@ -221,7 +222,7 @@ static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalT
     const LocalTypeDesc *ltd = &lt_desc[*ltype];
 
     ASSERT (local_buf->len % ltd->width == 0, "%s.local has %u bytes - but expecting the number of bytes to be a multiple of %u since ltype=%s",
-            ctx->tag_name, local_buf->len32, ltd->width, ltd->name);
+            ctx->tag_name, local_buf->len32, ltd->width, unר(ltd->nameר));
 
     local_buf->len /= ltd->width; 
 
@@ -231,14 +232,16 @@ static inline void piz_adjust_one_local (ContextP ctx, BufferP local_buf, LocalT
         
         if (*ltype == LT_BITMAP) { 
             local_buf->nbits = local_buf->len * 64 - param ; 
-            LTEN_bits (local_buf); 
+            LTEN_bits (local_buf);
+            
+            bits_clear_excess_bits_in_top_word (local_buf);
         }
 
         else if (*ltype >= LT_UINT8_TR && *ltype <= LT_UINT64_TR)
             local_buf->n_cols = param; // 0 means vcf_num_samples
         
-        if (ltd->file_to_native)   
-            ltd->file_to_native (local_buf, ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
+        if (ltd->file_to_nativeר)   
+            ((BgEnBuf)unר(ltd->file_to_nativeר)) (local_buf, ltype); // BGEN, transpose etc - updates ltype in case of Transpose, after untransposing
     }
 }
 
@@ -268,8 +271,8 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
         bool is_pair_section = i_am_r2 && (BGEN32 (h->vblock_i) != vb->vblock_i); // is this a section of R1 read into an R2 vb 
         bool uncompress_to_pair = is_pair_section && (!h->flags.ctx.r1_pair_identical || IS_ZIP); // ZIP: always; PIZ: if pair-assisted
 
-        ASSERT (is_b250 || h->ltype < NUM_LTYPES, "in vb=%u ctx=%s.%s: ltype=%u >= NUM_LTYPES=%u. This can possibly be solved by upgrading Genozip to the latest version", 
-                vb->vblock_i, ctx->tag_name, is_local ? "local" : "b250", h->ltype, NUM_LTYPES);
+        ASSERT (is_b250 || h->ltype < NUM_LTYPES, "vb=%s %s.local: bad ltype=%u", 
+                VB_NAME, ctx->tag_name, h->ltype);
 
         // PIZ only: load normal section, or a pair-identical section of from the R1 VB
         if (!uncompress_to_pair) {
@@ -293,15 +296,15 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
                 if (!VER(15) && !ctx->ltype) 
                     ctx->ltype = h->ltype; 
 
-                ctx->iterator    = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250), .prev_word_index = WORD_INDEX_NONE };
-                ctx->b250_size   = h->b250_size; // note: for files<=v13, this was always 0, ie B250_BYTES_4
+                ctx_init_iterator (ctx);
+                ctx->b250_size = h->b250_size; // note: for files<=v13, this was always 0, ie B250_BYTES_4
             }
         }
 
         // A pair section (but only pair-assisted in PIZ)
         else {
             if (is_b250) {
-                ctx->pair_b250_iter = (SnipIterator){ .next_b250 = B1ST8 (ctx->b250R1), .prev_word_index = WORD_INDEX_NONE };
+                ctx_init_pair_iter (ctx);
                 ctx->pair_b250_size = h->b250_size;
             }
             else 
@@ -313,8 +316,6 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
         
         rom target_buf_name = uncompress_to_pair ? (is_local ? C_LOCAL"R1" : C_B250"R1")
                                                  : (is_local ? C_LOCAL     : C_B250    );
-
-        START_TIMER;
 
         zfile_uncompress_section (vb, h, target_buf, target_buf_name, BGEN32 (h->vblock_i), h->section_type); 
 
@@ -525,7 +526,7 @@ void piz_read_all_ctxs (VBlockP vb, Section *sec/* VB_HEADER section */, bool is
                 vctx->flags = (*sec)->flags.ctx; // override flags inherited from vb=1 and possibly the other B250/LOCAL section
         } 
 
-        // note: vctx->is_loaded possibly already true if it has a dictionary - set in ctx_overlay_dictionaries_to_vb - and now sets to false if section is skipped
+        // note: vctx->is_loaded possibly already true if it has a dictionary - set in ctx_superimpose_dictionaries_to_vb - and now sets to false if section is skipped
         if (IS_PIZ && !pair_assisted && !skip_R1) 
             vctx->is_loaded = section_read; 
 
@@ -699,11 +700,11 @@ bool piz_read_one_vb (VBlockP vb, bool for_reconstruction)
     SectionHeaderVbHeader h = piz_read_vb_header (vb);
 
     if (flag_is_show_vblocks (TASK_PIZ)) 
-        iprintf ("READING(id=%d) vb=%s num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u %s\n",
-                 vb->id, VB_NAME, vb->lines.len32, vb->recon_size, BGEN32 (h.z_data_bytes), vb->longest_line_len, 
+        iprintf ("READING(id=%s) vb=%s num_lines=%u recon_size=%u genozip_size=%u longest_line_len=%u %s\n",
+                 dis_vb_id(vb->id).s, VB_NAME, vb->lines.len32, vb->recon_size, BGEN32 (h.z_data_bytes), vb->longest_line_len, 
                  flag.preprocessing ? "preprocessing=true" : "");
 
-    ctx_overlay_dictionaries_to_vb (VB); // overlay all dictionaries to the vb 
+    ctx_superimpose_dictionaries_to_vb (VB); // overlay all dictionaries to the vb 
 
     buf_alloc (vb, &vb->z_section_headers, MAX_DICTS * 2, 0, uint32_t, 0, "z_section_headers"); // room for section headers  
 
@@ -769,8 +770,8 @@ static void piz_dispatch_one_vb (Dispatcher dispatcher, Section sec)
 
     if (reconstruct) {
         if (flag_is_show_vblocks (TASK_PIZ)) 
-            iprintf ("BEFORE_COMPUTE(id=%d) vb=%s/%u num_running_compute_threads(before)=%u\n", 
-                     vb->id, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
+            iprintf ("BEFORE_COMPUTE(id=%s) vb=%s/%u num_running_compute_threads(before)=%u\n", 
+                     dis_vb_id(vb->id).s, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
 
         dispatcher_compute (dispatcher, piz_reconstruct_one_vb);
         dispatcher_increment_progress ("read", 1); // done reading
@@ -856,7 +857,7 @@ Dispatcher piz_z_file_initialize (void)
     writer_z_initialize();
 
     if (flag.test || flag.md5) 
-        ASSINP0 (dt_get_translation(NULL).is_src_dt, "Error: --test or --md5 cannot be used when converting a file to another format"); 
+        ASSINP0 (dt_get_translation(NULL).is_src_dt, _ERR "--test or --md5 cannot be used when converting a file to another format"); 
 
     // note: if --unbind, we will recalculate the target progress in dispatcher_resume()
     Dispatcher dispatcher = dispatcher_init (flag.reading_reference ? TASK_PIZ_REF : TASK_PIZ, // also referred to in dispatcher_recycle_vbs()
@@ -878,8 +879,6 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
     // generate z_file->piz_reading_list and z_file->recon_plan 
     writer_create_plan (first_comp_i == COMP_NONE ? COMP_MAIN : first_comp_i);
     if (is_genocat && (flag.show_reading_list || flag.show_recon_plan)) return;
-
-    recon_stack_initialize();
     
     if (DTPZ(piz_initialize) && !DTPZ(piz_initialize)(first_comp_i))
         return; // abort PIZ if piz_initialize says so
@@ -949,8 +948,8 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
         VBlockP vb = dispatcher_get_processed_vb (dispatcher, NULL, false);  // non-blocking
         if (vb) {    
             if (flag_is_show_vblocks (TASK_PIZ)) 
-                iprintf ("AFTER_COMPUTE(task=piz id=%d) vb=%s/%u num_running_compute_threads(after)=%u\n", 
-                         vb->id, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
+                iprintf ("AFTER_COMPUTE(task=piz id=%s) vb=%s/%u num_running_compute_threads(after)=%u\n", 
+                         dis_vb_id(vb->id).s, comp_name(vb->comp_i), vb->vblock_i, dispatcher_get_num_running_compute_threads(dispatcher));
             
             dispatcher_increment_progress ("preproc_or_recon", 1); // done preprocessing or reconstructing 
             if (!vb->preprocessing) 
@@ -1019,5 +1018,5 @@ void piz_one_txt_file (Dispatcher dispatcher, bool is_first_z_file, bool is_last
 
     if (flag.show_time && ((flag.show_time_comp_i >= first_comp_i && flag.show_time_comp_i <= last_comp_i) || 
                            (first_comp_i == COMP_NONE && flag.show_time_comp_i != COMP_ALL)))
-        profiler_add_evb_and_print_report();
+        𝓅𝓇ℴ𝒻𝒾𝓁ℯ (profiler_add_evb_and_print_report());
 }

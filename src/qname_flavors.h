@@ -26,147 +26,144 @@ TypeContainer(MAX_QNAME_ITEMS), QnameContainer;
 // See here: https://help.basespace.illumina.com/articles/descriptive/fastq-files/
 // interpretation of the first field here: https://github.com/10XGenomics/supernova/blob/master/tenkit/lib/python/tenkit/illumina_instrument.py#L12-L45
 //-----------------------------------------------------------------------------------------
-static bool val_illumina (STR𐤐s(item)) 
-{
-    // lane number is single digit
-    if (item_lens[1] != 1 || !IS_DIGIT(items[1][0]))
-        return false; 
 
+static bool val_illumina (STR𐤐s(item)) // lane is merged into Q0NAME
+{
     // run is a number (unlike Element)
-    str_split (items[0], item_lens[0], 3, ':', sub, true);
-    return n_subs == 3 && str_is_int (STRi(sub,1));
+    str_split (items[0], item_lens[0], 4, ':', sub, true);
+    return n_subs == 4 && str_is_int (STRi(sub,1));
 };
 
+static bool val_illum_gs (STR𐤐s(item)) // lane is merged into Q0NAME
+{
+    // run is a number (unlike Element)
+    str_split (items[2], item_lens[2], 4, ':', sub, true);
+    return n_subs == 4 && str_is_int (STRi(sub,1));
+};
+
+// 5 items - Lane is part of first item. good for FASTQ because qnames are sorted but for BAM
+// Example: G10321:222:ASCASDFDA:1:2299:15331:1995
+//          ------- Q0NAME -------
 static QnameContainer con_illumina_7 = {
     .repeats   = 1,
-    .nitems_lo = 6,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric)
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q4NAME },                                }, // Y
+    .nitems_lo = 5,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q3NAME },                                }, // Y
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
 };
 
 // Example: G10321:222:ASCASDFDA:1:2299:15331:1995#CTGGGAAG
 static QnameContainer con_illumina_7i = {
     .repeats   = 1,
-    .nitems_lo = 7,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) 
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q4NAME }, .separator = "#"               }, // Y
-                   { .dict_id = { _SAM_Q5NAME },                                },
+    .nitems_lo = 6,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q3NAME }, .separator = "#"               }, // Y
+                   { .dict_id = { _SAM_Q4NAME },                                },
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
 };
 
 // Example: A00488:61:HMLGNDSXX:4:1101:4345:1000:CAGACGCGCACATACTTTTCTCACG
 static QnameContainer con_illumina_7bc = {
     .repeats   = 1,
-    .nitems_lo = 7,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric)
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"               }, // Y
-                   { .dict_id = { _SAM_Q5NAME },                                },
-                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
-};
-
-// Example: A00488:61:HMLGNDSXX:4:1101:4345:1000;umi=ACCTTCCAA
-static QnameContainer con_illumina_7umi = {
-    .repeats   = 1,
-    .nitems_lo = 7,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric)
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q4NAME }, .separator = ";"               }, // Y
-                   { .dict_id = { _SAM_Q5NAME },                                },
-                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
-};
-
-#define PX_illumina_7umi { "", "", "", "", "", "umi=" }
-
-// Example: A00488:61:HMLGNDSXX:4:1101:4345:1000:rTGTATGTCCC
-static QnameContainer con_illumina_7rbc = {
-    .repeats   = 1,
-    .nitems_lo = 7,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) 
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q4NAME }, .separator = ":r"              }, // Y
-                   { .dict_id = { _SAM_Q5NAME },                                },
-                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
-};
-
-// Example: ST-E00314:354:H7J2YCCXY:1:1101:19025:1502 1:N:0:GAACGCAATA+ACAGTAAGAT
-static QnameContainer con_illumina_embS = {
-    .repeats   = 1,
-    .nitems_lo = 7,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric)
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q4NAME }, .separator = " "               }, // Y
-                   { .dict_id = { _SAM_Q5NAME },                                }, // Embedded QNAME3
-                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
-};
-
-// Example: A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA
-static QnameContainer con_illumina_emb_ = {
-    .repeats   = 1,
-    .nitems_lo = 7,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric)
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q4NAME }, .separator = "_"               }, // Y
-                   { .dict_id = { _SAM_Q5NAME },                                }, // Embedded QNAME3
+    .nitems_lo = 6,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // Y
+                   { .dict_id = { _SAM_Q4NAME },                                },
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
 };
 
 // Example: A00488:61:HMLGNDSXX:4:1101:4345:1000:TGCTGGG+ACTTTTA
 static QnameContainer con_illumina_7bc2 = {
     .repeats   = 1,
-    .nitems_lo = 8,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric)
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"               }, // Y
-                   { .dict_id = { _SAM_Q5NAME }, .separator = "+"               },
-                   { .dict_id = { _SAM_Q6NAME },                                }, 
+    .nitems_lo = 7,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // Y
+                   { .dict_id = { _SAM_Q4NAME }, .separator = "+"               },
+                   { .dict_id = { _SAM_Q5NAME },                                }, 
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
+};
+
+// Example: A00488:61:HMLGNDSXX:4:1101:4345:1000;umi=ACCTTCCAA
+static QnameContainer con_illumina_7umi = {
+    .repeats   = 1,
+    .nitems_lo = 6,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ";"               }, // Y
+                   { .dict_id = { _SAM_Q4NAME },                                },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
+};
+
+#define PX_illumina_7umi { "", "", "", "", "umi=" }
+
+// Example: A00488:61:HMLGNDSXX:4:1101:4345:1000:rTGTATGTCCC
+static QnameContainer con_illumina_7rbc = {
+    .repeats   = 1,
+    .nitems_lo = 6,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":r"              }, // Y
+                   { .dict_id = { _SAM_Q4NAME },                                },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
+};
+
+// Example: ST-E00314:354:H7J2YCCXY:1:1101:19025:1502 1:N:0:GAACGCAATA+ACAGTAAGAT
+static QnameContainer con_illumina_embS = {
+    .repeats   = 1,
+    .nitems_lo = 6,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q3NAME }, .separator = " "               }, // Y
+                   { .dict_id = { _SAM_Q4NAME },                                }, // Embedded QNAME3
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
+};
+
+// Example: A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA
+static QnameContainer con_illumina_emb_ = {
+    .repeats   = 1,
+    .nitems_lo = 6,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q3NAME }, .separator = "_"               }, // Y
+                   { .dict_id = { _SAM_Q4NAME },                                }, // Embedded QNAME3
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
 };
 
 // Example: ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1 (BAM only)
 static QnameContainer con_illumina_7gs = {
     .repeats   = 1,
-    .nitems_lo = 8,
+    .nitems_lo = 7,
     .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"               }, // the two parts of the barcode are correletated and hence segged together
                    { .dict_id = { _SAM_Q1NAME }, .separator = "|"               },
-                   { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_COLONn, 3 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) 
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // Lane - single digit integer
-                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"               }, // Tile
-                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"               }, // X
-                   { .dict_id = { _SAM_Q6NAME }, .separator = "|"               }, // Y
-                   { .dict_id = { _SAM_Q7NAME },                                } } // number of reads merged together during the consensus analysis step 
+                   { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
+                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"               }, // Tile
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"               }, // X
+                   { .dict_id = { _SAM_Q5NAME }, .separator = "|"               }, // Y
+                   { .dict_id = { _SAM_Q6NAME },                                } } // number of reads merged together during the consensus analysis step 
 };
 
 // Example: ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000 (FASTQ only)
 static QnameContainer con_illumina_7gsFQ = {
     .repeats   = 1,
-    .nitems_lo = 8,
+    .nitems_lo = 7,
     .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = "|"               },
                    { .dict_id = { _SAM_Q1NAME }, .separator = "|"               },
-                   { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_COLONn, 3 } },  
+                   { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_COLONn, 4 } }, // instrument ID (alphanumeric) : Run ID (integer) : Flow Cell ID (alphanumeric) : Lane (single digit)
                    { .dict_id = { _SAM_Q3NAME }, .separator = ":"               },
                    { .dict_id = { _SAM_Q4NAME }, .separator = ":"               },
-                   { .dict_id = { _SAM_Q5NAME }, .separator = ":"               },
-                   { .dict_id = { _SAM_Q6NAME }                                 }, 
+                   { .dict_id = { _SAM_Q5NAME }                                 }, 
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
 };
 
@@ -271,16 +268,15 @@ static QnameContainer con_mgi_sap8 = {
 // Example: C2506230018:S:PRM72604270026:2:230346:R004:C032
 static QnameContainer con_mgi_7 = {  
     .repeats             = 1,
-    .nitems_lo           = 6,
-    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 3}       },  // C2506230018:S:PRM72604270026
-                             { .dict_id = { _SAM_Q1NAME }, .separator = ":"                    }, 
-                             { .dict_id = { _SAM_Q2NAME },                                     }, 
-                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // row
-                             { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // column
+    .nitems_lo           = 5,
+    .items               = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 4 }      }, // C2506230018:S:PRM72604270026:2
+                             { .dict_id = { _SAM_Q1NAME }, .separator = { CI0_FIXED_0_PAD, 6 } }, 
+                             { .dict_id = { _SAM_Q2NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // row
+                             { .dict_id = { _SAM_Q3NAME }, .separator = { CI0_FIXED_0_PAD, 3 } }, // column
                              { .dict_id = { _SAM_QmNAME }, I_AM_MATE                           } }
 };
 
-#define PX_mgi_7 { "", "", "", ":R", ":C", PX_MATE_FIXED_0_PAD }
+#define PX_mgi_7 { "", "", ":R", ":C", PX_MATE_FIXED_0_PAD }
 
 // example: M:0:FT100099999:1:C001R001:0:1220
 static QnameContainer con_mgi_mft = {
@@ -1083,31 +1079,32 @@ typedef struct QnameFlavorStruct {
     QnameContainer con;                   // container
     bool is_integer[MAX_QNAME_ITEMS], is_hex[MAX_QNAME_ITEMS], is_in_local[MAX_QNAME_ITEMS], is_numeric[MAX_QNAME_ITEMS]; // indexed according to order of items in the container (NOT by order of did_i)
     bool is_mated;                        // true means qname has a /1 or /2 - and that mates (defined by is_first/is_last SAM flags) have opposite /1 vs /2. This field is generated with qname_genarate_qfs_with_mate()
+    bool examples_malloced;               // true means memory for examples strings is allocated on the heap
 } QnameFlavorStruct;
 
 static QnameFlavorStruct qf[] = { 
 /*  mate    id             name             example                                       tech           fq_qname1_tech only_q con_template         validate_func  canon #sp integer_items       numeric_items   in-local            hex_items       srt ord1,2 rng    sqln bc1 bc2 cb1 cb2  len px_strs           */
     // QNAMEs generated by sequencers
     {},  { QF_ILLUM_7gsFQ, "Illumina-gsFQ", { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000" },   // must be before QF_ILLUM_7
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QNAME1, &con_illumina_7gsFQ, no_validate,    0,   6,  {3,4,5,6,-1},       {-1},           {3,5,6,-1},         {-1},           0,  5,6,   -1,-1, -1,  -1, -1, -1, -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QNAME1, &con_illumina_7gsFQ, val_illum_gs,   0,   5,  {3,4,5,-1},         {-1},           {3,5,6,-1},         {-1},           0,  4,5,   -1,-1, -1,  -1, -1, -1, -1,                       },
          { QF_ILLUM_7gs,   "Illumina-gs",   { "ATATA-ATGCATAG|ab|A00488:61:HMLGNDSXX:4:1101:4345:1000|1" },   
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QSAM,   &con_illumina_7gs,   no_validate,    '|', 7,  {3,4,5,6,7,-1},     {-1},           {3,5,6,-1},         {-1},           0,  5,6,   -1,-1, -1,  -1, -1, -1, -1,                       },
-    {},  { QF_ILLUM_7,     "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7,     val_illumina,   0,   4,  {1,2,3,4,-1},       {-1},           {1,3,4,-1},         {-1},           0,  3,4,   -1,-1, -1,  -1, -1, -1, -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QSAM,   &con_illumina_7gs,   val_illum_gs,   '|', 6,  {3,4,5,6,-1},       {-1},           {3,5,6,-1},         {-1},           0,  4,5,   -1,-1, -1,  -1, -1, -1, -1,                       },
+    {},  { QF_ILLUM_7,     "Illumina",      { "A00488:61:HMLGNDSXX:4:1101:4345:1000" },   TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7,     val_illumina,   0,   3,  {1,2,3,-1},         {-1},           {2,3,-1},           {-1},           0,  2,3,   -1,-1, -1,  -1, -1, -1, -1,                       },
     {},  { QF_ILLUM_7i,    "Illumina#bc",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000#CTGGGAAG" }, 
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7i,    val_illumina,   '#', 5,  {1,2,3,4,-1},       {-1},           {1,3,4,-1},         {-1},           0,  3,4,   -1,-1, -1,  5,  -1, -1, -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7i,    val_illumina,   '#', 4,  {1,2,3,-1},         {-1},           {2,3,-1},           {-1},           0,  2,3,   -1,-1, -1,  4,  -1, -1, -1,                       },
     {},  { QF_ILLUM_7umi,  "Illumina-umi",  { "A00488:61:HMLGNDSXX:4:1101:4345:1000;umi=ACCTTCCAA" },   
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7umi,  val_illumina,   ';', 9,  {1,2,3,4,-1},       {-1},           {1,3,4,5,-1},       {-1},           0,  3,4,   -1,-1, -1,  5,  -1, -1, -1, 0,  PX_illumina_7umi  },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7umi,  val_illumina,   ';', 8,  {1,2,3,-1},         {-1},           {2,3,4,-1},         {-1},           0,  2,3,   -1,-1, -1,  4,  -1, -1, -1, 0,  PX_illumina_7umi  },
     {},  { QF_ILLUM_7_bc,  "Illumina-bc",   { "A00488:61:HMLGNDSXX:4:1101:4345:1000:CAGACGCGCACATACTTTTCTCACG" }, 
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7bc,   val_illumina,   ':', 5,  {1,2,3,4,-1},       {-1},           {1,3,4,-1},         {-1},           0,  3,4,   -1,-1, -1,  5,  -1, -1, -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7bc,   val_illumina,   ':', 4,  {1,2,3,-1},         {-1},           {2,3,-1},           {-1},           0,  2,3,   -1,-1, -1,  4,  -1, -1, -1,                       },
     {},  { QF_ILLUM_7_2bc, "Illumina-2bc",  { "A00488:61:HMLGNDSXX:4:1101:4345:1000:GNTGTCA+GCGTTGT", }, 
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7bc2,  val_illumina,   ':', 6,  {1,2,3,4,-1},       {-1},           {1,3,4,-1},         {-1},           0,  3,4,   -1,-1, -1,  5,  6,  -1, -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7bc2,  val_illumina,   ':', 5,  {1,2,3,-1},         {-1},           {2,3,-1},           {-1},           0,  2,3,   -1,-1, -1,  4,  5,  -1, -1,                       },
     {},  { QF_ILLUM_7_rbc, "Illumina-rbc",  { "A00488:61:HMLGNDSXX:4:1101:4345:1000:rTGTATGTCCC" }, 
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7rbc,  val_illumina,   ':', 6,  {1,2,3,4,-1},       {-1},           {1,3,4,-1},         {-1},           0,  3,4,   -1,-1, -1,  5,  -1, -1, -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_7rbc,  val_illumina,   ':', 5,  {1,2,3,-1},         {-1},           {2,3,-1},           {-1},           0,  2,3,   -1,-1, -1,  4,  -1, -1, -1,                       },
     {},  { QF_ILLUM_7embS, "Illumina-embS", { "ST-E00314:354:H7J2YCCXY:1:1101:19025:1502 1:N:0:GAACGCAATA+ACAGTAAGAT" }, // only possible in SAM
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QSAM,   &con_illumina_embS,  val_illumina,   ' ', 5,  {1,2,3,4,-1},       {-1},           {1,3,4,-1},         {-1},           0,  3,4,   -1,-1, -1,  -1, -1, 5,  -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QSAM,   &con_illumina_embS,  val_illumina,   ' ', 4,  {1,2,3,-1},         {-1},           {2,3,-1},           {-1},           0,  2,3,   -1,-1, -1,  -1, -1, 4,  -1,                       },
     // observed as QNAME2 in NCBI (possibly with mate), SAM/BAM and when generated FASTQ from SAM/BAM
     {},  { QF_ILLUM_7emb_, "Illumina-emb_", { "A00180:28:HC3F5DRXX:2:2110:27453:21981_1:N:0:ATTACTCGATCT+GGCTCTGA", "A00488:61:HMLGNDSXX:4:1101:4345:1000_2:N:0" }, 
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_emb_,  val_illumina,   '_', 5,  {1,2,3,4,-1},       {-1},           {1,3,4,-1},         {-1},           0,  3,4,   -1,-1, -1,  -1, -1, 5,  -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_emb_,  val_illumina,   '_', 4,  {1,2,3,-1},         {-1},           {2,3,-1},           {-1},           0,  2,3,   -1,-1, -1,  -1, -1, 4,  -1,                       },
     {},  { QF_SINGULAR,    "Singular",      { "B05:000:FC2:4:1:272670:483" },             TECH_SINGULAR, TECH_NCBI,    QANY,   &con_singular,       no_validate,    0,   6,  {3,4,5,6,-1},       {1,-1},         {5,6,-1},           {-1},           0,  6,-1,  -1,-1, -1,  -1, -1, -1, -1, 0,  PX_SINGULAR       },
 
     {},  { QF_ELEMENT,     "Element",       { "AV250505:Q6177-5-8pool:1324334413:1:22105:0068:2686", "PLT-16:APP-0316:UNKNOWN_FLOWCELL:1:10102:0582:0027" },     
@@ -1125,8 +1122,8 @@ static QnameFlavorStruct qf[] = {
                                                                                           TECH_MGI,      TECH_NCBI,    QANY,   &con_mgi_new8,       val_mgi_new,    0,   6,  {-1},               {1,3,4,5,6,7,-1},{4,5,6,-1},        {-1},           0,  5,6,   -1,-1, -1,  -1, -1, 7,  8,  0,  PX_mgi_new        }, // 15.0.51 
     {},  { QF_MGI_SAP8,    "MGI-SAP8",      { "SOME:2:PREFIX:L01:R001C012:0000:8199" },          
                                                                                           TECH_MGI,      TECH_NCBI,    QANY,   &con_mgi_sap8,       no_validate,    0,   6,  {-1},               {1,2,3,4,5,-1}, {2,3,4,5,-1},       {-1},           0,  4,-1,  -1,-1, -1,  -1, -1, -1, -1, 0,  PX_mgi_sap8       }, // 15.0.70
-    {},  { QF_MGI_7,       "MGI-7",         { "C2506230018:S:PRM72604270026:2:230346:R004:C032" },         
-                                                                                          TECH_MGI,      TECH_NCBI,    QANY,   &con_mgi_7,          no_validate,    0,   6,  {1,2,-1},           {3,4,-1},       {1,2,3,4,-1},       {-1},           0,  -1,-1, -1,-1, -1,  -1, -1, -1, -1, 0,  PX_mgi_7          }, // 15.0.84
+    {},  { QF_MGI_7,       "MGI-7",         { "C2506230018:S:PRM72604270026:2:030346:R004:C032" },         
+                                                                                          TECH_MGI,      TECH_NCBI,    QANY,   &con_mgi_7,          no_validate,    0,   5,  {-1},               {1,2,3,-1},     {1,2,3,-1},         {-1},           0,  -1,-1, -1,-1, -1,  -1, -1, -1, -1, 0,  PX_mgi_7          }, // 15.0.84
     {},  { QF_MGI_MFT,     "MGI-MFT",       { "M:0:FT100099999:1:C001R001:0:1220" },          
                                                                                           TECH_MGI,      TECH_NCBI,    QANY,   &con_mgi_mft,        no_validate,    0,   8,  {3,6,7,-1},         {4,5,-1},       {4,5,6,7,-1},       {-1},           0,  6,-1,  -1,-1, -1,  -1, -1, -1, -1, 0,  PX_mgi_mft        }, // 15.0.76
     {},  { QF_MGI_varlen,  "MGI-varlen",    { "8A_V100004684L3C001R029311637", "DP8400010271TLL1C005R0511863479" },          

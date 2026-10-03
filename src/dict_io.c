@@ -25,9 +25,9 @@ static void dict_io_prepare_for_assign_codec (VBlockP vb)
 {
     // get next non-too-small dict
     while (next_ctx->dcodec != CODEC_UNKNOWN && 
-           next_ctx < ZCTX(z_file->ca.num_contexts)) next_ctx++;
+           next_ctx < ZCTX(z_file->ca._num_contexts)) next_ctx++;
 
-    if (next_ctx < ZCTX(z_file->ca.num_contexts)) {
+    if (next_ctx < ZCTX(z_file->ca._num_contexts)) {
         vb->fragment_ctx = next_ctx;
         vb->dispatch = READY_TO_COMPUTE;
         next_ctx++;
@@ -80,7 +80,7 @@ static unsigned frag_size;
 // compression and decompression
 static void dict_io_prepare_for_compress (VBlockP vb)
 {
-    while (frag_ctx < ZCTX(z_file->ca.num_contexts)) {
+    while (frag_ctx < ZCTX(z_file->ca._num_contexts)) {
 
         if (!frag_next_node) {
             if (!frag_ctx->nodes.len ||
@@ -290,16 +290,16 @@ static void dict_io_uncompress_one_vb (VBlockP vb)
 
     // uncompress to a location within the dict buffer - while multiple threads are uncompressing into 
     // non-overlappying regions in the same buffer in parallel
-    buf_overlay_partial (vb, &vb->scratch, &vb->fragment_ctx->dict, BNUM64(vb->fragment_ctx->dict, vb->fragment_start), "scratch");
-    zfile_uncompress_section (vb, header, &vb->scratch, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
-    buf_destroy (vb->scratch);
+    Buffer frag_buf;
+    buf_superimpose (vb, &frag_buf, &vb->fragment_ctx->dict, BNUM64(vb->fragment_ctx->dict, vb->fragment_start), "frag_buf");
+    zfile_uncompress_section (vb, header, &frag_buf, NULL, 0, SEC_DICT); // NULL name prevents buf_alloc
 
 done:
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 }
 
-// PIZ
-static void dict_io_dict_build_word_list_one (ContextP zctx)
+// PIZ and also b250_mistmatch_diagnose
+void dict_io_dict_build_word_list_one (ContextP zctx)
 {
     if (!zctx->word_list.len || zctx->word_list.data) return; // skip if 1. no words, or 2. already built
 

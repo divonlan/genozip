@@ -3869,7 +3869,7 @@ deflate_init_offset_slot_full(struct libdeflate_compressor *c)
 
 LIBDEFLATEAPI struct libdeflate_compressor *
 libdeflate_alloc_compressor_ex(VBlockP vb, int compression_level,
-			       const struct libdeflate_options *options, FUNCLINE)
+			       const struct libdeflate_options *options, Caller caller)
 {
 	struct libdeflate_compressor *c;
 	size_t size = offsetof(struct libdeflate_compressor, p);
@@ -3901,7 +3901,7 @@ libdeflate_alloc_compressor_ex(VBlockP vb, int compression_level,
 	if (!vb)
 		return NULL; // divon
 
-	c = libdeflate_aligned_malloc (vb, MATCHFINDER_MEM_ALIGNMENT, size, func, code_line);
+	c = libdeflate_aligned_malloc (vb, MATCHFINDER_MEM_ALIGNMENT, size, caller);
 	if (!c)
 		return NULL;
 
@@ -4010,12 +4010,12 @@ libdeflate_alloc_compressor_ex(VBlockP vb, int compression_level,
 
 
 LIBDEFLATEAPI struct libdeflate_compressor *
-libdeflate_alloc_compressor(VBlockP vb, int compression_level, FUNCLINE)
+libdeflate_alloc_compressor(VBlockP vb, int compression_level, Caller caller)
 {
 	struct libdeflate_options defaults = {
 		.sizeof_options = sizeof(defaults)
 	};
-	return libdeflate_alloc_compressor_ex (vb, compression_level, &defaults, func, code_line);
+	return libdeflate_alloc_compressor_ex (vb, compression_level, &defaults, caller);
 }
 
 LIBDEFLATEAPI size_t
@@ -4063,10 +4063,10 @@ libdeflate_deflate_compress(struct libdeflate_compressor *c,
 }
 
 LIBDEFLATEAPI void
-libdeflate_free_compressor(struct libdeflate_compressor *c, FUNCLINE)
+libdeflate_free_compressor(struct libdeflate_compressor *c, Caller caller)
 {
 	if (c)
-		libdeflate_aligned_free(c->vb, c, func, code_line);
+		libdeflate_aligned_free(c->vb, c, caller);
 }
 
 unsigned int

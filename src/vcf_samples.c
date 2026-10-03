@@ -285,7 +285,7 @@ void vcf_seg_FORMAT_mux_by_dosagexDP (VBlockVCFP vb, ContextP ctx, STRp(cell), M
     ASSERT (mux.m->num_channels == N_DOSAGEx7_IN_MUX || mux.m->num_channels == N_DOSAGEx51_IN_MUX, 
             "bad num_channels=%u", mux.m->num_channels);
 
-    if (!ctx_encountered (VB, FORMAT_DP)) goto cannot_use_special; // no DP in the FORMAT of this line
+    if (!ctx_encountered_in_sample (VB, FORMAT_DP)) goto cannot_use_special; // no DP in the FORMAT of this line
 
     int64_t DP;
     if (!str_get_int (STRlst (FORMAT_DP), &DP)) // in some files, DP may be '.'
@@ -355,9 +355,9 @@ static WordIndex vcf_seg_FORMAT_minus (VBlockVCFP vb, ContextP ctx,
     // we can use the formula only if AD,F1R1 were encountered in this line, and that they have the number of items as us
     if (str && !str_get_int (STRa(str), &value)) goto fallback;
 
-    ctx_set_last_value (VB, ctx, value);
+    ctx_set_last_value_in_sample (VB, ctx, value);
 
-    bool use_formula = ctx_has_value (VB, base_ctx->did_i) && ctx_has_value (VB, minus_ctx->did_i) &&
+    bool use_formula = ctx_has_value_in_sample (VB, base_ctx->did_i) && ctx_has_value_in_sample (VB, minus_ctx->did_i) &&
                        value == base_ctx->last_value.i - minus_ctx->last_value.i;
 
     // case: formula works - seg as minus
@@ -388,7 +388,7 @@ static void vcf_seg_FORMAT_transposed (VBlockVCFP vb, ContextP ctx,
         ASSSEG (!cell || str_get_uint32 (STRa(cell), &value), 
                 "Expecting %s=\"%.*s\" to be an integer or '.'", ctx->tag_name, STRf(cell));
 
-        ctx_set_last_value (VB, ctx, (int64_t)value);
+        ctx_set_last_value_in_sample (VB, ctx, (int64_t)value);
 
         dyn_int_append (VB, ctx, value, add_bytes);
     }
@@ -426,7 +426,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, ContainerP con
 
         if (seg_item_cb) {
             if (str_get_int (STRi(item, i), &values[i])) 
-                ctx_set_last_value (VB, item_ctxs[i], values[i]);
+                ctx_set_last_value_in_sample (VB, item_ctxs[i], values[i]);
             else
                 seg_item_cb = NULL; // can't use callback if not all items are int
         }
@@ -452,7 +452,7 @@ static WordIndex vcf_seg_FORMAT_A_R (VBlockVCFP vb, ContextP ctx, ContainerP con
                 seg_by_ctx (VB, STRi(item, i), item_ctxs[i], item_lens[i]);
     
         if (ctx->flags.store == STORE_INT)
-            ctx_set_last_value (VB, ctx, sum);
+            ctx_set_last_value_in_sample (VB, ctx, sum);
     }
 
     ctx->last_txt.len = n_items; // seg only: for use by vcf_seg_*_items callbacks
@@ -474,15 +474,15 @@ static inline void vcf_seg_FORMAT_AD_varscan (VBlockVCFP vb, ContextP ctx, STRp(
 {
     // case: AD = DP-RD
     int64_t ad;
-    if (ctx_has_value (VB, FORMAT_DP) &&
-        ctx_has_value (VB, FORMAT_RD) && 
+    if (ctx_has_value_in_sample (VB, FORMAT_DP) &&
+        ctx_has_value_in_sample (VB, FORMAT_RD) && 
         str_get_int (STRa(ad_str), &ad) &&
         ad == CTX(FORMAT_DP)->last_value.i - CTX(FORMAT_RD)->last_value.i) 
     
         vcf_seg_FORMAT_minus (vb, ctx, 0, ad_str_len, ad, CTX(FORMAT_DP), CTX(FORMAT_RD), STRa(ad_varscan_snip));
 
     // case: we have only one sample, and INFO/ADP - we expect FORMAT/AD and INFO/ADP to be related
-    else if (ctx_has_value_in_line_(vb, CTX(INFO_ADP)) && vcf_num_samples==1)
+    else if (ctx_has_value_in_line (vb, INFO_ADP) && vcf_num_samples==1)
         seg_delta_vs_other_localS (VB, ctx, CTX(INFO_ADP), STRa(ad_str), -1);
 
     else
@@ -497,11 +497,11 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), Conte
     for (unsigned i=0; i < n_items; i++) 
         sum_ad += values[i];
 
-    ctx_set_last_value (VB, ctx, sum_ad); // AD value is sum of its items
+    ctx_set_last_value_in_sample (VB, ctx, sum_ad); // AD value is sum of its items
 
     // if we have ADALL in this file, we delta vs ADALL if we have it in this sample, or seg normally if not
     if (segconf_has(FORMAT_ADALL) && ctx->did_i == FORMAT_AD) { // note: we can't delta vs ADALL unless segconf says so, bc it can ruin other fields that rely on peeking AD, eg AB
-        bool has_adall_this_sample = ctx_encountered (VB, FORMAT_ADALL); 
+        bool has_adall_this_sample = ctx_encountered_in_sample (VB, FORMAT_ADALL); 
     
         for (unsigned i=0; i < n_items; i++) 
             // case: we had ADALL preceeding in this sample, seg as delta vs. ADALL 
@@ -526,7 +526,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), Conte
             else
                 seg_integer_or_not (VB, item_ctxs[i], STRi(item, i), item_lens[i]);
         
-            ctx_set_last_value (VB, item_ctxs[i], values[i]); // consumed by FORMAT_RO/AO
+            ctx_set_last_value_in_sample (VB, item_ctxs[i], values[i]); // consumed by FORMAT_RO/AO
         }
 
     memcpy (vb->ad_values, values, n_items * sizeof (values[0]));
@@ -534,7 +534,7 @@ static void vcf_seg_AD_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), Conte
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_FORMAT_AD0)
 {
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, 0 }, 1, false, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, 0 }, 1, false, THIS_CODE_LINE); // note: nul-termianted as expected of a dictionary snip
 
     new_value->i = ctx->last_value.i; // calculated by ^, equals Σ(ADᵢ)
 
@@ -560,8 +560,8 @@ static void vcf_seg_AD_complement_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(i
 
     // we can use the formula only if AD,F1R1 were encountered in this line, and that they have the number of items as us
     ContextP ad_ctx=CTX(FORMAT_AD), other_ctx;
-    bool use_formula = ctx_encountered (VB, FORMAT_AD) &&
-                       ctx_encountered_by_dict_id (VB, other_dict_id, &other_ctx) &&
+    bool use_formula = ctx_encountered_in_sample (VB, FORMAT_AD) &&
+                       ctx_encountered_in_sample_by_dict_id (VB, other_dict_id, &other_ctx) &&
                        ad_ctx->last_txt.len    == n_items &&  // last_txt_len is # of items stored by vcf_seg_FORMAT_A_R 
                        other_ctx->last_txt.len == n_items;
 
@@ -605,7 +605,7 @@ static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), Conte
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
     ContextP ad_ctx=CTX(FORMAT_AD);
-    bool use_formula = ctx_encountered (VB, FORMAT_AD) && ad_ctx->last_txt.len == 2 && n_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
+    bool use_formula = ctx_encountered_in_sample (VB, FORMAT_AD) && ad_ctx->last_txt.len == 2 && n_items == 4; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
     for (int i=0; i < n_items; i++) {
         
@@ -632,7 +632,7 @@ static void vcf_seg_SB_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), Conte
 static void vcf_seg_SAC_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), ContextP *item_ctxs, const int64_t *values)
 {
     // verify that AD was encountered in this line, and that it has exactly half the number of items as us
-    bool use_formula = ctx_encountered (VB, FORMAT_AD) && 2 * CTX(FORMAT_AD)->last_txt.len == n_items; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
+    bool use_formula = ctx_encountered_in_sample (VB, FORMAT_AD) && 2 * CTX(FORMAT_AD)->last_txt.len == n_items; // note: last_txt_len = # of items stored by vcf_seg_FORMAT_A_R
 
     for (unsigned i=0; i < n_items; i++) {
 
@@ -652,8 +652,8 @@ static void vcf_seg_SAC_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), Cont
 //--------------------------
 static void vcf_seg_ICNT (VBlockVCFP vb, ContextP ctx, STRp(ICNT))
 {
-    if (ctx_encountered (VB, FORMAT_AD)) {        
-        str_split_ints (ICNT, ICNT_len, 0, ',', icnt, false);
+    if (ctx_encountered_in_sample (VB, FORMAT_AD)) {        
+        str_split_unsigneds (ICNT, ICNT_len, 0, ',', icnt, false);
         if (!n_icnts) goto fallback;
 
         uint8_t snip[2 + n_icnts];
@@ -699,11 +699,11 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_ICNT)
 // --------------------------
 static void vcf_seg_SPL (VBlockVCFP vb, ContextP ctx, STRp(SPL))
 {
-    if (ctx_encountered (VB, FORMAT_PL)) {
+    if (ctx_encountered_in_sample (VB, FORMAT_PL)) {
         STRlast (PL, FORMAT_PL);
 
-        str_split_ints (SPL, SPL_len, 0, ',', spl, false);
-        str_split_ints (PL,  PL_len,  0, ',', pl , false);
+        str_split_unsigneds (SPL, SPL_len, 0, ',', spl, false);
+        str_split_unsigneds (PL,  PL_len,  0, ',', pl , false);
 
         if (!n_pls || n_spls != n_pls) goto fallback;
 
@@ -732,7 +732,7 @@ fallback:
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_SPL)
 {
     STRlast (PL, FORMAT_PL);
-    str_split_ints (PL, PL_len, snip_len/*0 or correct number*/, ',', pl,  false);
+    str_split_unsigneds (PL, PL_len, snip_len/*0 or correct number*/, ',', pl,  false);
 
     for (int i=0; i < n_pls; i++) {
         int64_t delta = (snip_len ? ((int64_t)(uint8_t)snip[i] - 144) : 0);
@@ -754,8 +754,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_SPL)
 // Seg the even items as delta from F2R1 and odd items as a MINUS snip between AD and the preceding even item
 static void vcf_seg_MB_items (VBlockVCFP vb, ContextP ctx, STR𐤐s(item), ContextP *item_ctxs, const int64_t *values)
 {
-    bool use_formula_even = ctx_encountered (VB, FORMAT_F2R1) && CTX(FORMAT_F2R1)->last_txt.len == 2 && n_items == 4;
-    bool use_formula_odd  = ctx_encountered (VB, FORMAT_AD)   && CTX(FORMAT_AD)  ->last_txt.len == 2 && n_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R
+    bool use_formula_even = ctx_encountered_in_sample (VB, FORMAT_F2R1) && CTX(FORMAT_F2R1)->last_txt.len == 2 && n_items == 4;
+    bool use_formula_odd  = ctx_encountered_in_sample (VB, FORMAT_AD)   && CTX(FORMAT_AD)  ->last_txt.len == 2 && n_items == 4; // last_txt_len is # of items set by vcf_seg_FORMAT_A_R
 
     for (unsigned i=0; i < n_items; i++) {
 
@@ -807,7 +807,7 @@ static inline void vcf_seg_FORMAT_RGQ (VBlockVCFP vb, ContextP ctx, STRp(rgq), C
     // case: GT[0] is not '.' - seg the value of RGQ multiplexed by DP
     if (gt[0] != '.') {
         if (!segconf_has(FORMAT_DP)          || // segconf didn't detect FORMAT/DP so we didn't initialize the mux
-            !ctx_encountered (VB, FORMAT_DP) || // no DP in the FORMAT of this line
+            !ctx_encountered_in_sample (VB, FORMAT_DP) || // no DP in the FORMAT of this line
             segconf_running) goto fallback;     // multiplexer not initalized yet 
 
         int64_t DP;
@@ -868,13 +868,13 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
             segconf.use_null_DP_method = true;
         
         if (!segconf.FMT_DP_method) {
-            if (ctx_has_value (VB, FORMAT_SDP)) // SDP has priority of AD (in files with SDP, AD means something else)
+            if (ctx_has_value_in_sample (VB, FORMAT_SDP)) // SDP has priority of AD (in files with SDP, AD means something else)
                 segconf.FMT_DP_method = BY_SDP;
             
-            else if (ctx_has_value (VB, FORMAT_AD)) 
+            else if (ctx_has_value_in_sample (VB, FORMAT_AD)) 
                 segconf.FMT_DP_method = BY_AD;
 
-            else if (vcf_num_samples == 1 && ctx_has_value (VB, INFO_DP))
+            else if (vcf_num_samples == 1 && ctx_has_value_in_line (VB, INFO_DP))
                 segconf.FMT_DP_method = BY_INFO_DP;
         }
 
@@ -884,7 +884,7 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
     else if ((segconf.FMT_DP_method == BY_AD || segconf.FMT_DP_method == BY_SDP) && !segconf_running) {
         Did other_did_i = (segconf.FMT_DP_method == BY_AD ? FORMAT_AD : FORMAT_SDP);
 
-        bool other_is_in_FORMAT = ctx_encountered (VB, other_did_i); // note: DP is always segged after AD and SDP, regardless of their order in FORMAT
+        bool other_is_in_FORMAT = ctx_encountered_in_sample (VB, other_did_i); // note: DP is always segged after AD and SDP, regardless of their order in FORMAT
         int channel_i = other_is_in_FORMAT;
 
         ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, &vb->mux_FORMAT_DP, channel_i);
@@ -897,12 +897,12 @@ static inline void vcf_seg_FORMAT_DP (VBlockVCFP vb)
         
         seg_by_ctx (VB, STRa(vb->mux_FORMAT_DP.snip), ctx, 0); 
 
-        ctx_set_last_value (VB, ctx, channel_ctx->last_value); // propagate up       
+        ctx_set_last_value_in_sample (VB, ctx, channel_ctx->last_value); // propagate up       
     }
     
     // case: seg against INFO/DP or not
     else if (segconf.FMT_DP_method == BY_INFO_DP) {
-        bool info_dp_is_int = ctx_has_value_in_line_(VB, CTX(INFO_DP));
+        bool info_dp_is_int = ctx_has_value_in_line (VB, INFO_DP);
 
         // special means: if FORMAT/DP>=1, INFO/DP is an integer, if FORMAT/DP==0, INFO/DP has no integer value
         if (has_value && ((value > 0) == info_dp_is_int)) {
@@ -938,7 +938,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_FORMAT_DP)
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DP_by_DP_single)
 {
-    int64_t info_dp = ctx_has_value_in_line_(vb, CTX(INFO_DP)) ? CTX(INFO_DP)->last_value.i : 0;
+    int64_t info_dp = ctx_has_value_in_line (vb, INFO_DP) ? CTX(INFO_DP)->last_value.i : 0;
 
     new_value->i = atoi (snip) + info_dp;
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
@@ -1013,7 +1013,7 @@ static inline void vcf_seg_FORMAT_AB (VBlockVCFP vb, ContextP ctx, STRp(ab))
     // vcf_seg_FORMAT_AB_verify_channel1 and rollback if prediction is wrong
     if (channel_i == 1) {
         seg_set_last_txt (VB, ctx, STRa(ab));
-        ctx_set_last_value (VB, ctx, (ValueType){.i = 1}); // need verification
+        ctx_set_last_value_in_sample (VB, ctx, (ValueType){.i = 1}); // need verification
 
         seg_create_rollback_point (VB, NULL, 1, FORMAT_AB); 
     }
@@ -1041,7 +1041,7 @@ static inline void vcf_seg_FORMAT_AB_verify_channel1 (VBlockVCFP vb)
     // rollback if we don't have AD0, AD1 this line, or if their value is not as expected by the formula
     if (!ad0_ctx || !ad1_ctx) goto rollback;
 
-    if (!ctx_has_value (VB, ad0_ctx->did_i) || !ctx_has_value (VB, ad1_ctx->did_i)) goto rollback;
+    if (!ctx_has_value_in_sample (VB, ad0_ctx->did_i) || !ctx_has_value_in_sample (VB, ad1_ctx->did_i)) goto rollback;
 
     double ad0 = ad0_ctx->last_value.i;
     double ad1 = ad1_ctx->last_value.i;
@@ -1134,7 +1134,7 @@ static inline void vcf_seg_FORMAT_GP (VBlockVCFP vb, ContextP ctx, STRp(gp))
 static inline void vcf_seg_FORMAT_PL (VBlockVCFP vb, ContextP ctx, STRp(PL))
 {
     if (segconf_running && !segconf.has_DP_before_PL) 
-        segconf.has_DP_before_PL = ctx_encountered (VB, FORMAT_DP);
+        segconf.has_DP_before_PL = ctx_encountered_in_sample (VB, FORMAT_DP);
 
     seg_set_last_txt (VB, ctx, STRa(PL)); // consumed by GQ and SPL 
        
@@ -1222,7 +1222,7 @@ void vcf_FORMAT_PL_after_vbs (Did did_i) // PL or LPL
 // along with the floating point format to allow exact reconstruction
 static inline WordIndex vcf_seg_FORMAT_DS (VBlockVCFP vb, ContextP ctx, rom ds, unsigned ds_len)
 {
-    int64_t dosage = ctx_has_value (VB, FORMAT_GT) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage stored here by vcf_seg_FORMAT_GT
+    int64_t dosage = ctx_has_value_in_sample (VB, FORMAT_GT) ? CTX(FORMAT_GT)->last_value.i : -1; // dosage stored here by vcf_seg_FORMAT_GT
     double ds_val;
     unsigned format_len;
     char snip[FLOAT_FORMAT_LEN + 20] = { SNIP_SPECIAL, VCF_SPECIAL_DS }; 
@@ -1277,7 +1277,7 @@ static inline void vcf_seg_FORMAT_BX (VBlockVCFP vb, ContextP ctx, STRp(BX))
 
 static void vcf_seg_by_DP_cutoff (VBlockVCFP vb, ContextP ctx, STRp(value), Multiplexer2P mux, int cutoff)
 {
-    if (!ctx_encountered (VB, FORMAT_DP)) fallback: { // no DP in the FORMAT of this line
+    if (!ctx_encountered_in_sample (VB, FORMAT_DP)) fallback: { // no DP in the FORMAT of this line
         vcf_seg_field_fallback (vb, ctx, STRa(value));
         return;
     }
@@ -1303,30 +1303,9 @@ static void vcf_seg_by_DP_cutoff (VBlockVCFP vb, ContextP ctx, STRp(value), Mult
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_DEMUX_BY_DP_CUTOFF)
 {
     int cutoff = snip[snip_len-1] - 32;
-    int channel_i = (ctx_has_value (VB, FORMAT_DP) && CTX(FORMAT_DP)->last_value.i > cutoff);
+    int channel_i = (ctx_has_value_in_sample (VB, FORMAT_DP) && CTX(FORMAT_DP)->last_value.i > cutoff);
     
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
-}
-
-static rom error_format_field (unsigned n_items, ContextP *ctxs)
-{
-    static char format[256];
-    unsigned len=0;
-    for (unsigned i=0; i < n_items; i++) 
-        len += strlen (ctxs[i]->tag_name) + 1;
-
-    if (len > sizeof format-1) return "<FORMAT too long to display>";
-
-    len=0;
-    for (unsigned i=0; i < n_items; i++) {
-        unsigned one_len = strlen (ctxs[i]->tag_name);
-        memcpy (&format[len], ctxs[i]->tag_name, one_len); 
-        len += one_len;
-        format[len++] = ':';
-    } 
-
-    format[len-1] = 0;
-    return format;
 }
 
 // ----------
@@ -1343,8 +1322,8 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl,
     
     str_split (sample, sample_len, con_nitems (format) - segconf.vcf_sample_copy, ':', sf, false);
 
-    ASSVCF (n_sfs, "Sample %u has too many subfields - FORMAT field \"%s\" specifies only %u: \"%.*s\"", 
-            vb->sample_i+1, error_format_field (con_nitems (format), ctxs), con_nitems (format), STRf(sample));
+    ASSVCF (n_sfs, "Sample %u has too many subfields - FORMAT field \"%.*s\" specifies only %u: \"%.*s\"", 
+            vb->sample_i+1, STRlstf(VCF_FORMAT), con_nitems (format) - segconf.vcf_sample_copy, STRf(sample));
 
     for (unsigned i=0; i < n_sfs; i++) { 
         START_TIMER;
@@ -1432,10 +1411,10 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl,
         // case: MIN_DP - it is slightly smaller and usually equal to DP - we store MIN_DP as the delta DP-MIN_DP
         // note: the delta is vs. the DP field that preceeds MIN_DP - we take the DP as 0 there is no DP that preceeds
         case _FORMAT_MIN_DP :
-            COND (ctx_has_value (VB, FORMAT_DP), seg_delta_vs_other_localS (VB, ctx, CTX(FORMAT_DP), STRi(sf, i), -1));
+            COND (ctx_has_value_in_sample (VB, FORMAT_DP), seg_delta_vs_other_localS (VB, ctx, CTX(FORMAT_DP), STRi(sf, i), -1));
 
         case _FORMAT_SDP   :
-            if (ctx_has_value_in_line_(VB, CTX(INFO_ADP)))
+            if (ctx_has_value_in_line (VB, INFO_ADP))
                 seg_delta_vs_other_localS (VB, ctx, CTX(INFO_ADP), STRi(sf, i), -1);
             else goto fallback;
             break;
@@ -1557,11 +1536,11 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl,
         } // switch
 
         int64_t value;
-        if (ctx->flags.store == STORE_INT && !ctx_has_value(VB, ctx->did_i) &&  // not already set
+        if (ctx->flags.store == STORE_INT && !ctx_has_value_in_sample(VB, ctx->did_i) &&  // not already set
             str_get_int (STRi(sf, i), &value))
-            ctx_set_last_value (VB, ctx, value);
+            ctx_set_last_value_in_sample (VB, ctx, value);
         else        
-            ctx_set_encountered (VB, ctx);
+            ctx_set_encountered_in_sample (VB, ctx);
 
         COPY_TIMER_SEG_FIELD (ctx->did_i);
     }
@@ -1579,15 +1558,15 @@ static inline unsigned vcf_seg_one_sample (VBlockVCFP vb, ZipDataLineVCF𐤐 dl,
     }
     
     // verify AB if its channel 1
-    if (ctx_has_value (VB, FORMAT_AB))
+    if (ctx_has_value_in_sample (VB, FORMAT_AB))
         vcf_seg_FORMAT_AB_verify_channel1 (vb);
 
     // seg DP (must be after AD, SDP)
-    if (ctx_encountered (VB, FORMAT_DP))
+    if (ctx_encountered_in_sample (VB, FORMAT_DP))
         vcf_seg_FORMAT_DP (vb); 
 
     // finally seg GQ if we have it (must be after after GP, PL, DP)
-    if (segconf_has(FORMAT_GQ) && ctx_encountered (VB, FORMAT_GQ))
+    if (segconf_has(FORMAT_GQ) && ctx_encountered_in_sample (VB, FORMAT_GQ))
         vcf_seg_FORMAT_GQ (vb);
 
     COPY_TIMER (vcf_seg_one_sample);
@@ -1680,7 +1659,7 @@ rom vcf_seg_samples (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, int32_t len, char *ne
 
     container_seg (vb, ctx, &format, 0, 0, format.repeats + num_colons); // account for : and \t \r \n separators
 
-    ctx_set_last_value (VB, ctx, (ValueType){ .i = format.repeats });
+    ctx_set_last_value_in_sample (VB, ctx, (ValueType){ .i = format.repeats });
  
     COPY_TIMER (vcf_seg_samples);
     return next_field;

@@ -23,6 +23,8 @@ extern WordIndex hash_get_entry_for_seg (VBlockP segging_vb, ContextP vctx, STRp
 
 extern bool hash_segconf_does_entry_exist (VBlockP vb, ContextP vctx, STRp(snip));
 
+extern uint32_t hash_crc32 (STRp(snip));
+
 // tested hash table sizes up to 5M. turns out smaller tables (up to a point) are faster, despite having longer
 // average linked lists. probably bc the CPU can store the entire hash and nodes arrays in L1 or L2
 // memory cache during segging

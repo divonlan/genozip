@@ -15,9 +15,109 @@
 #include "refhash.h"
 #include "dyn_int.h"
 
+static alignas(16) const char bam_base_codes[16] = "=ACMGRSVTWYHKDBN";
+
 //---------------
 // Shared ZIP/PIZ
 //---------------
+
+rom bam_seq_display (bytes seq, uint32_t l_seq) // caller should free memory
+{
+    char *str = MALLOC (l_seq + 2);
+
+    for (uint32_t i=0; i < (l_seq+1)/2; i++) {
+        str[i*2]   = bam_base_codes[seq[i] >> 4];
+        str[i*2+1] = bam_base_codes[seq[i] & 0xf];
+    }
+
+    str[l_seq] = 0;
+    return str;
+}
+
+// re-writes BAM format SEQ into textual SEQ
+void bam_seq_to_sam (VBlockP vb, bytes𐤐 bam_seq, 
+                     uint32_t seq_len,       // bases, not bytes
+                     bool start_mid_byte,    // ignore first nibble of bam_seq (seq_len doesn't include the ignored nibble)
+                     bool test_final_nibble, // if true, we test that the final nibble, if unused, is 0, and warn if not
+                     BufferP out,            // appends to end of buffer - caller should allocate seq_len+1 (+1 for last half-byte) 
+                     bool is_from_zip_cb)    // don't account for time when codec-compressing, as the codecs account for their own time
+{
+    START_TIMER;
+        
+    ASSERT (out->len32 + seq_len + 2 <= out->size, "%s: out allocation too small", LN_NAME);
+
+    if (!seq_len) {
+        BNXTc (*out) = '*';
+        return;        
+    }
+
+    // we implement "start_mid_byte" by converting the redudant base too, but starting 1 character before in the buffer 
+    char save = 0;
+    if (start_mid_byte) {
+        out->len32--;
+        seq_len++;
+        save = *BAFTc(*out); // this is the byte we will overwrite, and recover it later. possibly, the fence if the buffer is empty;
+    }
+    
+    unaligned_uint16_t *restrict sam_seq = (unaligned_uint16_t *)BAFTc(*out);
+    uint32_t num_bytes = (seq_len + 1) / 2;
+    uint32_t i=0;
+
+#ifdef __x86_64__  // note: AVX2 support enforced by arch_initialize   
+    const __m256i bam_base_codes_m256i = _mm256_setr_epi8 (
+        '=', 'A', 'C', 'M', 'G', 'R', 'S', 'V', 'T', 'W', 'Y', 'H', 'K', 'D', 'B', 'N',
+        '=', 'A', 'C', 'M', 'G', 'R', 'S', 'V', 'T', 'W', 'Y', 'H', 'K', 'D', 'B', 'N'
+    );
+
+    const __m256i mask_low = _mm256_set1_epi8 (0x0F);
+
+    // process 32 BAM bytes (64 bases) per iteration
+    for (; i + 32 <= num_bytes; i += 32) {
+        __m256i raw = _mm256_loadu_si256 ((const __m256i*)(bam_seq + i)); // unaligned load
+
+        // extract high (first base) and low (second base) nibbles
+        __m256i high_nibbles = _mm256_and_si256 (_mm256_srli_epi16(raw, 4), mask_low);
+        __m256i low_nibbles  = _mm256_and_si256 (raw, mask_low);
+
+        // hardware vector lookup
+        __m256i ascii_first  = _mm256_shuffle_epi8 (bam_base_codes_m256i, high_nibbles);
+        __m256i ascii_second = _mm256_shuffle_epi8 (bam_base_codes_m256i, low_nibbles);
+
+        // interleave (unpacking in 128-bit lanes)
+        __m256i unp_lo = _mm256_unpacklo_epi8 (ascii_first, ascii_second); // Lane0-Lo, Lane1-Lo
+        __m256i unp_hi = _mm256_unpackhi_epi8 (ascii_first, ascii_second); // Lane0-Hi, Lane1-Hi
+
+        // re-align 128-bit lanes into continuous 256-bit sequential order
+        __m256i out0 = _mm256_permute2x128_si256 (unp_lo, unp_hi, 0x20); // Lane0-Lo | Lane0-Hi
+        __m256i out1 = _mm256_permute2x128_si256 (unp_lo, unp_hi, 0x31); // Lane1-Lo | Lane1-Hi
+
+        // store 64 bases (32x uint16_t words) - unaligned
+        _mm256_storeu_si256 ((__m256i*)(sam_seq + i), out0);
+        _mm256_storeu_si256 ((__m256i*)(sam_seq + i + 16), out1);
+    }
+#endif
+
+    // remaining tail bytes (or all bytes if not using AVX2): 2 bases at a time
+    for (; i < num_bytes; i++)
+        sam_seq[i] =  (uint16_t)bam_base_codes[bam_seq[i] >> 4]
+                   | ((uint16_t)bam_base_codes[bam_seq[i] & 0x0F] << 8);
+
+    if (start_mid_byte) {
+        *BAFTc(*out) = save;
+        out->len32 += seq_len;      
+        seq_len--;
+    }
+    else
+        out->len32 += seq_len;
+
+    ASSERTW (!test_final_nibble || !(seq_len % 2) || (*BAFTc (*out)=='='), 
+             _WRN "%s: bam_seq_to_sam: expecting the unused lower 4 bits of last seq byte in an odd-length seq_len=%u to be 0, but its not. This will cause an incorrect digest",
+             LN_NAME, seq_len);
+
+    *BAFTc(*out) = 0; // nul-terminate after end of seq
+    
+    if (!is_from_zip_cb) COPY_TIMER(bam_seq_to_sam);
+}
 
 // called when SEQ in a prim or supp/sec line is segged against ref against prim: 
 // Sets vb->mismatch_bases_by_SEQ. ZIP: also sets vb->md_verified and. PIZ: also returns sqbitmap of this line in line_sqbitmap 
@@ -41,7 +141,7 @@ static bool sam_analyze_copied_SEQ (VBlockSAMP vb, STRp(seq), const PosType32 po
     
     // we initialize all the bits to "set", and clear as needed.   
     ASSERT (!line_sqbitmap->len32, "%s: line_sqbitmap is in use", LN_NAME);
-    buf_alloc_bits_exact (VB, line_sqbitmap, ref_and_seq_consumed, SET, 0, line_sqbitmap->name ? line_sqbitmap->name : "line_sqbitmap"); 
+    buf_alloc_bits_exact (VB, line_sqbitmap, ref_and_seq_consumed, SET, 0, line_sqbitmap->nameר ? unר(line_sqbitmap->nameר) : "line_sqbitmap"); 
 
     // if we're going to store seq for Deep, we need to record the NONREF (i.e. S, I) bases
     char *deep_nonref = NULL; 
@@ -450,7 +550,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STR
 
     buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, C_LOCAL); 
 
-    bitmap_ctx->local_num_words++;
+    bitmap_ctx->v_local_n_words++;
 
     uint32_t pos_index = pos - range->first_pos;
     uint32_t next_ref  = pos_index;
@@ -631,7 +731,7 @@ static MappingType sam_seg_SEQ_vs_ref (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STR
     bool use_un = segconf.MD_NM_by_unconverted && vb->bisulfite_strand;
     sam_MD_Z_verify_due_to_seq (vb, STRa(seq), pos, 
                                 use_un ? &vb->unconverted_bitmap : bitmap, 
-                                use_un ? 0                              : bitmap_start);
+                                use_un ? 0                       : bitmap_start);
 
     // note: change of logic in v14: up to v13, we use to align every recursion level, it seems that this was a bug
     sam_seg_SEQ_pad_nonref (VB);
@@ -728,9 +828,8 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_seq), unsig
     bool aligner_ok = flag.aligner_available && !segconf_running;
 
     // case: unmapped line and we have refhash: align to reference
-    if (unmapped && aligner_ok) {
-        use_aligner:
-        switch (aligner_seg_seq (VB, STRa(textual_seq), false, NO_GPOS, false)) {
+    if (unmapped && aligner_ok) use_aligner: {
+        switch (aligner_seg_seq (VB, STRa(textual_seq), false, NO_GPOS, false)) { // use aligner if fast mode (unless BAM is unmapped or --best) - don't waste too much time on alignments that failed the BAM aligner 
             case MAPPING_NO_MAPPING : force_verbatim = true; goto add_seq_verbatim; 
             case MAPPING_PERFECT    : perfect        = true; // fallthrough
             case MAPPING_ALIGNED    : aligner_used   = true; break;
@@ -739,7 +838,7 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_seq), unsig
 
         buf_alloc (vb, &nonref_ctx->local, 3, 0, uint8_t, CTX_GROWTH, C_LOCAL); 
         sam_seg_SEQ_pad_nonref (VB);
-
+        
         vb->md_verified = false;    
         vb->mismatch_bases_by_SEQ = -1; // we can't seg NM:i with special
     }
@@ -826,61 +925,63 @@ void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(textual_seq), unsig
 }
 
 // converts native SAM/BAM format to 2bit ACGT - if soft_fail, returns false if any base is not A,C,G or T 
-bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, FailType soft_fail)
+void sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STR8𐤐(seq), bool bam_format, bool revcomp)
 {
-    if (bam_format) {
-        if (!revcomp)
-            for (uint32_t i=0; i < seq_len; i++, next_bit += 2) {
-                uint8_t b = (!(i&1)) ? (((uint8_t*)seq)[i>>1] >> 4) : (((uint8_t*)seq)[i>>1] & 0xf);
-                switch (b) {
-                    case 0b0001 : bits_assign2 (packed, next_bit, 0); break;
-                    case 0b0010 : bits_assign2 (packed, next_bit, 1); break;
-                    case 0b0100 : bits_assign2 (packed, next_bit, 2); break;
-                    case 0b1000 : bits_assign2 (packed, next_bit, 3); break;
-                    default     : if (soft_fail) return false;
-                                  ABORT ("%s: Unexpected base: '%c' i=%u seq_len=%u", LN_NAME, bam_base_codes[b], i, seq_len);
-                }
-            }    
-        else
-            for (int32_t i=seq_len-1; i >= 0; i--, next_bit += 2) {
-                uint8_t b = (!(i&1)) ? (((uint8_t*)seq)[i>>1] >> 4) : (((uint8_t*)seq)[i>>1] & 0xf);
-                switch (b) {
-                    case 0b0001 : bits_assign2 (packed, next_bit, 3); break;
-                    case 0b0010 : bits_assign2 (packed, next_bit, 2); break;
-                    case 0b0100 : bits_assign2 (packed, next_bit, 1); break;
-                    case 0b1000 : bits_assign2 (packed, next_bit, 0); break;
-                    default     : if (soft_fail) return false;
-                                  ABORT ("%s: Unexpected base: '%c' i=%u seq_len=%u", LN_NAME, bam_base_codes[b], i, seq_len);
-                }
-            }    
+    START_TIMER;
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winitializer-overrides"
+    alignas(32) static const struct { uint8_t fwd[16], rev[16]; } bam2acgt = { // fwd and rev in same cache line
+        .fwd = { [0 ... 15]=4, [0b0001]=0, [0b0010]=1, [0b0100]=2, [0b1000]=3 },
+        .rev = { [0 ... 15]=4, [0b0001]=3, [0b0010]=2, [0b0100]=1, [0b1000]=0 }
+    };
+#pragma clang diagnostic pop
+    extern const uint8_t _nuke_encode[256], _nuke_encode_comp[256];
+
+    uint64_t *restrict bitmap_words = packed->words;
+    uint64_t word_i = bits_wrd(next_bit);
+    int bit_index   = bits_idx(next_bit);
+
+    uint64_t current_word = bitmap_words[word_i] & bitmask64(bit_index); // preserve valid lower bits while clearing unused upper bits
+
+    // select 1 of the 4 lookup tables
+    bytes lut = bam_format ? (revcomp ? bam2acgt.rev      : bam2acgt.fwd)
+                           : (revcomp ? _nuke_encode_comp : _nuke_encode);
+
+    for (uint32_t i=0; i < seq_len; i++) {
+        uint32_t seq_i = revcomp ? (seq_len - 1 - i) : i;
+
+        // fetch raw byte: extracts 4-bit BAM nibble or 8-bit SAM ASCII. 
+        // note: we use if statement and not ?/: since bam_format remains constant for the entire txt_file and hence branch prediction will be 100% accurate
+        uint8_t raw;
+        if (bam_format) raw = (seq_i & 1) ? (seq[seq_i >> 1] & 0xF) : (seq[seq_i >> 1] >> 4);
+        else            raw = seq[seq_i];
+
+        uint8_t acgt = lut[raw];
+
+        if (__builtin_expect(acgt == 4, 0)) {
+            if (bam_format) 
+                ABORT("%s: Unexpected base: '%c' i=%u seq_len=%u", LN_NAME, bam_base_codes[raw], seq_i, seq_len);
+            else 
+                ABORT("%s: Unexpected base: '%s'(ASCII %u) i=%u seq_len=%u", 
+                      LN_NAME, char_to_printable((char)raw).s, raw, seq_i, seq_len);
+        }
+
+        current_word |= ((uint64_t)acgt << bit_index);
+        bit_index += 2;
+
+        if (bit_index == 64) {
+            bitmap_words[word_i++] = current_word;
+            current_word = 0;
+            bit_index = 0;
+        }
     }
 
-    else { // SAM
-        if (!revcomp)
-            for (uint32_t i=0; i < seq_len; i++, next_bit += 2) 
-                switch (seq[i]) {
-                    case 'A' : bits_assign2 (packed, next_bit, 0); break;
-                    case 'C' : bits_assign2 (packed, next_bit, 1); break;
-                    case 'G' : bits_assign2 (packed, next_bit, 2); break;
-                    case 'T' : bits_assign2 (packed, next_bit, 3); break;
-                    default  : if (soft_fail) return false;
-                               ABORT ("%s: Unexpected base: '%s'(ASCII %u) i=%u seq_len=%u", LN_NAME, char_to_printable(seq[i]).s, (uint8_t)seq[i], i, seq_len);
-                }
-        else
-            for (int32_t i=seq_len-1; i >= 0; i--, next_bit += 2) 
-                switch (seq[i]) {
-                    case 'A' : bits_assign2 (packed, next_bit, 3); break;
-                    case 'C' : bits_assign2 (packed, next_bit, 2); break;
-                    case 'G' : bits_assign2 (packed, next_bit, 1); break;
-                    case 'T' : bits_assign2 (packed, next_bit, 0); break;
-                    default  : if (soft_fail) return false;
-                               ABORT ("%s: Unexpected base: '%s'(ASCII %u) i=%u seq_len=%u", LN_NAME, char_to_printable(seq[i]).s, (uint8_t)seq[i], i, seq_len);
-                }
-    }
+    // flush remaining partial word. unused top bits are guaranteed to be zero.
+    if (bit_index > 0) 
+        bitmap_words[word_i] = current_word;
 
-    bits_clear_excess_bits_in_top_word (packed, true);
-
-    return true;
+    COPY_TIMER (sam_seq_pack);
 }
 
 // setting ref bases by analyze_* functions
@@ -1085,7 +1186,7 @@ void sam_reconstruct_SEQ_vs_ref (VBlockP vb_, STRp(snip), ReconType reconstruct)
     
     // case: unmapped, segged against reference using our aligner
     if (aligner_used) {
-        aligner_reconstruct_seq (VB, vb->seq_len, false, false, is_perfect, reconstruct,
+        aligner_reconstruct_seq (VB, vb->seq_len, false, NOT_SPLICED, is_perfect, reconstruct,
                                  MAX_DEEP_SEQ_MISMATCHES, 
                                  deep_seq_by_ref ? vb->deep_mismatch_base   : NULL, 
                                  deep_seq_by_ref ? vb->deep_mismatch_offset : NULL, 
@@ -1323,26 +1424,77 @@ done:
     COPY_TIMER (sam_reconstruct_SEQ_vs_ref);
 }
 
-
 // reconstruct from a 2bit array - start_base and seq_len are in bases (not in bits)
+// reconstruct as SAM. If BAM, we later translate to BAM. To do: reconstruct directly as BAM if needed, bug 530    
 static void reconstruct_SEQ_acgt (VBlockSAMP vb, BitsP seq_2bits, uint64_t start_base, uint32_t seq_len, bool revcomp)
 {
-    // Reconstruct as SAM. If BAM, we later translate to BAM. To do: reconstruct directly as BAM if needed, bug 530
-    char *next = BAFTtxt;
+    START_TIMER;
+    decl_acgt_decode;
 
-    if (!revcomp)
-        for (uint64_t i=0; i < seq_len; i++) {
-            uint8_t b = bits_get2 (seq_2bits, (start_base + i)*2);
-            *next++ = b==0 ? 'A' : b==1 ? 'C' : b==2 ? 'G' : 'T';
+    if (__builtin_expect(seq_len == 0, 0)) return;
+
+    char *restrict next = BAFTtxt;
+    const uint64_t *restrict words=seq_2bits->words, nwords=seq_2bits->nwords;
+    int64_t x;
+    int remaining = seq_len & 31;
+
+    if (!revcomp) {
+        uint64_t bit_pos = start_base * 2;
+
+        // process whole blocks of 32 bases / 64 bits
+        for (uint32_t block=0; block < seq_len / 32; block++) {
+            x = _get_word_(words, nwords, bit_pos); 
+
+            for (int i=0; i < 32; i++) {
+                *next++ = acgt_decoder[x & 3];
+                x >>= 2;
+            }
+
+            bit_pos += 64;
         }
-    
-    else
-        for (int64_t i=seq_len-1; i >= 0; i--) {
-            uint8_t b = bits_get2 (seq_2bits, (start_base + i)*2);
-            *next++ = b==3 ? 'A' : b==2 ? 'C' : b==1 ? 'G' : 'T';
+
+        // handle remaining 1-31 bases
+        if (remaining) {
+            x = _get_word_(words, nwords, bit_pos);
+            for (int i=0; i < remaining; i++) {
+                *next++ = acgt_decoder[x & 3];
+                x >>= 2;
+            }
         }
+    } 
+    else {
+        // reverse path: main loop moves from end of sequence down to start_base + remaining
+        int64_t bit_pos = (start_base + seq_len - 1) * 2;
+
+        // process whole blocks of 32 bases / 64 bits (revcomp)
+        for (uint32_t block=0; block < seq_len / 32; block++) {
+            x = _get_word_(words, nwords, (uint64_t)(bit_pos - 62));
+            x = bits_revcomp_word (x);
+
+            for (int i=0; i < 32; i++) {
+                *next++ = acgt_decoder[x & 3];
+                x >>= 2;
+            }
+
+            bit_pos -= 64;
+        }
+
+        // handle remaining 1-31 bases (revcomp)
+        if (remaining) {
+            // the remaining bases in reverse order are always the first 'remaining' bases [start_base ... start_base + remaining - 1]
+            x = _get_word_(words, nwords, start_base * 2);
+            x = bits_revcomp_word (x);
+            x >>= 2 * (32 - remaining); // bring the top 'remaining' bases down to the low bits
+
+            for (int i=0; i < remaining; i++) {
+                *next++ = acgt_decoder[x & 3];
+                x >>= 2;
+            }
+        }
+    }
 
     Ltxt += seq_len;
+    COPY_TIMER (reconstruct_SEQ_acgt);
 }
 
 // PRIM or DEPN VB
@@ -1533,7 +1685,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     // lookup table indexed by lower nibble (ASCII & 0x0F)
     const __m256i lut_lo = _mm256_setr_epi8 (
         // low 128-bit lane (indices 0 to 15)
-        0x00, // Index  0: Placeholder -> BAM 0x00
+        0x00, // Index  0: Placeholder  -> BAM 0x00
         0x01, // Index  1: 'A' (0x41)   -> BAM 0x01 (1)
         0x0E, // Index  2: 'B' (0x42)   -> BAM 0x0E (14)
         0x02, // Index  3: 'C' (0x43)   -> BAM 0x02 (2)
@@ -1543,12 +1695,12 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
         0x04, // Index  7: 'G' (0x47)   -> BAM 0x04 (4)
         0x0B, // Index  8: 'H' (0x48)   -> BAM 0x0B (11)
         0x0A, // Index  9: 'Y' (0x59)   -> BAM 0x0A (10)
-        0x00, // Index 10: Placeholder -> BAM 0x00
+        0x00, // Index 10: Placeholder  -> BAM 0x00
         0x0C, // Index 11: 'K' (0x4B)   -> BAM 0x0C (12)
-        0x00, // Index 12: Placeholder -> BAM 0x00
+        0x00, // Index 12: Placeholder  -> BAM 0x00
         0x00, // Index 13: '='/'M' collision slot
         0x0F, // Index 14: 'N' (0x4E)   -> BAM 0x0F (15)
-        0x00, // Index 15: Placeholder -> BAM 0x00
+        0x00, // Index 15: Placeholder  -> BAM 0x00
 
         // high 128-bit lane (identical duplicate) 
         0x00, 0x01, 0x0E, 0x02, 0x00, 0x00, 0x07, 0x04,

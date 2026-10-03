@@ -229,10 +229,7 @@ char *filename_make_unix (char *filename)
     char path[PATH_MAX];
     unsigned len = strlen (filename);
     
-    if (
-#ifdef _WIN32
-        (len >= 2 && filename[1] == ':') || // full name - starting with eg C:
-#endif
+    if (𝓌𝒾𝓃 ((len >= 2 && filename[1] == ':') ||) // full name - starting with eg C:
         (len >= 1 && filename[0] == '/') || // full name - starting with /
         !getcwd (path, sizeof (path))) // path too long
         path[0] = 0;  // don't store path
@@ -249,8 +246,7 @@ char *filename_make_unix (char *filename)
         full_fn[0] = '/';
     }
 
-    for (unsigned i=0; i < len; i++)
-        if (full_fn[i] == '\\') full_fn[i] = '/';
+    str_replace_letter (full_fn, len, '\\', '/');
 #endif
 
     return full_fn;

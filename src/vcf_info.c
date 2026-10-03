@@ -280,7 +280,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         #define CALL_IF0(cond,f) if (cond) { (f); break; } else 
         #define CALL_WITH_FALLBACK(f) if (f(vb, ctx, STRa(value))) { seg_by_ctx (VB, STRa(value), ctx, value_len); } break
         #define STORE_AND_SEG(store_type) ({ seg_set_last_txt_store_value (VB, ctx, STRa(value), store_type); seg_by_ctx (VB, STRa(value), ctx, value_len); break; })
-        #define DEFER(f,seg_after_did_i) ({ vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_##f, vb->idx_##f, seg_after_did_i); break; })
+        #define DEFER(f,seg_after_did_i) ({ vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_##f, vb->idx.f, seg_after_did_i); break; })
         // important: when adding DEFER, also update vcf_seg_copy_one_sample
 
         // _______________________________________
@@ -644,7 +644,11 @@ void vcf_parse_info_subfields (VBlockVCFP vb, STRp(info))
         
         if (segconf_running) segconf_set_has (ii.ctx->did_i);
 
-        #define X(x) case INFO_##x : vb->idx_##x = ii_buf.len32; break
+        #define X(x) case INFO_##x : \
+            vb->idx.x = (vb->idx.x == -1) ? ii_buf.len32 /* first time this subfield is encountered in this line */ \
+                                          : -2; /* a duplicate key was detected in violation of VCF spec 1.6.1 ("Duplicate keys are not allowed"), but nevertheless seen the wild (test.annovar.vcf.gz) */ \
+            break;
+
         switch (ii.ctx->did_i) {
             X(AN); X(AF); X(AC); X(MLEAC); X(MLEAF); X(AC_Hom); X(AC_Het); X(AC_Hemi); X(DP); X(QD); X(SF);
             X(AS_SB_TABLE); X(SVINSSEQ) ; X(SVTYPE); X(SVLEN); X(HOMSEQ); X(END) ; X(CIPOS); X(LEFT_SVINSSEQ);

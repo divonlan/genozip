@@ -157,7 +157,7 @@ static void contigs_sort (ConstBufferP contigs, ConstBufferP contigs_dict, Buffe
     sorter_contigs = contigs;
     sorter_contigs_dicts = contigs_dict;    
 
-    ARRAY_alloc (uint32_t, index, contigs->len, false, *index_buf, evb, contigs->name);
+    ARRAY_alloc (uint32_t, index, contigs->len, false, *index_buf, evb, unר(contigs->nameר));
 
     for (uint32_t i=0; i < index_len; i++)
         index[i] = i;

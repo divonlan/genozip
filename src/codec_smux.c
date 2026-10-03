@@ -32,6 +32,8 @@
 // ZIP side
 //--------------
 
+#define SMUX_STDV_THREADHOLD 0.08 // between 0 and 1. The higher this is, the more drastic differences between the quality histogram associated with each base is needed to qualify for SMUX
+
 static void normalize_histo (double histo[94])
 {
     double total = 0;
@@ -66,8 +68,8 @@ static void set_stdv (double *histo, int histo_len)
     segconf.smux_max_stdv_q = max_var_q + '!';
 
     if (flag.show_qual)      
-        iprintf ("SMUX threadshold: '%c' has the highest standard deviation: %2.1f%%\n", 
-                 segconf.smux_max_stdv_q, 100.0 * segconf.smux_max_stdv);
+        iprintf ("SMUX threadshold: '%c' has the highest standard deviation: %2.1f%% (threshold for SMUX is %.0f%%)\n", 
+                 segconf.smux_max_stdv_q, 100.0 * segconf.smux_max_stdv, 100.0 * SMUX_STDV_THREADHOLD);
 }
 
 // calculate stats for smux AND qmux as well as stats
@@ -149,8 +151,6 @@ void codec_smux_calc_stats (VBlockP vb)
 // ZIP: called for QUAL-like dids
 static bool codec_smux_maybe_used (Did did_i)
 {
-    #define SMUX_STDV_THREADHOLD 0.08 // between 0 and 1. The higher this is, the more drastic differences between the quality histogram associated with each base is needed to qualify for SMUX
-
     return did_i == SAM_QUAL/*==FASTQ_QUAL*/ && // we only calculated stats for SAM_QUAL (not OQ)
                (flag.force_qual_codec == CODEC_SMUX || 
                 ((TECH(MGI) || segconf.has_BQSR) && segconf.nontrivial_qual && !flag.no_smux && segconf.smux_max_stdv > SMUX_STDV_THREADHOLD)); // not yet seen benefit for non-MGI/BQSR files);

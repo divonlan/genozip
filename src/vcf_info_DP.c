@@ -29,11 +29,11 @@ void vcf_seg_INFO_DP (VBlockVCFP vb, ContextP ctx, STRp(dp_str))
         seg_integer_or_not (VB, ctx, STRa(dp_str), dp_str_len);
 
     else if (segconf.INFO_DP_method == BY_BaseCounts) 
-        vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_DP_by_BaseCounts, vb->idx_DP, INFO_BaseCounts);
+        vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_DP_by_BaseCounts, vb->idx.DP, INFO_BaseCounts);
 
     // defer segging to vcf_seg_INFO_DP_by_FORMAT_DP called after samples are done
     else if (segconf.INFO_DP_method == BY_FORMAT_DP)  
-        vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_DP_by_FORMAT_DP, vb->idx_DP, DID_NONE);
+        vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_DP_by_FORMAT_DP, vb->idx.DP, DID_NONE);
 
     else
         ABOSEG ("Unknown method INFO_DP_method=%d", segconf.INFO_DP_method);
@@ -126,7 +126,7 @@ void vcf_piz_insert_INFO_DP (VBlockVCFP vb)
             rom recon = BAFTtxt;
             STR(snip);
             ctx_get_snip_by_word_index (ctx, ctx->last_wi, snip);
-            reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip+2, snip_len-2, true, __FUNCTION__, __LINE__);
+            reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip+2, snip_len-2, true, THIS_CODE_LINE);
 
             info_dp_len = BAFTtxt - recon;
             memcpy (info_dp, recon, info_dp_len);

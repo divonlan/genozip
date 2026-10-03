@@ -98,9 +98,8 @@ extern void bz_internal_error ( int errcode );
 
 #endif
 
-
-#define BZALLOC(nnn) (strm->bzalloc)(strm->opaque,(nnn),1, __FUNCTION__, __LINE__)
-#define BZFREE(ppp)  (strm->bzfree)(strm->opaque,(ppp), __FUNCTION__, __LINE__)
+#define BZALLOC(nnn) (strm->bzalloc)(strm->opaque,(nnn),1, THIS_CODE_LINE)
+#define BZFREE(ppp)  (strm->bzfree)(strm->opaque,(ppp), THIS_CODE_LINE)
 
 
 /*-- Header bytes. --*/

@@ -42,8 +42,6 @@ const struct {rom name; uint32_t header_size; } abouts[NUM_SEC_TYPES] = {
     [SEC_HUFFMAN]         = {"SEC_HUFFMAN",         sizeof (SectionHeaderHuffman)       }, \
 };
 
-const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES] = LOCALTYPE_DESC;
-
 typedef struct SectionsVbIndexEnt {
     int32_t vb_header_sec_i, last_sec_i; // -1 if none
     VBIType next_vb_i; // linked list of VBs of the same comp in the order of vb_i. list is terminated with -1. VBs are in the order they appear in section list, not necessarily consecutive vb_i's.
@@ -84,6 +82,19 @@ static const SectionsCompIndexEnt *Bcompindex (CompIType comp_i)
 
     const SectionsCompIndexEnt *comp_index_ent = B(SectionsCompIndexEnt, z_file->comp_sections_index, comp_i);
     return comp_index_ent;
+}
+
+static alignas(64) LocalTypeDesc lt_desc_data[3/*dummy entries*/ + NUM_LOCAL_TYPES];
+LocalTypeDesc *lt_desc;
+void sections_initialize (void)
+{
+    // note: lt_desc is prefixed by 3 dummy entries, so that the alignas(64) causes
+    // the I/U integer entries to be 64B-aligned: all 8 entries fit in two cache lines
+    memcpy (&lt_desc_data[3], 
+            (LocalTypeDesc[NUM_LOCAL_TYPES])LOCALTYPE_DESC, 
+            NUM_LOCAL_TYPES * sizeof (LocalTypeDesc));
+
+    lt_desc = &lt_desc_data[3];
 }
 
 DictId sections_get_dict_id (SectionHeaderUnionP header)
@@ -486,8 +497,8 @@ void sections_list_memory_to_file_format (void)
     evb->scratch.len = z_file->section_list.len;
     
     // replace dict_id with the the sec_i of its first appearahce. 
-    int32_t first_appearance[z_file->ca.num_contexts];
-    memset (first_appearance, 255, z_file->ca.num_contexts * sizeof (int32_t));
+    int32_t first_appearance[z_file->ca._num_contexts];
+    memset (first_appearance, 255, z_file->ca._num_contexts * sizeof (int32_t));
 
     SectionEntModifiable prev_sec = {};
     uint32_t prev_num_lines = 0;

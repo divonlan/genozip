@@ -32,7 +32,7 @@ void vcf_freebayes_seg_initialize (VBlockVCFP vb)
 void vcf_seg_FORMAT_RO_AO (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
     if (segconf.FMT_RO_AO_method == RO_AO_by_AD) {
-        if (ctx_has_value (VB, ctx->other_ctx->did_i)) 
+        if (ctx_has_value_in_sample (VB, ctx->other_ctx->did_i)) 
             seg_delta_vs_other_dictS (VB, ctx, ctx->other_ctx, STRa(value), -1);
         else 
             seg_by_ctx (VB, STRa(value), ctx, value_len); // usually "."
@@ -41,7 +41,7 @@ void vcf_seg_FORMAT_RO_AO (VBlockVCFP vb, ContextP ctx, STRp(value))
     else if (segconf.FMT_RO_AO_method == RO_AO_by_DP) {
         int64_t ao;
         // predicting: AO + RO = DP
-        if ((ctx->did_i == FORMAT_AO) && ctx_has_value (VB, FORMAT_DP) && ctx_has_value (VB, FORMAT_RO) &&
+        if ((ctx->did_i == FORMAT_AO) && ctx_has_value_in_sample (VB, FORMAT_DP) && ctx_has_value_in_sample (VB, FORMAT_RO) &&
             str_get_int (STRa(value), &ao) && ao == CTX(FORMAT_DP)->last_value.i - CTX(FORMAT_RO)->last_value.i) {
             
             seg_by_ctx (VB, STRa(dp_minus_ro_snip), ctx, value_len);
@@ -73,14 +73,14 @@ void vcf_seg_FORMAT_QR_QA (VBlockVCFP vb, ContextP ctx, STRp(value_str))
 
     else {
         if (segconf_running) {
-            if (ctx_has_value (VB, other_ctx->did_i) && other_ctx->last_value.i) {
+            if (ctx_has_value_in_sample (VB, other_ctx->did_i) && other_ctx->last_value.i) {
                 segconf.Q_to_O += (float)value / (float)other_ctx->last_value.i;
                 segconf.n_Q_to_O++;
             }
             goto fallback;
         }
 
-        if (!ctx_has_value (VB, other_ctx->did_i) || !segconf.Q_to_O) goto fallback;
+        if (!ctx_has_value_in_sample (VB, other_ctx->did_i) || !segconf.Q_to_O) goto fallback;
 
         int64_t prediction = round ((float)other_ctx->last_value.i * (float)segconf.Q_to_O);
         int64_t delta = value - prediction;
@@ -117,7 +117,7 @@ void vcf_seg_INFO_DPB (VBlockP vb_)
     SEGCONF_RECORD_WIDTH (INFO_DPB, dpb_str_len);
 
     int64_t dpb;    
-    if (ctx_has_value (VB, INFO_DP) && str_get_int (STRa(dpb_str), &dpb)) {
+    if (ctx_has_value_in_line (VB, INFO_DP) && str_get_int (STRa(dpb_str), &dpb)) {
         int64_t delta = dpb - CTX(INFO_DP)->last_value.i; 
 
         // prepare snip: VCF_SPECIAL_DEFER followed by snip to be reconstructed after samples

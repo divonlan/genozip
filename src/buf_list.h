@@ -11,16 +11,15 @@
 #include "genozip.h"
 
 typedef struct {
-    BufferP buf;  // address of Buffer structure (not the data!). Buffer is removed if removed bit is set with BL_SET_REMOVED 
-    rom func;     // function in which this Buffer was first allocated (at which time it was added to the buffer_list)
-    rom name;     // buffer name
-    uint32_t code_line;
+    BufferP buf;    // address of Buffer structure (not the data!). Buffer is removed if removed bit is set with BL_SET_REMOVED 
+    Caller caller;  // function in which this Buffer was first allocated (at which time it was added to the buffer_list)
+    Pointeר nameר;  // buffer name
 } BufListEnt;
 
 // buflist modifications
-extern void buflist_add_buf (VBlockP vb, BufferP buf, FUNCLINE);
-extern void buflist_remove_buf (BufferP buf, FUNCLINE);
-extern void buflist_move_buf (VBlockP vb, BufferP new_buf, rom new_name, ConstBufferP old_buf, FUNCLINE);
+extern void buflist_add_buf (VBlockP vb, BufferP buf, Caller caller);
+extern void buflist_remove_buf (BufferP buf, Caller caller);
+extern void buflist_move_buf (VBlockP vb, BufferP new_buf, rom new_name, ConstBufferP old_buf, Caller caller);
 extern void buflist_update_vb_addr_change (VBlockP new_vb, ConstVBlockP old_vb);
 extern void buflist_compact (VBlockP vb);
 extern void buflist_sort (VBlockP vb, bool already_locked); // ahead of destroying

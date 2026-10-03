@@ -61,6 +61,7 @@ extern QnameFlavor qname_get_optimize_qf (void);
 extern void qname_zip_initialize (void);
 extern void qname_seg_initialize (VBlockP vb, QType q, Did st_did_i);
 extern void qname_segconf_finalize (VBlockP vb);
+extern void qname_finalize (void);
 
 extern void qname_show_flavor (void);
 

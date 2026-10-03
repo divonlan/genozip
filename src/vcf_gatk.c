@@ -65,7 +65,7 @@ void vcf_gatk_seg_initialize (VBlockVCFP vb)
 // comma-seperated two numbers: RAW_MQandDP=720000,200: 1. sum of squared MAPQ values of alignments that contributed to the variant and 2. total reads over variant genotypes (note: INFO/MQ is sqrt(#1/#2))
 void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    str_split_ints (value, value_len, 2, ',', item, true);
+    str_split_unsigneds (value, value_len, 2, ',', item, true);
     int64_t mq=items[0], dp=items[1]; // for readability
 
     if (!n_items || !dp) { // expecting DP>0
@@ -318,7 +318,7 @@ void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs
             if (*alt->alt == *alt_b->alt) goto fallback;
     }
 
-    str_split_ints (bc, bc_len, 4, ',', count, true); // counts[] corresponds to A,C,G,T
+    str_split_unsigneds (bc, bc_len, 4, ',', count, true); // counts[] corresponds to A,C,G,T
     if (n_counts != 4 || counts[0] < 0 || counts[1] < 0 || counts[1] < 0 || counts[3] < 0) 
         goto fallback;
 
@@ -363,13 +363,13 @@ void vcf_seg_INFO_BaseCounts (VBlockP vb_) // returns true if caller still needs
 
 static int64_t vcf_piz_calculate_BaseCounts (VBlockVCFP vb, STRp(snip), qSTRp(out))
 {
-    str_split_ints (snip, snip_len, 4, ',', sorted_count, true); // sorted_counts correspond to REF,VT0,ALT1,ALT2
+    str_split_ints (snip, snip_len, 4, ',', sorted_count, true); // sorted_counts correspond to REF,VT0,ALT1,ALT2 (can be negative)
     ASSPIZ (n_sorted_counts == 4, "invalid snip: \"%.*s\"", snip_len, snip);
 
     // copy values from AD if needed
     if (sorted_counts[0] == -9 || sorted_counts[1] == -9 || sorted_counts[2] == -9 || sorted_counts[3] == -9) {
         STRlast (ad_str, FORMAT_AD);
-        str_split_ints (ad_str, ad_str_len, N_ALTS + 1, ',', ad, false); // exactly=false bc we don't enforce this in seg
+        str_split_unsigneds (ad_str, ad_str_len, N_ALTS + 1, ',', ad, false); // exactly=false bc we don't enforce this in seg
         ASSPIZ (ctx_encountered_in_line (VB, FORMAT_AD) && n_ads, "cannot find AD needed for reconstructing BaseCounts. snip=\"%.*s\"", STRf(snip));
 
         for (int sc_i=0; sc_i < 4; sc_i++)
@@ -473,7 +473,7 @@ bool vcf_seg_INFO_SF_init (VBlockVCFP vb, ContextP ctx, STRp(sf))
         case yes: 
             seg_set_last_txt (VB, ctx, STRa(sf));
 
-            vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_SF_seg, vb->idx_SF, DID_NONE);
+            vb_add_to_deferred_q (VB, ctx, vcf_seg_INFO_SF_seg, vb->idx.SF, DID_NONE);
 
             ctx->sf.next = 0; // relative to last_txt
             adjustment = 0;      
@@ -673,7 +673,7 @@ void vcf_piz_insert_INFO_SF (VBlockVCFP vb)
 void vcf_seg_sum_DP_for_QD (VBlockVCFP vb, int64_t value)
 {
     if (ctx_encountered_in_line (VB, INFO_QD) && 
-        ctx_has_value (VB, FORMAT_GT) && CTX(FORMAT_GT)->last_value.i >= 1 /*dosage*/)
+        ctx_has_value_in_sample (VB, FORMAT_GT) && CTX(FORMAT_GT)->last_value.i >= 1 /*dosage*/)
         
         CTX(INFO_QD)->qd.sum_dp_with_dosage += value;
 }

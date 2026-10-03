@@ -36,7 +36,7 @@ void vcf_reset_line (VBlockP vb_)
     
     if (IS_ZIP) {
         memset (B1ST16(CTX(VCF_FORMAT)->sf_i), 0xff, MAX_DICTS * sizeof (uint16_t));  // set all sf_i to NO_SF_I
-        memset (&vb->first_idx, 0xff, (char*)&vb->after_idx - (char*)&vb->first_idx); // set all idx's to -1
+        memset (&vb->idx, 0xff, sizeof (vb->idx)); // set all idx to -1
     }
 
     else {

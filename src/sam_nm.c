@@ -46,7 +46,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsigned 
     bool NM_is_integer = segconf.NM_is_integer; 
 
     if (segconf_running) {
-        if (has_MD && vb->idx_MD_Z > vb->idx_NM_i) segconf.NM_after_MD = false; // we found evidence that sometimes NM is before MD
+        if (has_MD && vb->idx.MD_Z > vb->idx.NM_i) segconf.NM_after_MD = false; // we found evidence that sometimes NM is before MD
         goto no_special;
     }
 
@@ -113,7 +113,7 @@ void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xm, int16_t idx
     // method 1: if we have MD:Z, we use prediction of number of mismatches derived by analyzing it. This is almost always correct, 
     // but the downside is that reconstruction takes longer due to the need to peek MD:Z. Therefore, we limit it to certain cases.
     if (xm == predicted_by_MD && 
-            ((vb->idx_MD_Z >= 0 && idx > vb->idx_MD_Z) || // case 1: MD is reconstructed before XM so peek is fast
+            ((vb->idx.MD_Z >= 0 && idx > vb->idx.MD_Z) || // case 1: MD is reconstructed before XM so peek is fast
             IS_REF_INTERNAL                            || // case 2: prediction against SEQ performs poorly
             predicted_by_SEQ != xm                     || // case 3: rare cases in which prediction by SEQ is wrong with an external reference.
             flag.best))                                   // case 4: the user request the best method

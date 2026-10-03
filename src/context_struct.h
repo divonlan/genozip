@@ -8,15 +8,16 @@
 
 #pragma once
 
+#include <stddef.h>
 #include "buffer.h"
 #include "mutex.h"
 #include "sections.h"
 #include "segconf.h"
 #include "sam_friend.h"
 
-typedef struct { // initialize with ctx_init_iterator()
-    bytes next_b250;           // Pointer into b250 of the next b250 to be read (must be initialized to NULL)
-    WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initialized to -1)
+typedef struct { // 8 bytes. initialize with ctx_init_iterator()
+    uint32_t next_b250;        // Index into b250 buffer of the next b250 to be read (must be initialized to 0)
+    WordIndex prev_word_index; // When decoding, if word_index==BASE250_ONE_UP, then make it prev_word_index+1 (must be initialized to WORD_INDEX_NONE)
 } SnipIterator;
 
 typedef enum { DYN_DEC, DYN_hex, DYN_HEX } DynType;
@@ -54,49 +55,42 @@ typedef packed_enum {  // PIZ: set by a SPECIAL function, as if there was a WORD
 
 typedef struct Context {
     // ------ common fields for ZIP & PIZ ------ 
+// § 0 ⇐ these word (64b) alignments expectations are consumed by context_validate.sh
     char tag_name[MAX_TAG_LEN];// nul-terminated tag name 
+// § 8
     DictId dict_id;            // the dict_id of this context
-
-    int64_t dyn_int_min, dyn_int_max; // ZIP/PIZ vctx: if ltype=LT_DYN* - min and max values encountered in this VB so far
-
+// § 9-10
+    int64_t dyn_int_min;       // ZIP/PIZ vctx: if ltype=LT_DYN* - min and max values encountered in this VB so far
+    int64_t dyn_int_max;
+// § 11
     Did did_i;                 // the index of this ctx within the array vb->contexts. PIZ: if this context is an ALIAS_CTX, did_i contains the destination context did_i
     Did dict_did_i;            // ZIP/PIZ: zctx only: normally ==did_i, but if context is a ALIAS_DICT, did_i of its destination (shared dictionary between otherwise independent contexts)
 
     #define start_erase_field local_in_z // everything after this is erased by buflist_free_ctx
     uint32_t local_in_z;       // ZIP: index and len into z_data where local compressed data is
                                // PIZ: used as bool: local section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
+// § 12
     uint32_t local_in_z_len;   
     uint32_t b250_in_z;        // ZIP: index and len into z_data where b250 compressed data is
-                               // PIZ: used as bool: b250 section of this VB found in file (used to determined if pair-identical R1 section should be loaded)
+                               // PIZ: used as bool: b250 section of this VB found in file (used to determined if pair-identical R1 section should be loaded)// § 13
     uint32_t b250_in_z_len;    
 
     union {
     uint8_t dict_helper;       // ZIP zctx / PIZ zctx+vctx: context-specific value passed through SectionHeaderDictionary.dict_helper (since 15.0.42)
     uint8_t con_rep_special;   // ZIP/PIZ: zctx: SPECIAL for getting container repeats in case of CON_REPEATS_IS_SPECIAL
     };
-    
 
     LocalType ltype;           // LT_* - type of local data - included in the section header
     LocalType pair_ltype;      // LT_* - Used if this file is a PAIR_R2 - type of local data of PAIR_R1
     struct FlagsCtx flags;     // flags to be included in section header
-    struct FlagsCtx pair_flags;// Used if this file is a PAIR_R2 - contains ctx->flags of the PAIR_R1
-    struct FlagsDict dict_flags;  // ZIP zctx ; PIZ: zctx+vctx . Tramsmiited via SectionFlags.dictionary (v15)
-    B250Size b250_size;        // Size type of element in b250 data (PIZ and ZIP after generation) v14
-    B250Size pair_b250_size;
-    Codec lcodec;              // ZIP/PIZ: vctx/zctx: codec used to compress local (or sub_codec if codec is complex like CODEC_DOMQ)
-    union {
-    Codec lsubcodec_piz;       // ZIP/PIZ: vctx: piz to decompress with this codec, AFTER decompressing with lcodec
-    Codec qual_codec;          // ZIP zctx: QUAL codec selected in codec_assign_best_qual_codec
-    };
-    bool is_initialized;       // ZIP/PIZ: context-specific initialization has been done
     
-    union {
-    bool z_data_exists;        // ZIP/PIZ: zctx: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
-    uint8_t dyn_lt_order;      // ZIP/PIZ: vctx: if ltype=LT_DYN*, the current ltype order of the data in local (ZIP) or history (PIZ)
-    };
-    uint8_t nothing_char;      // ZIP/PIZ: vctx: if non-zero, if local integer == max_int (for its ltype), nothing_char will be reconstructed instead. In PIZ, 0xff means fallback to pre-15.0.39
+// § 14-15
+    uint64_t unused_word_14;
+    uint64_t unused_word_15;
 
     #define FIRST_BUFFER_IN_Context dict
+    // Buffers are aligned to 64B manually (why not alignas(64)? see comment in typedef Buffer).
+// §s 16-39 (8 words per Buffer)
     Buffer dict;               // ZIP/PIZ: tab-delimited list of all unique snips - in this VB that don't exist in ol_dict
     Buffer b250;               // ZIP: vctx: During Seg, .data contains variable-length indices into context->nodes. .count contains the number 
                                //      of b250s (still >1 if multiple b250s collapse with all-the-same) and .len contains the length in bytes.
@@ -107,16 +101,17 @@ typedef struct Context {
                                // ZIP zctx - only .len - number of fields of this type segged in the file (for stats)
     
     // ZIP/PIZ: context-specific buffer #0
+// §s 40-47
     union {
-    Buffer b250R1;             // ZIP/PIZ: FASTQ/SAM used by PAIR_R2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_R1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)    
-    Buffer alts;               // ZIP/PIZ: VCF: VCF_REFALT
-    Buffer last_samples;       // ZIP/PIZ: VCF: VCF_SAMPLES: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples, entry [format_node_i,sample_i] is TxtWord of last sample sample_i (could be this line or previous line with FORMAT type format_node_i)
-    Buffer sample_copied;      // ZIP/PIZ: VCF: VCF_COPY_SAMPLE: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples of bool, true if last sample_i was copied
-    Buffer lookback;           // ZIP/PIZ: VCF/SAM: vctx: lookback for contexts that use lookback
-    Buffer width_count;        // ZIP Segconf ZCTX VCF: used for calculating width of VCF_ID, VCF_QUAL, INFO_AC, INFO_MLEAC, INFO_AN, INFO_AF, INFO_SF, INFO_QD, INFO_DP INFO_AS_SB_TABLE, INFO_BaseCounts, INFO_DPB
-    Buffer vep_spec;           // ZIP initialization ZCTX VCYF: INFO_vep
+        Buffer b250R1;         // ZIP/PIZ: FASTQ/SAM used by PAIR_R2 FASTQ VBs (inc. in Deep SAM), for paired contexts: PAIR_R1 b250 data from corresponding VB (in PIZ: only if CTX_PAIR_LOAD)    
+        Buffer alts;           // ZIP/PIZ: VCF: VCF_REFALT
+        Buffer last_samples;   // ZIP/PIZ: VCF: VCF_SAMPLES: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples, entry [format_node_i,sample_i] is TxtWord of last sample sample_i (could be this line or previous line with FORMAT type format_node_i)
+        Buffer sample_copied;  // ZIP/PIZ: VCF: VCF_COPY_SAMPLE: array of length samples_ctx->format_mapper_buf.len x vcf_num_samples of bool, true if last sample_i was copied
+        Buffer lookback;       // ZIP/PIZ: VCF/SAM: vctx: lookback for contexts that use lookback
+        Buffer width_count;    // ZIP Segconf ZCTX VCF: used for calculating width of VCF_ID, VCF_QUAL, INFO_AC, INFO_MLEAC, INFO_AN, INFO_AF, INFO_SF, INFO_QD, INFO_DP INFO_AS_SB_TABLE, INFO_BaseCounts, INFO_DPB
+        Buffer vep_spec;       // ZIP initialization ZCTX VCYF: INFO_vep
     };
-
+// § 48-63
     Buffer counts;             // ZIP/PIZ: counts of snips (VB:uint32_t, z_file:uint64_t)
                                // ZIP: counts.param is a context-specific global counter that gets accumulated in zctx during merge (e.g. OPTION_SA_CIGAR)
 
@@ -124,86 +119,97 @@ typedef struct Context {
                                // ZIP: used by: 1. seg_array_of_struct
 
     // ZIP/PIZ: context specific buffer #1
+// § 64-71
     union {
         // GENERAL
-        Buffer con_cache;          // PIZ: vctx: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
-                                   //      Each struct is truncated to used items, followed by prefixes. 
-                                   // ZIP: vctx: seg_array, sam_seg_array_field_get_con cache a container.
-        Buffer ctx_cache;          // PIZ: vctx: used to cached Contexts of Multiplexers and other dict_id look ups
-        Buffer chrom2ref_map;      // ZIP (vctx & zctx), PIZ(zctx): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
-        Buffer snip_cache;         // ZIP: vctx: used by contexts that call seg_delta_vs_other_local*
+        Buffer con_cache;      // PIZ: vctx: use by contexts that might have containers: Handled by container_reconstruct - an array of Container which includes the did_i. 
+                               //      Each struct is truncated to used items, followed by prefixes. 
+                               // ZIP: vctx: seg_array, sam_seg_array_field_get_con cache a container.
+        Buffer ctx_cache;      // PIZ: vctx: used to cached Contexts of Multiplexers and other dict_id look ups
+        Buffer chrom2ref_map;  // ZIP (vctx & zctx), PIZ(zctx): Used by CHROM and contexts with a dict alias to it. Mapping from user file chrom to alternate chrom in reference file (for ZIP-VB: new chroms in this VB) - incides match ctx->nodes
+        Buffer snip_cache;     // ZIP: vctx: used by contexts that call seg_delta_vs_other_local*
 
         // CODECs
-        Buffer packed;             // PIZ: vctx: used by contexts that compressed CODEC_ACTG               
-        Buffer subdicts;           // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL with PACB or TMPL codecs, iq:Z
-        Buffer template;           // ZIP: zctx (QUAL+1): CODEC_TMPL 
-        Buffer value_to_bin;       // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
-        Buffer longr_state;        // PIZ: Used by LONGR codec on QUAL contexts
-        Buffer qual_line;          // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
-        Buffer normalize_buf;      // ZIP: used by DOMQ codec on QUAL contexts
+        Buffer packed;         // PIZ: vctx: used by contexts that compressed CODEC_ACTG               
+        Buffer subdicts;       // ZIP/PIZ: zctx: Used by contexts that set ctx->subdicts_section: QUAL with PACB or TMPL codecs, iq:Z
+        Buffer template;       // ZIP: zctx (QUAL+1): CODEC_TMPL 
+        Buffer value_to_bin;   // ZIP: Used by LONGR codec on *_DOMQRUNS contexts
+        Buffer longr_state;    // PIZ: Used by LONGR codec on QUAL contexts
+        Buffer qual_line;      // ZIP: used by DOMQ codec on *_DOMQRUNS contexts
+        Buffer normalize_buf;  // ZIP: used by DOMQ codec on QUAL contexts
         
         // SAM/BAM
-        Buffer qname_hash;         // ZIP: vctx: SAM_QNAME: each entry i contains a line number for which the hash(qname)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
-        Buffer interlaced;         // ZIP: SAM: used to interlace BD/BI and iq/dq/sq line data
-        Buffer mi_history;         // ZIP: SAM: used by OPTION_MI_Z in Ultima
-        Buffer XG;                 // ZIP/PIZ: OPTION_XG_Z in bsseeker2: XG:Z field with the underscores removed. ZIP: revcomped if FLAG.revcomp. PIZ: as reconstructed when peeking during XM:Z special recon
-        Buffer deep_nonref;        // PIZ: SAM: SAM_NONREF in Deep: either an allocated buffer or partial overlay over .local. revcomp'ed of FLAG.revcomp
-        Buffer deep_cigar;         // PIZ: SAM: Deep: SAM_CIGAR in Deep: reversed if FLAG.revcomp
-        Buffer bamass_cigar;       // ZIP: FASTQ: vctx CIGAR: used in bamass (binary format, no H,P,X,=, revcomped if needed)
+        Buffer qname_hash;     // ZIP: vctx: SAM_QNAME: each entry i contains a line number for which the hash(qname)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
+        Buffer interlaced;     // ZIP: SAM: used to interlace BD/BI and iq/dq/sq line data
+        Buffer mi_history;     // ZIP: SAM: used by OPTION_MI_Z in Ultima
+        Buffer XG;             // ZIP/PIZ: OPTION_XG_Z in bsseeker2: XG:Z field with the underscores removed. ZIP: revcomped if FLAG.revcomp. PIZ: as reconstructed when peeking during XM:Z special recon
+        Buffer deep_nonref;    // PIZ: SAM: SAM_NONREF in Deep: either an allocated buffer or partial overlay over .local. revcomp'ed of FLAG.revcomp
+        Buffer deep_cigar;     // PIZ: SAM: Deep: SAM_CIGAR in Deep: reversed if FLAG.revcomp
+        Buffer bamass_cigar;   // ZIP: FASTQ: vctx CIGAR: used in bamass (binary format, no H,P,X,=, revcomped if needed)
 
         // VCF
         Buffer format_mapper_buf;  // ZIP: vctx: VCF_SAMPLES: an array of type Container - one entry per entry in CTX(VCF_FORMAT)->nodes   
-        Buffer last_format;        // ZIP: vctx: VCF_FORMAT: cache previous line's FORMAT string
-        Buffer id_hash;            // ZIP: vctx: VCF_ID (BND mates): each entry i contains a line number for which the hash(ID₀)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
-        Buffer info_items;         // ZIP: vctx: VCF_INFO
-        Buffer deferred_snip;      // ZIP/PIZ: VCF: snip of a field whose seg/recon is postponed to after samples: INFO_SF, INFO_DPB
-    };
+        Buffer last_format;    // ZIP: vctx: VCF_FORMAT: cache previous line's FORMAT string
+        Buffer id_hash;        // ZIP: vctx: VCF_ID (BND mates): each entry i contains a line number for which the hash(ID₀)=i (or -1). prm8[0] is log2(len) (i.e., the number of bits)
+        Buffer info_items;     // ZIP: vctx: VCF_INFO
+        Buffer deferred_snip;  // ZIP/PIZ: VCF: snip of a field whose seg/recon is postponed to after samples: INFO_SF, INFO_DPB
+    }; // END OF context specific buffer #1
 
     // ZIP/PIZ: context specific #2
+// § 72-79
     union {
         // GENERAL
         Buffer ol_chrom2ref_map;   // ZIP: vctx: SAM/BAM/VCF: CHROM: mapping from user file chrom to alternate chrom in reference file (cloned) - indices match vb->contexts[CHROM].ol_nodes. New nodes are stored in ctx->chrom2ref_map.
-        Buffer ref2chrom_map;      // ZIP: zctx: SAM/BAM/VCF: CHROM: reverse mapping from ref_index to chrom, created by ref_compress_ref
-        Buffer con_len;            // PIZ: vctx: use by contexts that might have containers: Array of uint16_t - length of item in cache
+        Buffer ref2chrom_map;  // ZIP: zctx: SAM/BAM/VCF: CHROM: reverse mapping from ref_index to chrom, created by ref_compress_ref
+        Buffer con_len;        // PIZ: vctx: use by contexts that might have containers: Array of uint16_t - length of item in cache
         // FASTQ
-        Buffer localR1;            // ZIP/PIZ vctx: PAIR_R2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_R1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted). Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
+        Buffer localR1;        // ZIP/PIZ vctx: PAIR_R2 FASTQ VBs (inc. in Deep SAM): for paired contexts: PAIR_R1 local data from corresponding VB (in PIZ: only if fastq_use_pair_assisted). Note: contexts with containers are always no_stons, so they have no local - therefore no issue with union conflict.
         // VCF
-        Buffer format_contexts;    // ZIP: vctx: VCF_SAMPLES: an array of format_mapper_buf.len of ContextPBlock
-        Buffer sf_i;               // ZIP: vctx: VCF_FORMAT: array of MAX_DICTS x uint16_t : position of this context within this line's FORMAT ; NO_SF_I (0xffff) if context is not present in this line
-        Buffer insertion;          // PIZ: vctx: INFO_SF: inserted INFO fields reconstructed after samples
+        Buffer format_contexts;// ZIP: vctx: VCF_SAMPLES: an array of format_mapper_buf.len of ContextPBlock
+        Buffer sf_i;           // ZIP: vctx: VCF_FORMAT: array of MAX_DICTS x uint16_t : position of this context within this line's FORMAT ; NO_SF_I (0xffff) if context is not present in this line
+        Buffer insertion;      // PIZ: vctx: INFO_SF: inserted INFO fields reconstructed after samples
         // SAM/BAM
-        Buffer huffman;            // ZIP/PIZ zctx: QNAME, QUAL, CIGAR, SA_CIGAR, Solo contexts
-        Buffer piz_is_set;         // vctx: SQBITMAP: PIZ in SAM/BAM ; ZIP in FASTQ-bamass: 
-    };
-                
+        Buffer huffman;        // ZIP/PIZ zctx: QNAME, QUAL, CIGAR, SA_CIGAR, Solo contexts
+        Buffer piz_is_set;     // vctx: SQBITMAP: PIZ in SAM/BAM ; ZIP in FASTQ-bamass: 
+    }; // END OF context specific #2
+      
     // ------------------------------------------------------------------------------------------------
-    // START: RECONSTRUCT STATE : copied in reconstruct_peek 
-    #define reconstruct_state_start(ctx) ((char*)&(ctx)->last_value)
-    #define reconstruct_state_size_formula  ((char*)(&evb->ca.contexts[0].last_encounter_was_reconstructed + 1) - (char*)(&evb->ca.contexts[0].last_value))
-
+    // START: RECONSTRUCT STATE : copied in reconstruct_peek : 64B-aligned (ideally, single cache-line copy)
+    #define FIRST_RECON_STATE_FIELD last_value
+    #define AFTER_RECON_STATE_FIELD unused_in_word_86
+    #define RECON_STATE_SIZE  \
+        (offsetof(Context, AFTER_RECON_STATE_FIELD) - offsetof(Context, FIRST_RECON_STATE_FIELD)) // compile-time constant
+        
+    #define reconstruct_state_start(ctx) ((char*)&(ctx)->FIRST_RECON_STATE_FIELD)
+// § 80
     ValueType last_value;          // ZIP/PIZ: last value of this context (it can be a basis for a delta, used for BAM translation, and other uses)
+// § 81
     union {
         int64_t last_delta;        // ZIP/PIZ: last delta value calculated (always in PIZ, sometimes in ZIP)
+        int64_t last_value_spliced;// PIZ FASTQ_GPOS.
         WordIndex last_con_wi;     // PIZ: word index of last container retrieved from this ctx
     };
-
+// § 82
     #define INVALID_LAST_TXT_INDEX ((uint32_t)-1)
     TxtWord last_txt;              // ZIP/PIZ: index/len into vb->txt_data of last seg/reconstruction (always in PIZ, sometimes in Seg) (introduced 10.0.5)
 
     #define LAST_LINE_I_INIT -0x7fffffff
+// § 83
     LineIType last_line_i;         // ZIP/PIZ: =-1 means ctx not encountered in this line
                                    //          =vb->line_i this line, so far, generated a valid last_value that can be used by downstream fields 
                                    //          =(-vb->line_i-2) means ctx encountered in this line (so far) but last_value was not set 
-    int32_t last_sample_i;         // ZIP/PIZ: Current sample in VCF/FORMAT ; must be set to 0 if not VCF/FORMAT
-    
+    union { // 32 bit                                   
+        int32_t last_sample_i;     // ZIP/PIZ VCF: last sample in VCF/FORMAT which was encountered or value set
+        int32_t next_localR1;      // ZIP/PIZ FASTQ R2: iterator on Context.localR1 (here and not in localR1.next, so it is part of the reconstruct state). Initialized to -1
+    };
+// § 84
     union { // 64 bit
         int64_t ctx_specific;
-        uint32_t segconf_max;      // maximum value during segconf
         bool last_is_alt;          // CHROM (all DTs): ZIP: last CHROM was has an alternative name
         IdType id_type;            // ZIP: type of ID in fields segged with seg_id_field        
-        TxtWord prev_last_txt;     // ZIP/PIZ: used by CB:Z
 
         // SAM / BAM
+        TxtWord prev_last_txt;     // OPTION_CB_Z: ZIP/PIZ
         bool last_is_new;          // SAM_QNAME: ZIP: used in segconf.running
         bool mate_copied_exactly;  // SAM_QNAME: PIZ (consumed for PRIM preprocessing by sam_load_groups_add_qname)
         SamFlags prev_flags;       // PIZ SAM_FLAGS: previous line's SamFlags
@@ -238,7 +244,6 @@ typedef struct Context {
         };
         PosType32 pos_last_value;   // PIZ: VCF_POS: value for rolling back last_value after INFO/END
         bool has_len;               // ZIP: INFO_ANN subfields of cDNA, CDS, AA
-        // char deferred;              // PIZ: !=0 if reconstruction deferred. possibly a seg-passed parameter
 
         struct {                    // ZIP: INFO_SF
             uint32_t next;
@@ -274,143 +279,194 @@ typedef struct Context {
         uint8_t field_width;        // ZCTX ZIP/PIZ: VCF_ID, VCF_QUAL, INFO_AC, INFO_MLEAC, INFO_AN, INFO_AF, INFO_SF, INFO_QD, INFO_DP INFO_AS_SB_TABLE, INFO_BaseCounts, INFO_DPB
          
         // FASTQ
-        packed_enum { PAIR1_ALIGNED_UNKNOWN=-1, PAIR1_NOT_ALIGNED=0, PAIR1_ALIGNED=1 } r1_is_aligned;  // FASTQ_SQBITMAP: PIZ: used when reconstructing pair-2
-        BamAssTrimCigarTreatment bamass_trims; // ZIP FASTQ_CIGAR: bamass: set to segconf.bamass_trims at VB init. 
-        
-        TxtWord last_line1;         // ZIP segconf QNAME: entire line1
+        TxtWord last_line1;         // ZIP QNAME (used during segconf only): entire line1
+        SnipIterator pair_b250_iter;// ZIP R2: all DESC/QNAME fields, TOPLEVEL, SQBITMAP: iterating on pair-1 data while compressing pair-2
+                                    // PIZ R2: SQBITMAP: Iterator on pair, if it contains b250 data
+        BamAssTrimCigarTreatment bamass_trims; // ZIP FASTQ_CIGAR: bamass: set to segconf.bamass_trims at VB init.
     };
+// § 85
+    SnipIterator iterator;          // PIZ: used to iterate on the ctx->b250, reading one b250 word_index at a time
+// § 86
+    uint32_t next_local;            // PIZ: iterator on Context.local 
 
-    SnipIterator iterator;     // PIZ: used to iterate on the ctx->b250, reading one b250 word_index at a time
-    SnipIterator pair_b250_iter; // PIZ: Iterator on pair, if it contains b250 data 
-                               // ZIP FASTQ paired: iterating on pair-1 data while compressing pair-2
-    uint32_t next_local;       // PIZ: iterator on Context.local 
-    bool last_encounter_was_reconstructed; // PIZ: only valid if ctx_encountered() is true. Means last encountered was also reconstructed.
+    bool r1_is_aligned;             // FASTQ_SQBITMAP: PIZ: true if this line is aligned (by aligner, bamass or deep). used when reconstructing pair-2 (R2 file or interleaved)
+
+    bool last_encounter_was_reconstructed; // PIZ: only valid if ctx_encountered_in_sample() is true. Means last encountered was also reconstructed.
+
     // END: RECONSTRUCT STATE 
     // ----------------------------------------------------------------------------------------
-    
+    char unused_in_word_86;         // align subsequent Buffers to 64B
+    SpecialResult special_res;      // PIZ: set by a SPECIAL function in case of result for which the reconstructor needs to take further action
+
+// § 87
+    struct FlagsCtx pair_flags;     // Used if this file is a PAIR_R2 - contains ctx->flags of the PAIR_R1
+    struct FlagsDict dict_flags;    // ZIP zctx ; PIZ: zctx+vctx . Tramsmiited via SectionFlags.dictionary (v15)
+    B250Size b250_size      : 3;    // Size type of element in b250 data (PIZ and ZIP after generation) v14
+    B250Size pair_b250_size : 3;
+    Codec lcodec;              // ZIP/PIZ: vctx/zctx: codec used to compress local (or sub_codec if codec is complex like CODEC_DOMQ)
     union {
-    
-    // ------ ZIP-only fields - common zctx and vctx ------ 
-    struct {
-    Buffer nodes;              // ZIP: array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
-                               // ZIP->PIZ zctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
-    Buffer global_hash;        // ZIP: zctx/vctx: global hash table that is populated during merge in zctx and is overlayed to vctx during clone. contains indices into global_ents.
-
-    uint64_t txt_len;          // ZIP zctx/vctx: number of characters in reconstructed (possibly modified) text are accounted for by snips in this ctx (for stats)  (note: seg_seg_long_CIGAR assumes this is uint64_t)
-    int64_t txt_shrinkage;     // ZIP zctx/vctx: number of characters removed from txt due to modifications (can be negative)
-    uint64_t local_num_words;  // ZIP zctx/vctx: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.
-
-    int32_t num_new_entries_prev_merged_vb; // zctx: updated in every merge - how many new words happened in this VB
-                               // vctx: copied from zctx during clone, and used to initialize the size of local_hash
-                               //         0 means no VB merged yet with this. if a previous vb had 0 new words, it will still be 1.
-
-    Did st_did_i;              // ZIP: in --stats, consolidate this context into st_did_i
-
-    Codec bcodec;              // ZIP zctx/vctx: codec used to compress b250
-    Codec dcodec;              // ZIP zctx/vctx: codec used to compress dict
-
-    bool no_stons;             // ZIP: zctx/vctx: don't attempt to move singletons to local even if ltype=LT_SINGLETON or if local is not used for anything else
-    bool local_param;          // copy local.param to SectionHeaderCtx
-    bool counts_section;       // ZIP: zctx/vctx: output ctx->counts to SEC_COUNTS section for this context
-    bool subdicts_section;     // ZIP: zctx/vctx: output ctx->subdicts to SEC_SUBDICTS section for this context
-    bool lcodec_hard_coded;    // ZIP: zctx/vctx: lcodec is hard-coded and should not be reassigned
-    bool is_stats_parent;      // other contexts have this context in st_did_i
-    StoreType seg_to_local;    // ZIP: zctx/vctx: seg_array: this Int/Float field should be segged to local 
-
-    union {
-        struct {
-            packed_enum { NOT_IN_HEADER=0, NUMBER_R=-1, NUMBER_A=-2, NUMBER_G=-3, NUMBER_VAR=-4, NUMBER_LARGE=-5/*Number∉[1,127]*/ } Number; // contains a value 1->127 or one of enumerated values
-            packed_enum { VCF_Unknown_Type, VCF_Float, VCF_Integer, VCF_Character, VCF_Flag, VCF_String } Type;
-        } vcf;
-    } header_info;
-
-    union {
-
-    // ------ ZIP-only fields - vctx only ------ 
-    struct { 
-    Buffer ol_dict;            // ZIP vctx: tab-delimited list of all unique snips - overlayed zctx->dict (i.e. all previous VB dictionaries)
-    Buffer ol_nodes;           // ZIP vctx: array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
-    Buffer local_hash;         // ZIP: vctx: hash table for entries added by this VB that are not yet in the global (until merge_number)
-                               // obtained by hash function hash(snip) and contains indices into vctx->nodes
-
-    // rollback point - used for rolling back during Seg (64b fields first and 32b fields after)
-    int64_t rback_id;          // ZIP: rollback data valid only if ctx->rback_id == vb->rback_id
-    TxtWord rback_last_txt;
-    ValueType rback_last_value;
-    int64_t rback_last_delta, rback_ctx_spec_param;
-    
-    STR (last_snip);           // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated             
-
-    uint32_t rback_b250_count, rback_local_num_words, rback_local_len, rback_nodes_len, rback_txt_len; // ZIP: data to roll back the last seg
-
-    uint32_t nodes_len_at_1_3, nodes_len_at_2_3;  // used in merge to set the size of the global hash table, when the first vb to create a ctx does so: value of nodes->len after an estimated 1/3 + 2/3 of the lines have been segmented
-
-    bool local_always;         // ZIP vctx: always create a local section in zfile, even if it is empty 
-    bool local_is_lten;        // ZIP vctx: if true local data is LTEN, otherwise it is the machine (native) endianity
-    bool dyn_transposed;       // ZIP vctx: matrix should be transposed, if possible
-    bool no_drop_b250;         // ZIP: the b250 section cannot be optimized away in b250_zip_generate_section (eg if we need section header to carry a param)
-    bool no_callback;          // ZIP vctx: don't use callback for compressing, despite it being defined
-    LocalDepType local_dep;    // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
-    bool local_compressed;     // ZIP: VB: local has been compressed
-    bool b250_compressed;      // ZIP: VB: b250 has been compressed
-    bool nodes_converted;      // ZIP vctx: nodes have been converted in ctx_merge_in_one_vctx from index/len to word_index
-    bool dict_merged;          // ZIP vctx: dict has been merged into zctx
-    int tag_i;                 // ZIP VCF: dual-coordinates VB only: index into vb->tags for tag renaming 
-    WordIndex last_snip_ni;    // ZIP
-    }; // ------ End of ZIP-only fields - vctx only ------
-
-    // ------ ZIP-only fields - zctx only ------ 
-    struct { 
-    Buffer ston_hash;          // ZIP zctx: hash table for global singletons - each entry is a head of linked-list - index into ston_ents
-    Buffer ston_ents;          // ZIP zctx: ents of hash of singletons - of type LocalHashEnt. contains link lists for each hash entry - headed from ston_hash
-    Mutex ctx_mutex;           // ZIP zctx: protects merges
-    Mutex assign_codec_mutex[2]; // ZIP zctx: [0]=b250 codec [1]=local codec 
-    uint32_t num_failed_singletons;// zctx: (for stats) Words that we wrote into local in one VB only to discover later that they're not a singleton, and wrote into the global dict too
-    Codec lcodec_non_inherited;// ZIP zctx: non-inherited lcodec - used only for submitting stats
-    uint8_t lcodec_count, bcodec_count; // ZIP zctx --best: approximate number of VBs in a row that selected this codec
-    bool dict_len_excessive;   // ZIP zctx: dict is very big, indicating an ineffecient segging of this context
-    bool please_remove_dict;   // zctx: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
-    bool rm_dict_all_the_same; // zctx: we can remove the dict bc it is all-the-same
-    bool override_rm_dict_ats; // zctx: don't remove dict, even if rm_dict_all_the_same is set
-    bool all_the_same_wi_is_set; // zctx: zctx->dict_flags.all_the_same_wi is set 
-    int8_t vb_1_pending_merges;// ZIP zctx: count of vb=1 merges still pending for this context (>1 if it has aliases). Other VBs can merge only if this is 0.
-    }; // ------ End of ZIP-only fields - zctx only -------
+    Codec lsubcodec_piz;       // ZIP/PIZ: vctx: piz to decompress with this codec, AFTER decompressing with lcodec
+    Codec qual_codec;          // ZIP zctx: QUAL codec selected in codec_assign_best_qual_codec
     };
-    };
-
-    // ------ PIZ-only fields ------ 
-    struct {
-    Buffer word_list;          // PIZ: zctx (+ overlayed to vctx): word list. an array of CtxWord - listing the snips in dictionary
-    Buffer history;            // PIZ: contains an array of either int64_t (if STORE_INT) or HistoryWord (pointing into txt_data, dict or dropped_txt). used for: A. if FlagsCtx.store_per_line. B. for lookback (since 12.0.41) 
-    Buffer dropped_txt;        // PIZ: reconstructed txt that might be pointed to by ctx->history, and is absent from txt_data because: 1. the line was dropped due to genocat subsetting, 2. reconstruction of CIGAR in FASTQ
-
-    // PIZ: context-specific buffer
-    union {
-        Buffer piz_ctx_specific_buf;
-        Buffer piz_word_list_hash; // PIZ: zctx of SAM_RNAME, VCF_CHROM 
-        Buffer cigar_anal_history; // PIZ: used in SAM_CIGAR - items of type CigarAnalItem
-        Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
-        Buffer domq_denorm;        // PIZ: SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
-        Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec ; FASTQ: used by TMPL codec
-        Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
-    };
-
-    ContainerP curr_container;// PIZ: current container in this context currently in the stack. NULL if none.
-
-    WordIndex last_wi;         // PIZ: last word_index retrieved from b250 
-    LineIType recon_insertion; // PIZ VCF: for deferred fields (mostly INFO fields inserted after samples) - whether to reconstruct. if to reconstruct - set to vb->line_i+1. any other value means "don't reconstruct"
-    Did other_did_i;           // PIZ: cache the other context needed for reconstructing this one
-    SectionType pair_assist_type; // PIZ FASTQ R2: SEC_LOCAL, SEC_B250 is pair-assist, SEC_NONE if not.
-    bool is_ctx_alias;         // PIZ: context is an alias            
-    bool local_uncompressed;   // PIZ: vctx: local has been uncompressed
-    bool b250_uncompressed;    // PIZ: vctx: b250 has been uncompressed
-    bool empty_lookup_ok;      // PIZ: 
-    bool is_loaded;            // PIZ: vctx/zctx: vctx: either dict or local or b250 are loaded (not skipped) so context can be reconstructed ; zctx: dict is loaded
-    SpecialResult special_res; // PIZ: set by a SPECIAL function in case of result for which the reconstructor needs to take further action
-    }; // ------ End of PIZ-only fields ------- 
+    bool is_initialized;       // ZIP/PIZ: context-specific initialization has been done
     
-    }; // union ZIP-only and PIZ-only fields
+    union {
+    bool z_data_exists;        // ZIP/PIZ: zctx: z_file has SEC_DICT, SEC_B250 and/or SEC_LOCAL sections of this context (not necessarily loaded)
+    uint8_t dyn_lt_order;      // ZIP/PIZ: vctx: if ltype=LT_DYN*, the current ltype order of the data in local (ZIP) or history (PIZ)
+    };
+    uint8_t nothing_char;      // ZIP/PIZ: vctx: if non-zero, if local integer == max_int (for its ltype), nothing_char will be reconstructed instead. In PIZ, 0xff means fallback to pre-15.0.39
+        
+    union {
+        // ------ ZIP-only fields - starting with common zctx and vctx ------ 
+        struct Context_ZIP {
+// § 88-103: aligned on 8-word (64B) boundary 
+            Buffer nodes;              // ZIP: array of CtxNode - in this VB that don't exist in ol_nodes. char/word indices are into dict.
+                                       // ZIP->PIZ zctx.nodes.param is transferred via SectionHeaderCounts.nodes_param if counts_section=true
+            Buffer global_hash;        // ZIP: §96 zctx/vctx: global hash table that is populated during merge in zctx and is overlayed to vctx during clone. contains indices into global_ents.
 
+// § 104-105
+            uint64_t txt_len;          // ZIP zctx/vctx: number of characters in reconstructed (possibly modified) text are accounted for by snips in this ctx (for stats)  (note: seg_seg_long_CIGAR assumes this is uint64_t)
+            int64_t txt_shrinkage;     // ZIP zctx/vctx: number of characters removed from txt due to modifications (can be negative)
+// § 106
+            int32_t num_new_entries_prev_merged_vb; // zctx: updated in every merge - how many new words happened in this VB
+                                       // vctx: copied from zctx during clone, and used to initialize the size of local_hash
+                                       //         0 means no VB merged yet with this. if a previous vb had 0 new words, it will still be 1.
+
+            Did st_did_i;              // ZIP: in --stats, consolidate this context into st_did_i
+
+            Codec bcodec;              // ZIP zctx/vctx: codec used to compress b250
+            Codec dcodec;              // ZIP zctx/vctx: codec used to compress dict
+// § 107
+            StoreType seg_to_local;    // ZIP: zctx/vctx: seg_array: this Int/Float field should be segged to local 
+            bool no_stons;             // ZIP: zctx/vctx: don't attempt to move singletons to local even if ltype=LT_SINGLETON or if local is not used for anything else
+            // infrequintly accessed fields can be bitfields
+            bool local_param       : 1;// copy local.param to SectionHeaderCtx
+            bool counts_section    : 1;// ZIP: zctx/vctx: output ctx->counts to SEC_COUNTS section for this context
+            bool subdicts_section  : 1;// ZIP: zctx/vctx: output ctx->subdicts to SEC_SUBDICTS section for this context
+            bool lcodec_hard_coded : 1;// ZIP: zctx/vctx: lcodec is hard-coded and should not be reassigned
+            bool is_stats_parent   : 1;// other contexts have this context in st_did_i
+            
+            union {
+                struct {
+                    packed_enum { NOT_IN_HEADER=0, NUMBER_R=-1, NUMBER_A=-2, NUMBER_G=-3, NUMBER_VAR=-4, NUMBER_LARGE=-5/*Number∉[1,127]*/ } Number; // contains a value 1->127 or one of enumerated values
+                    packed_enum { VCF_Unknown_Type, VCF_Float, VCF_Integer, VCF_Character, VCF_Flag, VCF_String } Type;
+                } vcf;
+            } header_info;
+            char unused_word_107[3];
+
+            union {
+
+                // ------ ZIP-only fields - vctx only ------ 
+                struct Context_ZIP_vctx { 
+// § 108-111
+                    STR(last_snip);            // Seg: snip (in dictionary) and node_index the last non-empty ("" or NULL) snip evaluated             
+                    uint32_t nodes_len_at_⅓[2];// ZIP vctx: used in merge to set the size of the global hash table, when the first vb to create a ctx does so: value of nodes->len after an estimated ⅓ and ⅔ of the lines have been segged
+                    WordIndex last_snip_ni;    // ZIP
+                    uint32_t v_local_n_words;  // ZIP vctx: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.                 
+
+                    // infrequently accessed fields can be bitfields
+                    uint32_t local_always     : 1; // ZIP vctx: always create a local section in zfile, even if it is empty 
+                    uint32_t local_is_lten    : 1; // ZIP vctx: if true local data is LTEN, otherwise it is the machine (native) endianity
+                    uint32_t dyn_transposed   : 1; // ZIP vctx: matrix should be transposed, if possible
+                    uint32_t no_drop_b250     : 1; // ZIP: the b250 section cannot be optimized away in b250_zip_generate_section (eg if we need section header to carry a param)
+                    uint32_t no_callback      : 1; // ZIP vctx: don't use callback for compressing, despite it being defined
+                    uint32_t local_compressed : 1; // ZIP: VB: local has been compressed
+                    uint32_t b250_compressed  : 1; // ZIP: VB: b250 has been compressed
+                    uint32_t nodes_converted  : 1; // ZIP vctx: nodes have been converted in ctx_merge_in_one_vctx from index/len to word_index
+                    uint32_t dict_merged      : 1; // ZIP vctx: dict has been merged into zctx
+                    LocalDepType local_dep    : 2; // ZIP: this local is created when another local is compressed (each NONREF_X is created with NONREF is compressed) (value=0,1,2)
+                    uint32_t unused_bits_111  : 21; 
+
+// § 112-135 - Buffers are 64B-aligned
+                    Buffer ol_dict;    // ZIP vctx: tab-delimited list of all unique snips - overlayed zctx->dict (i.e. all previous VB dictionaries)
+                    Buffer ol_nodes;   // ZIP vctx: array of CtxNode - overlayed all previous VB dictionaries. char/word indices are into ol_dict.
+                    Buffer local_hash; // ZIP: vctx: hash table for entries added by this VB that are not yet in the global (until merge_number)
+                                       // obtained by hash function hash(snip) and contains indices into vctx->nodes
+
+// § 136            ZIP vctx: rollback point (same cache line) - used for rolling back during Seg
+                    uint64_t unused136[2]; 
+                    struct rback { // 48 bytes
+                        ValueType last_value;
+                        int64_t last_delta;
+                        TxtWord last_txt;
+                        int32_t id;     // ZIP: rollback data valid only if ctx->rback.id == vb->rback_id
+                        uint32_t b250_count;
+                        uint32_t local_len;
+                        uint32_t local_n_words;
+                        uint32_t nodes_len; 
+                        uint32_t txt_len; 
+                    } rback;
+                }; // ------ End of Context_ZIP_vctx ------
+
+                // ------ ZIP-only fields - zctx only ------ 
+                struct Context_ZIP_zctx { 
+// § 108
+                    uint64_t z_local_n_words        : 48; // ZIP zctx: number of words (segs) that went into local. If a field is segged into multiple contexts - this field is incremented in each of them. If the context also uses b250, this field is ignored by stats which uses count instead.
+                    uint64_t dict_len_excessive     : 1;  // ZIP zctx: dict is very big, indicating an ineffecient segging of this context
+                    uint64_t please_remove_dict     : 1;  // zctx: one or more of the VBs request NOT compressing this dict (will be dropped unless another VB insists on keeping it)
+                    uint64_t rm_dict_all_the_same   : 1;  // zctx: we can remove the dict bc it is all-the-same
+                    uint64_t override_rm_dict_ats   : 1;  // zctx: don't remove dict, even if rm_dict_all_the_same is set
+                    uint64_t all_the_same_wi_is_set : 1;  // zctx: zctx->dict_flags.all_the_same_wi is set 
+                    uint64_t unused_bits_151        : 11;
+// § 109
+                    uint32_t num_failed_singletons;// zctx: (for stats) Words that we wrote into local in one VB only to discover later that they're not a singleton, and wrote into the global dict too
+                    Codec lcodec_non_inherited;// ZIP zctx: non-inherited lcodec - used only for submitting stats
+                    uint8_t lcodec_count;      // ZIP zctx --best: approximate number of VBs in a row that selected this codec
+                    uint8_t bcodec_count; 
+                    int8_t vb_1_pending_merges;// ZIP zctx: count of vb=1 merges still pending for this context (>1 if it has aliases). Other VBs can merge only if this is 0.
+// § 110 to: Linux:127, Mac:136, Windows:115 (due to different sizes of pthread_mutex_t)
+                    Mutex ctx_mutex;               // ZIP zctx: protects merges
+                    Mutex assign_codec_mutex[2];   // ZIP zctx: [0]=b250 codec [1]=local codec 
+
+#define MUTEX_START_WRD 110
+#define MUTEX_AFTER_BYTES ((MUTEX_START_WRD * 8) + (sizeof(Mutex) * 3))
+                    uint64_t align_64B_pad[((64 - (MUTEX_AFTER_BYTES % 64)) % 64) / 8]; // length: Linux:0, Windows:4, Mac: 7
+// 64B-aligned: Linux word 128-143, Mac 144-159, Windows 120-135 (no word sign in this comment because validate_context.sh can't deal with platform-specific)
+                    Buffer ston_hash;              // ZIP zctx: hash table for global singletons - each entry is a head of linked-list - index into ston_ents
+                    Buffer ston_ents;              // ZIP zctx: ents of hash of singletons - of type SingletonEnt. contains link lists for each hash entry - headed from ston_hash
+                }; // ------ End Context_ZIP_zctx -------
+            
+            }; // ------ End union Context_ZIP_vctx | Context_ZIP_zctx -------
+        
+        }; // ------ End of Context_ZIP -------
+
+        // ------ PIZ-only fields ------ 
+        struct Context_PIZ {
+// § 88-111 - 64B-aligned
+            Buffer word_list;          // PIZ: zctx (+ overlayed to vctx): word list. an array of CtxWord - listing the snips in dictionary
+            Buffer history;            // PIZ: contains an array of either int64_t (if STORE_INT) or HistoryWord (pointing into txt_data, dict or dropped_txt). used for: A. if FlagsCtx.store_per_line. B. for lookback (since 12.0.41) 
+            Buffer dropped_txt;        // PIZ: reconstructed txt that might be pointed to by ctx->history, and is absent from txt_data because: 1. the line was dropped due to genocat subsetting, 2. reconstruction of CIGAR in FASTQ
+
+            // PIZ: context-specific buffer
+// § 112-119
+            union {
+                Buffer piz_ctx_specific_buf;
+                Buffer piz_word_list_hash; // PIZ: zctx of SAM_RNAME, VCF_CHROM 
+                Buffer cigar_anal_history; // PIZ: used in SAM_CIGAR - items of type CigarAnalItem
+                Buffer line_sqbitmap;      // PIZ: used in SAM_SQBITMAP
+                Buffer domq_denorm;        // PIZ: SAM/BAM/FASTQ: DomQual codec denormalization table for contexts with QUAL data 
+                Buffer channel_data;       // PIZ: SAM: QUAL/OPTION_iq_Z/OPTION_dq_Z/OPTION_sq_Z : used by PACB codec ; FASTQ: used by TMPL codec
+                Buffer homopolymer;        // PIZ: SAM: OPTION_tp_B_c
+            };
+
+// § 120
+            ContainerP curr_container; // PIZ: current container in this context currently in the stack. NULL if none.
+
+// § 121
+            WordIndex last_wi;         // PIZ: last word_index retrieved from b250 
+            LineIType recon_insertion; // PIZ VCF: for deferred fields (mostly INFO fields inserted after samples) - whether to reconstruct. if to reconstruct - set to vb->line_i+1. any other value means "don't reconstruct"
+// § 122
+            Did other_did_i;           // PIZ: cache the other context needed for reconstructing this one
+            SectionType pair_assist_type; // PIZ FASTQ R2: SEC_LOCAL, SEC_B250 is pair-assist, SEC_NONE if not.
+            bool is_ctx_alias;         // PIZ: context is an alias            
+            bool local_uncompressed;   // PIZ: vctx: local has been uncompressed
+            bool b250_uncompressed;    // PIZ: vctx: b250 has been uncompressed
+            bool empty_lookup_ok;      // PIZ: 
+            bool is_loaded;            // PIZ: vctx/zctx: vctx: either dict or local or b250 are loaded (not skipped) so context can be reconstructed ; zctx: dict is loaded
+
+// § this "PIZ-only" union member is shorter than "ZIP-only" member
+        }; // ------ End of Context_PIZ ------- 
+    }; // ------ END of union Context_ZIP | Context_PIZ ------
 } Context;
 
 typedef struct {
@@ -418,10 +474,13 @@ typedef struct {
     Did did_i;
 } ContextIndex;
 
+// note: size is a multiple of 64B (as is every Context)
 typedef struct ContextArray {
-    Did d2d_map[65536 * 2]; // 256 KB
-    Buffer ctx_index;  // sorted index into contexts for binary-search lookup if d2d_map fails (PIZ VB / ZIP evb in stats_get_compressed_sizes)
-    Did num_contexts;             
-    Context contexts[MAX_DICTS];
+    // the most used fields (inc. typically only a few tens or hundred of ctxs) first, so that the unused tail pages needn't be loaded 
+    Did d2d_map[65536 * 2];      // 256 KB
+    Buffer ctx_index;            // 64 B. sorted index into contexts for binary-search lookup if d2d_map fails (PIZ VB / ZIP evb in stats_get_compressed_sizes). prm16[0] is num_contexts
+    Context contexts[MAX_DICTS]; // ~ 2 MB
 } ContextArray, *ContextArrayP;
+#define _num_contexts ctx_index.prm16[0]
+
 typedef const struct ContextArray *ConstContextArrayP;

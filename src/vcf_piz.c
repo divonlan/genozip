@@ -323,7 +323,7 @@ CONTAINER_ITEM_CALLBACK (vcf_piz_con_item_cb)
             break;
 
         case _FORMAT_DP:
-            if (ctx_has_value (VB, FORMAT_DP)) { // not '.' or missing
+            if (ctx_has_value_in_sample (VB, FORMAT_DP)) { // not '.' or missing
                 if (segconf.INFO_DP_method == BY_FORMAT_DP) 
                     CTX(INFO_DP)->dp.sum_format_dp += CTX(FORMAT_DP)->last_value.i;
 
@@ -361,7 +361,7 @@ static void vcf_piz_insert_by_snip (VBlockVCFP vb, ContextP ctx)
 {
     rom recon = BAFTtxt;
 
-    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, STRb(ctx->deferred_snip), true, __FUNCLINE);
+    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, STRb(ctx->deferred_snip), true, THIS_CODE_LINE);
     uint32_t recon_len = BAFTtxt - recon;
 
     // we can't send recon in txt_data since its going to memmove, so we copy it to a buffer

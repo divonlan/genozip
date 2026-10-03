@@ -251,7 +251,7 @@ void random_access_finalize_entries (BufferP ra_buf)
 
     // use sorter to consturct a sorted RA
     static Buffer sorted_ra_buf = {}; // must be static because its added to buf_list
-    buf_alloc_exact (evb, sorted_ra_buf, ra_buf->len, RAEntry, ra_buf->name);
+    buf_alloc_exact (evb, sorted_ra_buf, ra_buf->len, RAEntry, unר(ra_buf->nameר));
 
     for_buf2 (RAEntry, sorted_ra, i, sorted_ra_buf)
         *sorted_ra = *B(RAEntry, *ra_buf, sorter[i]);

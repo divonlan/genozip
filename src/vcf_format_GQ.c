@@ -49,7 +49,7 @@ static int64_t vcf_predict_GQ_by_PL (VBlockVCFP vb)
     if (IS_PERIOD(pl)) return -1;
 
     // get sorted array of PL values
-    str_split_ints (pl, pl_len, 500, ',', val, false);
+    str_split_unsigneds (pl, pl_len, 500, ',', val, false);
     if (!n_vals) return 0; // array too long or not all integers
 
     qsort (vals, n_vals, sizeof(int64_t), value_sorter);
@@ -101,18 +101,18 @@ void vcf_seg_FORMAT_GQ (VBlockVCFP vb)
     }
 
     if (segconf_running) {
-        if (ctx_encountered (VB, FORMAT_GP) && ABS (vcf_predict_GQ_by_GP (vb) - gq_value) <= 5) segconf.count_GQ_by_GP++;
-        if (ctx_encountered (VB, FORMAT_PL) && ABS (vcf_predict_GQ_by_PL (vb) - gq_value) <= 5) segconf.count_GQ_by_PL++;
+        if (ctx_encountered_in_sample (VB, FORMAT_GP) && ABS (vcf_predict_GQ_by_GP (vb) - gq_value) <= 5) segconf.count_GQ_by_GP++;
+        if (ctx_encountered_in_sample (VB, FORMAT_PL) && ABS (vcf_predict_GQ_by_PL (vb) - gq_value) <= 5) segconf.count_GQ_by_PL++;
     }
 
     else switch (segconf.FMT_GQ_method) {
         case BY_GP: 
-            if (!ctx_encountered (VB, FORMAT_GP)) goto fallback;
+            if (!ctx_encountered_in_sample (VB, FORMAT_GP)) goto fallback;
             prediction = vcf_predict_GQ_by_GP (vb);
             goto do_seg;
 
         case BY_PL: {
-            if (!ctx_encountered (VB, FORMAT_PL)) goto fallback;
+            if (!ctx_encountered_in_sample (VB, FORMAT_PL)) goto fallback;
             prediction = vcf_predict_GQ_by_PL (vb);
         
         do_seg: {

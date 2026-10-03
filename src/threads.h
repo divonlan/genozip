@@ -34,8 +34,8 @@ void threads_write_log (bool to_info_stream);
 
 #define ASSERTMAINTHREAD ASSERT (threads_am_i_main_thread(), "%s can only be called in main thread", __FUNCTION__)
 
-extern void catch_exception_do (rom msg, FUNCLINE);
-#define catch_exception(msg) catch_exception_do ((msg), __FUNCLINE)
+extern void catch_exception_do (rom msg, Caller caller);
+#define catch_exception(msg) catch_exception_do ((msg), THIS_CODE_LINE)
 
 extern void uncatch_exception (void);
 

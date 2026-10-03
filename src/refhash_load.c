@@ -59,22 +59,18 @@ static void refhash_uncompress_one_vb (VBlockP vb)
 {
     START_TIMER;
 
-    SectionHeaderRefHashP header = (SectionHeaderRefHashP )vb->z_data.data;
+    SectionHeaderRefHashP header = (SectionHeaderRefHashP)vb->z_data.data;
 
-    // a hack for uncompressing to a location withing the buffer - while multiple threads are uncompressing into 
+    // uncompress to a location within the buffer - while multiple threads are uncompressing into 
     // non-overlappying regions in the same buffer in parallel
-    Buffer copy = refhash_buf;
+    Buffer refhash_sub_buf;
 
-    if (refhash_is_flat) {
-        ASSERTNOTZERO (gpos_bytes);
-        uint64_t start = header->first_ent * gpos_bytes;
-        copy.data = Bc(refhash_buf, start);
-    }
+    uint64_t start = refhash_is_flat ? (header->first_ent * gpos_bytes)
+                   /*up to 15.0.80*/ : (LAYER_START[header->OLD.layer_i] * 4 + BGEN32 (header->OLD.start_in_layer));
 
-    else  // up to 15.0.80
-        copy.data = (char *)B32(refhash_buf, LAYER_START[header->OLD.layer_i]) + BGEN32 (header->OLD.start_in_layer);
+    buf_superimpose (vb, &refhash_sub_buf, &refhash_buf, start, "refhash_sub_buf");
     
-    zfile_uncompress_section (vb, header, &copy, NULL, 0, SEC_REF_HASH);
+    zfile_uncompress_section (vb, header, &refhash_sub_buf, NULL, 0, SEC_REF_HASH);
 
     vb_set_is_processed (vb); // tell dispatcher this thread is done and can be joined.
 

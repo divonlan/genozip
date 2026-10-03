@@ -95,7 +95,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_xcons_XO)
 // YY is predicted to be non-0 iff XX is 0
 void sam_seg_xcons_YY (VBlockSAMP vb, int64_t yy, unsigned add_bytes)
 {
-    int channel_i = ctx_has_value_in_line_(VB, CTX(OPTION_XX_i)) && !CTX(OPTION_XX_i)->last_value.i;
+    int channel_i = ctx_has_value_in_line (VB, OPTION_XX_i) && !CTX(OPTION_XX_i)->last_value.i;
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_YY_i, &vb->mux_YY, channel_i);
 
@@ -107,7 +107,7 @@ void sam_seg_xcons_YY (VBlockSAMP vb, int64_t yy, unsigned add_bytes)
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_XX_0)
 {
-    int channel_i = ctx_has_value_in_line_(VB, CTX(OPTION_XX_i)) && !CTX(OPTION_XX_i)->last_value.i;
+    int channel_i = ctx_has_value_in_line (VB, OPTION_XX_i) && !CTX(OPTION_XX_i)->last_value.i;
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);
 }
@@ -116,9 +116,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_XX_0)
 void sam_seg_xcons_XC (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xc, unsigned add_bytes)
 {
     int64_t prediction = 0;
-    if (ctx_has_value_in_line_(VB, CTX(OPTION_XX_i))) prediction += CTX(OPTION_XX_i)->last_value.i;
-    if (ctx_has_value_in_line_(VB, CTX(OPTION_YY_i))) prediction += CTX(OPTION_YY_i)->last_value.i;
-    if (ctx_has_value_in_line_(VB, CTX(OPTION_XY_i))) prediction += CTX(OPTION_XY_i)->last_value.i;
+    if (ctx_has_value_in_line (VB, OPTION_XX_i)) prediction += CTX(OPTION_XX_i)->last_value.i;
+    if (ctx_has_value_in_line (VB, OPTION_YY_i)) prediction += CTX(OPTION_YY_i)->last_value.i;
+    if (ctx_has_value_in_line (VB, OPTION_XY_i)) prediction += CTX(OPTION_XY_i)->last_value.i;
     
     if (xc == prediction)
         seg_by_did (VB, STRa(XC_snip), OPTION_XC_i, add_bytes);

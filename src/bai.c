@@ -992,7 +992,7 @@ void bai_write (void)
     file_remove (filename, true);
 
     FILE *fp = fopen (filename, WRITE);
-    ASSRET (fp,, "WARNING: Failed to write %s. fopen: %s", filename, strerror (errno));
+    ASSRET (fp,, _WRN"Failed to write %s. fopen: %s", filename, strerror (errno));
 
     ARRAY_alloc (uint64_t, n_chunks_in_rname,      num_bai_contigs,  true,  evb->codec_bufs[0], evb, "codec_bufs[0]");
     ARRAY_alloc (BaiChunk *, first_chunk_in_rname, num_bai_contigs,  true,  evb->codec_bufs[1], evb, "codec_bufs[1]");
@@ -1082,19 +1082,19 @@ void bai_write (void)
 
     if (IS_BAI)
         ASSGOTO (fwrite (vb->txt_data.data, vb->txt_data.len, 1, fp) == 1, 
-                 "WARNING: Failed to write %s. fwrite: %s", filename, arch_str_error());
+                 _WRN"Failed to write %s. fwrite: %s", filename, arch_str_error());
 
     // TBI needs to be BGZF-compressed
     else {
         bgzf_compress_tbi();
 
         ASSGOTO (fwrite (vb->comp_txt_data.data, vb->comp_txt_data.len, 1, fp) == 1, 
-                 "WARNING: Failed to write %s. fwrite: %s", filename, arch_str_error());
+                 _WRN"Failed to write %s. fwrite: %s", filename, arch_str_error());
         
         buf_destroy (vb->comp_txt_data);
     }
     
-    ASSGOTO (!fclose (fp), "WARNING: Failed to write %s. fclose: %s", filename, strerror (errno));
+    ASSGOTO (!fclose (fp), _WRN"Failed to write %s. fclose: %s", filename, strerror (errno));
     
     buf_free (vb->txt_data);
     flag.make_bai = false; 
@@ -1155,10 +1155,10 @@ static void bai_show_one_bin (BinStructP bin, rom rname_s)
 // read BAI or TBI file data into evb->txt_data
 static void bai_show_read_file (rom filename)
 {
-    ASSINP (file_exists (filename), "Error: file not found: %s", filename);
+    ASSINP (file_exists (filename), _ERR"file not found: %s", filename);
     
     uint64_t file_size = file_get_size (filename);
-    ASSINP (file_size, "Error: file is empty: %s", filename);
+    ASSINP (file_size, _ERR"file is empty: %s", filename);
         
     txt_file = file_open_txt_read (filename);
     ASSERTNOTNULL (txt_file);
@@ -1311,5 +1311,5 @@ void bai_show (rom filename)
     COPY_TIMER_EVB(show_bai);
 
     if (flag.show_time)
-        profiler_add_evb_and_print_report();
+        𝓅𝓇ℴ𝒻𝒾𝓁ℯ (profiler_add_evb_and_print_report());
 }

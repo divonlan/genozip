@@ -141,7 +141,7 @@ static void zip_handle_unique_words_ctxs (VBlockP vb)
         if (vctx->local.len || vctx->local_always ||  // local is not free to accept our singletons
             vctx->no_stons  ||  // don't change to LT_SINGLETON if we were explicitly forbidden having singletons
             vctx->ltype == LT_SUPP || // local data might be created by codec (later)
-            (VB_DT(VCF) && dict_id_is_vcf_format_sf (vctx->dict_id))) // this doesn't work for FORMAT fields
+            ctx_is_VCF_FORMAT (vctx)) // this doesn't work for FORMAT fields
             continue;
             
         // reset ltype to LT_SINGLETON so that we can use local for singletons (either here or in ctx_commit_node - subject to conditions).
@@ -173,7 +173,7 @@ static bool zip_generate_local (VBlockP vb, ContextP ctx)
     ctx->ltype = dyn_int_get_ltype (ctx);
 
     // case: local is LTEN (instead of native endianity) and machine is BGEN, so BGEN_*_buf ^ above did nothing.     
-    bool need_lten = (ctx->local_is_lten && !flag.is_lten);
+    bool need_lten = ℬ𝒾ℊℰ(ctx->local_is_lten) + 0;
     
     switch (ctx->ltype) {
         case LT_BITMAP    : 
@@ -250,16 +250,16 @@ static void zip_compress_all_contexts_b250 (VBlockP vb)
     threads_log_by_vb (vb, "zip", "START COMPRESSING B250", 0);
     
     // arrays of all contexts in this VB
-    ContextP ctxs[vb->ca.num_contexts];
+    ContextP ctxs[vb->ca._num_contexts];
     for_ctx (&vb->ca) ctxs[did_i] = ctx;
 
         // in each iteration, pick a context at random and remove it from the list 
-    for (unsigned i=0; i < vb->ca.num_contexts; i++) {
+    for (unsigned i=0; i < vb->ca._num_contexts; i++) {
  
-        int ctx_i = global_max_threads > 1 ? ((clock()+1) * (vb->vblock_i+1)) % (vb->ca.num_contexts - i) : 0; // force predictability with single thread 
+        int ctx_i = global_max_threads > 1 ? ((clock()+1) * (vb->vblock_i+1)) % (vb->ca._num_contexts - i) : 0; // force predictability with single thread 
         
         ContextP ctx = ctxs[ctx_i];
-        memmove ((char *)&ctxs[ctx_i], (char *)&ctxs[ctx_i+1], (vb->ca.num_contexts - i - ctx_i - 1) * sizeof (ContextP));
+        memmove ((char *)&ctxs[ctx_i], (char *)&ctxs[ctx_i+1], (vb->ca._num_contexts - i - ctx_i - 1) * sizeof (ContextP));
 
         if (!ctx->b250.len || ctx->b250_compressed) continue;
 
@@ -297,7 +297,7 @@ static void zip_compress_all_contexts_local (VBlockP vb)
     for (int dep_level=DEP_L0 ; dep_level < NUM_LOCAL_DEPENDENCY_LEVELS; dep_level++) {
 
         // initialize list of contexts at this dependency level that need compression
-        ContextP ctxs[vb->ca.num_contexts];
+        ContextP ctxs[vb->ca._num_contexts];
         unsigned num_ctxs=0;
         for_vctx_that ((vctx->local.len || vctx->local_always) && vctx->local_dep == dep_level && !vctx->local_compressed)
             ctxs[num_ctxs++] = vctx;
@@ -511,7 +511,7 @@ static void zip_compress_one_vb (VBlockP vb)
 {
     START_TIMER; 
 
-    // we're just taking a biopsy of the txt data, so no need to actually compress. 
+    // we're just taking a biopsy of the txt data, so no need to actually seg or compress. 
     if (flag.biopsy && 
         !(segconf.sag_type && vb->comp_i == SAM_COMP_MAIN)) // except in MAIN of SAM/BAM gencomp - need to generate PRIM and DEPN VBs 
         goto after_compress; 
@@ -644,11 +644,11 @@ static void zip_prepare_one_vb_for_dispatching (VBlockP vb)
 
         // note: the opposite case where R2 has less reads than R1 is caught in txtfile_read_vblock
         ASSINP (!R1_data_exhausted || vb->dispatch == DATA_EXHAUSTED, // we are expecting that if our pair R1 data is exhausted, then our R2 data is exhausted too
-                "Error: File %s has more FASTQ reads than its R1 mate (vb=%s)", txt_name, VB_NAME);
+                _ERR"File %s has more FASTQ reads than its R1 mate (vb=%s)", txt_name, VB_NAME);
 
         // error if stdin is empty - can happen only when redirecting eg "cat empty-file|./genozip -" (we test for empty regular files in main_genozip)
         ASSINP0 (vb->vblock_i > 1 || txt_file->txt_data_so_far_single /* txt header data */, 
-                 "Error: Cannot compress stdin data because its size is 0");
+                 _ERR"Cannot compress stdin data because its size is 0");
 
         if (flag.biopsy && vb->dispatch == DATA_EXHAUSTED)
             biopsy_data_is_exhausted();
@@ -683,7 +683,7 @@ static void zip_complete_processing_one_vb (VBlockP vb)
     zip_update_txt_counters (vb);
 
     // destroy some buffers of "first generation" contexts (those that didn't clone any nodes)  
-    if (vb->vblock_i < 100) // don't bother checking for high vb_i 
+    if (vb->vblock_i <= global_max_threads) // don't bother checking for high vb_i 
         for_vctx_that (vctx->nodes.len32 && !vctx->ol_nodes.len32) {
             buf_destroy (vctx->b250);       // 1st generation likely to have excessive length due to being all-new 4B nodes
             buf_destroy (vctx->local_hash); // 1st generation allocated based on wild guess
@@ -720,7 +720,7 @@ uint64_t zip_get_target_progress (void)
 void zip_one_file (bool is_last_user_txt_file)  // the last user-specified txt file in this execution
 {
     Dispatcher dispatcher = 0;
-    if (flag.show_time_comp_i == flag.zip_comp_i) profiler_initialize(); // re-start wallclock
+    𝓅𝓇ℴ𝒻𝒾𝓁ℯ (if (flag.show_time_comp_i == flag.zip_comp_i) profiler_initialize();) // re-start wallclock
 
     z_file->txt_data_so_far_single = 0;
     z_file->num_components         = MAX_(z_file->num_components, flag.zip_comp_i+1); // may increase further with generated components (in zip_update_txt_counters())
@@ -862,5 +862,5 @@ finish:
     segconf_free();
     
     if (flag.show_time_comp_i == flag.zip_comp_i) 
-        profiler_add_evb_and_print_report();
+        𝓅𝓇ℴ𝒻𝒾𝓁ℯ (profiler_add_evb_and_print_report());
 }

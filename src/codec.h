@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include "lzma/7zTypes.h"
-#include "lzma/LzmaDec.h"
 #include "data_types.h"
 
 #define MIN_LEN_FOR_COMPRESSION 50 // less that this size, and compressed size is typically larger than uncompressed size
@@ -140,11 +138,11 @@ extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_domq_est_
 // non-codec-specific functions
 extern void codec_initialize (void);
 extern rom codec_name (Codec codec);
-extern void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, unsigned *buf_i, FUNCLINE);
-#define codec_alloc(vb,size,grow_at_least_factor) codec_alloc_do((vb),(size),(grow_at_least_factor), NULL, __FUNCLINE)
+extern void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, unsigned *buf_i, Caller caller);
+#define codec_alloc(vb,size,grow_at_least_factor) codec_alloc_do((vb),(size),(grow_at_least_factor), NULL, THIS_CODE_LINE)
 
-extern void codec_free_do (void *vb, void *addr, FUNCLINE);
-#define codec_free(vb,addr) codec_free_do ((vb), (addr), __FUNCLINE)
+extern void codec_free_do (void *vb, void *addr, Caller caller);
+#define codec_free(vb,addr) codec_free_do ((vb), (addr), THIS_CODE_LINE)
 
 extern void codec_free_all (VBlockP vb);
 extern void codec_destroy_all (VBlockP vb);

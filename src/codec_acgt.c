@@ -42,16 +42,37 @@ void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i,
 }
 
 // packing of an array A,C,G,T characters into a 2-bit Bits, stored in vb->scratch. 
-static inline void codec_acgt_pack (BitsP packed, rom data, uint64_t data_len)
+// top unused bits are set to zero.
+static inline void codec_acgt_pack (VBlockP vb, BitsP packed, rom data, uint64_t data_len)
 {
-    // increase bit array to accomodate data
-    uint64_t next_bit = packed->nbits;
-    packed->nbits += data_len * 2;
-    packed->nwords = roundup_bits2words64 (packed->nbits);
+    if (__builtin_expect(data_len == 0, 0)) return;
 
-    // pack nucleotides - each character is packed into 2 bits
-    for (uint64_t i=0 ; i < data_len ; i++, next_bit += 2)       
-        bits_assign2 (packed, next_bit, acgt_encode(data[i]));
+    START_TIMER;
+
+    uint64_t next_bit = bits_resize (packed, packed->nbits + data_len * 2);
+
+    uint64_t *restrict bitmap_words = packed->words;
+    uint64_t word_i = bits_wrd (next_bit);
+    int bit_index   = bits_idx (next_bit); // starting bit position within bitmap_words[word_i]
+
+    uint64_t current_word = bitmap_words[word_i] & bitmask64(bit_index); // load existing bits to preserve them (unused bits are zero)
+
+    for (uint64_t i=0; i < data_len; i++) {
+        current_word |= ((uint64_t)acgt_encode(data[i]) << bit_index);
+        bit_index += 2;
+
+        if (bit_index == 64) {
+            bitmap_words[word_i++] = current_word;
+            current_word = 0;
+            bit_index = 0;
+        }
+    }
+
+    // flush remaining partial word. unused top bits are guaranteed zero.
+    if (bit_index > 0) 
+        bitmap_words[word_i] = current_word;
+
+    COPY_TIMER (codec_acgt_pack);
 }
 
 // This function decompsoses SEQ data into two buffers:
@@ -71,7 +92,7 @@ COMPRESS (codec_acgt_compress)
     
     START_TIMER;
     
-    #define PACK(data,len) { if (len) codec_acgt_pack (packed, (data), (len)); }
+    #define PACK(data,len) { if (len) codec_acgt_pack (vb, packed, (data), (len)); }
 
     ContextP nonref_ctx = ctx;
     bool has_x = !nonref_ctx->flags.acgt_no_x;
@@ -93,13 +114,11 @@ COMPRESS (codec_acgt_compress)
 
     // option 1 - pack contiguous data
     if (uncompressed) {
-        // overlay the NONREF.local to NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
-        if (has_x) {
-            buf_set_shared (&nonref_ctx->local);
-            buf_overlay (vb, &nonref_x_ctx->local, &nonref_ctx->local, C_LOCAL);
-        }
 
-        PACK (uncompressed, *uncompressed_len); // pack into vb->scratch
+        // superimpose the NONREF_X.local to avoid needing more memory, as NONREF.local is not needed after packing
+        buf_superimpose (vb, &nonref_x_ctx->local, &nonref_ctx->local, 0, C_LOCAL);
+
+        codec_acgt_pack (vb, packed, uncompressed, *uncompressed_len);
 
         // calculate the exception in-place in NONREF.local also overlayed to NONREF_X.local
         if (has_x) 
@@ -116,10 +135,10 @@ COMPRESS (codec_acgt_compress)
             STRw0𐤐(data_1);
             get_line_cb (vb, ctx, line_i, pSTRa(data_1), *uncompressed_len - nonref_x_ctx->local.len32, NULL);
 
-            PACK (data_1, data_1_len);
+            codec_acgt_pack (vb, packed, data_1, data_1_len);
 
             ASSERT (nonref_x_ctx->local.len + data_1_len <= nonref_x_ctx->local.size, "nonref_x_ctx overflow: data_1_len=%u local=%.*s", 
-                    data_1_len, (int)sizeof(BufDescType)-1, buf_desc (&nonref_x_ctx->local).s);
+                    data_1_len, (int)sizeof(StrText1K)-1, buf_desc (&nonref_x_ctx->local).s);
             
             for (uint8_t *restrict next=BAFT8(nonref_x_ctx->local), *after=next + data_1_len; next < after; next++, data_1++) 
                 *next = (uint8_t)*data_1 ^ acgt_exceptions[(uint8_t)*data_1];
@@ -130,10 +149,8 @@ COMPRESS (codec_acgt_compress)
     else 
         ABORT ("%s: \"%s\": neither src_data nor callback is provided", VB_NAME, name);
 
-    bits_clear_excess_bits_in_top_word (packed, false); // for good measure (V15)
-
     // case: no exception bases after all
-    if (buf_is_zero (&nonref_x_ctx->local)) {
+    if (buf_is_zero (&nonref_x_ctx->local, 1)) {
         has_x = false;  
         header->flags.ctx.acgt_no_x = true; 
         buf_destroy (nonref_x_ctx->local); // cannot use buf_free for an overlaid buffer 
@@ -146,7 +163,7 @@ COMPRESS (codec_acgt_compress)
         nonref_x_ctx->lcodec = z_lcodec; // possibly set by a previous VB call to codec_assign_best_codec
         PAUSE_TIMER(vb); // codec_assign_best_codec account for itself
         nonref_x_ctx->lsubcodec_piz = codec_assign_best_codec (vb, nonref_x_ctx, NULL, SEC_LOCAL);
-        RESUME_TIMER (vb, compressor_acgt);
+        RESUME_TIMER(vb, compressor_acgt);
         if (nonref_x_ctx->lsubcodec_piz == CODEC_UNKNOWN) nonref_x_ctx->lsubcodec_piz = CODEC_NONE; // really small
         
         nonref_x_ctx->lcodec = CODEC_XCGT;
@@ -158,12 +175,16 @@ COMPRESS (codec_acgt_compress)
 
     // note: we ignore --no-lzma here, becuase ACGT codec counts on LZMA, and it is fast on this data 
     nonref_ctx->lcodec = header->sub_codec = (vb->scratch.len32 * sizeof (uint64_t) >= MIN_LEN_FOR_COMPRESSION) ? CODEC_LZMA : CODEC_NONE;
-    
+
+    if (flag_is_set (show_codec, nonref_ctx->dict_id) || flag.show_qual) // printing aligned to the output of codec_assign_best_codec
+        iprintf ("%-8s %-12s %-5s           *[%s→%s]\n", VB_NAME, nonref_ctx->tag_name, "LOCAL", 
+                 codec_name(CODEC_ACGT), codec_name(nonref_ctx->lcodec));
+ 
     compress_sub: {
         CodecCompress *compress = codec_args[header->sub_codec].compress;
         uint32_t packed_uncompressed_len = packed->nwords * sizeof (uint64_t);
 
-        if (flag.show_time) codec_show_time (vb, "Subcodec", vb->profile.next_subname, header->sub_codec);
+        𝓅𝓇ℴ𝒻𝒾𝓁ℯ (if (flag.show_time) codec_show_time (vb, "Subcodec", vb->profile.next.subname, header->sub_codec);)
 
         PAUSE_TIMER(vb); // sub-codec compresssors account for themselves
         if (!compress (vb, ctx, header, (char *)packed->words, &packed_uncompressed_len, NULL, compressed, compressed_len, soft_fail, name)) return false;
@@ -232,7 +253,7 @@ UNCOMPRESS (codec_acgt_uncompress)
 
     LTEN_bits (packed);
 
-    bits_clear_excess_bits_in_top_word (packed, false);
+    bits_clear_excess_bits_in_top_word (packed);
 
     // decode here if no X. If there's X we decode in codec_xcgt_uncompress (acgt_no_x added in 15.0.13)
     if (ctx->flags.acgt_no_x) {

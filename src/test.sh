@@ -31,11 +31,11 @@ cleanup()
 # compares two files using internal MD%, allowing each file to be gz-compressed or not
 cmp_2_files() 
 {
-    if [ ! -f $1 ] ; then echo "File $1 not found while in cmp_2_files()"; exit 1; fi
-    if [ ! -f $2 ] ; then echo "File $2 not found while in cmp_2_files()"; exit 1; fi
+    if [ ! -f $1 ] ; then echo "❌ File $1 not found while in cmp_2_files()"; exit 1; fi
+    if [ ! -f $2 ] ; then echo "❌ File $2 not found while in cmp_2_files()"; exit 1; fi
 
     if [[ `$zmd5 $1` != `$zmd5 $2` ]] ; then
-        echo "MD5 comparison FAILED: $1 $2"
+        echo "❌ MD5 comparison FAILED: $1 $2"
         echo `$zmd5 "$1"` "$1" 
         echo `$zmd5 "$2"` "$2"
         exit 1
@@ -45,11 +45,11 @@ cmp_2_files()
 # compares two files using external MD5, requiring that they have the same gz compression
 cmp_2_files_exact() 
 {
-    if [ ! -f $1 ] ; then echo "File $1 not found while in cmp_2_files()"; exit 1; fi
-    if [ ! -f $2 ] ; then echo "File $2 not found while in cmp_2_files()"; exit 1; fi
+    if [ ! -f $1 ] ; then echo "❌ File $1 not found while in cmp_2_files()"; exit 1; fi
+    if [ ! -f $2 ] ; then echo "❌ File $2 not found while in cmp_2_files()"; exit 1; fi
 
     if [[ "`$md5 $1 | cut -d' ' -f1`" != "`$md5 $2 | cut -d' ' -f1`" ]] ; then
-        echo "MD5 comparison FAILED: $1 $2"
+        echo "❌ MD5 comparison FAILED: $1 $2"
         echo `$md5 "$1"`
         echo `$md5 "$2"`
         exit 1
@@ -58,7 +58,7 @@ cmp_2_files_exact()
 
 verify_failure() # $1=exe $2=$? 
 {
-    if (( $2 == 0 )); then echo "Error: expecting $1 to fail but it succeeded"; exit 1; fi
+    if (( $2 == 0 )); then echo "❌ expecting $1 to fail but it succeeded"; exit 1; fi
 }
 
 test_header() 
@@ -81,7 +81,7 @@ test_count_genocat_lines()
     local wc=`cat $recon | wc -l`
 
     if (( $wc != $3 )); then
-        echo "FAILED - expected $3 lines, but getting $wc"
+        echo "❌ test_count_genocat_lines: expected $3 lines, but getting $wc"
         exit 1
     fi  
     # note: we don't delete $output as subsequent tests might use it
@@ -95,7 +95,7 @@ test_count_genocat_info_lines()
     local wc=`cat $recon | wc -l`
 
     if (( $wc != $2 )); then
-        echo "FAILED - expected $2 lines, but getting $wc"
+        echo "❌ test_count_genocat_info_lines: expected $2 lines, but getting $wc"
         exit 1
     fi  
 }
@@ -112,7 +112,7 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         for file in ${args[@]:2}; do 
             cp $TESTDIR/$file $OUTDIR/copy.$file
             copies+=( $OUTDIR/copy.$file )
-            args+=( tmp/copy.$file ) # adding the ${TESTDIR}/ prefix in a sec
+            args+=( $OUTDIRNAME/copy.$file ) # adding the ${TESTDIR}/ prefix in a sec
         done
     fi
 
@@ -144,7 +144,7 @@ test_standard()  # $1 genozip args $2 genounzip args $3... filenames
         local count=`ls -1 $TESTDIR/*.genozip | wc -l`   # unfortunately, these go to TESTDIR not OUTDIR
         local num_files=$(( $# - 1 ))
         if (( $count != $num_files )); then
-            echo "Error: compressed $num_files files, but only $count genozip files found. Files compressed: "
+            echo "❌ compressed $num_files files, but only $count genozip files found. Files compressed: "
             echo ${files[@]}
             exit 1
         fi
@@ -176,7 +176,7 @@ test_redirected() { # $1=filename  $2...$N=optional extra genozip arg
 
     # verify not generic
     if [[ $input != "" ]] && [[ $input != "--input generic" ]] && [[ `$genocat $output --show-data-type` == "GENERIC" ]]; then
-        echo "data_type of $file unexpectedly not recognized and compressed as GENERIC"
+        echo "❌ data_type of $file unexpectedly not recognized and compressed as GENERIC"
         exit 1
     fi
 
@@ -201,7 +201,7 @@ test_windows_style() {  # $1=filename
     test_header "$1 - Window-style end-of-line"
     local file=$TESTDIR/$1
 
-    if [ ! -f $file ] ; then echo "$1: File $file not found"; exit 1; fi
+    if [ ! -f $file ] ; then echo "❌ $1: File $file not found"; exit 1; fi
 
     sed 's/$/\r/g' $OUTDIR/unix-nl.$1 > $OUTDIR/windows-nl.$1 || exit 1 # note: sed on mac doesn't recognize \r
     $genozip $OUTDIR/windows-nl.$1 -ft -o $output || exit 1
@@ -248,7 +248,7 @@ test_md5()
     genozip_md5=`$genols $output | grep $output | cut -c 51-82` || exit $? 
     real_md5=`$zmd5 $file` || exit $?
 
-    if [[ "$genozip_md5" != "$real_md5" ]]; then echo "FAILED - expected $file to have MD5=\"$real_md5\" but genozip calculated MD5=\"$genozip_md5\""; exit 1; fi
+    if [[ "$genozip_md5" != "$real_md5" ]]; then echo "❌ expected $file to have MD5=\"$real_md5\" but genozip calculated MD5=\"$genozip_md5\""; exit 1; fi
 
     cleanup
 }
@@ -261,8 +261,8 @@ test_translate_sam_to_bam_to_sam() # $1 bam file $2 genozip options $3 genocat o
     local sam=${bam%.bam}.sam
     local new_bam=$OUTDIR/copy_new.bam
     local new_sam=$OUTDIR/copy_new.sam
-    if [ ! -f $bam ] ; then echo "$bam: File not found"; exit 1; fi
-    if [ ! -f $sam ] ; then echo "$sam: File not found"; exit 1; fi
+    if [ ! -f $bam ] ; then echo "❌ $bam: File not found"; exit 1; fi
+    if [ ! -f $sam ] ; then echo "❌ $sam: File not found"; exit 1; fi
 
     # SAM -> BAM
     echo "STEP 1: sam -> sam.genozip"
@@ -291,7 +291,7 @@ verify_is_fastq() # $1 fastq file name
     local lines=`cat $fastq | wc -l`
 
     if (( $pluses * 4 != $lines )); then 
-        echo "After converting $1 to FASTQ: $fastq has $pluses '+' lines and $lines lines, but expecting $(($pluses * 4)) lines"
+        echo "❌ After converting $1 to FASTQ: $fastq has $pluses '+' lines and $lines lines, but expecting $(($pluses * 4)) lines"
         exit 1
     fi
 
@@ -359,7 +359,7 @@ batch_basic()
         replace=
     fi
 
-    test_standard "NOPREFIX CONCAT $ref" " " file://${path}${TESTDIR}/$file
+    test_standard "NOPREFIX CONCAT $ref" " " file://${TESTDIR}/$file
     test_standard "-p123 $ref" "--password 123" $file
     if [ -z "$is_windows" ] || [ "$file" != basic.bam ]; then # can't redirect binary files in Windows
         test_redirected $file
@@ -383,7 +383,7 @@ batch_precompressed()
 
         if [ -x "$(command -v xz)" -o "${file##*.}" != xz ] ; then # skip .xz files if xz is not installed
             test_standard " " " " "$file"
-            test_standard "NOPREFIX CONCAT" " " file://${path}${TESTDIR}/$file
+            test_standard "NOPREFIX CONCAT" " " file://$TESTDIR/$file
             test_standard "-p123" "--password 123" $file
         fi
     done
@@ -394,27 +394,27 @@ verify_bgzf() # $1 file that we wish to inspect $2 expected result (0 not-bgzf 1
     # case: file is BGZF-foramt
     if [ "$(head -c4 $1 | od -x | head -1 | awk '{$2=$2};1')" == "0000000 8b1f 0408" ]; then 
         if [ $2 -eq 0 ]; then
-            echo "$1 is unexpectedly BGZF-compressed"
+            echo "❌ $1 is unexpectedly BGZF-compressed"
             exit 1
         
         # case: BGZF format consists of non-compressed blocks
         elif [ "$(head -c26 $1 | tail -c3)" == "BAM" ]; then
             if [ $2 -eq 1 ]; then
-                echo "$1 is unexpectedly a BAM file with non-compressed BGZF blocks"
+                echo "❌ $1 is unexpectedly a BAM file with non-compressed BGZF blocks"
                 exit 1
             fi
 
         # case: BGZF format consists of compressed blocks
         else
             if [ $2 -eq 2 ]; then
-                echo "$1 is unexpectedly a BGZF-compressed file (with compressed BGZF blocks)"
+                echo "❌ $1 is unexpectedly a BGZF-compressed file (with compressed BGZF blocks)"
                 exit 1
             fi
         fi
 
     else
         if [ $2 -ne 0 ]; then
-            echo "$1 is not BGZF-compressed"
+            echo "❌ $1 is not BGZF-compressed"
             exit 1
         fi
     fi
@@ -430,7 +430,7 @@ batch_bgzf()
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
-        test_standard "NOPREFIX CONCAT" " " file://${path}${TESTDIR}/$file
+        test_standard "NOPREFIX CONCAT" " " file://${TESTDIR}/$file
         test_standard "-p123" "--password 123" $file
 #        if [ -z "$is_windows" ]; then # in windows, we don't support redirecting stdin
             test_redirected $file
@@ -487,7 +487,7 @@ batch_bgzf()
 
     local restarting=`$genozip $file -fXo $output |& grep restarting | wc -l`
     if (( restarting != 1)); then # verify restart
-        echo "Failed to restart genozip"
+        echo "❌ Failed to restart genozip"
         exit 1
     fi
 }
@@ -521,7 +521,7 @@ batch_bgzf_exact()
     test_header "--exact-strict for $file - should fail (file is purposely non-exactable)"
     $genounzip $TESTDIR/special/special.igzip⁀1.fails-exact.fq.genozip -fo $recon --bgzf=exact-strict
     if (( $? == 0 )); then
-        echo "Expecting a failure, but it incorrectly succeeded"
+        echo "❌ Expecting a failure, but it incorrectly succeeded"
         exit 1
     fi
 
@@ -613,7 +613,7 @@ batch_special_algs()
     test_header "regression: bamass: QUAL not compressed with SMUX when expected"
     $genozip -tf ${TESTDIR}/regression.bamass.mgi.fq --bamass ${TESTDIR}/regression.bamass.mgi.sam -e $GRCh38 --show-codec > $OUTDIR/out || exit 1
     if ! grep SMUX $OUTDIR/out > /dev/null ; then 
-        echo "Expecting SMUX, but not found"
+        echo "❌ Expecting SMUX, but not found"
         exit 1
     fi
 
@@ -718,11 +718,11 @@ batch_iupac()
     count=`$genocat_no_echo $output -H --bases ACGTN --count -q` || exit $? 
     if [ "$count" == "" ]; then echo genocat error; exit 1; fi
 
-    if [ "$count" -ne $non_iupac_lines ]; then echo "bad count = $count, expecting $non_iupac_lines"; exit 1; fi
+    if [ "$count" -ne $non_iupac_lines ]; then echo "❌ bad count = $count, expecting $non_iupac_lines"; exit 1; fi
 
     test_header "genocat --bases ^ACGTN --count (FASTQ)"
     count=`$genocat_no_echo $output -H --bases ^ACGTN --count -q` || exit $? 
-    if [ "$count" -ne 1 ]; then echo "bad count = $count"; exit 1; fi
+    if [ "$count" -ne 1 ]; then echo "❌ bad count = $count"; exit 1; fi
 }
 
 # Test SAM/BAM translations
@@ -767,7 +767,7 @@ batch_qname_flavors()
 
         if [[ "$expected_flavor" != "$observed_flavor" ]]; then
             cat $OUTDIR/stats
-            echo "$file: Incorrect flavor. Filename indicates \"$expected_flavor\" but genozip found \"$observed_flavor\""
+            echo "❌ $file: Incorrect flavor. Filename indicates \"$expected_flavor\" but genozip found \"$observed_flavor\""
             exit 1
         fi
     done
@@ -936,7 +936,7 @@ batch_user_message_permissions()
 
         $genounzip $output -fo $recon > $recon_msg || exit 1
         if (( `grep "$line" $recon_msg | wc -l` != 1 )); then
-            echo "Error: cannot find message from $msg in $recon_msg"
+            echo "❌ cannot find message from $msg in $recon_msg"
             exit 1
         fi
     done
@@ -994,7 +994,7 @@ batch_developer_limitations()
 
     local file=$GENOZIP_HOME/public/hg19.fa.gz
     if [ ! -f "$file" ]; then
-        echo $file not found
+        echo "❌ batch_developer_limitations: $file not found"
         exit 1
     fi
 
@@ -1009,6 +1009,7 @@ batch_licfile()
 {
     batch_print_header
 
+    rm -f $LICFILE
     $genozip -fXo $output $TESTDIR/minimal.bam --licfile $LICENSESDIR/genozip_license.v71.Enterprise || exit 1
 
     cleanup
@@ -1171,17 +1172,17 @@ ass_eq_num() # $1 result $2 expected
 
     echo \"$res\" \"$2\"
     if ! [[ "$res" =~ ^[0-9]+$ ]] ; then
-        echo "test.sh: Failed: result \"$res\" is not a number" # genocat failed and hence didn't return a number - error message is already displayed
+        echo "❌ test.sh: Failed: result \"$res\" is not a number" # genocat failed and hence didn't return a number - error message is already displayed
         exit 1
     fi
 
     if ! [[ "$res" =~ ^[0-9]+$ ]] ; then
-        echo "test.sh: Bad comparison argument, expecting \$2 to be an integer" # genocat failed and hence didn't return a number - error message is already displayed
+        echo "❌ test.sh: Bad comparison argument, expecting \$2 to be an integer" # genocat failed and hence didn't return a number - error message is already displayed
         exit 1
     fi
 
     if (( $res != $2 )); then 
-        echo "test.sh: Failed: result is $1 but expecting $2"
+        echo "❌ test.sh: Failed: result is $1 but expecting $2"
         exit 1
     fi
 }
@@ -1308,17 +1309,33 @@ batch_real_world_optimize()
 {
     batch_print_header
 
-    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
+    for dt in fastq.fq sam.sam bam.bam vcf.vcf; do
+        local recon=$OUTDIR/$dt
 
-    cd $TESTDIR
-    local files=( `ls -1 test.*vcf test.*vcf.gz test.*bcf test.*sam test.*sam.gz test.*bam test.*fq test.*fq.gz \
+        for res in $TESTDIR/optimize/$dt.*; do
+            local opt=`echo $res | rev | cut -d. -f1 | rev`
+            opt="${opt//-/:}" # replace '-' with ':' (filename has '-' bc NTFS doesn't allow filenames with a colon)
+
+            test_header "$dt with --$opt"
+
+            $genozip $TESTDIR/optimize/$dt --$opt -o $output -fXq || exit 1
+            $genounzip $output -fo $recon || exit 1
+            
+            cmp_2_files $res $recon
+        done
+    done
+
+    # optimize many files of different types at once
+    local files=( `cd $TESTDIR; ls -1 test.*vcf test.*vcf.gz test.*bcf test.*sam test.*sam.gz test.*bam test.*fq test.*fq.gz \
                    | grep -v headerless` )
 
-    # test genozip and genounzip --test - first 10K lines of the file should be sufficient to detect optimization issues
-    echo "compressing first 10k lines with --optimize"
-    $genozip --head=10000 --fast --optimize --show-filename --test --force ${files[*]} || exit 1
+    # test genozip and genounzip --test - first 1000 lines of the file should be sufficient to detect optimization issues
+    echo "compressing first 1000 lines with --optimize"
+    $genozip --head=1000 --fast --optimize --show-filename --test --force ${files[*]/#/$TESTDIR/} -o $OUTDIR/ || exit 1
 
-    cd -
+    # test correctness
+
+    cleanup 
 }
 
 test_effective_codec_pair() # $1=R1_file $2=R2_file $3=expected_effective_codecs 
@@ -1332,7 +1349,7 @@ test_effective_codec_pair() # $1=R1_file $2=R2_file $3=expected_effective_codecs
     echo -n "effective_codecs=" `cat $effective_codecs`
 
     if [[ "`cat $effective_codecs`" != "$3" ]]; then
-        echo "expected_effective_codecs=\"$3\" but effective_codecs=\"`cat $effective_codecs`\""
+        echo "❌ expected_effective_codecs=\"$3\" but effective_codecs=\"`cat $effective_codecs`\""
         exit 1
     fi
 
@@ -1366,7 +1383,7 @@ batch_mgzip_fastq()
         local discovered_codec=$( $genocat --show-header=TXT_HEADER $output | tr " " "\n" | grep src_codec | cut -d= -f2 )
 
         if (( "${expected_codec^^}" != "$discovered_codec")); then
-            echo "$f: Bad codec discovery for file: expected_codec=${expected_codec^^} discovered_codec=$discovered_codec"
+            echo "❌ $f: Bad codec discovery for file: expected_codec=${expected_codec^^} discovered_codec=$discovered_codec"
             exit 1
         fi
         echo "$f is compressed with effective_codec=$discovered_codec"
@@ -1469,8 +1486,6 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
 {
     batch_print_header
 
-    cleanup # note: cleanup doesn't affect TESTDIR, but we shall use -f to overwrite any existing genozip files
-
     local filter_xz=nothing
     if [ ! -x "$(command -v xz)" ] ; then # xz unavailable
         local filter_xz=.xz
@@ -1523,7 +1538,7 @@ batch_real_world_genounzip_compare_file() # $1 extra genozip argument
 
         local expected_md5=`cat ${TESTDIR}/${f}.md5` # calculated in test/Makefile
         if [[ "$actual_md5" != "$expected_md5" ]] ; then
-            echo "${TESTDIR}/$f has MD5=$expected_md5 but reconstructed file ${OUTDIR}/$f has MD5=$actual_md5"
+            echo "❌ ${TESTDIR}/$f has MD5=$expected_md5 but reconstructed file ${OUTDIR}/$f has MD5=$actual_md5"
             exit 1
         fi
 
@@ -1599,7 +1614,7 @@ verify_sam_type() # $1=filename ; $2=expected type
     local type=$(get_sam_type "$1")
 
     if [[ "$type" != "$2" ]]; then
-        echo "Error: expected $filename to be a $2 but it is a $type"
+        echo "❌ expected $filename to be a $2 but it is a $type"
         exit 1
     fi
 }
@@ -1646,7 +1661,7 @@ batch_test_bai()
 
         for txt_file in "$recon_bam" "$recon_sam"; do
             if [[ ! -f "$txt_file.bai" ]]; then
-                echo "genounzip didn't generate $txt_file.bai, likely because $bam is unmapped or unsorted. If so, exclude it from the file list"
+                echo "❌ genounzip didn't generate $txt_file.bai, likely because $bam is unmapped or unsorted. If so, exclude it from the file list"
                 exit 1
             fi
         done
@@ -1664,7 +1679,7 @@ batch_test_bai()
                 # compare two subset SAMs generated by samtools view: one (index) with the samtools index BAI
                 # and the second with the BAI generated by genounzip/cat
                 if [[ "$($md5sum < "$recon_range_sam")" != "$($md5sum < "$index_sam")" ]] ; then # md5sum is A LOT faster than cmp
-                    echo "ERROR: samtools returned a different range for samtools index bai vs genounzip (of $(basename $txt_file)) bai. See:"
+                    echo "❌ samtools returned a different range for samtools index bai vs genounzip (of $(basename $txt_file)) bai. See:"
                     ls -l "$index_sam" "$recon_range_sam"
                     exit 1
                 fi
@@ -1698,7 +1713,7 @@ batch_test_tbi()
         $genounzip "$dir/${vcf/gz/genozip}" -fo "$txt_file" || exit 1 # generates .vcf.gz and .vcf.tbi
 
         if [[ ! -f "$txt_file.tbi" ]]; then
-            echo "genounzip didn't generate $txt_file.tbi."
+            echo "❌ genounzip didn't generate $txt_file.tbi."
             exit 1
         fi
 
@@ -1714,7 +1729,7 @@ batch_test_tbi()
             # compare two subset SAMs generated by bcftools view: one (tabix) with the tabix BAI
             # and the second with the BAI generated by genounzip
             if [[ "$($md5sum < "$recon_range_vcf")" != "$($md5sum < "$tabix_vcf")" ]] ; then # md5sum is A LOT faster than cmp
-                echo "ERROR: bcftools returned a different range for tabix tbi vs genounzip (of $(basename $txt_file)) tbi. See:"
+                echo "❌ bcftools returned a different range for tabix tbi vs genounzip (of $(basename $txt_file)) tbi. See:"
                 ls -l "$tabix_vcf" "$recon_range_vcf"
                 exit 1
             fi
@@ -1904,89 +1919,89 @@ batch_sam_bam_cram_output()
         test_header "#1: test genounzip of `basename $z`: should be the same type"
         $genounzip $z -fo $txt || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != $z_type ]]; then echo "genounzip of $z_type unexpectedly generated $txt_type"; exit 1; fi
+        if [[ $txt_type != $z_type ]]; then echo "❌ genounzip of $z_type unexpectedly generated $txt_type"; exit 1; fi
 
         test_header "#2: genocat of `basename $z`: implicit - should be the same type"
         $genocat $z -fo $txt || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != $z_type ]]; then echo "genocat (implicit) of $z_type unexpectedly generated $txt_type"; exit 1; fi
+        if [[ $txt_type != $z_type ]]; then echo "❌ genocat (implicit) of $z_type unexpectedly generated $txt_type"; exit 1; fi
 
         test_header "#3: genocat of `basename $z`: stdout - should be SAM"
         $genocat $z > $txt || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != "SAM" ]]; then echo "genocat (stdout) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
+        if [[ $txt_type != "SAM" ]]; then echo "❌ genocat (stdout) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
 
         test_header "#4: genocat of `basename $z`: explicitly SAM by filename"
         $genocat $z -fo $txt.sam || exit 1
         txt_type=$(get_sam_type $txt.sam)
-        if [[ $txt_type != "SAM" ]]; then echo "genocat (-o .sam) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
+        if [[ $txt_type != "SAM" ]]; then echo "❌ genocat (-o .sam) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
 
         test_header "#5: genocat of `basename $z`: explicitly SAM by flag"
         $genocat $z -fo $txt --sam || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $z_type == "SAM" && $txt_type != "SAM" ]]; then echo "genocat (--sam) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
-        if [[ $z_type != "SAM" && $txt_type != "SAM_GZ" ]]; then echo "genocat (--sam) of $z_type unexpectedly generated $txt_type, expecting SAM_GZ"; exit 1; fi
+        if [[ $z_type == "SAM" && $txt_type != "SAM" ]]; then echo "❌ genocat (--sam) of $z_type unexpectedly generated $txt_type, expecting SAM"; exit 1; fi
+        if [[ $z_type != "SAM" && $txt_type != "SAM_GZ" ]]; then echo "❌ genocat (--sam) of $z_type unexpectedly generated $txt_type, expecting SAM_GZ"; exit 1; fi
 
         test_header "#6: genocat of `basename $z`: stdout as SAM.gz"
         $genocat $z --sam -z1 > $txt || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != "SAM_GZ" ]]; then echo "genocat (stdout as SAM.gz) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+        if [[ $txt_type != "SAM_GZ" ]]; then echo "❌ genocat (stdout as SAM.gz) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
 
         test_header "#7: genocat of `basename $z`: explicitly SAM.gz by .sam.gz filename"
         $genocat $z -fo $txt.sam.gz || exit 1
         txt_type=$(get_sam_type $txt.sam.gz)
-        if [[ $txt_type != "SAM_GZ" ]]; then echo "genocat (-o .sam.gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
+        if [[ $txt_type != "SAM_GZ" ]]; then echo "❌ genocat (-o .sam.gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
 
         test_header "#8: genocat of `basename $z`: explicitly SAM.gz by --sam + .gz filename"
         $genocat $z -fo $txt.gz --sam || exit 1
         txt_type=$(get_sam_type $txt.gz)
-        if [[ $txt_type != "SAM_GZ" ]]; then echo "genocat (--sam -o .gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
+        if [[ $txt_type != "SAM_GZ" ]]; then echo "❌ genocat (--sam -o .gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
 
         test_header "#9: genocat of `basename $z`: stdout as BAM"
         $genocat $z --bam -z1 > $txt || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != "BAM" ]]; then echo "genocat (stdout as BAM) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+        if [[ $txt_type != "BAM" ]]; then echo "❌ genocat (stdout as BAM) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
 
         test_header "#10: genocat of `basename $z`: explicitly BAM by filename"
         $genocat $z -fo $txt.bam || exit 1
         txt_type=$(get_sam_type $txt.bam)
-        if [[ $txt_type != "BAM" ]]; then echo "genocat (-o .bam) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+        if [[ $txt_type != "BAM" ]]; then echo "❌ genocat (-o .bam) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
 
         test_header "#11: genocat of `basename $z`: explicitly BAM by flag"
         $genocat $z -fo $txt --bam || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != "BAM" ]]; then echo "genocat (--bam) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+        if [[ $txt_type != "BAM" ]]; then echo "❌ genocat (--bam) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
 
         test_header "#12: genocat of `basename $z`: stdout as BAM_Z0"
         $genocat $z --bam > $txt || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != "BAM_Z0" ]]; then echo "genocat (stdout as BAM_Z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
+        if [[ $txt_type != "BAM_Z0" ]]; then echo "❌ genocat (stdout as BAM_Z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
 
         test_header "#13: genocat of `basename $z`: explicitly BAM_Z0 by filename"
         $genocat $z -fo $txt.bam -z0 || exit 1
         txt_type=$(get_sam_type $txt.bam)
-        if [[ $txt_type != "BAM_Z0" ]]; then echo "genocat (-o .bam -z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
+        if [[ $txt_type != "BAM_Z0" ]]; then echo "❌ genocat (-o .bam -z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
 
         test_header "#14: genocat of `basename $z`: explicitly BAM_Z0 by flag"
         $genocat $z -fo $txt --bam -z0 || exit 1
         txt_type=$(get_sam_type $txt)
-        if [[ $txt_type != "BAM_Z0" ]]; then echo "genocat (--bam -z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
+        if [[ $txt_type != "BAM_Z0" ]]; then echo "❌ genocat (--bam -z0) of $z_type unexpectedly generated $txt_type, expecting BAM_Z0"; exit 1; fi
 
         if [ ! -n "$is_windows" ]; then # these don't work with samtools on Windows (bug 1250)
             test_header "#15: genocat of `basename $z`: explicitly CRAM by flag"
             $genocat $z -fo $txt --cram || exit 1
             txt_type=$(get_sam_type $txt)
-            if [[ $txt_type != "CRAM" ]]; then echo "genocat (--cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
+            if [[ $txt_type != "CRAM" ]]; then echo "❌ genocat (--cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
 
             test_header "#16: genocat of `basename $z`: stdout as CRAM"
             $genocat $z --cram > $txt || exit 1
             txt_type=$(get_sam_type $txt)
-            if [[ $txt_type != "CRAM" ]]; then echo "genocat (stdout as CRAM) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+            if [[ $txt_type != "CRAM" ]]; then echo "❌ genocat (stdout as CRAM) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
 
             test_header "#17: genocat of `basename $z`: explicitly CRAM by filename"
             $genocat $z -fo $txt.cram || exit 1
             txt_type=$(get_sam_type $txt.cram)
-            if [[ $txt_type != "CRAM" ]]; then echo "genocat (-o .cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
+            if [[ $txt_type != "CRAM" ]]; then echo "❌ genocat (-o .cram) of $z_type unexpectedly generated $txt_type, expecting CRAM"; exit 1; fi
         fi
 
     done
@@ -2032,58 +2047,58 @@ batch_vcf_bcf_output()
         test_header "#1: test genounzip of `basename $z`: should be the same type"
         $genounzip $z -fo $txt || exit 1
         txt_type=$(get_vcf_type $txt)
-        if [[ $txt_type != $z_type ]]; then echo "genounzip of $z_type unexpectedly generated $txt_type"; exit 1; fi
+        if [[ $txt_type != $z_type ]]; then echo "❌ genounzip of $z_type unexpectedly generated $txt_type"; exit 1; fi
 
         test_header "#2: genocat of `basename $z`: implicit - should be the same type"
         $genocat $z -fo $txt || exit 1
         txt_type=$(get_vcf_type $txt)
-        if [[ $txt_type != $z_type ]]; then echo "genocat (implicit) of $z_type unexpectedly generated $txt_type"; exit 1; fi
+        if [[ $txt_type != $z_type ]]; then echo "❌ genocat (implicit) of $z_type unexpectedly generated $txt_type"; exit 1; fi
 
         test_header "#3: genocat of `basename $z`: stdout - should be VCF"
         $genocat $z > $txt || exit 1
         txt_type=$(get_vcf_type $txt)
-        if [[ $txt_type != "VCF" ]]; then echo "genocat (stdout) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
+        if [[ $txt_type != "VCF" ]]; then echo "❌ genocat (stdout) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
 
         test_header "#4: genocat of `basename $z`: explicitly VCF by filename"
         $genocat $z -fo $txt.vcf || exit 1
         txt_type=$(get_vcf_type $txt.vcf)
-        if [[ $txt_type != "VCF" ]]; then echo "genocat (-o .vcf) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
+        if [[ $txt_type != "VCF" ]]; then echo "❌ genocat (-o .vcf) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
 
         test_header "#5: genocat of `basename $z`: explicitly VCF by flag"
         $genocat $z -fo $txt --vcf || exit 1
         txt_type=$(get_vcf_type $txt)
-        if [[ $z_type == "VCF" && $txt_type != "VCF"    ]]; then echo "genocat (--vcf) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
-        if [[ $z_type != "VCF" && $txt_type != "VCF_GZ" ]]; then echo "genocat (--vcf) of $z_type unexpectedly generated $txt_type, expecting VCF_GZ"; exit 1; fi
+        if [[ $z_type == "VCF" && $txt_type != "VCF"    ]]; then echo "❌ genocat (--vcf) of $z_type unexpectedly generated $txt_type, expecting VCF"; exit 1; fi
+        if [[ $z_type != "VCF" && $txt_type != "VCF_GZ" ]]; then echo "❌ genocat (--vcf) of $z_type unexpectedly generated $txt_type, expecting VCF_GZ"; exit 1; fi
 
         test_header "#6: genocat of `basename $z`: stdout as VCF.gz"
         $genocat $z --vcf -z1 > $txt || exit 1
         txt_type=$(get_vcf_type $txt)
-        if [[ $txt_type != "VCF_GZ" ]]; then echo "genocat (stdout as VCF.gz) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+        if [[ $txt_type != "VCF_GZ" ]]; then echo "❌ genocat (stdout as VCF.gz) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
 
         test_header "#7: genocat of `basename $z`: explicitly VCF.gz by .vcf.gz filename"
         $genocat $z -fo $txt.vcf.gz || exit 1
         txt_type=$(get_vcf_type $txt.vcf.gz)
-        if [[ $txt_type != "VCF_GZ" ]]; then echo "genocat (-o .vcf.gz) of $z_type unexpectedly generated $txt_type, expecting VCF.gz"; exit 1; fi
+        if [[ $txt_type != "VCF_GZ" ]]; then echo "❌ genocat (-o .vcf.gz) of $z_type unexpectedly generated $txt_type, expecting VCF.gz"; exit 1; fi
 
         test_header "#8: genocat of `basename $z`: explicitly VCF.gz by --vcf + .gz filename"
         $genocat $z -fo $txt.gz --vcf || exit 1
         txt_type=$(get_vcf_type $txt.gz)
-        if [[ $txt_type != "VCF_GZ" ]]; then echo "genocat (--vcf -o .gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
+        if [[ $txt_type != "VCF_GZ" ]]; then echo "❌ genocat (--vcf -o .gz) of $z_type unexpectedly generated $txt_type, expecting SAM.gz"; exit 1; fi
 
         test_header "#9: genocat of `basename $z`: stdout as BCF"
         $genocat $z --bcf > $txt || exit 1
         txt_type=$(get_vcf_type $txt)
-        if [[ $txt_type != "BCF" ]]; then echo "genocat (stdout as BCF) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
+        if [[ $txt_type != "BCF" ]]; then echo "❌ genocat (stdout as BCF) of $z_type unexpectedly generated $txt_type, expecting BAM"; exit 1; fi
 
         test_header "#10: genocat of `basename $z`: explicitly BCF by filename"
         $genocat $z -fo $txt.bcf || exit 1
         txt_type=$(get_vcf_type $txt.bcf)
-        if [[ $txt_type != "BCF" ]]; then echo "genocat (-o .bcf) of $z_type unexpectedly generated $txt_type, expecting BCF"; exit 1; fi
+        if [[ $txt_type != "BCF" ]]; then echo "❌ genocat (-o .bcf) of $z_type unexpectedly generated $txt_type, expecting BCF"; exit 1; fi
 
         test_header "#11: genocat of `basename $z`: explicitly BCF by flag"
         $genocat $z -fo $txt --bcf || exit 1
         txt_type=$(get_vcf_type $txt)
-        if [[ $txt_type != "BCF" ]]; then echo "genocat (--bcf) of $z_type unexpectedly generated $txt_type, expecting BCF"; exit 1; fi
+        if [[ $txt_type != "BCF" ]]; then echo "❌ genocat (--bcf) of $z_type unexpectedly generated $txt_type, expecting BCF"; ❌; fi
     done
 
     cleanup
@@ -2141,28 +2156,28 @@ batch_reference_fastq()
     local n
     n=`$genocat --grep "@A00910:85:HYGWJDSXX:1:1101:9028:1000" -p 123 $output --count` || exit $?
     if (( n != 2 )); then
-        echo "Expecting 2 reads to be grepped in paired FASTQ"
+        echo "❌ Expecting 2 reads to be grepped in paired FASTQ"
         exit 1
     fi
 
     # test single-line --head (only pair-1 is expressed) - note: cannot use --count with --head
     n=`$genocat --head=1 -p 123 $output | wc -l` || exit $? 
     if (( n != 4 )); then
-        echo "Expecting 1 read to be counted with --head=1 in paired FASTQ but lines=$n"
+        echo "❌ Expecting 1 read to be counted with --head=1 in paired FASTQ but lines=$n"
         exit 1
     fi
 
     # test single-line --tail (only pair-2 expressed) - note: cannot use --count with --tail
     n=`$genocat --tail=1 -p 123 $output | wc -l` || exit $? 
     if (( n != 4 )); then
-        echo "Expecting 1 reads to be counted with --tail=1 in paired FASTQ"
+        echo "❌ Expecting 1 reads to be counted with --tail=1 in paired FASTQ"
         exit 1
     fi
 
     # test --bases
     n=`$genocat --bases=N -p 123 $output --count || exit 1` || exit $? 
     if (( n != 99 )); then
-        echo "Expecting 99 reads to be counted with --bases=N in this paired FASTQ"
+        echo "❌ Expecting 99 reads to be counted with --bases=N in this paired FASTQ"
         exit 1
     fi
 
@@ -2203,42 +2218,42 @@ batch_reference_fasta_as_fastq()
     local n
     n=`$genocat --grep "@A00910:85:HYGWJDSXX:1:1101:9028:1000" -p 123 $output --count` || exit $?
     if (( n != 1 )); then
-        echo "Expecting 1 reads to be grepped in FASTA-as-FASTQ"
+        echo "❌ Expecting 1 reads to be grepped in FASTA-as-FASTQ"
         exit 1
     fi
 
     # test single-line --head (only pair-1 is expressed) - note: cannot use --count with --head
     n=`$genocat --head=1 -p 123 $output | wc -l` || exit $? 
     if (( n != 2 )); then
-        echo "Expecting 1 read to be counted with --head=1 in FASTA-as-FASTQ but lines=$n"
+        echo "❌ Expecting 1 read to be counted with --head=1 in FASTA-as-FASTQ but lines=$n"
         exit 1
     fi
 
     # test single-line --tail (only pair-2 expressed) - note: cannot use --count with --tail
     n=`$genocat --tail=1 -p 123 $output | wc -l` || exit $? 
     if (( n != 2 )); then
-        echo "Expecting 1 reads to be counted with --tail=1 in FASTA-as-FASTQ"
+        echo "❌ Expecting 1 reads to be counted with --tail=1 in FASTA-as-FASTQ"
         exit 1
     fi
 
     # test --bases
     n=`$genocat --bases=N -p 123 $output --count || exit 1` || exit $? 
     if (( n != 49 )); then
-        echo "Expecting 49 reads to be counted with --bases=N in this FASTA-as-FASTQ"
+        echo "❌ Expecting 49 reads to be counted with --bases=N in this FASTA-as-FASTQ"
         exit 1
     fi
 
     # test --header-only
     n=`$genocat --header-only -p 123 $output | wc -l` || exit $? 
     if (( n != 100000 )); then
-        echo "Expecting 100000 lines to be counted with -header-only in FASTA-as-FASTQ"
+        echo "❌ Expecting 100000 lines to be counted with -header-only in FASTA-as-FASTQ"
         exit 1
     fi
 
     # test --seq-only
     n=`$genocat --seq-only -p 123 $output | wc -l` || exit $? 
     if (( n != 100000 )); then
-        echo "Expecting 100000 lines to be counted with --seq-only in FASTA-as-FASTQ"
+        echo "❌ Expecting 100000 lines to be counted with --seq-only in FASTA-as-FASTQ"
         exit 1
     fi
 
@@ -2346,8 +2361,8 @@ batch_make_reference()
     local ref_file=$OUTDIR/output.ref.genozip
 
     # test making from a URL
-    echo "Making a reference from a URL: $genozip --make-reference file://$path$fa_file"
-    $genozip --make-reference file://$path$fa_file --force -o $ref_file || exit 1
+    echo "Making a reference from a URL: $genozip --make-reference file://$fa_file"
+    $genozip --make-reference file://$fa_file --force -o $ref_file || exit 1
 
     # test making from stdin
     test_header "Making a reference from stdin: $genozip --make-reference -fo $ref_file - < $fa_file"
@@ -2398,7 +2413,7 @@ batch_make_reference()
 update_latest()
 {
     if [ ! -d ../genozip-latest ]; then
-        echo "can't find ../genozip-latest"
+        echo "❌ update_latest: can't find ../genozip-latest"
         exit 1
     fi
 
@@ -2509,12 +2524,12 @@ batch_headerless_wrong_ref()
 
 test_exists()
 {
-    if [ ! -f $1 ]; then echo "Expecting $1 to exist, but it doesn't" ; exit 1 ; fi
+    if [ ! -f $1 ]; then echo "❌ Expecting $1 to exist, but it doesn't" ; exit 1 ; fi
 }
 
 test_not_exists()
 {
-    if [ -f $1 ]; then echo "Expecting $1 to not exist, but it does" ; exit 1 ; fi
+    if [ -f $1 ]; then echo "❌ Expecting $1 to not exist, but it does" ; exit 1 ; fi
 }
 
 # test that --replace (or -^) replaces and without --replace doesn't
@@ -2615,6 +2630,48 @@ batch_replace()
     test_not_exists $output
 }
 
+# test biopsy works, esp with --pair and --anonymize
+batch_biopsy()
+{
+    # TO DO: add biopsy test for BAM, SAM, VCF
+    batch_print_header
+
+    local r1=$TESTDIR/test.human2-R1.fq.gz
+    local r2=$TESTDIR/test.human2-R2.fq.gz
+    local biopsy=2,38
+    local biopsy_r1=$biopsy.biopsy.R1.fastq.gz
+    local biopsy_r2=$biopsy.biopsy.R2.fastq.gz
+
+    test_header "biopsy of FASTQ pair"
+    $genozip $r1 $r2 -e $hs37d5 -2XfB1 --biopsy $biopsy || exit 1
+
+    local first_qname_r1=`$zcat $biopsy_r1 | head -1 | cut -d" " -f1`
+    local first_qname_r2=`$zcat $biopsy_r2 | head -1 | cut -d" " -f1`
+    if [[ "$first_qname_r1" != "$first_qname_r2" ]]; then
+        printf "❌ First qname differs R1 and R2:\nR1: %s\nR2: %s\n" "$first_qname_r1" "$first_qname_r2"
+        exit 1
+    fi
+
+    local last_qname_r1=`$zcat $biopsy_r1 | tail -4 | head -1 | cut -d" " -f1`
+    local last_qname_r2=`$zcat $biopsy_r2 | tail -4 | head -1 | cut -d" " -f1`
+    if [[ "$last_qname_r1" != "$last_qname_r2" ]]; then
+        printf "❌ Last qname differs R1 and R2:\nR1: %s\nR2: %s\n" "$last_qname_r1" "$last_qname_r2"
+        exit 1
+    fi
+
+    test_header "biopsy of FASTQ pair with --anonymize"
+    $genozip $r1 $r2 -e $hs37d5 -2XfB1 --biopsy $biopsy --anonymize || exit 1
+
+    local seq=`$zcat $biopsy_r1 $biopsy_r2 | awk 'NR % 4 == 2' | tr -d "\n"`
+    if [[ ! "$seq" =~ ^A+$ ]]; then
+        echo "❌ --anonymize failed: either $biopsy_r1 or $biopsy_r2 unexpectedly contains non-A bases"
+        exit 1
+    fi
+
+    rm -f $biopsy_r1 $biopsy_r2 # in current dir
+    cleanup
+}
+
 batch_genols()
 {
     batch_print_header
@@ -2662,7 +2719,7 @@ verify_depn_far_to_num_depn() # #1: expected percentage
     local depn_far_to_num_depn=`$genocat --stats $output | grep Buddying | cut -d= -f6 | cut -d% -f1`
 
     if (( $depn_far_to_num_depn != $1 )); then
-        echo "`$genocat --stats $output | grep file:`: Expecting depn_far/num_DEPN to be $1 but it is $depn_far_to_num_depn"
+        echo "❌ `$genocat --stats $output | grep file:`: Expecting depn_far/num_DEPN to be $1 but it is $depn_far_to_num_depn"
         exit 1
     fi
 }
@@ -3033,14 +3090,14 @@ sparkling_clean()
 set -o pipefail # if any command in a pipe fails, then the pipe exit code is failure 
 
 start_date="`date`"
-is_windows="`uname|grep -i mingw``uname|grep -i MSYS`"
-is_mac=`uname|grep -i Darwin`
-is_linux=`uname|grep -i Linux`
+is_windows="`uname | egrep -i 'mingw|MSYS'`"
+is_mac=`uname | grep -i Darwin`
+is_linux=`uname | grep -i Linux`
 
 unset GENOZIP_REFERENCE
 
-if [[ -z "$GENOZIP_HOME" ]]; then # Windows note: definition in /home/divon/.bashrc overrides definition in Windows Settings->Environment Variables
-    echo "GENOZIP_HOME is not set"
+if [[ ! -v GENOZIP_HOME ]]; then # Windows note: definition in /home/divon/.bashrc overrides definition in Windows Settings->Environment Variables
+    echo "❌ \$GENOZIP_HOME is not set"
     exit 1
 fi
 
@@ -3050,16 +3107,22 @@ else
 BASEDIR=.
 fi
 
-TESTDIR=$BASEDIR/private/test
+TESTDIR=$GENOZIP_HOME/private/test
 GZTESTDIR=$TESTDIR/mgzip
-SCRIPTSDIR=$BASEDIR/private/scripts
-LICENSESDIR=$BASEDIR/private/licenses
-OUTDIR=$TESTDIR/tmp
-REFDIR=$BASEDIR/public
+SCRIPTSDIR=$GENOZIP_HOME/private/scripts
+LICENSESDIR=$GENOZIP_HOME/private/licenses
+OUTDIRNAME="outdir.`uname|cut -d_ -f1`"
+OUTDIR=$TESTDIR/$OUTDIRNAME # so we can test on Windows and WSL2 in parallel
+REFDIR=$GENOZIP_HOME/public
 
 if [ -n "$is_windows" ]; then
+    if [[ ! -v HOME ]]; then 
+        echo "❌ \$HOME is not set"
+        exit 1
+    fi
+
     if [[ ! -v APPDATA ]]; then
-        export APPDATA="$BASEDIR/../AppData/Roaming"
+        export APPDATA="$HOME/../AppData/Roaming"
     fi
 
     LICFILE=$APPDATA/genozip/.genozip_license.v71
@@ -3144,9 +3207,11 @@ elif [ -n "$is_exe" ]; then
 elif [ -n "$is_mac" ]; then
 #    exe=.mac
     path=$PWD/
+    bcftools=/opt/homebrew/bin/bcftools
 else # linux
     exe=""
     path=$PWD/
+    bcftools=/usr/bin/bcftools # apt version, newer than the conda one for this ancient sysroot
 fi
 
 export GENOZIP_TEST=$1
@@ -3168,14 +3233,13 @@ genocat_no_echo="$genocat_exe $2 $piz_threads"
 genocat="$genocat_exe --echo $2 $piz_threads"
 genols=$genols_exe 
 
-bcftools=/usr/bin/bcftools
 basics=(basic.vcf basic.bcf basic.sam basic.bam basic.fq basic.fa basic.gvf basic.gtf basic.me23 \
         basic.locs basic.bed basic.generic)
 
 exes=($genozip_exe $genounzip_exe $genocat_exe $genols_exe)
 for exe in ${exes[@]}; do
     if [ ! -x $exe ]; then
-        echo "Error: $exe does not exist"
+        echo "❌ $exe does not exist"
         exit 1
     fi
 done
@@ -3265,7 +3329,7 @@ case $GENOZIP_TEST in
 56)  batch_make_reference              ;;
 57)  batch_headerless_wrong_ref        ;;
 58)  batch_replace                     ;;
-59)  ;; 
+59)  batch_biopsy                      ;;
 60)  batch_qname_flavors               ;;
 61)  batch_piz_no_license              ;;
 62)  batch_sendto                      ;;

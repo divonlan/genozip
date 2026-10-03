@@ -49,7 +49,7 @@ Version file_version (void)
 // takes a string "15.0.81" and returns (Version){15,81}. Or {0,0} is string is malformatted
 Version str_to_version (rom version_str)
 {
-    str_split_ints (version_str, strlen (version_str), 3, '.', v, true);
+    str_split_ints (version_str, strlen (version_str), 3, '.', v, true); // minor version can be negative
 
     return (n_vs == 3 && vs[0] > 0 && vs[1] == 0 && vs[2] >= 0) 
         ? (Version){ vs[0], vs[2] } : (Version){};

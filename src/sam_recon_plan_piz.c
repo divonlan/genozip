@@ -124,14 +124,14 @@ static void recon_plan_read_one_vb (VBlockP vb)
 
         // add memory to recon_plan
         buf_alloc (wvb, &z_file->recon_plan, max_frag_size * sections_get_recon_plan(NULL), 0, char, 0, "z_file->recon_plan");
-        buf_set_shared (&z_file->recon_plan);
     }
 
     vb->fragment_len   = BGEN32 (header->data_uncompressed_len);
     vb->fragment_start = Bc (z_file->recon_plan, (vb->vblock_i-1) * max_frag_size + sizeof (ReconPlanItem)/*PLAN_TXTHEADER*/);
 
-    // overlay vb->scratch on the part of z_file->recon_plan belonging to this thread for storing UNcompressed data
-    buf_overlay_partial (vb, &vb->scratch, &z_file->recon_plan, BNUM(z_file->recon_plan, vb->fragment_start), "scratch");
+    // superimpose vb->scratch on the part of z_file->recon_plan belonging to this thread for storing UNcompressed data
+    buf_destroy (vb->scratch);
+    buf_superimpose (vb, &vb->scratch, &z_file->recon_plan, BNUM(z_file->recon_plan, vb->fragment_start), "scratch");
 
     z_file->recon_plan.len += vb->fragment_len / sizeof (ReconPlanItem);
 

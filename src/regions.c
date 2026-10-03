@@ -102,7 +102,7 @@ void regions_add (rom regions_arg)
     bool is_negated = (*B1STc(regions_data) == '^');
 
     bool is_conflicting_negation = (regions_buf.len && (is_negative_regions != is_negated));
-    ASSINP0 (!is_conflicting_negation, "Error: inconsistent negation - all regions listed must either be negated or not");
+    ASSINP0 (!is_conflicting_negation, _ERR"inconsistent negation - all regions listed must either be negated or not");
 
     is_negative_regions = is_negated;
 
@@ -117,17 +117,17 @@ void regions_add (rom regions_arg)
         char *after_colon;
         char *before_colon = strtok_r (one_rs, ":", &after_colon);
 
-        ASSINP (before_colon, "Error: invalid region string: %s", regions_arg);
+        ASSINP (before_colon, _ERR"invalid region string: %s", regions_arg);
 
         Region *reg = &BNXT (Region, regions_buf);
         *reg = (Region){ .chrom = NULL, .start_pos = 0, .end_pos = MAX_POS };
 
         // case: we have both chrom and pos - easy!
         if (after_colon && after_colon[0]) {
-            ASSINP (regions_is_valid_chrom (before_colon), "Error: Invalid CHROM in region string: %s", regions_arg);
+            ASSINP (regions_is_valid_chrom (before_colon), _ERR"Invalid CHROM in region string: %s", regions_arg);
             reg->chrom = before_colon;
             
-            ASSINP (regions_parse_pos (after_colon, reg), "Error: Invalid position range in region string: \"%s\"", regions_arg);
+            ASSINP (regions_parse_pos (after_colon, reg), _ERR"Invalid position range in region string: \"%s\"", regions_arg);
         }
 
         // case: only one substring. we need to determine if the single substring is a pos or a chrom. if it
@@ -140,7 +140,7 @@ void regions_add (rom regions_arg)
             bool has_pos = regions_parse_pos (before_colon, reg);
 
             // make sure at least one of them is valid
-            ASSINP (reg->chrom || has_pos, "Error: Invalid region string: %s", regions_arg);
+            ASSINP (reg->chrom || has_pos, _ERR"Invalid region string: %s", regions_arg);
 
             // if both are valid, but the number is <= MAX_NUM_THAT_WE_ASSUME_IS_A_CHROM_AND_NOT_POS, we assume it is a chromosome.
             // Otherwise, we create two regions. Note: the user can always force a region with 10-10 or 1:10

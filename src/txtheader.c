@@ -200,7 +200,7 @@ static void txtheader_read_one_vb (VBlockP vb)
     vb->dispatch = READY_TO_COMPUTE;
 }
 
-// entry point of compute thread of dictionary decompression
+// entry point of compute thread of txt_header fragment uncompression
 static void txtheader_uncompress_one_vb (VBlockP vb)
 {
     SectionHeaderTxtHeaderP header = B1ST (SectionHeaderTxtHeader, vb->z_data);

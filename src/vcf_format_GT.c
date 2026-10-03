@@ -104,7 +104,7 @@ static void vcf_seg_analyze_GT (VBlockVCFP vb, int n_hts, int32_t *ht)
             if (ht[ht_i] >= 1) dosage++;
         }
     
-    ctx_set_last_value (VB, CTX(FORMAT_GT), dosage); // to be used in vcf_seg_get_mux_channel_i
+    ctx_set_last_value_in_sample (VB, CTX(FORMAT_GT), dosage); // to be used in vcf_seg_get_mux_channel_i
 
     // in case we have INFO/SF, we verify that it is indeed the list of samples for which the first ht is not '.'
     if (CTX(INFO_SF)->sf.SF_by_GT == yes && ht[0] >= 0) 

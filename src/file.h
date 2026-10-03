@@ -228,9 +228,9 @@ typedef struct File {
     Ploidy max_ploidy;                 // Z_FILE: ZIP: VCF 
     Ploidy max_ploidy_for_mux;         // Z_FILE: PIZ: VCF: copied from SectionHeaderGenozipHeader.max_ploidy_for_mux
     };
-    uint64_t sam_num_seq_by_aln;       // Z_FILE: ZIP: SAM/BAM: number of alignments segged vs reference by rname/pos/cigar (i.e. not aligner, not copy from prim/saggy, not verbatim)
-    uint64_t sam_num_aligned_perfect;  // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
-    uint64_t sam_num_aligned;          // Z_FILE: ZIP: SAM/BAM: number of alignments successfully found by aligner. for stats 
+    uint64_t sam_num_by_sam_aln;       // Z_FILE: ZIP: SAM/BAM: number of alignments segged vs reference by rname/pos/cigar (i.e. not aligner, not copy from prim/saggy, not verbatim)
+    uint64_t sam_num_genozip_aln_perfect;  // Z_FILE: ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner. for stats 
+    uint64_t sam_num_genozip_aln;      // Z_FILE: ZIP: SAM/BAM: number of alignments successfully found by aligner. for stats 
     uint64_t sam_num_verbatim;         // Z_FILE: ZIP: SAM/BAM: number of alignments segged verbatim
     uint64_t sam_num_by_prim;          // Z_FILE: ZIP: SAM/BAM: number of alignments segged against prim
     uint64_t sam_num_by_saggy;         // Z_FILE: ZIP: SAM/BAM: number of alignments segged against saggy
@@ -342,8 +342,8 @@ extern bool file_buf_locate (FileP file, ConstBufferP buf);
 #define txt_name file_printname(txt_file)
 #define z_name   file_printname(z_file)
 
-#define CLOSE(fd,name,quiet) ({ ASSERTW (!close (fd) || (quiet), _WRN "%s:%u: Failed to close %s: %s",  __FUNCLINE, (name), strerror(errno));})
-#define FCLOSE(fp,name) ({ if (fp) { ASSERTW (!fclose (fp), _WRN "%s:%u: Failed to fclose %s: %s", __FUNCLINE, (name), strerror(errno)); fp = NULL; } })
+#define CLOSE(fd,name,quiet) ({ ASSERTW (!close (fd) || (quiet), _WRN "%s:%u: Failed to close %s: %s",  THIS_CODE_LINE, (name), strerror(errno));})
+#define FCLOSE(fp,name) ({ if (fp) { ASSERTW (!fclose (fp), _WRN "%s:%u: Failed to fclose %s: %s", THIS_CODE_LINE, (name), strerror(errno)); fp = NULL; } })
  
  // ---------------------------
 // tests for compression types
@@ -360,19 +360,14 @@ static inline bool is_written_via_ext_compressor(Codec codec) { return FC(BCF) |
 #undef FC
 
 // read the contents and a newline-separated text file and split into lines - creating char **lines, unsigned *line_lens and unsigned n_lines
-#define file_split_lines(fn, name, ver_type)                                                \
-    static Buffer data = {};                                                                \
-    ASSINP0 (!data.len, "only one instance of a " name " option can be used");              \
-    file_get_file (evb, fn, &data, "file_split_lines__" name, 0, ver_type, false);          \
-    ASSINP (data.len, "File %s is empty", (fn));                                            \
-    ASSINP (*BLSTc(data) == '\n', "File %s expected to end with a newline", (fn));          \
-                                                                                            \
-    str_split_enforce (data.data, data.len, 0, '\n', line, true, (name));                   \
-    ASSINP (!line_lens[n_lines-1], "Expecting %s to end with a newline", (fn));             \
-                                                                                            \
-    n_lines--; /* remove final empty line */                                                \
-    str_remove_CR (line); /* note: fopen with non-binary mode (no "b") doesn't help, because it won't remove Windows-created \r when running on Unix */ \
-    str_nul_separate (line);                                                                \
+// caller should free data
+#define file_split_lines(fn, name, ver_type)                                        \
+    static Buffer data = {};                                                        \
+    ASSERTNOTINUSE(data);                                                           \
+    file_get_file (evb, fn, &data, "file_split_lines__" name, 0, ver_type, false);  \
+    ASSINP (data.len, "File %s is empty", (fn));                                    \
+    str_split_by_lines (data.data, data.len, 0, false);                             \
+    str_nul_separate (line);                                                        \
     /* note: its up to the caller to free data */
 
 // platform compatibility stuff

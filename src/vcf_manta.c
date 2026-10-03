@@ -7,6 +7,7 @@
 //   and subject to penalties specified in the license.
 
 #include "vcf_private.h"
+#include "hash.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 static const Container_7 id_con = {
@@ -67,7 +68,7 @@ void vcf_seg_manta_ID (VBlockVCFP vb, STRp(id))
     static SegCallback callbacks[7] = { [3]=vcf_seg_manta_ID_cb_3 }; 
 
     if (id_len > 15 && !memcmp (id, "MantaBND:", 9)) 
-        vcf_seg_BND_mate (vb, STRa(id), 0, 0, crc32 (0, id, id_len-2)); // last digit is 0 or 1 - the mate
+        vcf_seg_BND_mate (vb, STRa(id), 0, 0, hash_crc32 (id, id_len-2)); // last digit is 0 or 1 - the mate
 
     if (vcf_has_mate)
         seg_special0 (VB, VCF_SPECIAL_COPY_MATE, CTX(VCF_ID), id_len + 1); // +1 for \t

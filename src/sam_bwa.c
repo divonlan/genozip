@@ -62,7 +62,7 @@ static void sam_seg_BWA_XA_initialize (VBlockSAMP vb)
 }
 
 #define SET_XA(old,new) ({ thool expected = (old); \
-                           __atomic_compare_exchange_n (&segconf.sam_has_BWA_XA_Z, &expected, (new), false, __ATOMIC_RELAXED, __ATOMIC_RELAXED); })
+                           cas_strong_relaxed (segconf.sam_has_BWA_XA_Z, expected, (new)); })
 
 static bool sam_seg_verify_BWA_XA (VBlockSAMP vb, STRp(xa))
 {
@@ -334,7 +334,7 @@ void sam_seg_BWA_X1_i (VBlockSAMP vb, int64_t X1, unsigned add_bytes)
     // (X0 + X1 = 1 + XA.repeats), and (X0 >= 1)
     if (has(XA_Z)) {
         STR(xa);
-        sam_seg_get_aux_Z (vb, vb->idx_XA_Z, pSTRa(xa), IS_BAM_ZIP);
+        sam_seg_get_aux_Z (vb, vb->idx.XA_Z, pSTRa(xa), IS_BAM_ZIP);
 
         int xa_alns = str_count_char (STRa(xa), ';');
 

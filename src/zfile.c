@@ -41,8 +41,7 @@ static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, C
     mutex_initialize (show_b250_mutex); // possible unlikely race condition on initializing - good enough for debugging purposes
     mutex_lock (show_b250_mutex);
 
-    bytes data  = B1ST (const uint8_t, *b250_data);
-    bytes after = BAFT (const uint8_t, *b250_data);
+    uint32_t b250_data_len = b250_data->len32;
 
     if (detailed) {
         ContextP zctx = ZCTX(zctx_get_existing_did_i (h->dict_id));
@@ -52,8 +51,8 @@ static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, C
         uint32_t count_in_vb=0; 
         STR(snip);
 
-        while (data < after) {
-            WordIndex wi = b250_piz_decode (&data, true, h->b250_size, "zfile_show_b250_section");
+        for (uint32_t i=0; i < b250_data_len; ) {
+            WordIndex wi = b250_piz_decode (b250_data, &i, true, h->b250_size, "zfile_show_b250_section");
             bool one_up = (wi == WORD_INDEX_ONE_UP);
             if (one_up) wi = last_wi + 1;
 
@@ -62,7 +61,7 @@ static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, C
                     wi == WORD_INDEX_EMPTY   ? "EMPTY" 
                   : wi == WORD_INDEX_MISSING ? "MISSING"
                   : wi >= 0 ? ({ ctx_get_snip_by_word_index (zctx, wi, snip); str_snip_ex(vb->data_type, STRa(snip), true).s; }) : "",
-                    (data == after && h->flags.ctx.all_the_same) ? "ALL-THE-SAME" : "");
+                    (i == b250_data_len && h->flags.ctx.all_the_same) ? "ALL-THE-SAME" : "");
             
             if (wi >= 0) last_wi = wi;
         }
@@ -71,8 +70,8 @@ static void zfile_show_b250_section (VBlockP vb, SectionHeaderUnionP header_p, C
     else {
         iprintf ("vb_i=%u %*.*s: ", BGEN32 (h->vblock_i), -DICT_ID_LEN-1, DICT_ID_LEN, dict_id_typeless (h->dict_id).id);
 
-        while (data < after) {
-            WordIndex word_index = b250_piz_decode (&data, true, h->b250_size, "zfile_show_b250_section");
+        for (uint32_t i=0; i < b250_data_len; ) {
+            WordIndex word_index = b250_piz_decode (b250_data, &i, true, h->b250_size, "zfile_show_b250_section");
 
             switch (word_index) {
                 case WORD_INDEX_ONE_UP  : iprint0 ("ONE_UP " ) ; break ;
@@ -278,11 +277,11 @@ void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP header_p
 {
     if (!header_p.common->data_uncompressed_len) return;
     
-    ASSERT (dst >= B1STc(*dst_buf) && dst <= BLSTc(*dst_buf), "expecting dst=%p to be within dst_buf=%s", dst, buf_desc(dst_buf).s);
+    ASSERTINRANGE (dst, B1STc(*dst_buf), BAFTc(*dst_buf));
 
-    Buffer copy = *dst_buf;
-    copy.data = dst; // somewhat of a hack
-    zfile_uncompress_section (vb, header_p, &copy, NULL, expected_vb_i, expected_section_type); // NULL name prevents buf_alloc
+    Buffer sub_buf;
+    buf_superimpose (vb, &sub_buf, dst_buf, dst - B1STc(*dst_buf), "sub_buf");
+    zfile_uncompress_section (vb, header_p, &sub_buf, NULL, expected_vb_i, expected_section_type); // NULL name prevents buf_alloc
 }
 
 uint32_t zfile_compress_b250_data (VBlockP vb, ContextP ctx)
@@ -402,7 +401,7 @@ static DESCENDING_SORTER (sort_removed_sections, RemovedSection, start)
 void zfile_remove_ctx_group_from_z_data (VBlockP vb, Did remove_did_i)
 {
     unsigned num_rms=0;
-    RemovedSection rm[vb->ca.num_contexts * 2];
+    RemovedSection rm[vb->ca._num_contexts * 2];
 
     // remove all contexts in the group
     CTX(remove_did_i)->st_did_i = remove_did_i; // so the loop catches it too
@@ -477,12 +476,12 @@ int32_t zfile_read_section_do (FileP file,
                                BufferP data, rom buf_name, // buffer to append 
                                SectionType expected_sec_type,
                                Section sec, // NULL for no seeking
-                               FUNCLINE)
+                               Caller caller)
 {
     ASSERTMAINTHREAD;
 
     ASSERT (!sec || expected_sec_type == sec->st, "called from %s:%u: expected_sec_type=%s but encountered sec->st=%s. vb_i=%u",
-            func, code_line, st_name (expected_sec_type), st_name(sec->st), vb->vblock_i);
+            CALLERf, st_name (expected_sec_type), st_name(sec->st), vb->vblock_i);
 
     // skip if this section is not needed according to flags
     if (sec && file == z_file && 
@@ -511,7 +510,7 @@ int32_t zfile_read_section_do (FileP file,
     uint32_t bytes_read = header_size;
 
     ASSERT (h, "called from %s:%u: Failed to read data from file %s while expecting section type %s: %s", 
-            func, code_line, z_name, st_name(expected_sec_type), strerror (errno));
+            CALLERf, z_name, st_name(expected_sec_type), strerror (errno));
     
     bool is_magical = BGEN32 (h->magic) == GENOZIP_MAGIC;
 
@@ -540,7 +539,7 @@ int32_t zfile_read_section_do (FileP file,
     h->section_i = BNUM (z_file->section_list, sec); // note: replaces magic, 32 bit only. nonsense if sec is not in z_file->section_list.
 
     ASSERT (is_magical || flag.verify_codec, "called from %s:%u: corrupt data (magic is wrong) when attempting to read section=%s dict_id=%s of vblock_i=%u comp=%s in file %s", 
-            func, code_line, st_name (expected_sec_type), sec ? dis_dict_id (sec->dict_id).s : "(no sec)", vb->vblock_i, comp_name(vb->comp_i), z_name);
+            CALLERf, st_name (expected_sec_type), sec ? dis_dict_id (sec->dict_id).s : "(no sec)", vb->vblock_i, comp_name(vb->comp_i), z_name);
 
     uint32_t data_compressed_len = BGEN32 (h->data_compressed_len);
     uint32_t data_encrypted_len  = BGEN32 (h->data_encrypted_len);
@@ -553,7 +552,7 @@ int32_t zfile_read_section_do (FileP file,
     // check that we received the section type we expect, 
     ASSERT (expected_sec_type == h->section_type,
             "called from %s:%u: Unexpected section type when reading %s: expecting %s, found %s sec(expecting)=(offset=%s, dict_id=%s)",
-            func, code_line, z_name, st_name(expected_sec_type), st_name(h->section_type), 
+            CALLERf, z_name, st_name(expected_sec_type), st_name(h->section_type), 
             sec ? str_int_commas (sec->offset).s : "N/A", sec ? dis_dict_id (sec->dict_id).s : "N/A");
 
     ASSERT (BGEN32 (h->vblock_i) == original_vb_i, 
@@ -564,7 +563,7 @@ int32_t zfile_read_section_do (FileP file,
     // as an extra verification of the SectionHeader integrity 
     ASSERT (VER(15) || BGEN32 (h->v14_compressed_offset) == header_size,
             "called from %s:%u: invalid header when reading %s - expecting compressed_offset to be %u but found %u. genozip_version=%s section_type=%s", 
-            func, code_line, z_name, header_size, BGEN32 (h->v14_compressed_offset), STRver(z_file->genozip_ver).s/*set from footer*/, st_name(h->section_type));
+            CALLERf, z_name, header_size, BGEN32 (h->v14_compressed_offset), STRver(z_file->genozip_ver).s/*set from footer*/, st_name(h->section_type));
 
     // allocate more memory for the rest of the header + data 
     buf_alloc (vb, data, 0, header_offset + header_size + data_len, uint8_t, CTX_GROWTH, buf_name);
@@ -582,11 +581,11 @@ int32_t zfile_read_section_do (FileP file,
 // Read one section header - returns the header in vb->scratch - caller needs to free vb->scratch
 SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec, 
                                                  SectionType expected_sec_type, // optional: if not SEC_NONE, also verifies section is of expected type
-                                                 FUNCLINE)
+                                                 Caller caller)
 {
     ASSERTNOTNULL (sec);
     ASSERT (expected_sec_type == SEC_NONE || sec->st == expected_sec_type, 
-            "called from %s:%u: expecting sec.st=%s to be %s", func, code_line, st_name (sec->st), st_name (expected_sec_type));
+            "called from %s:%u: expecting sec.st=%s to be %s", CALLERf, st_name (sec->st), st_name (expected_sec_type));
 
     uint32_t header_size = st_header_size (sec->st);
     uint32_t unencrypted_header_size = header_size;
@@ -601,7 +600,7 @@ SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec,
     uint32_t bytes = fread (&h, 1, header_size, GET_FP(z_file));
     
     ASSERT (bytes == header_size, "called from %s:%u: Failed to read header of section type %s from file %s: %s (bytes=%u header_size=%u)", 
-            func, code_line, st_name(sec->st), z_name, arch_str_error(), bytes, header_size);
+            CALLERf, st_name(sec->st), z_name, arch_str_error(), bytes, header_size);
 
     bool is_magical = BGEN32 (h.common.magic) == GENOZIP_MAGIC;
 
@@ -615,7 +614,7 @@ SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec,
     // decrypt header 
     if (is_encrypted) {
         ASSERT (BGEN32 (h.common.magic) != GENOZIP_MAGIC, 
-                "called from %s:%u: password provided, but file %s is not encrypted (sec_type=%s)", func, code_line, z_name, st_name (h.common.section_type));
+                "called from %s:%u: password provided, but file %s is not encrypted (sec_type=%s)", CALLERf, z_name, st_name (h.common.section_type));
 
         crypt_do (vb, (uint8_t*)&h, header_size, sec->vblock_i, sec->st, true); 
     
@@ -623,13 +622,13 @@ SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec,
     }
 
     ASSERT (is_magical, "called from %s:%u: corrupt data (magic is wrong) when attempting to read header of section %s in file %s", 
-            func, code_line, st_name (sec->st), z_name);
+            CALLERf, st_name (sec->st), z_name);
 
     ASSERT (expected_sec_type == SEC_NONE ||
             (BGEN32 (h.common.vblock_i) == sec->vblock_i && h.common.section_type == sec->st) ||
             (!VER(14) && sec->st == SEC_REF_HASH), // in V<=13, REF_HASH didn't have a vb_i in the section list
             "called from %s:%u: Requested to read %s with vb_i=%u, but actual section is %s with vb_i=%u",
-            func, code_line, st_name(sec->st), sec->vblock_i, st_name(h.common.section_type), BGEN32 (h.common.vblock_i));
+            CALLERf, st_name(sec->st), sec->vblock_i, st_name(h.common.section_type), BGEN32 (h.common.vblock_i));
 
     return h;
 }
@@ -872,12 +871,12 @@ uint64_t zfile_read_genozip_header_get_offset (bool as_is)
     // check that file version is at most this executable version, except for reference file for which only major version is tested
     ASSINP (VER_GE (code_version(), z_file->genozip_ver) || 
             ((Z_DT(REF) || (is_genocat && flag.show_stats)) && code_version().major == z_file->genozip_ver.major),
-            "Error: %s cannot be opened because it was compressed with genozip version %s which is newer than the version running - %s.\n%s",
+            _ERR"%s cannot be opened because it was compressed with genozip version %s which is newer than the version running - %s.\n%s",
             z_name, STRver(file_version()).s, STRver(code_version()).s, genozip_update_msg());
 
     bool metadata_only = is_genocat && (flag.show_stats || flag.show_gheader || flag.show_headers || flag.show_aliases || flag.show_dict);
 
-    #define FMT "Error: %s was compressed with version %u of genozip. It may be uncompressed with genozip versions %u to %u"
+    #define FMT _ERR"%s was compressed with version %u of genozip. It may be uncompressed with genozip versions %u to %u"
 
     // in version 6, we canceled backward compatability with v1-v5
     ASSINP (VER(6), FMT, z_name, z_file->genozip_ver.major, z_file->genozip_ver.major, 5);
@@ -1144,8 +1143,8 @@ void zfile_update_compressed_vb_header (VBlockP vb)
     h->z_data_bytes = BGEN32 (vb->z_data.len32);
 
     if (flag_is_show_vblocks (TASK_ZIP)) 
-        iprintf ("UPDATE_VB_HEADER(id=%d) vb=%s recon_size=%u genozip_size=%u n_lines=%u longest_line_len=%u\n",
-                 vb->id, VB_NAME, 
+        iprintf ("UPDATE_VB_HEADER(id=%s) vb=%s recon_size=%u genozip_size=%u n_lines=%u longest_line_len=%u\n",
+                 dis_vb_id(vb->id).s, VB_NAME, 
                  BGEN32 (h->recon_size), BGEN32 (h->z_data_bytes), 
                  vb->lines.len32, // just for debugging, not in VB header
                  BGEN32 (h->longest_line_len));

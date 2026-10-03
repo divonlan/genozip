@@ -45,6 +45,8 @@ void vcf_seg_FORMAT (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, STRp(fmt))
 {
     START_TIMER;
 
+    set_last_txt (VCF_FORMAT, fmt); // consumed by error messages
+    
     ContextP format_ctx      = CTX(VCF_FORMAT);
     ContextP samples_ctx     = CTX(VCF_SAMPLES);
     ContextP copy_sample_ctx = CTX(VCF_COPY_SAMPLE);

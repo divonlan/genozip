@@ -103,7 +103,7 @@ local ptr_table table[MAX_PTR];
  * a protected system like OS/2. Use Microsoft C instead.
  */
 
-voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, unsigned items, unsigned size, FUNCLINE)
+voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, unsigned items, unsigned size, Caller caller)
 {
     voidpf buf;
     ulg bsize = (ulg)items*size;
@@ -166,7 +166,7 @@ void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
 #  define _hfree   hfree
 #endif
 
-voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, uInt items, uInt size, FUNCLINE)
+voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, uInt items, uInt size, Caller caller)
 {
     (void)opaque;
     return _halloc((long)items, size);
@@ -191,7 +191,7 @@ extern voidp  calloc OF((uInt items, uInt size));
 extern void   free   OF((voidpf ptr));
 #endif
 
-voidpf ZLIB_INTERNAL zcalloc (voidpf opaque __attribute__((unused)), unsigned items, unsigned size, FUNCLINE)
+voidpf ZLIB_INTERNAL zcalloc (voidpf opaque __attribute__((unused)), unsigned items, unsigned size, Caller caller)
 {
     // return sizeof(uInt) > 2 ? (voidpf)malloc(items * size) :
     //                           (voidpf)calloc(items, size);
@@ -201,7 +201,7 @@ voidpf ZLIB_INTERNAL zcalloc (voidpf opaque __attribute__((unused)), unsigned it
     return mem;
 }
 
-void ZLIB_INTERNAL zcfree (voidpf opaque __attribute__((unused)), voidpf ptr, FUNCLINE)
+void ZLIB_INTERNAL zcfree (voidpf opaque __attribute__((unused)), voidpf ptr, Caller caller)
 {
     FREE(ptr);
 }

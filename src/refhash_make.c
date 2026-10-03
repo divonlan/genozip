@@ -151,10 +151,10 @@ static void refhash_aggregate_stats (VBlockP vb_)
 // increment a value atomically, but never past 255
 static inline void increment_relaxed_ceiling_255 (uint8_t *addr)
 {
-    uint8_t value = load_relaxed (*addr);
+    uint8_t value = load_relaxed (*addr); // must load atomically to avoid data rate with __atomic_compare_exchange_n which is "undefined behavior" in C.
     while (value < 255) // don't try to increment if already 255
         // increment, but if another thread beat me to it, loop back and try again (value is updated if failed)
-        if (__atomic_compare_exchange_n (addr, &value, value+1, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) 
+        if (cas_strong_relaxed (*addr, value, value+1)) 
             break;
 }
 
@@ -164,7 +164,7 @@ static inline bool decrement_relaxed_floor_0 (uint8_t *addr)
     uint8_t value = load_relaxed (*addr);
     while (value > 0) // loop until we successfully decrement value, or another thread decrements it down to zero
         // decrement, but if another thread beat me to it, loop back and try again (value is updated, but only if failed)
-        if (__atomic_compare_exchange_n (addr, &value, value-1, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) 
+        if (cas_strong_relaxed (*addr, value, value-1)) 
             return (value == 1); // true if it is we that decremented the value to 0 (i.e. the expected value was 1), false if we decremented but not to zero
 
     return false; // another thread decremented the value to zero, not us
@@ -193,25 +193,39 @@ void refhash_calc_one_range (VBlockP vb_, RefhashCalcType calc_type) // VB of re
     #define encoded_ref_base(idx) bits_get2 (&r->ref, (idx) * 2)
 
     // note: we lose a handful of hooks which might be in the final BASES_PER_HASH of each range - negligible vs the number of hooks we lose due to hash collisions
-    for (PosType64 base_i=0; base_i < num_bases - BASES_PER_HASH; base_i++)
+    uint64_t prev_hash = UINT64_MAX;
+    PosType64 prev_base_i = 0;
+    for (PosType64 base_i=0; base_i < num_bases - BASES_PER_HASH; base_i++) 
 
         // take only the final hook in a homopolymer of hooks (i.e. the last G in a e.g. GGGGG)
         if (encoded_ref_base (base_i) == encoded_HOOK && encoded_ref_base (base_i+1) != encoded_HOOK) {
             uint64_t kmer = bits_get_wordn (&r->ref, (base_i+1) * 2, BASES_PER_HASH * 2); // starting from the base after the hook
             uint64_t hash = fibonacci_hash (kmer);
 
-            if (calc_type == REFHASH_COUNT_INSTANCES) // just count (pass 1)
-                increment_relaxed_ceiling_255 (&counts[hash]); // increment count, but not past 255
+            // pipeline stage 1: prefetch cache line (note: also prefetching refhash32 provides no noticeable benefit)
+            __builtin_prefetch (&counts[hash], 1, 0); 
 
-            else { // (calc_type == REFHASH_OCCUPY) - place gpos values in the hash table (pass 3)
-                // logic: when a kmer in reference that maps to this hash entry arrives here, we decrement count, 
-                // and it is the kmer the is lucky one to reduce count to 0, that gets to occupy hash with its GPOS.
-                if (decrement_relaxed_floor_0 (&counts[hash])) {
-                    if (gpos_bytes == 4) refhash32[hash] = LTEN32 (r->gpos + base_i);
-                    else /* 5 */         refhash40[hash] = LTEN40 (r->gpos + base_i);
+            // pipeline stage 2: process previous base 
+            if (prev_hash != UINT64_MAX) {
+                if (calc_type == REFHASH_COUNT_INSTANCES) // just count (pass 1)
+                    increment_relaxed_ceiling_255 (&counts[prev_hash]); // increment count, but not past 255
+
+                else { // (calc_type == REFHASH_OCCUPY) - place gpos values in the hash table (pass 3)
+                    // logic: when a kmer in reference that maps to this hash entry arrives here, we decrement count, 
+                    // and it is the kmer the is lucky one to reduce count to 0, that gets to occupy hash with its GPOS.
+                    if (decrement_relaxed_floor_0 (&counts[prev_hash])) {
+                        if (gpos_bytes == 4) refhash32[prev_hash] = LTEN32 (r->gpos + prev_base_i);
+                        else /* 5 */         refhash40[prev_hash] = LTEN40 (r->gpos + prev_base_i);
+                    }
                 }
             }
+
+            prev_base_i = base_i;
+            prev_hash = hash;
         }
+
+    // note: the last hook in the range will never be in refhash - because we only executed 
+    // stage 1 and not stage 2 for it. that's ok. its just one of many hooks that are dropped (due to counts).
 
     if (calc_type == REFHASH_OCCUPY) COPY_TIMER (refhash_p3_occupy); else COPY_TIMER (refhash_p1_count);
 }

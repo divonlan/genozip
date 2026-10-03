@@ -36,7 +36,7 @@ void ref_make_seg_initialize (VBlockP vb)
     START_TIMER;
 
     ASSINP (vb->vblock_i > 1 || *B1STtxt == '>' || *B1STtxt == ';',
-            "Error: expecting FASTA file %s to start with a '>' or a ';'", txt_name);
+            _ERR"expecting FASTA file %s to start with a '>' or a ';'", txt_name);
 
     CTX(FASTA_CONTIG)->no_stons = true; // needs b250 node_index for reference
     DC = '>';
@@ -76,31 +76,65 @@ static Range *ref_make_ref_get_range (VBIType vblock_i)
 // converts the vb sequence into a range
 void ref_make_create_range (VBlockP vb)
 {
-    Range *r = ref_make_ref_get_range (vb->vblock_i);
+    START_TIMER;
+
+    RangeP r = ref_make_ref_get_range (vb->vblock_i);
     uint64_t seq_len = CTX(FASTA_NONREF)->local.len;
 
     // at this point, we don't yet know the first/last pos or the chrom - we just create the 2bit sequence array.
     // the missing details will be added during ref_make_prepare_one_range_for_dispatch
-    r->ref = bits_alloc (seq_len * 2, false); // 2 bits per base
+    
+    // an ugly hack: allocation outside of buf_lists.
+    r->ref = (Bits){ .type   = BITS_SELF_ALLOC, // not in buf_list
+                     .nbits  = seq_len * 2,
+                     .nwords = roundup_bits2words64(seq_len * 2),
+                     .words  = MALLOC (roundup_bits2bytes64(seq_len * 2)),
+                     .nameר  = ר(__FUNCTION__) };
+    bits_clear_excess_bits_in_top_word (&r->ref); // initialize: clear garagage in top unused bits
+
     r->range_id = vb->vblock_i-1;
 
-    uint64_t bit_i=0;
+    // NEW
+    uint64_t *restrict bitmap_words = r->ref.words;
+    uint64_t word_i=0, current_word=0, len_so_far=0;
+    int bits_in_word = 0;
+
     for_line {
-        
-        uint32_t seq_data_start, seq_len;
-        fasta_get_data_line (vb, line_i, &seq_data_start, &seq_len);
+        uint32_t seq_data_start, line_len;
+        fasta_get_data_line (vb, line_i, &seq_data_start, &line_len);
 
         bytes line_seq = B8 (vb->txt_data, seq_data_start);
-        for (uint64_t base_i=0; base_i < seq_len; base_i++, bit_i += 2) {
-            char base = line_seq[base_i];
-            bits_assign2 (&r->ref, bit_i, acgt_encode(base)); // note: upper and lower case bases, and IUPACs, are accepted
+        uint64_t line_base_i=0;
 
-            // store very rare IUPAC bases (GRCh38 has 94 of them)
-            ref_iupacs_add (vb, bit_i/2, base);
+        while (line_base_i < line_len) {
+            while (line_base_i < line_len && bits_in_word < 64) {
+                char base = line_seq[line_base_i];
+
+                current_word |= ((uint64_t)(acgt_encode(base) & 3)) << bits_in_word;
+                bits_in_word += 2;
+                
+                ref_iupacs_add (vb, len_so_far + line_base_i, base);
+                line_base_i++;
+            }
+
+            if (bits_in_word == 64) {
+                bitmap_words[word_i++] = current_word;
+                current_word = 0;
+                bits_in_word = 0;
+            }
         }
+
+        len_so_far += line_len;
     }
 
-    ASSERT (seq_len * 2 == bit_i, "Expecting SEQ.local.len (x2 = %"PRId64") == bit_i (%"PRId64")", seq_len * 2, bit_i);
+    if (bits_in_word > 0) 
+        bitmap_words[word_i++] = current_word;
+
+    ASSERT (word_i == r->ref.nwords && bits_in_word == r->ref.nbits % 64, 
+            "Wrong length: word_i=%"PRId64" nwords=%"PRId64" nbits=%"PRId64" bits_in_word=%d", 
+            word_i, r->ref.nwords, r->ref.nbits, bits_in_word);
+
+    COPY_TIMER (ref_make_create_range);
 }
 
 // in make_ref, each VB gets it own range indexed by vb->vblock_i - so they can work on them in parallel without
@@ -158,17 +192,17 @@ void ref_make_calculate_digest (void)
     Range *last_r = BLST(Range, gref.ranges);
     gref.genome_nbases = ROUNDUP64 (last_r->gpos + ref_size (last_r)) + 64;
 
-    gref.genome_buf.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
-    gref.genome = buf_alloc_bits_exact (evb, &gref.genome_buf, gref.genome_nbases * 2, CLEAR, 0, "ref->genome_buf");
+    gref.genome.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
+    buf_alloc_bits_exact (evb, &gref.genome, gref.genome_nbases * 2, CLEAR, 0, "ref->genome");
 
     for_buf (Range, r, gref.ranges) 
-        bits_copy (gref.genome, r->gpos * 2, &r->ref, 0, ref_size(r) * 2);
+        bits_copy (&gref.genome, r->gpos * 2, &r->ref, 0, ref_size(r) * 2);
 
     // 15.0.[0-80]: was adler32 rather than xxh3 
     // 15.0.[0-81]: lacked the "* sizeof (uint64_t)" so digested just 1/8 of the genome (defect 2026-04-12)
-    z_file->digest = digest_do (STRb(gref.genome_buf) * sizeof (uint64_t), flag.md5 ? DIGEST_MD5 : DIGEST_XXH3, "genome"); 
+    z_file->digest = digest_do (STRb(gref.genome) * sizeof (uint64_t), flag.md5 ? DIGEST_MD5 : DIGEST_XXH3, "genome"); 
     
-    buf_free (gref.genome_buf);
+    buf_free (gref.genome);
 
     COPY_TIMER_EVB (ref_make_calculate_digest);
 }

@@ -6,6 +6,10 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+// LZMA SDK usage history:
+// Initial integration 14.0.19: lzma 19.0
+// Starting 15.0.92:            lzma 26.3
+
 #include "lzma/LzmaEnc.h"
 #include "lzma/LzmaDec.h"
 #include "compressor.h"
@@ -36,7 +40,8 @@ static rom lzma_status (ELzmaStatus status)
 static SRes codec_lzma_data_in_callback (const ISeqInStream *p, void *buf, size_t *size)
 {
     ISeqInStream *instream = (ISeqInStream *)p; // discard the const
-
+    ASSERTNOTNULL (instream->vb);
+    
     // case: we're done serving all the data
     if (!instream->avail_in) {
         *size = 0; // we're done
@@ -96,16 +101,15 @@ COMPRESS (codec_lzma_compress)
 {
     START_TIMER;
 
+    CLzmaEncHandle lzma_handle = LzmaEnc_Create (vb);
+
     // for documentation on these parameters, see lzma/LzmaLib.h
     CLzmaEncProps props;
     LzmaEncProps_Init (&props);
     props.level        = 5;    // Without setting dictSize, Level 5 consumes < 200MB ; level 7 consumes up to 350MB per VB. negligible difference between level 5,7,9 (< 0.1% file size)
     props.fb           = 273;  // a bit better compression with no noticable impact on memory or speed
-    props.writeEndMark = true; // add an "end of compression" mark - better error detection during decompress
+    props.writeEndMark = true; // add an "end of compression" mark - better error detection during uncompress
     props.dictSize     = MIN_(*uncompressed_len, segconf.vb_size);
-
-    char lzma_handle[LzmaEnc_LzmaHandleSize()];
-    LzmaEnc_Create (lzma_handle, vb, ctx);
 
     SRes res = LzmaEnc_SetProps (lzma_handle, &props);
     ASSERT (res == SZ_OK, "%s: \"%s\": LzmaEnc_SetProps failed for ctx=%s: %s", VB_NAME, name, TAG_NAME, lzma_errstr (res));
@@ -124,7 +128,7 @@ COMPRESS (codec_lzma_compress)
         SizeT data_compressed_len64 = (SizeT)*compressed_len - LZMA_PROPS_SIZE;
         res = LzmaEnc_MemEncode (lzma_handle, 
                                 (uint8_t *)compressed + LZMA_PROPS_SIZE, &data_compressed_len64, 
-                                (uint8_t *)uncompressed, *uncompressed_len, true);
+                                (uint8_t *)uncompressed, *uncompressed_len, true, NULL, vb, vb);
         
         *compressed_len = (uint32_t)data_compressed_len64 + LZMA_PROPS_SIZE;
     }
@@ -133,6 +137,7 @@ COMPRESS (codec_lzma_compress)
 
         ISeqInStream instream =   { .Read          = codec_lzma_data_in_callback, 
                                     .vb            = vb,
+                                    .ctx           = ctx,
                                     .line_i        = 0,
                                     .avail_in      = *uncompressed_len,
                                     .next_in_1     = NULL,
@@ -145,7 +150,7 @@ COMPRESS (codec_lzma_compress)
                                     .next_out     = compressed + LZMA_PROPS_SIZE,
                                     .avail_out    = *compressed_len - LZMA_PROPS_SIZE};
         
-        res = LzmaEnc_Encode (lzma_handle, &outstream, &instream);        
+        res = LzmaEnc_Encode (lzma_handle, &outstream, &instream, NULL, vb, vb);        
 
         *compressed_len -= outstream.avail_out; 
     }
@@ -155,7 +160,7 @@ COMPRESS (codec_lzma_compress)
     else
         ASSERT (res == SZ_OK, "%s: \"%s\": LzmaEnc_MemEncode failed for ctx=%s: %s", VB_NAME, name, TAG_NAME, lzma_errstr (res));
 
-    LzmaEnc_Destroy (lzma_handle);
+    LzmaEnc_Destroy (lzma_handle, vb, vb);
 
     COPY_TIMER_COMPRESS_BY_CODEC (compressor_lzma); // higher level codecs are accounted for in their codec code
 
@@ -169,11 +174,12 @@ UNCOMPRESS (codec_lzma_uncompress)
     ELzmaStatus status;
 
     SizeT compressed_len64 = (uint64_t)compressed_len - LZMA_PROPS_SIZE; // first 5 bytes in compressed stream are the encoding properties
-    
-    SRes ret = LzmaDecode (vb, (uint8_t *)uncompressed_buf->data, &uncompressed_len, 
+    SizeT uncompressed_len64 = uncompressed_len;
+
+    SRes ret = LzmaDecode ((uint8_t *)uncompressed_buf->data, &uncompressed_len64, 
                            (uint8_t *)compressed + LZMA_PROPS_SIZE, &compressed_len64, 
                            (uint8_t *)compressed, LZMA_PROPS_SIZE, 
-                           LZMA_FINISH_END, &status);
+                           LZMA_FINISH_END, &status, vb);
 
     ASSERT (ret == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK, 
             "%s: \"%s\": LzmaDecode failed: ret=%s status=%s", VB_NAME, name, lzma_errstr (ret), lzma_status (status)); 

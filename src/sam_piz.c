@@ -17,6 +17,7 @@
 #include "qname_filter.h"
 #include "huffman.h"
 #include "dyn_int.h"
+#include "hash.h"
 #include "libdeflate_1.19/libdeflate.h"
 #include "htscodecs/arith_dynamic.h"
 
@@ -129,7 +130,7 @@ void sam_piz_vb_recon_init (VBlockP vb)
     buf_alloc_zero (vb, &CTX(SAM_CIGAR)->cigar_anal_history, 0, vb->lines.len, CigarAnalItem, 0, "cigar_anal_history"); // initialize to exactly one per line.
 
     if (flag.deep) 
-        CTX(SAM_CIGAR)->deep_cigar.name = C_"deep_cigar"; // so sam_cigar_binary_to_textual uses the right buffer name
+        CTX(SAM_CIGAR)->deep_cigar.nameר = ר(C_"deep_cigar"); // so sam_cigar_binary_to_textual uses the right buffer name
 }
 
 // PIZ main thread: after reading and uncompressing VB_HEADER
@@ -177,7 +178,7 @@ void sam_piz_finalize (bool is_last_z_file)
         vb_dehoard_memory (true);
     }
 
-    if (is_last_z_file && flag.debug_valgrind)
+    if (is_last_z_file && flag.is_valgrind)
         seq_filter_destroy();
 }
 
@@ -382,14 +383,14 @@ void seq_filter_initialize (rom filename)
     for (int i=0; i < n_lines; i++) 
         seq[i] = (SeqFilterItem){ .seq     = lines[i], // pointer into data buffer defined in file_split_lines
                                   .seq_len = line_lens[i],
-                                  .hash    = crc32 (0, STRi(line,i)) };
+                                  .hash    = hash_crc32 (STRi(line,i)) };
 
     // revcomp entries
     for (int i=0; i < n_lines; i++) {
         seq[n_lines + i].seq        = MALLOC (line_lens[i]);
         seq[n_lines + i].seq_len    = line_lens[i];
         str_revcomp ((char *)seq[n_lines + i].seq, STRi(line, i));
-        seq[n_lines + i].hash       = crc32 (0, STRa(seq[n_lines + i].seq));
+        seq[n_lines + i].hash       = hash_crc32 (STRa(seq[n_lines + i].seq));
         seq[n_lines + i].is_alloced = true;
     }
 
@@ -418,7 +419,7 @@ static void seq_filter_destroy (void)
 
 static bool sam_piz_line_survives_seq_filter (STRp(seq))
 {
-    uint32_t hash = crc32 (0, STRa(seq));
+    uint32_t hash = hash_crc32 (STRa(seq));
     SeqFilterItem *ent = binary_search (find_seq_in_filter, SeqFilterItem, seqs_filter, hash);
 
     bool found = false;
@@ -745,7 +746,6 @@ bool sam_piz_filter_up_to_v13_stuff (VBlockP vb, DictId dict_id, int item, bool 
     // and other lines, which have buddy, it is not consumed because the field that consumes it is skipped
     if (dict_id.num == _SAM_TOP2BAM && item == 0 && 
         CTX(SAM_QNAME)->b250.len32) { // might be 0 in special cases, like flag.count
-        STR(snip);
         PEEK_SNIP(SAM_QNAME);
         if (snip_len && *snip == v13_SNIP_COPY_BUDDY)
             sam_piz_set_buddy_v13(vb);
@@ -775,18 +775,29 @@ CONTAINER_FILTER_FUNC (sam_piz_filter)
     if (!VER(14) && sam_piz_filter_up_to_v13_stuff (vb, dict_id, item, &v13_ret_value))
         return v13_ret_value;
 
-    else if (CONTAINER_IS(SAM_TOP2NONE)) { 
-        if (ITEM_IS(SAM_QUAL) && (flag.header_only_fast || flag.seq_only)) // only possible when genocat --fastq of a deep file
-            return false; // don't reconstruct QUAL
+    // toplevel
+    else if (CONTAINER_IS(SAM_TOP2BAM) || CONTAINER_IS(SAM_TOP2NONE) || CONTAINER_IS(SAM_TOPLEVEL)) {
+
+        // before each sam/bam line (repeat)
+        if (item == 0) {
+            // case line segged with aligner: get the next available gpos/gwd and prefetch genome region ahead of time (to save random-access latency to genome)
+            if (sam_piz_has_gpos (VB_SAM))
+                aligner_piz_recon_gpos_fwd_prefetch_genome (VB, false, false); // prefetches
+        }
+
+        if (CONTAINER_IS(SAM_TOP2NONE)) { 
+            if (ITEM_IS(SAM_QUAL) && (flag.header_only_fast || flag.seq_only)) // only possible when genocat --fastq of a deep file
+                return false; // don't reconstruct QUAL
+        }
+        
+        // --qname-only: skip reconstructing everything but QNAME, BUDDY, EOL
+        else if (CONTAINER_IS(SAM_TOPLEVEL) && flag.qname_only &&
+                !ITEM_IS(SAM_QNAME) && !ITEM_IS(SAM_QNAMESA) && !ITEM_IS(SAM_BUDDY) && !ITEM_IS(SAM_EOL))
+            return false;
     }
     
     else if (CONTAINER_IS(SAM_AUX)) 
         VB_SAM->aux_con = con;
-
-    // --qname-only: skip reconstructing everything but QNAME, BUDDY, EOL
-    else if (CONTAINER_IS(SAM_TOPLEVEL) && flag.qname_only &&
-             !ITEM_IS(SAM_QNAME) && !ITEM_IS(SAM_QNAMESA) && !ITEM_IS(SAM_BUDDY) && !ITEM_IS(SAM_EOL))
-        return false;
 
     return true; // go ahead and reconstruct
 }
@@ -830,7 +841,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_BUDDY)
 SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_BY_MATE_PRIM)
 {
     // note: when reconstructing POS or MAPQ in BAM, FLAG is not known yet, so we peek it here
-    if (!ctx_has_value_in_line_(vb, CTX(SAM_FLAG)))
+    if (!ctx_has_value_in_line (vb, SAM_FLAG))
         ctx_set_last_value (vb, CTX(SAM_FLAG), reconstruct_peek (vb, CTX(SAM_FLAG), 0, 0));
 
     int channel_i = sam_has_mate?1 : sam_has_prim?2 : 0;
@@ -859,7 +870,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_SET_BUDDY)
     if (IS_PRIM(vb) && (!vb->preprocessing || (vb->preprocessing && reconstruct))) 
         LOAD_SNIP (SAM_QNAME);
     else
-        PEEK_SNIP (SAM_QNAME);
+        PEEK_SNIP_(SAM_QNAME);
 
     if (snip_len == 3 && snip[1] == SAM_SPECIAL_COPY_BUDDY) { // has buddy
 

@@ -428,9 +428,7 @@ static void file_open_txt_read_bz2 (FileP file)
         int fd = BZ2_get_fd (file->bz_file);
         
         stream_set_inheritability (fd, false); // Windows: allow file_remove in case of --replace
-        #ifdef __linux__
-        posix_fadvise (fd, 0, 0, POSIX_FADV_SEQUENTIAL); // ignore errors
-        #endif
+        ℓ𝒾𝓃𝓊𝓍 (posix_fadvise (fd, 0, 0, POSIX_FADV_SEQUENTIAL);) // ignore errors
     }
 }
 
@@ -444,9 +442,7 @@ static void file_open_txt_read_gz (FileP file)
 
     if (!file->is_remote && !file->redirected) {
         stream_set_inheritability (fileno (file->os_file), false); // Windows: allow file_remove in case of --replace
-        #ifdef __linux__
-        posix_fadvise (fileno (file->os_file), 0, 0, POSIX_FADV_SEQUENTIAL); // ignore errors
-        #endif
+        ℓ𝒾𝓃𝓊𝓍 (posix_fadvise (fileno (file->os_file), 0, 0, POSIX_FADV_SEQUENTIAL);) // ignore errors
     }
 
     // case: discovery deferred to the end of segconf when we know segconf.tech
@@ -741,7 +737,7 @@ static void file_initialize_z_file_data (FileP file)
 // get time since creation of z_file object in memory
 StrText file_get_z_run_time (FileP file)
 {
-    TimeSpecType tb; 
+    struct timespec tb; 
     clock_gettime(CLOCK_REALTIME, &tb); 
 
     int seconds_so_far = ((tb.tv_sec - file->start_time.tv_sec)*1000 + 
@@ -891,7 +887,8 @@ FileP file_open_z_write (rom filename, FileMode mode, DataType data_type, Codec 
         !flag.force            && 
         !flag.zip_no_z_file    && // not zip with --seg-only
         !flag.restarted        && // if restarted, user already approved overwrite in previous process
-        !file->is_in_tar)   
+        !file->is_in_tar       &&
+        !flag.biopsy_R1)          // we always overwrite an old biopsy temporary file   
 
         file_ask_user_to_confirm_overwrite (filename); // function doesn't return if user responds "no"
 
@@ -995,7 +992,7 @@ void file_close (FileP *file_p)
 
     if (z_file && file == z_file && !flag_loading_auxiliary && 
         flag.show_time_comp_i == COMP_ALL && !flag.show_time[0]) // show-time without the optional parameter 
-        profiler_add_evb_and_print_report();
+        𝓅𝓇ℴ𝒻𝒾𝓁ℯ (profiler_add_evb_and_print_report());
 
     __atomic_store_n ((File **)file_p, (FileP)NULL, __ATOMIC_RELAXED); // can't use store_relaxed here bc need to cast away the "restrict" on file_p
 
@@ -1142,7 +1139,7 @@ void file_mkfifo (rom filename)
 
 bool file_is_fifo (rom filename)
 {
-    if (flag.is_windows) return false; // we don't support FIFOs in Win32 yet
+    𝓌𝒾𝓃(return false;) // we don't support FIFOs in Win32 yet
 
     struct stat st;
     ASSERT (!stat (filename, &st), "stat failed on %s", filename);
@@ -1249,11 +1246,9 @@ void file_mkdir (rom dirname)
 {
     if (file_is_dir (dirname)) return; // already exists - that's ok
 
-#ifdef _WIN32
-    int ret = _mkdir (dirname); // note: errno=0 even if returning -1, need to check GetLastError
-#else
-    int ret = mkdir (dirname, 0777);
-#endif
+    int ret = 𝓌𝒾𝓃(_mkdir (dirname))  // note: errno=0 even if returning -1, need to check GetLastError
+              X𝓌𝒾𝓃(mkdir (dirname ,0777));
+
     ASSERT (!ret, "mkdir(%s) failed: %s", flag.out_dirname, arch_str_error());
 }
 
@@ -1263,9 +1258,11 @@ void file_get_file (VBlockP vb, rom filename, BufferP buf, rom buf_name,
                     FileContentVerificationType ver_type, bool add_string_terminator)
 {
     bool is_stdin = !strcmp (filename, "-");
-    if (is_stdin && !max_size) max_size = 10000000; // max size for stdin
+    bool size_unknowable = (is_stdin ℓ𝒾𝓃𝓊𝓍(|| str_isprefix_(filename, strlen(filename), "/proc/", 6)));
+
+    if (size_unknowable && !max_size) max_size = 10000000; // max size for stdin
     
-    uint64_t file_size = is_stdin ? 0 : file_get_size (filename);
+    uint64_t file_size = size_unknowable ? 0 : file_get_size (filename);
 
     uint64_t size = is_stdin   ? max_size
                   : !file_size ? max_size
@@ -1355,15 +1352,15 @@ bool file_put_data (rom filename, const void *data, uint64_t len,
 
     put_data_tmp_filenames[my_file_i] = NULL; // remove tmp file name from list 
     
-    mutex_unlock (put_data_mutex);
-
     // warnings and not errors, because we might be called in the midst of printing a much more important error message
     ASSERTW (!renamed_failed, "Failed to rename %s to %s: %s", tmp_filename, filename, strerror (errno));
     FREE (tmp_filename);
 
     if (chmod_to && !renamed_failed) 
         ASSERTW (!chmod (filename, chmod_to), "Failed to chmod %s: %s", filename, strerror (errno));
-    
+
+    mutex_unlock (put_data_mutex);
+        
     return true;
 }
 

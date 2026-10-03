@@ -163,7 +163,7 @@ void sam_seg_gc_initialize (VBlockSAMP vb)
   ( { if (condition) { \
           if (flag.debug_sag) iprintf ("%s: " format "\n", LN_NAME, __VA_ARGS__); \
           if (IS_MAIN(vb)) return false; \
-          else { progress_newline(); fprintf (stderr, "%s: Error in %s:%u: Failed PRIM line because ", LN_NAME, __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true); }} \
+          else { progress_newline(); fprintf (stderr, "_ERR%s: in %s:%u: Failed PRIM line because ", LN_NAME, __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); fflush (stderr); exit_on_error(true); }} \
     } )
 
 // Call in seg PRIM line (both in MAIN and PRIM vb): 
@@ -399,7 +399,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(alignment), 
 
             // case: standard SA:Z            
             else if (has(SA_Z) && has(NM_i) &&
-                     sam_seg_get_aux_int (vb, vb->idx_NM_i, &NM, is_bam, MIN_NM_i, MAX_NM_i, SOFT_FAIL) &&
+                     sam_seg_get_aux_int (vb, vb->idx.NM_i, &NM, is_bam, MIN_NM_i, MAX_NM_i, SOFT_FAIL) &&
                      (n_alns = sam_seg_prim_add_sag_SA (vb, dl, STRauxZ (SA_Z, is_bam), NM, is_bam)))  // testing to see if we can successfully add a sag based on SA
                 comp_i = SAM_COMP_PRIM;
 
@@ -408,10 +408,10 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(alignment), 
         case SAG_BY_NH: 
         case SAG_BY_SOLO: 
             // case: IH=1 - no gencomp
-            if (sam_seg_peek_int_field (vb, OPTION_IH_i, vb->idx_IH_i, 1, 1, false, NULL))
+            if (sam_seg_peek_int_field (vb, OPTION_IH_i, vb->idx.IH_i, 1, 1, false, NULL))
                 goto done;
 
-            if (has(NH_i) && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2/*at least*/, MAX_HI_NH, SOFT_FAIL)) {
+            if (has(NH_i) && sam_seg_get_aux_int (vb, vb->idx.NH_i, &n_alns, is_bam, 2/*at least*/, MAX_HI_NH, SOFT_FAIL)) {
                 
                 if (sam_line_is_depn(dl)) 
                     comp_i = SAM_COMP_DEPN;
@@ -422,7 +422,7 @@ bool sam_seg_is_gc_line (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(alignment), 
             break;
             
         case SAG_BY_CC:
-            if (has(NH_i) && sam_seg_get_aux_int (vb, vb->idx_NH_i, &n_alns, is_bam, 2, MAX_HI_NH, SOFT_FAIL)) {  // not out of range, i.e. at least 2
+            if (has(NH_i) && sam_seg_get_aux_int (vb, vb->idx.NH_i, &n_alns, is_bam, 2, MAX_HI_NH, SOFT_FAIL)) {  // not out of range, i.e. at least 2
 
                 if (has(CC_Z) && has(CP_i))
                     comp_i = SAM_COMP_DEPN;
@@ -707,7 +707,7 @@ static void sam_sa_seg_depn_find_sagroup_SAtag (VBlockSAMP vb, ZipDataLineSAM�
 
     // get alignments of this DEPN line ([0]=main field [1...]=SA alignments)
     if (segconf.SA_NM_by_CIGAR_X) my_nm = vb->mismatch_bases_by_CIGAR;
-    else if (has(NM_i)) sam_seg_get_aux_int (vb, vb->idx_NM_i, &my_nm, is_bam, MIN_NM_i, MAX_NM_i, HARD_FAIL);
+    else if (has(NM_i)) sam_seg_get_aux_int (vb, vb->idx.NM_i, &my_nm, is_bam, MIN_NM_i, MAX_NM_i, HARD_FAIL);
 
     // populate my_alns: this depn line's alignment in my_alns[0], and the alignments in SA:Z following in my_alns[]
     if (!sam_sa_seg_depn_get_my_SA_alns (vb, dl, vb->chrom_node_index, dl->POS, dl->MAPQ, STRa(textual_cigar), my_nm, revcomp, 
@@ -767,9 +767,9 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM𐤐
     STR0(cc); cc="";
     int32_t hi=-1; // stays -1 if the line has no HI:i
     if (flag.show_depn) {
-        if (has(HI_i)) sam_seg_get_aux_int (vb, vb->idx_HI_i, &hi, is_bam, 1, 0x7fffffff, SOFT_FAIL);
-        if (has(CP_i)) sam_seg_get_aux_int (vb, vb->idx_CP_i, &cp, is_bam, 0, MAX_POS_SAM, SOFT_FAIL);
-        if (has(CC_Z)) sam_seg_get_aux_Z (vb, vb->idx_CC_Z, pSTRa(cc), is_bam);
+        if (has(HI_i)) sam_seg_get_aux_int (vb, vb->idx.HI_i, &hi, is_bam, 1, 0x7fffffff, SOFT_FAIL);
+        if (has(CP_i)) sam_seg_get_aux_int (vb, vb->idx.CP_i, &cp, is_bam, 0, MAX_POS_SAM, SOFT_FAIL);
+        if (has(CC_Z)) sam_seg_get_aux_Z (vb, vb->idx.CC_Z, pSTRa(cc), is_bam);
     }
 
     if (!g) {
@@ -785,7 +785,7 @@ static void sam_sa_seg_depn_find_sagroup_noSA (VBlockSAMP vb, ZipDataLineSAM𐤐
     }
     
     int32_t nh;
-    if ((IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) && !sam_seg_get_aux_int (vb, vb->idx_NH_i, &nh, is_bam, 1, 0x7fffffff, SOFT_FAIL)) {
+    if ((IS_SAG_NH || IS_SAG_SOLO || IS_SAG_CC) && !sam_seg_get_aux_int (vb, vb->idx.NH_i, &nh, is_bam, 1, 0x7fffffff, SOFT_FAIL)) {
         if (flag.show_depn) iprintf ("vb=%u FAIL:NO_VALID_NH QNAME=\"%.*s\"(%08x) HI=%d CC=\"%.*s\" CP=%d\n", vb->vblock_i, STRfQNAME, qname_hash, hi, STRf(cc), cp);
         return; // missing or invalid NH:i in depn line
     }

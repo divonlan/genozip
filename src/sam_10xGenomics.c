@@ -180,7 +180,7 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
         ContextP cb_ctx = CTX(OPTION_CB_Z); 
         STR(cb);
 
-        sam_seg_get_aux_Z (vb, vb->idx_CB_Z, pSTRa(cb), IS_BAM_ZIP); // base field can be before or after
+        sam_seg_get_aux_Z (vb, vb->idx.CB_Z, pSTRa(cb), IS_BAM_ZIP); // base field can be before or after
         
         TxtWord save_last_txt = cb_ctx->last_txt;
         seg_set_last_txt (VB, cb_ctx, STRa(cb)); // needed for seg_diff
@@ -286,7 +286,7 @@ static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), un
         ContextP bx_ctx = CTX(OPTION_BX_Z);
         STR(bx);
 
-        sam_seg_get_aux_Z (vb, has(BX_Z) ? vb->idx_BX_Z : vb->idx_UB_Z, pSTRa(bx), IS_BAM_ZIP); // base field can be before or after
+        sam_seg_get_aux_Z (vb, has(BX_Z) ? vb->idx.BX_Z : vb->idx.UB_Z, pSTRa(bx), IS_BAM_ZIP); // base field can be before or after
 
         TxtWord save_last_txt = bx_ctx->last_txt;
         seg_set_last_txt (VB, bx_ctx, STRa(bx));
@@ -512,7 +512,7 @@ void sam_seg_GX_GN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(value)
     
     // the normal case is that we have both GX:Z and GN:Z and GX is first.
     // since GX and GN have 1:1 mapping we seg them together (since 15.0.83)
-    if (has(GX_Z) && has(GN_Z) && vb->idx_GX_Z < vb->idx_GN_Z) {    
+    if (has(GX_Z) && has(GN_Z) && vb->idx.GX_Z < vb->idx.GN_Z) {    
         ctx->txt_len += add_bytes; // add bytes now so sam_seg_GX_GN_do doesn't need to worry about it
 
         // case: we already encountered GX and GN - time for the seg
@@ -601,7 +601,7 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gr), unsigned add_
     // diff against CR if possible
     if (has(CR_Z)) {
         STR(cr);
-        sam_seg_get_aux_Z (vb, vb->idx_CR_Z, pSTRa(cr), IS_BAM_ZIP); // base field can be before or after
+        sam_seg_get_aux_Z (vb, vb->idx.CR_Z, pSTRa(cr), IS_BAM_ZIP); // base field can be before or after
         seg_set_last_txt (VB, CTX(OPTION_CR_Z), STRa(cr));
 
         if (cr_len < gr_len) goto fallback; // can't diff
@@ -629,7 +629,7 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gy), unsigned add_
     // diff against CY if possible
     if (has(CY_Z)) {
         STR(cy);
-        sam_seg_get_aux_Z (vb, vb->idx_CY_Z, pSTRa(cy), IS_BAM_ZIP); // base field can be before or after
+        sam_seg_get_aux_Z (vb, vb->idx.CY_Z, pSTRa(cy), IS_BAM_ZIP); // base field can be before or after
         seg_set_last_txt (VB, CTX(OPTION_CY_Z), STRa(cy));
 
         if (cy_len < gy_len) goto fallback; // can't diff

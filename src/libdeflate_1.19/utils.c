@@ -39,9 +39,9 @@
 // free_func_t libdeflate_default_free_func = free;
 
 void *
-libdeflate_aligned_malloc(VBlockP vb, size_t alignment, size_t size, FUNCLINE)
+libdeflate_aligned_malloc(VBlockP vb, size_t alignment, size_t size, Caller caller)
 {
-	void *ptr = codec_alloc_do (vb, sizeof(void *) + alignment - 1 + size, 1, NULL, func, code_line);
+	void *ptr = codec_alloc_do (vb, sizeof(void *) + alignment - 1 + size, 1, NULL, caller);
 
 	if (ptr) {
 		void *orig_ptr = ptr;
@@ -53,9 +53,9 @@ libdeflate_aligned_malloc(VBlockP vb, size_t alignment, size_t size, FUNCLINE)
 }
 
 void
-libdeflate_aligned_free(VBlockP vb, void *ptr, FUNCLINE)
+libdeflate_aligned_free(VBlockP vb, void *ptr, Caller caller)
 {
-	codec_free_do(vb, ((void **)ptr)[-1], func, code_line);
+	codec_free_do(vb, ((void **)ptr)[-1], caller);
 }
 
 // LIBDEFLATEAPI void
@@ -133,7 +133,7 @@ libdeflate_aligned_free(VBlockP vb, void *ptr, FUNCLINE)
 // #include <stdio.h>
 // #include <stdlib.h>
 // void
-// libdeflate_assertion_failed(const char *expr, FUNCLINE)
+// libdeflate_assertion_failed(const char *expr, Caller caller)
 // {
 // 	ABORT ("libdefault_1.19 error: ")
 // 	fprintf(stderr, "Assertion failed: %s at %s:%d\n", expr, file, line);

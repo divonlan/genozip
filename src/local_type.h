@@ -60,57 +60,63 @@ typedef void BgEnBufFunc (BufferP buf, LocalType *lt);
 
 typedef BgEnBufFunc (*BgEnBuf);
 
-typedef struct LocalTypeDesc {
-    rom name;
-    const char sam_type;
-    unsigned width;
-    bool is_signed;
-    int64_t min_int, max_int; // relevant for integer fields only
-    BgEnBuf file_to_native;
+typedef enum  {  BAM_NA=0, BAM_c, BAM_C, BAM_s, BAM_S, BAM_i, BAM_I, NUM_BAM_INT_TYPES } BamIntTypes;
+#define BAM_INT_TYPES { 0,    'c',   'C',   's',   'S',   'i',   'I' }
+typedef struct LocalTypeDesc { // 16 bytes
+    Pointeר nameר           : 28; // 28 bit is plenty for a relative pointer within our static data
+    uint32_t bam_type       : 3;
+    uint32_t is_signed      : 1;
+
+    uint32_t width          : 4;
+    Pointeר file_to_nativeר : 28; // relative pointer to function
+
+    int64_t max_int; // relevant for integer fields only. if is_signed, min_int = (-max_int-1)
 } LocalTypeDesc;
 
-extern const LocalTypeDesc lt_desc[NUM_LOCAL_TYPES];
-#define LOCALTYPE_DESC {                                                       \
-/*   name   sam  wid signed min_int    max_int     file_to_native           */ \
-   { "SIN", 0,   1,  0,     0,         0,          0                        }, \
-   { "I8 ", 'c', 1,  1,     INT8_MIN,  INT8_MAX,   BGEN_deinterlace_d8_buf  }, \
-   { "U8 ", 'C', 1,  0,     0,         UINT8_MAX,  BGEN_u8_buf              }, \
-   { "I16", 's', 2,  1,     INT16_MIN, INT16_MAX,  BGEN_deinterlace_d16_buf }, \
-   { "U16", 'S', 2,  0,     0,         UINT16_MAX, BGEN_u16_buf             }, \
-   { "I32", 'i', 4,  1,     INT32_MIN, INT32_MAX,  BGEN_deinterlace_d32_buf }, \
-   { "U32", 'I', 4,  0,     0,         UINT32_MAX, BGEN_u32_buf             }, \
-   { "I64", 0,   8,  1,     INT64_MIN, INT64_MAX,  BGEN_deinterlace_d64_buf }, \
-   { "U64", 0,   8,  0,     0,         INT64_MAX,  BGEN_u64_buf             }, /* note: our internal representation is int64_t so max is limited by that */ \
-   { "F32", 'f', 4,  0,     0,         0,          BGEN_u32_buf             }, \
-   { "F64", 0,   8,  0,     0,         0,          BGEN_u64_buf             }, \
-   { "BLB", 0,   1,  0,     0,         0,          0                        }, \
-   { "BMP", 0,   8,  0,     0,         0,          0                        }, \
-   { "COD", 0,   1,  0,     0,         0,          0                        }, \
-   { "T8 ", 0,   1,  0,     0,         UINT8_MAX,  BGEN_transpose_u8_buf    }, \
-   { "T16", 0,   2,  0,     0,         UINT16_MAX, BGEN_transpose_u16_buf   }, \
-   { "T32", 0,   4,  0,     0,         UINT32_MAX, BGEN_transpose_u32_buf   }, \
-   { "N/A", 0,   8,  0,     0,         INT64_MAX,  0                        }, /* unused - can be repurposed - used to be T64, but this was never possible in the code */ \
-   { "h8",  0,   1,  0,     0,         UINT8_MAX,  BGEN_u8_buf              }, /* lower-case UINT8 hex */ \
-   { "H8",  0,   1,  0,     0,         UINT8_MAX,  BGEN_u8_buf              }, /* upper-case UINT8 hex */ \
-   { "h16", 0,   2,  0,     0,         UINT16_MAX, BGEN_u16_buf             }, \
-   { "H16", 0,   2,  0,     0,         UINT16_MAX, BGEN_u16_buf             }, \
-   { "h32", 0,   4,  0,     0,         UINT32_MAX, BGEN_u32_buf             }, \
-   { "H32", 0,   4,  0,     0,         UINT32_MAX, BGEN_u32_buf             }, \
-   { "h64", 0,   8,  0,     0,         INT64_MAX,  BGEN_u64_buf             }, \
-   { "H64", 0,   8,  0,     0,         INT64_MAX,  BGEN_u64_buf             }, \
-   { "STR", 0,   1,  0,     0,         0,          0                        }, \
-   { "SUP", 0,   1,  0,     0,         0,          0                        }, \
-   { "t8 ", 0,   1,  0,     0,         UINT8_MAX,  BGEN_ptranspose_u8_buf   }, \
-   { "t16", 0,   2,  0,     0,         UINT16_MAX, BGEN_ptranspose_u16_buf  }, \
-   { "t32", 0,   4,  0,     0,         UINT32_MAX, BGEN_ptranspose_u32_buf  }, \
-   { /* NUM_LTYPES */                                                       }, \
-   /* from here - not part of the file format, just used during seg */         \
-   { "DYN", 0,   8,  0,     INT64_MIN, INT64_MAX,  0                        }, \
-   { "DYh" ,0,   8,  0,     INT64_MIN, INT64_MAX,  0                        }, \
-   { "DYH" ,0,   8,  0,     INT64_MIN, INT64_MAX,  0                        }, \
+extern LocalTypeDesc *lt_desc;
+
+#define LOCALTYPE_DESC {                                                                                                          \
+/*  name          bam_type  signed width file_to_native              max_int   */                                                 \
+   { ר("SIN"),    0,        0,     1,    0,                          0          },                                                \
+   /* 64B-alignment starts here: each entry is 16B ⇒ the 8 I/U integers fit in 2 cache lines */                                   \
+   { ר("I8 "),    BAM_c,    1,     1,    ר(BGEN_deinterlace_d8_buf), INT8_MAX   },                                                \
+   { ר("U8 "),    BAM_C,    0,     1,    ר(BGEN_u8_buf),             UINT8_MAX  },                                                \
+   { ר("I16"),    BAM_s,    1,     2,    ר(BGEN_deinterlace_d16_buf),INT16_MAX  },                                                \
+   { ר("U16"),    BAM_S,    0,     2,    ר(BGEN_u16_buf),            UINT16_MAX },                                                \
+   { ר("I32"),    BAM_i,    1,     4,    ר(BGEN_deinterlace_d32_buf),INT32_MAX  },                                                \
+   { ר("U32"),    BAM_I,    0,     4,    ר(BGEN_u32_buf),            UINT32_MAX },                                                \
+   { ר("I64"),    0,        1,     8,    ר(BGEN_deinterlace_d64_buf),INT64_MAX  },                                                \
+   { ר("U64"),    0,        0,     8,    ר(BGEN_u64_buf),            INT64_MAX  }, /* internal rep is int64_t so max is limited */\
+   { ר("F32"),    0,        0,     4,    ר(BGEN_u32_buf),            0          },                                                \
+   { ר("F64"),    0,        0,     8,    ר(BGEN_u64_buf),            0          },                                                \
+   { ר("BLB"),    0,        0,     1,    0,                          0          },                                                \
+   { ר("BMP"),    0,        0,     8,    0,                          0          },                                                \
+   { ר("COD"),    0,        0,     1,    0,                          0          },                                                \
+   { ר("T8 "),    0,        0,     1,    ר(BGEN_transpose_u8_buf),   UINT8_MAX  },                                                \
+   { ר("T16"),    0,        0,     2,    ר(BGEN_transpose_u16_buf),  UINT16_MAX },                                                \
+   { ר("T32"),    0,        0,     4,    ר(BGEN_transpose_u32_buf),  UINT32_MAX },                                                \
+   { ר("N/A"),    0,        0,     8,    0,                          INT64_MAX  }, /* unused */                                   \
+   { ר("h8 "),    0,        0,     1,    ר(BGEN_u8_buf),             UINT8_MAX  }, /* lower-case UINT8 hex */                     \
+   { ר("H8 "),    0,        0,     1,    ר(BGEN_u8_buf),             UINT8_MAX  }, /* upper-case UINT8 hex */                     \
+   { ר("h16"),    0,        0,     2,    ר(BGEN_u16_buf),            UINT16_MAX },                                                \
+   { ר("H16"),    0,        0,     2,    ר(BGEN_u16_buf),            UINT16_MAX },                                                \
+   { ר("h32"),    0,        0,     4,    ר(BGEN_u32_buf),            UINT32_MAX },                                                \
+   { ר("H32"),    0,        0,     4,    ר(BGEN_u32_buf),            UINT32_MAX },                                                \
+   { ר("h64"),    0,        0,     8,    ר(BGEN_u64_buf),            INT64_MAX  },                                                \
+   { ר("H64"),    0,        0,     8,    ר(BGEN_u64_buf),            INT64_MAX  },                                                \
+   { ר("STR"),    0,        0,     1,    0,                          0          },                                                \
+   { ר("SUP"),    0,        0,     1,    0,                          0          },                                                \
+   { ר("t8 "),    0,        0,     1,    ר(BGEN_ptranspose_u8_buf),  UINT8_MAX  },                                                \
+   { ר("t16"),    0,        0,     2,    ר(BGEN_ptranspose_u16_buf), UINT16_MAX },                                                \
+   { ר("t32"),    0,        0,     4,    ר(BGEN_ptranspose_u32_buf), UINT32_MAX },                                                \
+   { /* NUM_LTYPES */                                                           },                                                \
+   /* from here - not part of the file format, just used during seg */                                                            \
+   { ר("DYN"),    0,        0,     8,    0,                          INT64_MAX  },                                                \
+   { ר("DYh"),    0,        0,     8,    0,                          INT64_MAX  },                                                \
+   { ר("DYH"),    0,        0,     8,    0,                          INT64_MAX  },                                                \
 }
 
 #define lt_width(ctx)       (lt_desc[(ctx)->ltype].width)
-#define lt_min(ltype)       (lt_desc[ltype].min_int)
-#define lt_max(ltype)       (lt_desc[ltype].max_int)
 #define lt_is_signed(ltype) (lt_desc[ltype].is_signed)
+#define lt_max(ltype)       (lt_desc[ltype].max_int)
+#define lt_min(ltype)       (lt_is_signed(ltype) ? (-lt_max(ltype) - 1) : 0)

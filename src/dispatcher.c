@@ -23,13 +23,13 @@ rom _task_names[NUM_TASKS] = TASK_NAMES;
 
 #define RR(x) ((x) % d->max_threads)
 
-#define MAX_COMPUTED_VBS 4096
+#define MAX_POOL_VBS 4096
 typedef struct DispatcherData {
     Task task;
     VBlockPoolType pool_type;
     uint32_t pool_in_use_at_init;  // Used to verify that all VBs allocated by dispatcher are released by finish time
     uint32_t max_vb_id_so_far; 
-    VBlockP vbs[MAX_COMPUTED_VBS]; // VBs currently in the pipeline (with a compute thread or just before or after)
+    VBlockP vbs[MAX_POOL_VBS]; // VBs currently in the pipeline (with a compute thread or just before or after)
     VBlockP processed_vb;     // processed VB returned to caller (VB moved from the "vbs" field to this field)
 
     bool input_exhausted;
@@ -54,7 +54,7 @@ typedef struct DispatcherData {
 } DispatcherData;
 
 // variables that persist across multiple dispatchers run sequentially
-static TimeSpecType start_time; // wallclock
+static struct timespec start_time; // wallclock
 static bool start_time_initialized = false;
 
 // progress counter: zip: zeroed for new z_file, piz: zeroed for new txt_file
@@ -184,7 +184,7 @@ Dispatcher dispatcher_init (Task task,
     DispatcherData *d   = (DispatcherData *)CALLOC (sizeof(DispatcherData));
     d->task             = task;
     d->next_vb_i        = previous_vb_i;  // used if we're binding files - the vblock_i will continue from one file to the next
-    d->max_threads      = MIN_(max_threads, MAX_COMPUTED_VBS);
+    d->max_threads      = MIN_(max_threads, MAX_POOL_VBS);
     d->target_progress  = target_progress;
     d->task_pc_of_total = dispatcher_task_percent_of_total (task);
     d->pool_type        = dispatcher_task_pool_type (task);
@@ -277,14 +277,6 @@ void dispatcher_set_task (Dispatcher d, Task task)
     d->task = task;
 }
 
-void dispatcher_calc_avg_compute_vbs (Dispatcher d)
-{
-    ASSERTNOTNULL (d);
-    uint32_t dispatcher_lifetime = arch_time_lap (d->init_timestamp);
-    
-    profiler_set_avg_compute_vbs (dispatcher_lifetime ? ((double)d->total_compute_time / (double)dispatcher_lifetime) : 0);
-}
-
 static void dispatcher_show_task_times (void)
 {
     double total=0;
@@ -318,7 +310,7 @@ VBlockP dispatcher_generate_next_vb (Dispatcher d, VBIType vb_i, CompIType comp_
     d->next_vb_i = vb_i ? vb_i : d->next_vb_i+1;
 
     d->vbs[d->next_dispatched] = vb_get_vb (d->pool_type, d->task, d->next_vb_i, comp_i);
-    d->max_vb_id_so_far = MAX_(d->max_vb_id_so_far, d->vbs[d->next_dispatched]->id);
+    d->max_vb_id_so_far = MAX_(d->max_vb_id_so_far, (int)d->vbs[d->next_dispatched]->id.index);
 
     return d->vbs[d->next_dispatched];
 }
@@ -526,11 +518,11 @@ void dispatcher_end_task (Dispatcher d)
 
     task_time[d->task] = (arch_timestamp() / 1000000000.0) - task_time[d->task]; // time on this task (in seconds)
 
-    int32_t id_in_use;
+    VBID id_in_use;
     uint32_t pool_in_use_at_finish = vb_pool_get_num_in_use (d->pool_type, &id_in_use);
     // note for piz: we have 1 at start (wvb) and 0 at finish
-    ASSERT (pool_in_use_at_finish <= d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u (one VB in use is vb_id=%d)",
-            task_name (d->task), d->pool_in_use_at_init, pool_in_use_at_finish, id_in_use);
+    ASSERT (pool_in_use_at_finish <= d->pool_in_use_at_init, "Dispatcher \"%s\" leaked VBs: pool_in_use_at_init=%u pool_in_use_at_finish=%u (one VB in use is vb_id=%s)",
+            task_name (d->task), d->pool_in_use_at_init, pool_in_use_at_finish, dis_vb_id(id_in_use).s);
 
     if (flag.show_tasks) {
         progress_newline();
@@ -616,3 +608,10 @@ Dispatcher dispatcher_fan_out_task (Task task,
     return ret;
 }
 
+void dispatcher_calc_avg_compute_vbs (Dispatcher d)
+{
+    ASSERTNOTNULL (d);
+    uint32_t dispatcher_lifetime = arch_time_lap (d->init_timestamp);
+
+    profiler_set_avg_compute_vbs (dispatcher_lifetime ? ((double)d->total_compute_time / (double)dispatcher_lifetime) : 0);
+}

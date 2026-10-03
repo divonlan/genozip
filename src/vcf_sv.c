@@ -189,10 +189,10 @@ static int64_t vcf_INFO_SVLEN_prediction (VBlockVCFP vb)
     if (VT0(INS) || VT0(SUBST_INS)) 
         return ALTi(0)->alt_len - 1;
     
-    if ((VT0(SYM_DUP) || VT0(SYM_CNV)) && (IS_PIZ || vb->idx_SVLEN > vb->idx_END)) 
+    if ((VT0(SYM_DUP) || VT0(SYM_CNV)) && (IS_PIZ || vb->idx.SVLEN > vb->idx.END)) 
         return CTX(VCF_POS)->last_delta; // note: can predict only if END is before SVLEN
 
-    if (VT0(SYM_DEL) && (IS_PIZ || vb->idx_SVLEN > vb->idx_END)) 
+    if (VT0(SYM_DEL) && (IS_PIZ || vb->idx.SVLEN > vb->idx.END)) 
         return CTX(VCF_POS)->last_delta * (segconf.vcf_del_svlen_is_neg ? -1 : 1); // same comment ^
 
     if ((VT0(DEL) || VT0 (SUBST_DEL) || VT0(SUBST))) 
@@ -266,7 +266,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_SVLEN)
 
 void vcf_seg_INFO_CIPOS (VBlockVCFP vb, ContextP ctx, STRp(cipos))
 {
-    str_split_ints (cipos, cipos_len, 2, ',', item, true);
+    str_split_ints (cipos, cipos_len, 2, ',', item, true); // values can be negative
 
     // sometimes CIPOS is "0,n" where n is the length of HOMSEQ
     if (has(HOMSEQ) && n_items == 2 && items[0] == 0 && items[1] == BII(HOMSEQ)->value_len) 
@@ -477,7 +477,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_HOMSEQ)
 // seg mate as buddy and return true if this line has one 
 void vcf_seg_BND_mate (VBlockVCFP vb, STRp(id), 
                        STRp(mate_id), // optional: used if given, if not, test one character difference based on segconf.vcf_mate_id_chars
-                       uint64_t hash)
+                       uint32_t hash)
 {
     hash &= MAXB(CTX(VCF_ID)->id_hash.prm8[0]);
     LineIType candidate = LINE_BY_HASH(hash);

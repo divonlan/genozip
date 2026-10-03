@@ -90,15 +90,11 @@ typedef struct __attribute__((packed, aligned(4))) { // 20 bytes
     union { 
         uint64_t vb_qname_hash;            // before linking: full 64b hash (note: 54 MSb overlap with z_qname_hash_hi). 
         struct { 
-#ifdef __BIG_ENDIAN__                      // see: https://gcc.gnu.org/legacy-ml/gcc/2004-09/msg00581.html
-            uint64_t z_qname_hash_hi : 54; // after linking: high 54 bits of vb_qname_hash (first field, because its big endian)
-#endif 
+            ℬ𝒾ℊℰ (uint64_t z_qname_hash_hi : 54;) // after linking: high 54 bits of vb_qname_hash (first field, because its big endian). See see: https://gcc.gnu.org/legacy-ml/gcc/2004-09/msg00581.html
             uint64_t z_aln_hi        : 8;  // after linking: high byte of 40-bit aln
             uint64_t z_is_forward    : 1;  // after linking: true if the FASTQ seq is forward relative to the reference 
             uint64_t z_is_long_gpos  : 1;  // after linking: gpos is 5 bytes instead of 4
-#ifdef __LITTLE_ENDIAN__
-            uint64_t z_qname_hash_hi : 54; // after linking: high 54 bits of vb_qname_hash (little endian) (low bits are implied by linked list)
-#endif 
+            ℒ𝒾𝓉ℰ (uint64_t z_qname_hash_hi : 54;) // after linking: high 54 bits of vb_qname_hash (little endian) (low bits are implied by linked list)
         };
     };
     union {
@@ -144,12 +140,13 @@ extern void sam_seg_MM_Z (VBlockP vb, STRp(mm), unsigned add_bytes);
 
 // SEQ
 extern void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), bool deep);
+extern bool fastq_piz_has_gpos (VBlockFASTQP vb);
 
 // QUAL
 extern void fastq_seg_QUAL (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(qual));
 
 // Pairing stuff
-extern bool fastq_piz_R1_test_aligned (VBlockFASTQP vb);
+extern void fastq_piz_set_r1_is_aligned (VBlockFASTQP vb);
 extern int64_t reconstruct_from_pair_int (VBlockFASTQP vb, ContextP ctx);
 
 // Parse stuff

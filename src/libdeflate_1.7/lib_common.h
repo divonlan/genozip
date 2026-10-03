@@ -13,6 +13,7 @@
 #define BUILDING_LIBDEFLATE
 
 #include "common_defs.h"
+#include "libdeflate.h" // divon
 
 /*
  * Prefix with "_libdeflate_" all global symbols which are not part of the API
@@ -30,11 +31,11 @@
 #define _cpu_features			SYM_FIXUP(_cpu_features)
 #define setup_cpu_features		SYM_FIXUP(setup_cpu_features)
 
-void *libdeflate_malloc_do(size_t size, void *opaque, const char *func, uint32_t code_line);
-#define libdeflate_malloc(size, opaque) libdeflate_malloc_do ((size), (opaque), __FUNCTION__, __LINE__)
+void *libdeflate_malloc_do(size_t size, void *opaque, Caller caller);
+#define libdeflate_malloc(size, opaque) libdeflate_malloc_do ((size), (opaque), THIS_CODE_LINE)
 
-void libdeflate_free_do(void *ptr, void *opaque, const char *func, uint32_t code_line);
-#define libdeflate_free(ptr, opaque) libdeflate_free_do ((ptr), (opaque), __FUNCTION__, __LINE__)
+void libdeflate_free_do(void *ptr, void *opaque, Caller caller);
+#define libdeflate_free(ptr, opaque) libdeflate_free_do ((ptr), (opaque), THIS_CODE_LINE)
 
 void *libdeflate_aligned_malloc_1_7(size_t alignment, size_t size, void *opaque);
 void libdeflate_aligned_free_1_7(void *ptr, void *opaque);

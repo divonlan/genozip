@@ -20,19 +20,18 @@
 // we now verify that the mismatches are consistent with SEQ.
 void sam_MD_Z_verify_due_to_seq (VBlockSAMP vb, STRp(seq), PosType32 pos, BitsP sqbitmap, uint64_t sqbitmap_start)
 {
-    BitsP M_is_ref = &vb->md_M_is_ref;
-
-    bool bitmap_matches_MD = vb->md_verified && !bits_hamming_distance (M_is_ref, sqbitmap, sqbitmap_start);
+    bool bitmap_matches_MD = vb->md_verified && !bits_hamming_distance (&vb->md_M_is_ref, sqbitmap, sqbitmap_start);
 
     if (flag.show_wrong_md && vb->md_verified && !bitmap_matches_MD) {
 
         iprintf ("%s RNAME=%.*s POS=%d CIGAR=%s MD=%.*s SEQ=%.*s\n", 
                 LN_NAME, STRf(vb->chrom_name), pos, vb->last_cigar, vb->last_txt_len(OPTION_MD_Z), last_txt(VB, OPTION_MD_Z), STRf(seq));
         if (sqbitmap) 
-            bits_print_substr ("SEQ match to ref", sqbitmap, sqbitmap_start, M_is_ref->nbits, info_stream);
+            iprintf ("SEQ match to ref: %s", bits_to_01_string (sqbitmap, sqbitmap_start, -1).s);
         else
             iprint0 ("SEQ: no bitmap\n");
-        bits_print_substr ("MD implied match", M_is_ref, 0, M_is_ref->nbits, info_stream); 
+
+        iprintf ("MD implied match: %s\n", bits_to_01_string (&vb->md_M_is_ref, 0, -1).s); 
     }
 
     vb->md_verified = bitmap_matches_MD;
@@ -82,8 +81,7 @@ static inline rom sam_md_consume_D (VBlockSAMP vb, bool is_depn, char **md_in_ou
 
 // verifies that the reference matches as required, and updates reference bases if missing
 static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_out, uint32_t *M_D_bases, PosType32 *pos, int M_bases,
-                                    Bits *M_is_ref, uint64_t *M_is_ref_i,
-                                    RangeP *range_p, RefLock *lock, bool *critical_error)
+                                    uint64_t *M_is_ref_i, RangeP *range_p, RefLock *lock, bool *critical_error)
 {
     char *md               = *md_in_out;
     uint32_t my_M_D_bases  = *M_D_bases;
@@ -101,8 +99,7 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
         }
 
         // matching bases
-        int match_len = fast_atoi (md, &md); 
-        // strtoul (md, &md, 10); // get number and advance past number
+        int match_len = fast_atoi (md, &md); // get number and advance past number
 
         // case: MD number is bigger than needed by current CIGAR op (perhaps partially covering the next CIGAR op) - update MD in-place
         if (match_len > M_bases || (match_len == M_bases && *md && *md != '^')) {
@@ -135,7 +132,7 @@ static inline rom sam_md_consume_M (VBlockSAMP vb, bool is_depn, char **md_in_ou
                 if (result && !error) error = result;
             }
 
-            bits_clear (M_is_ref, my_M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
+            bits_clear (&vb->md_M_is_ref, my_M_is_ref_i); // base in SEQ is expected to be NOT equal to the reference base
             my_M_is_ref_i++;              
 
             M_bases--;
@@ -196,7 +193,6 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom md_orig, ui
 
     // start by marking all as matching, and clear the SNPs later
     buf_alloc_bits_exact (vb, &vb->md_M_is_ref, vb->ref_and_seq_consumed, SET, CTX_GROWTH, "md_M_is_ref"); 
-    BitsP M_is_ref = &vb->md_M_is_ref;
     
     uint64_t M_is_ref_i=0;
     
@@ -207,7 +203,7 @@ void sam_seg_MD_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, rom md_orig, ui
 
     for_cigar (vb->binary_cigar) {
         case BC_M: case BC_E: case BC_X:
-            if ((error = sam_md_consume_M (vb, is_depn, &md, &M_D_bases, &pos, op->n, M_is_ref, &M_is_ref_i, &range, &lock, &critical_error))
+            if ((error = sam_md_consume_M (vb, is_depn, &md, &M_D_bases, &pos, op->n, &M_is_ref_i, &range, &lock, &critical_error))
                 && critical_error) // break loop now if critical error, else continue to count mismatch_bases_by_MD despite error
                 not_verified (error);
             if (!reason) reason = error; // non-critical error - continue

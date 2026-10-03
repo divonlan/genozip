@@ -41,14 +41,9 @@
 
 #include "common_defs.h"
 
-// typedef void *(*malloc_func_t)(void *vb, size_t size, FUNCLINE);
-// typedef void (*free_func_t)(void *vb, void *p, FUNCLINE);
 
-// extern malloc_func_t libdeflate_default_malloc_func;
-// extern free_func_t libdeflate_default_free_func;
-
-void *libdeflate_aligned_malloc(VBlockP vb, size_t alignment, size_t size, FUNCLINE);
-void libdeflate_aligned_free(VBlockP vb, void *ptr, FUNCLINE);
+void *libdeflate_aligned_malloc(VBlockP vb, size_t alignment, size_t size, Caller caller);
+void libdeflate_aligned_free(VBlockP vb, void *ptr, Caller caller);
 
 // #ifdef FREESTANDING
 // /*

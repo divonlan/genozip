@@ -24,6 +24,21 @@ void bam_seg_initialize (VBlockP vb)
                    char, CTX_GROWTH, "line_textual_cigars");
 }
 
+char sam_seg_sam_type_to_bam_type (char type, int64_t n)
+{
+    static LocalType test[6] = { LT_UINT8, LT_INT8, LT_UINT16, LT_INT16, LT_UINT32, LT_INT32 }; // preference to UINT
+    static char bam_types[NUM_BAM_INT_TYPES] = BAM_INT_TYPES;
+
+    if (type != 'i') return type; // all SAM types except 'i' are the same in BAM
+
+    // i converts to one of 6: C,c,S,s,I,i
+    for (int i=0 ; i < 6; i++)
+        if (IN_RANGX (n, lt_min (test[i]), lt_max (test[i])))
+            return bam_types[lt_desc[test[i]].bam_type];
+    
+    return 0; // number out of range
+}
+
 // detect if a generic file is actually a BAM
 bool is_bam (STRp(header), bool *need_more)
 {
@@ -173,15 +188,12 @@ bool bam_txt_file_is_last_alignment_unmapped (void)
 
 static rom bam_dump_alignment (VBlockSAMP vb, rom alignment, rom after)
 {
-    buf_destroy (vb->scratch); // feel free to use scratch bc this is called in an ASSERT before aborting
-
-    buf_set_shared (&vb->txt_data);
-    buf_overlay_partial (vb, &vb->scratch, &vb->txt_data, BNUMtxt(alignment), "alignment_buf");
-    vb->scratch.len = after - alignment;
+    Buffer alignment_buf;
+    buf_superimpose (vb, &alignment_buf, &vb->txt_data, BNUMtxt(alignment), "alignment_buf");
+    alignment_buf.len = after - alignment;
 
     rom fn = "bad_alignment.bam";
-    buf_dump_to_file (fn, &vb->scratch, 1, false, false, false, false);
-    buf_destroy (vb->scratch); // overlaid needs to be destroyed
+    buf_dump_to_file (fn, &alignment_buf, 1, false, false, false, false);
 
     return fn;
 }
@@ -337,7 +349,7 @@ void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
             *value = aux + sizeof (uint32_t);
             
             // switch from BAM's little endian to machine endianity
-            if (!flag.is_lten) 
+            #ifdef __BIG_ENDIAN__ 
                 switch (*array_subtype) {
                     case 'i': case 'I': case 'f': 
                         for (int i=0; i < *value_len; i++) ((uint32_t*)(*value))[i] = LTEN32(((uint32_t*)(*value))[i]);
@@ -349,6 +361,7 @@ void bam_get_one_aux (VBlockSAMP vb, int16_t idx,
 
                     default: break;
                 }
+            #endif
 
             ASSERT (aux_width[(uint8_t)*array_subtype], "%s: Invalid array type: '%c' for field \"%c%c\"", 
                     LN_NAME, *array_subtype, (*tag)[0], (*tag)[1]);
@@ -539,11 +552,11 @@ rom bam_seg_txt_line (VBlockP vb_, rom alignment /* BAM terminology for one line
     }
 
     if (has(NM_i)) 
-        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, true, MIN_NM_i, MAX_NM_i, HARD_FAIL);
+        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx.NM_i, &dl->NM, true, MIN_NM_i, MAX_NM_i, HARD_FAIL);
 
     // set dl->AS needed by sam_seg_prim_add_sag (in PRIM) and several fields that delta against it
     if (has(AS_i))
-        sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, true, MIN_AS_i, MAX_AS_i, HARD_FAIL);
+        sam_seg_get_aux_int (vb, vb->idx.AS_i, &dl->AS, true, MIN_AS_i, MAX_AS_i, HARD_FAIL);
 
     if (!IS_MAIN(vb)) 
         sam_seg_sag_stuff (vb, dl, STRb(vb->textual_cigar), B1STc(vb->textual_seq), true);

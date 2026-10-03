@@ -14,6 +14,7 @@ extern "C" {
 
 #include <stddef.h>
 #include <stdint.h>
+#include "../pointeר.h" // divon
 
 /*
  * On Windows, if you want to link to the DLL version of libdeflate, then
@@ -175,8 +176,8 @@ libdeflate_free_compressor_1_7(struct libdeflate_compressor *compressor);
  * structures in existence when calling this function.
  */
 LIBDEFLATEEXPORT void LIBDEFLATEAPI_1_7
-libdeflate_set_memory_allocator_1_7 (void *(*malloc_func)(void *, unsigned, unsigned, const char*, uint32_t),
-				void (*free_func)(void *, void *, const char*, uint32_t));
+libdeflate_set_memory_allocator_1_7 (void *(*malloc_func)(void *, unsigned, unsigned, Caller),
+				void (*free_func)(void *, void *, Caller));
 
 #ifdef __cplusplus
 }

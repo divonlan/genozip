@@ -46,7 +46,7 @@ typedef union SectionFlags {
         #define is_ref_internal  dt_specific // SAM: REF_INTERNAL was used for compressing (i.e. SAM file without reference) (introduced v6)
         #define v14_is_paired    dt_specific // FASTQ: This z_file contains one or more pairs of FASTQs compressed with --pair (introduced v9.0.13 until v14, since v15 moved to TxtHeader)
         uint8_t dt_specific      : 1;  // this flag has a different meaning depending on the data_type, may be one of the above ^ 
-        uint8_t aligner          : 1;  // SAM, FASTQ: our aligner may have used to align sequences to the reference (always with FASTQ if compressed with a reference, sometimes with SAM)
+        uint8_t aligner          : 1;  // SAM, FASTQ: our aligner may have used to align sequences to the reference. Note: in Deep, this reflects FASTQ's data, not SAM.
         uint8_t txt_is_bin       : 1;  // BAM: Source file is binary 
         uint8_t has_digest       : 1;  // true if compressed with digest (i.e. not --optimize etc) (v15) 
         #define v14_bgzf has_digest    // Up to v14: Reconstruct as BGZF (user may override) (determined by the last component) (since v15, determined by SectionHeaderTxtHeader.src_codec)
@@ -208,7 +208,7 @@ typedef struct {
         struct {
             // copied from their respective values in segconf, and copied back to segconf in PIZ
             DictId segconf_seq_len_dict_id;   // SAM: dict_id of one of the Q?NAME contexts (the "length=" item), which is expected to hold the seq_len for this read. 0 if there is no such item. v14.
-            uint32_t segconf_std_seq_len;     // SAM: longest (up to 15.0.68: average) seq_len in segconf data. v14. (called sam_seq_len up to 15.0.68)
+            uint32_t segconf_std_seq_len;     // SAM: longest (up to 15.0.68: average) seq_len in segconf data. goes into segconf.std_seq_len. v14. (called sam_seq_len up to 15.0.68)
             SagType segconf_sag_type;         // SAM: v14
             uint8_t segconf_seq_len_cm;       // SAM: v14: minimap2: average seq_len / cm:i    
             uint8_t segconf_ms_type      : 3; // SAM: v14 
@@ -250,8 +250,8 @@ typedef struct {
             uint8_t segconf_use_ins_ctxs : 1; // 15.0.30
             uint8_t unused_bits          : 5;
             uint8_t unused8[3];
-            uint32_t segconf_std_seq_len;     // FASTQ: 15.0.69
-            uint32_t segconf_std_seq_lR2;     // FASTQ: 15.0.84
+            uint32_t segconf_std_seq_len;     // FASTQ: 15.0.69. goes into segconf.std_seq_len
+            uint32_t segconf_std_seq_lR2;     // FASTQ: 15.0.84. goes into segconf.std_seq_lR2
             char unused[243];
         } fastq;
 
@@ -607,6 +607,8 @@ typedef const struct SectionEnt {
 typedef packed_enum { ALIAS_NONE, ALIAS_CTX, ALIAS_DICT } AliasType;
 #define ALIAS_TYPE_NAMES              { "NONE",     "CTX",     "DICT"    }
 
+extern void sections_initialize (void);
+
 // ---------
 // ZIP stuff
 // ---------
@@ -694,3 +696,4 @@ extern StrText comp_name_(CompIType comp_i);
 #define IS_TXT_SEC(st)    (0b100000011000000100000000 & (1<<(st))) // SEC_TXT_HEADER, SEC_GZ_ISIZES, SEC_GZ_DIGESTS, SEC_RECON_PLAN
 #define IS_COMP_SEC(st)   (0b100000011001101100000000 & (1<<(st))) // IS_VB_SEC || IS_TXT_SEC
 #define IS_FRAG_SEC(st)   (0b000000010000010100001110 & (1<<(st))) // SEC_DICT, SEC_TXT_HEADER, SEC_RECON_PLAN, SEC_REFERENCE, SEC_REF_IS_SET, SEC_REF_HASH : global sections fragmented with a dispatcher, and hence use vb_i 
+

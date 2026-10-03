@@ -109,7 +109,7 @@ static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, ReconType
     uint32_t snip_len = ctx->next_local - start; 
     ctx->next_local++; // skip the separator 
 
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, STRa(snip), reconstruct, __FUNCLINE);
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, STRa(snip), reconstruct, THIS_CODE_LINE);
 
     return snip_len;
 }
@@ -414,7 +414,7 @@ HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int c
     reconstruct_from_ctx (vb, channel_ctx->did_i, 0, reconstruct);
 
     // propagate last_value up
-    if (ctx_has_value (vb, channel_ctx->did_i)) {
+    if (ctx_has_value_maybe_in_sample (vb, channel_ctx->did_i)) {
         *new_value = channel_ctx->last_value; 
         return HAS_NEW_VALUE; 
     }
@@ -451,7 +451,7 @@ static HasNewValue reconstruct_numeric (VBlockP vb, ContextP ctx, STRp(snip), Va
 
 void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx, 
                            WordIndex word_index, // WORD_INDEX_NONE if not used.
-                           STRp(snip), ReconType reconstruct, FUNCLINE) // if false, calculates last_value but doesn't output to vb->txt_data)
+                           STRp(snip), ReconType reconstruct, Caller caller) // if false, calculates last_value but doesn't output to vb->txt_data)
 {
     ASSERT (snip[snip_len] == 0, "expecting snip to be nul-terminated: %s", str_snip);
 
@@ -465,8 +465,8 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
     if (flag_show_snips)
         iprintf ("%s %s[%u] %s%s%s%s%s%s\n", LN_NAME, snip_ctx->tag_name, snip_ctx->did_i, str_snip,
                  cond_int (word_index!=WORD_INDEX_NONE, " wi=", word_index), 
-                 cond_str (word_index==WORD_INDEX_NONE, " ", func), 
-                 cond_int (word_index==WORD_INDEX_NONE, ":", code_line), 
+                 cond_str (word_index==WORD_INDEX_NONE, " ", unר(caller.funcר)), 
+                 cond_int (word_index==WORD_INDEX_NONE, ":", caller.code_line), 
                  cond_int (vb->peek_stack_level, " peek_level=", vb->peek_stack_level),
                  reconstruct ? "" : " recon=false");
 
@@ -539,7 +539,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 
         ContainerP con_p = container_retrieve (vb, snip_ctx, word_index, snip+1, snip_len-1, pSTRa(prefixes));
 
-        ctx_set_encountered (vb, snip_ctx); // indicate this container was encountered, in case it is queried in container_peek_get_idxs
+        ctx_set_encountered_maybe_in_sample (vb, snip_ctx); // indicate this container was encountered, in case it is queried in container_peek_get_idxs
         new_value = container_reconstruct (vb, snip_ctx, con_p, STRa(prefixes)); 
         has_new_value = HAS_NEW_VALUE;
         break;
@@ -659,7 +659,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
 done:
     // update last_value if needed
     if (has_new_value && store_type) // note: we store in our own context, NOT base (a context, eg FORMAT/DP, sometimes serves as a base_ctx of MIN_DP and sometimes as the snip_ctx for INFO_DP)
-        ctx_set_last_value (vb, snip_ctx, new_value); // if marely encountered it is set in is set in reconstruct_from_ctx_do
+        ctx_set_last_value_maybe_in_sample (vb, snip_ctx, new_value); // if marely encountered it is set in is set in reconstruct_from_ctx_do
 
     // note: if store_delta, we do a self-delta. this overrides last_delta set by the delta snip which could be against a different
     // base_ctx. note: when Seg sets last_delta, it must also set store=STORE_INT
@@ -673,7 +673,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
                                  ReconType reconstruct, // if false, calculates last_value but doesn't output to vb->txt_data
                                  rom func)
 {
-    ASSPIZ (did_i < vb->ca.num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u", func, did_i, vb->ca.num_contexts);
+    ASSPIZ (did_i < vb->ca._num_contexts, "called from: %s: did_i=%u out of range: vb->num_contexts=%u", func, did_i, vb->ca._num_contexts);
 
     decl_ctx (did_i);
 
@@ -698,7 +698,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
 
         if (!snip) goto missing;
 
-        reconstruct_one_snip (vb, ctx, word_index, STRa(snip), reconstruct, __FUNCLINE);        
+        reconstruct_one_snip (vb, ctx, word_index, STRa(snip), reconstruct, THIS_CODE_LINE);        
 
         // if SPECIAL function set value_is_missing (eg vcf_piz_special_PS_by_PID) - this treated as a WORD_INDEX_MISSING 
         if (ctx->special_res == SPEC_RES_IS_MISSING) {
@@ -708,7 +708,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
 
         // for backward compatability with v8-11 that didn't yet have flags.store = STORE_INDEX for CHROM
         if (did_i == DTF(chrom)) { // NOTE: CHROM cannot have aliases, because looking up the did_i by dict_id will lead to CHROM, and this code will be executed for a non-CHROM field
-            if (!ctx_has_value_in_line_(vb, CTX(did_i))) 
+            if (!ctx_has_value_in_line (vb, did_i)) 
                 vb->last_index (did_i) = word_index;
             
             vb->chrom_node_index = vb->last_index (did_i); 
@@ -722,7 +722,7 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     // case: all data is only in local
     else if (ctx->local.len32) {
         ctx->last_wi = WORD_INDEX_NONE; // not reconstructed from b250
-        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, 0 }, 1, reconstruct, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip  
+        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, 0 }, 1, reconstruct, THIS_CODE_LINE); // note: nul-termianted as expected of a dictionary snip  
     }
 
     // in case of LT_BITMAP, it is it is ok if the bitmap is empty and all the data is in NONREF (e.g. unaligned SAM)
@@ -749,8 +749,8 @@ int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i,
     ctx->last_txt = (TxtWord){ .index = last_txt_index,
                                .len   = Ltxt - last_txt_index };
 
-    ctx_set_encountered (vb, ctx); // this is the normal place in PIZ where we set encountered, but it was already set if we called ctx_set_last_value or in the case of a container
-    ctx->last_encounter_was_reconstructed = reconstruct && ctx->special_res != SPEC_RES_DEFERRED;
+    ctx_set_encountered_maybe_in_sample (vb, ctx); // this is the normal place in PIZ where we set encountered, but it was already set if we called ctx_set_last_value or in the case of a container
+    ctx->last_encounter_was_reconstructed = (reconstruct && ctx->special_res != SPEC_RES_DEFERRED);
 
     // in "store per line" mode, we save one entry per line (possibly a line has no entries if it is an optional field)
     if (ctx->flags.store_per_line) 
@@ -765,7 +765,7 @@ missing:
     ctx->last_txt.len = 0;
 
     if (ctx->flags.store == STORE_INDEX) 
-        ctx_set_last_value (vb, ctx, (int64_t)WORD_INDEX_MISSING);
+        ctx_set_last_value_maybe_in_sample (vb, ctx, (int64_t)WORD_INDEX_MISSING);
 
     if (vb->peek_stack_level) 
         recon_stack_pop (vb, ctx, false);

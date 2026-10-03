@@ -136,13 +136,13 @@ static uint32_t count_repsep (STRp (str), char repsep)
 uint32_t container_peek_repeats (VBlockP vb, ContextP ctx, char repsep)
 {
     // case: already reconstructed - count repsep
-    if (ctx_encountered (vb, ctx->did_i)) {
+    if (ctx_encountered_maybe_in_sample (vb, ctx->did_i)) {
         ASSPIZ (ctx->flags.store == STORE_INDEX, "Expecting ctx=%s to have STORE_INDEX, which for containers stores repeats", ctx->tag_name);
         return ctx->last_value.i;
     }
 
     STR(snip);
-    WordIndex wi = PEEK_SNIP (ctx->did_i);
+    WordIndex wi = PEEK_SNIP_(ctx->did_i);
 
     // case: container - get number of repeats from containter struct. note: containers are always
     // segged with no_stons so they are never in local (see container_seg_do)
@@ -180,10 +180,10 @@ bool container_peek_has_item (VBlockP vb, ContextP ctx, DictId item_dict_id, boo
     ASSISLOADED(ctx);
 
     // case: already reconstructed - not yet supported (not too difficult to add support for this case if needed)
-    ASSPIZ (!ctx_encountered (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
+    ASSPIZ (!ctx_encountered_maybe_in_sample (vb, ctx->did_i), "context %s is already encountered", ctx->tag_name);
 
     STR(snip);
-    WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
+    WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP_(ctx->did_i);
 
     if (!snip || *snip != SNIP_CONTAINER) return false; // not a container, so definitely doesn't contain the item
 
@@ -207,12 +207,12 @@ void container_peek_get_idxs (VBlockP vb, ContextP ctx, uint16_t n_items,
     if (con_p->h)
         {} // use this container
 
-    else if (ctx_encountered (vb, ctx->did_i)) 
+    else if (ctx_encountered_maybe_in_sample (vb, ctx->did_i)) 
         *con_p = container_retrieve (vb, ctx, ctx->last_con_wi, 0, 0, 0, 0);
 
     else { 
         STR(snip);
-        WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP (ctx->did_i);
+        WordIndex wi = consume ? LOAD_SNIP (ctx->did_i) : PEEK_SNIP_(ctx->did_i);
         if (!snip || *snip != SNIP_CONTAINER) return; // not a container, so definitely doesn't contain the item
 
         *con_p = container_retrieve (vb, ctx, wi, snip+1, snip_len-1, 0, 0);
@@ -454,7 +454,7 @@ static inline ContextP container_get_debug_lines_ctx (VBlockP vb)
 
 ValueType container_reconstruct (VBlockP vb, ContextP ctx, ContainerP con, STR𐤐(prefixes))
 {
-    TimeSpecType profiler_timer = {}; 
+    𝓅𝓇ℴ𝒻𝒾𝓁ℯ (ProfilerTime profiler_timer = NULL_TIMER;) 
     bool is_toplevel = con.h->is_toplevel; // copy to automatic. note: it is possible that we are top of stack but not a toplevel container - eg when reconstructing for SAG loading
     vb->curr_item = DID_NONE;
 
@@ -469,7 +469,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ContainerP con, STR�
 
     if (is_toplevel) {
         if (flag.show_time) 
-            clock_gettime (CLOCK_REALTIME, &profiler_timer);
+            𝓅𝓇ℴ𝒻𝒾𝓁ℯ (profiler_timer = get_timer_start());
 
         if (!VER(12)) // up to v11 TOPLEVEL didn't have filter_items, however now PIZ relies on it, so we set it here
             con.h->filter_items = true;
@@ -486,7 +486,7 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ContainerP con, STR�
         StoreType save_store = ctx->flags.store;
         ctx->flags.store = STORE_INT;
         
-        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_SPECIAL, ctx->con_rep_special, 0 }, 2, false, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip
+        reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_SPECIAL, ctx->con_rep_special, 0 }, 2, false, THIS_CODE_LINE); // note: nul-termianted as expected of a dictionary snip
         
         ctx->flags.store = save_store;
         con.h->repeats = ctx->last_value.i;
@@ -622,10 +622,10 @@ ValueType container_reconstruct (VBlockP vb, ContextP ctx, ContainerP con, STR�
                 if (show_item_time) COPY_TIMER (seg_recon_field[item_ctx->did_i]);
 
                 // sum up items' values if needed (STORE_INDEX is handled at the end of this function)
-                if (ctx->flags.store == STORE_INT && ctx_has_value (vb, item_ctx->did_i)) // ctx_has_value add to the test in 15.0.37, need to verify backcomp
+                if (ctx->flags.store == STORE_INT && ctx_has_value_maybe_in_sample (vb, item_ctx->did_i)) // ctx_has_value_in_sample add to the test in 15.0.37, need to verify backcomp
                     new_value.i += item_ctx->last_value.i;
                 
-                else if (ctx->flags.store == STORE_FLOAT && ctx_has_value (vb, item_ctx->did_i))
+                else if (ctx->flags.store == STORE_FLOAT && ctx_has_value_maybe_in_sample (vb, item_ctx->did_i))
                     new_value.f += item_ctx->last_value.f;
 
                 // case: reconstructing to a translated format (eg SAM2BAM) - modify the reconstruction ("translate") this item
@@ -960,16 +960,19 @@ void con_verify_items (ContainerP con, ContextP ctx, rom con_name)
         
         if (!item->dict_id.num 
         && !((item - con.h->items) == 0 && con.h->items[0].translator) // item 0 can be a translator-only item
-        && !(TXT_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->st_did_i == VCF_INFO))) // VCF_INFO can have dict_id=0 items (valueless items)
-            ABORT ("container %s item_i=%u has dict_id=0. Perhaps n_items is too large?", con_name, (int)(item - con.h->items));
+        && !(TXT_DT(VCF) && (ctx->did_i == VCF_INFO || ctx->st_did_i == VCF_INFO)) // VCF_INFO can have dict_id=0 items (valueless items)
+        && !(TXT_DT(GFF) && (ctx->did_i == GFF_ATTRS || ctx->st_did_i == GFF_ATTRS)))  // GFF_ATTRS can have dict_id=0 items (valueless items)
+            ABORT ("ctx=%s container %s item_i=%u has dict_id=0. Perhaps n_items is too large? container=%s", 
+                   ctx->tag_name, con_name, (int)(item - con.h->items), container_to_json (con, 0, 0).s);
 
         if ((sep0 == CI0_LAST_MATCH && !IS_PRINTABLE(sep1)) ||
             ((sep0 == CI0_FIXED_0_PAD || sep0 == CI0_VAR_0_PAD || sep0 == CI0_COLONn) && !sep1))
-            ABORT ("container %s item_i=%u has sep0=%s, expecting sep1≠0", con_name, (int)(item - con.h->items), item_sep_name0(sep0).s);
+            ABORT ("ctx=%s container %s item_i=%u has sep0=%s, expecting sep1≠0. container=%s", 
+                   ctx->tag_name, con_name, (int)(item - con.h->items), item_sep_name0(sep0).s, container_to_json (con, 0, 0).s);
 
         if ((sep0 == CI0_DIGIT || sep0 == CI0_SKIP || sep0 == CI0_NONE || sep0 == CI0_INVISIBLE) && sep1 > CI1_LAST_SPECIAL)
-            ABORT ("container %s item_i=%u has sep0=%s, expecting sep1 ≤ CI1_LAST_SPECIAL(%u) but it is '%c'(%u)", 
-                   con_name, (int)(item - con.h->items), item_sep_name0(sep0).s, CI1_LAST_SPECIAL, sep1, sep1);
+            ABORT ("ctx=%s container %s item_i=%u has sep0=%s, expecting sep1 ≤ CI1_LAST_SPECIAL(%u) but it is '%c'(%u). container=%s", 
+                   ctx->tag_name, con_name, (int)(item - con.h->items), item_sep_name0(sep0).s, CI1_LAST_SPECIAL, sep1, sep1, container_to_json (con, 0, 0).s);
     }
 }
 

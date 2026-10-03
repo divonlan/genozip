@@ -77,9 +77,9 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
 
     // if we have a reference, we use it 
     if (IS_REF_LOADED_ZIP &&
-        ctx_has_value (VB, INFO_ILLUMINA_POS) &&           // we go by ILLUMINA_POS, not POS
+        ctx_has_value_in_line (VB, INFO_ILLUMINA_POS) &&           // we go by ILLUMINA_POS, not POS
         ctx_encountered_in_line (VB, INFO_ILLUMINA_CHR) && // verified that CHR is the same as CHROM, so vb->chrom_node_index is correct
-        ctx_has_value (VB, INFO_ILLUMINA_STRAND)) {
+        ctx_has_value_in_line (VB, INFO_ILLUMINA_STRAND)) {
 
         WordIndex strand = CTX(INFO_ILLUMINA_STRAND)->last_value.i;
         PosType64 pos = vb->last_int(INFO_ILLUMINA_POS);
@@ -258,7 +258,7 @@ static int vcf_seg_adjust_channel_i (VBlockP vb, int channel_i)
 
     if (new_method && channel_i > 2) channel_i=2; // dosage>2 not expected on Illumina genotyping chips, but just in case
 
-    char allele_a = ctx_has_value (vb, INFO_ALLELE_A) ? CTX(INFO_ALLELE_A)->last_value.i : 0;
+    char allele_a = ctx_has_value_in_line_(vb, CTX(INFO_ALLELE_A)) ? CTX(INFO_ALLELE_A)->last_value.i : 0;
 
     if (allele_a == 'A' && (channel_i==0 || channel_i==2))
         return 2 - channel_i; // if homozygot and the ALLELE_A/B are switched vs REF/ALT, we switch the channel

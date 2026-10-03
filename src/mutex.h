@@ -18,16 +18,19 @@
 #endif
 #endif
 #include "buffer.h"
-#include "profiler.h" // for TimeSpecType
+#include "profiler.h" // for ProfilerTime
 
 // -----------
 // mutex stuff
 // -----------
 
 typedef struct Mutex {
-    rom name, initialized, lock_func;
-    pthread_mutex_t mutex;
-} Mutex;
+    pthread_mutex_t mutex; // size: linux:40, mac:64, mingw:8 (see also arch.c) 
+    uint64_t name        : 57; // note: pointer. user-space virtual address on Linux are either 48 or 57 bit, and on mac and windows 48 bit
+    uint64_t initialized : 1;
+    uint64_t locked      : 1;
+    uint64_t unused      : 5;
+} Mutex; // size: linux:48, mac:72, mingw:16
 
 extern void mutex_initialize_do (MutexP mutex, rom name, rom func);
 #define mutex_initialize(mutex) mutex_initialize_do (&(mutex), #mutex, __FUNCTION__)
@@ -35,15 +38,15 @@ extern void mutex_initialize_do (MutexP mutex, rom name, rom func);
 extern void mutex_destroy_do (MutexP mutex, rom func);
 #define mutex_destroy(mutex) mutex_destroy_do (&(mutex), __FUNCTION__)
 
-extern bool mutex_lock_do (MutexP mutex, bool blocking, FUNCLINE);
-#define mutex_lock(mutex) mutex_lock_do (&(mutex), true, __FUNCLINE)
-#define mutex_trylock(mutex) mutex_lock_do (&(mutex), false, __FUNCLINE)
+extern bool mutex_lock_do (MutexP mutex, bool blocking, Caller caller);
+#define mutex_lock(mutex) mutex_lock_do (&(mutex), true, THIS_CODE_LINE)
+#define mutex_trylock(mutex) mutex_lock_do (&(mutex), false, THIS_CODE_LINE)
 
-extern void mutex_unlock_do (MutexP mutex, FUNCLINE);
-#define mutex_unlock(mutex) mutex_unlock_do (&(mutex), __FUNCLINE)
+extern void mutex_unlock_do (MutexP mutex, Caller caller);
+#define mutex_unlock(mutex) mutex_unlock_do (&(mutex), THIS_CODE_LINE)
 
-extern bool mutex_wait_do (MutexP mutex, bool blocking, FUNCLINE);
-#define mutex_wait(mutex, blocking) mutex_wait_do (&(mutex), (blocking), __FUNCLINE)
+extern bool mutex_wait_do (MutexP mutex, bool blocking, Caller caller);
+#define mutex_wait(mutex, blocking) mutex_wait_do (&(mutex), (blocking), THIS_CODE_LINE)
 
 extern void mutex_bottleneck_analysis_init (void);
 extern void mutex_show_bottleneck_analsyis (void);
@@ -66,10 +69,10 @@ extern void serializer_initialize_do (SerializerP ser, rom name, rom func);
 extern void serializer_destroy_do (SerializerP ser, rom func);
 #define serializer_destroy(ser) serializer_destroy_do (&(ser), __FUNCTION__)
 
-extern void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE);
-#define serializer_lock(ser, vb_i) serializer_lock_do (&(ser), vb_i, __FUNCLINE)
+extern void serializer_lock_do (SerializerP ser, VBIType vb_i, Caller caller);
+#define serializer_lock(ser, vb_i) serializer_lock_do (&(ser), vb_i, THIS_CODE_LINE)
 
-#define serializer_unlock(ser) mutex_unlock_do (&(ser).mutex, __FUNCLINE)
+#define serializer_unlock(ser) mutex_unlock_do (&(ser).mutex, THIS_CODE_LINE)
 
 // --------------
 // spinlock stuff
@@ -121,12 +124,12 @@ extern void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE);
 // support for pthread_join bottleneck analysis
 // --------------------------------------------
 
-extern void thread_join_lock_point (rom thread_name, TimeSpecType profiler_timer, FUNCLINE);
+extern void thread_join_lock_point (rom thread_name, ProfilerTime start_time, Caller caller);
 
 #define PTHREAD_JOIN(thread, thread_entry_point) ({                                 \
     START_TIMER;                                                                    \
     int err = pthread_join ((thread), NULL);                                        \
     if (flag.show_time_comp_i != COMP_NONE)                                         \
-        thread_join_lock_point ((thread_entry_point), profiler_timer, __FUNCLINE);  \
+        thread_join_lock_point ((thread_entry_point), profiler_timer, THIS_CODE_LINE);  \
     err;                                                                            \
 })

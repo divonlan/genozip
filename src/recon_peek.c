@@ -34,18 +34,17 @@
 
 #define stack_pointer (vb)->frozen_state.len32 // index of next item that will be pushed
 
-#define RECON_STATE_SIZE 77 // needs adjustment if Context changes
-typedef struct __attribute__ ((packed)) { // struct members are not word-aligned 
-    ContextP ctx;
-    uint8_t level;
-    char state[RECON_STATE_SIZE]; 
+#define ICE_SIZE 64 // precisely one cache line
+typedef union { // struct members are not word-aligned 
+    struct {
+        char state[RECON_STATE_SIZE]; 
+        uint8_t level;
+        Did did_i;
+    };
+    char placeholder[ICE_SIZE]; // keep Ice fixed size 
 } Ice; // one item on the frozen stack
 
-void recon_stack_initialize (void)
-{
-    ASSERT (RECON_STATE_SIZE == reconstruct_state_size_formula, "Expecting RECON_STATE_SIZE=%u == reconstruct_state_size_formula=%u - need to update RECON_STATE_SIZE in the code",
-            RECON_STATE_SIZE, (int)reconstruct_state_size_formula);
-}
+ASSERT_SIZEOF (Ice, 64); // this also means that RECON_STATE_SIZE<=61 (run: genozip --show-memory to see value of RECON_STATE_SIZE)
 
 static inline void increment_level (VBlockP vb, ContextP ctx)
 {
@@ -76,10 +75,9 @@ void recon_stack_pop (VBlockP vb, ContextP ctx, bool is_done_peek)
 
     // recover state of all downstream contexts - which have one level higher.
     // Note: Invariant: levels on the stack are always monotonously non-decreasing
-    ;
     while (stack_pointer && ice[stack_pointer-1].level > vb->peek_stack_level) {
         stack_pointer--;
-        memcpy (reconstruct_state_start(ice[stack_pointer].ctx), ice[stack_pointer].state, RECON_STATE_SIZE);
+        memcpy (reconstruct_state_start(CTX(ice[stack_pointer].did_i)), ice[stack_pointer].state, RECON_STATE_SIZE);
     }
 
     if (flag_debug_peek) 
@@ -89,13 +87,14 @@ void recon_stack_pop (VBlockP vb, ContextP ctx, bool is_done_peek)
 
 void recon_stack_push (VBlockP vb, ContextP ctx)
 {
-    // add this context to the frozen state
-    buf_alloc (vb, &vb->frozen_state, 1, 10, Ice, 2, "frozen_state");
+    // add this context to the frozen state (align 64B, for effecient read/write of Ice which 64B)
+    buf_alloc_aligned_64B (vb, &vb->frozen_state, 1, 10, Ice, 2, "frozen_state");
 
     Ice *ice = BAFT (Ice, vb->frozen_state);
-    ice->level = vb->peek_stack_level;
-    ice->ctx   = ctx;
-    memcpy (ice->state, reconstruct_state_start(ctx), RECON_STATE_SIZE); // actual reconstruction state
+    // we copy a whole cache line (64B) which is more than RECON_STATE_SIZE. The tail is unneeded garbage.
+    memcpy (ice->state, reconstruct_state_start(ctx), ICE_SIZE); // actual reconstruction state
+    ice->level = vb->peek_stack_level; // must assign AFTER memcpy, bc memcpy overwrite these fields
+    ice->did_i = ctx->did_i;
 
     stack_pointer++;
 
@@ -111,7 +110,7 @@ ValueType reconstruct_peek (VBlockP vb, ContextP ctx,
                             pSTRp(txt)) // optional in / out
 {
     // case: already reconstructed in this line (or sample in the case of VCF/FORMAT)
-    if (ctx_encountered (vb, ctx->did_i) && (ctx->last_encounter_was_reconstructed || (!txt && !txt_len))) {
+    if (ctx_encountered_maybe_in_sample (vb, ctx->did_i) && (ctx->last_encounter_was_reconstructed || (!txt && !txt_len))) {
         if (txt) *txt = last_txtx (vb, ctx);
         if (txt_len) *txt_len = ctx->last_txt.len;
         return ctx->last_value; // may or may not be set

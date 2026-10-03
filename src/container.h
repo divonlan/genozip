@@ -39,7 +39,7 @@ typedef struct ContainerItem { // 12 bytes
     #define CI0_VAR_0_PAD    ((uint8_t)0x05) // variable width, but has at least sep[1] digits, zero padded if needed (introduced 15.0.75)
     #define CI0_LAST_MATCH   ((uint8_t)0x06) // item is terminated by LAST occurance of seperator of sep[1] in the string (introduced 15.0.80)
     #define CI0_ACGTN        ((uint8_t)0x07) // item is terminated by first A,C,G,T or N character - but not less than sep[1] characters (may be 0) (the ACGTN character will belong to the next item) (15.0.83)
-    #define CI0_COLONn       ((uint8_t)0x08) // item is terminated by after the n'th ':', seperator[1] being n. Note: only final should be accounted for in qf.num_seps (15.0.84)
+    #define CI0_COLONn       ((uint8_t)0x08) // item is terminated by after the n'th ':', seperator[1] being n. Note: only final colon should be accounted for in qf.num_seps (15.0.84)
 
     // separator[0] values with bit 7 set (0x80) are interpreted as flags rather than a separator, in 
     // which case separator[1] is a parameter of the flags
@@ -68,25 +68,25 @@ typedef struct ContainerItem { // 12 bytes
 // by a prefix for each item. Every prefix, if provided, is terminated by CON_PX_SEP.
 // Only the container-wide prefix may alternatively be terminated by CON_PX_SEP_SHOW_REPEATS or CON_PX_SEP_SHOW_N_ITEMS.
 
-#define CON_REPEATS_BITS            24
-#define CON_MAX_REPEATS             ((1 << CON_REPEATS_BITS) - 1)
-#define CONTAINER_FIELDS(nitems)        \
-    uint32_t nitems_hi            : 3;  /* nitems_lo+hi=11 bits, matches CONTAINER_MAX_DICTS. MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)), until 12.0.27 nitems_hi was 8 bits */ \
+#define CON_REPEATS_BITS          24
+#define CON_MAX_REPEATS           ((1 << CON_REPEATS_BITS) - 1)
+#define CONTAINER_FIELDS(nitems)  /* 8B + (nitems * 12B) */ \
+    uint32_t nitems_hi          : 3;  /* nitems_lo+hi=11 bits, matches CONTAINER_MAX_DICTS. MSB of num_items (until 9.0.22 it was MSB of repeats (after BGEN)), until 12.0.27 nitems_hi was 8 bits */ \
     /* container flags set during reconstruction */ \
-    uint32_t unused               : 4;  /* can be used to enlarge nitems_hi or to add flags */ \
-    uint32_t no_translation       : 1;  /* Cancel translation for this container and all of its items */\
-    uint32_t repeats              : CON_REPEATS_BITS; /* number of "repeats" (array elements) */ \
-    uint8_t nitems_lo;                  /* LSB of num_items */  \
+    uint32_t unused             : 4;  /* can be used to enlarge nitems_hi or to add flags */ \
+    uint32_t no_translation     : 1;  /* Cancel translation for this container and all of its items */\
+    uint32_t repeats            : CON_REPEATS_BITS; /* number of "repeats" (array elements) */ \
+    uint8_t nitems_lo;                /* LSB of num_items */  \
     /* container flags set during Seg */               \
     uint8_t drop_final_item_sep_of_final_repeat : 1; /* Deprecated - should not be used in new code. drop separator of final item of FINAL repeat */  \
-    uint8_t drop_final_repsep     : 1;  \
-    uint8_t filter_repeats        : 1; /* filter called before reconstruction of each repeat to determine if it should be reconstructed */ \
-    uint8_t filter_items          : 1; /* filter called before reconstruction of each item to determine if it should be reconstructed */ \
-    uint8_t is_toplevel           : 1;  \
-    uint8_t keep_empty_item_sep   : 1; /* normally, we delete the separator preceding an empty item. this flag supprnor its repeat separator is reconstructed */ \
-    uint8_t callback              : 1; /* callback called after reconstruction of each repeat (introduced 10.0.6) */ \
-    uint8_t drop_final_item_sep   : 1; /* drop separator of final item of each repeat (introduced v12) */ \
-    char repsep[2];                    /* repeat separator - two bytes that appear at the end of each repeat (ignored if 0) */ \
+    uint8_t drop_final_repsep   : 1;  \
+    uint8_t filter_repeats      : 1; /* filter called before reconstruction of each repeat to determine if it should be reconstructed */ \
+    uint8_t filter_items        : 1; /* filter called before reconstruction of each item to determine if it should be reconstructed */ \
+    uint8_t is_toplevel         : 1;  \
+    uint8_t keep_empty_item_sep : 1; /* normally, we delete the separator preceding an empty item. this flag supprnor its repeat separator is reconstructed */ \
+    uint8_t callback            : 1; /* callback called after reconstruction of each repeat (introduced 10.0.6) */ \
+    uint8_t drop_final_item_sep : 1; /* drop separator of final item of each repeat (introduced v12) */ \
+    char repsep[2];                  /* repeat separator - two bytes that appear at the end of each repeat (ignored if 0) */ \
     ContainerItem items[nitems];
 
 // Note: when using TypeContainer with a constant macro (e.g. MAX_FIELDS): add the container type to genozip.h:ContainerP 
@@ -127,14 +127,6 @@ extern void con_initialize (ContainerP con, uint32_t n_items);
 #define for_con2(con) \
     for (uint32_t item_i=0, _n_items=con_nitems(con); item_i < _n_items;)  \
         for (ContainerItem *item=&(con).h->items[0]; item < &(con).h->items[_n_items]; item++, item_i++)
-
-static inline bool container_has (ContainerP con, DictId dict_id)
-{
-    for_con (con)
-        if (item->dict_id.num == dict_id.num) return true;
-
-    return false;
-}
 
 // item in container currently in reconstruction stack.
 extern bool curr_container_has (VBlockP vb, DictId item_dict_id);

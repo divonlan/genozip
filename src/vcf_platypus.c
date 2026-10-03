@@ -160,7 +160,7 @@ void vcf_seg_platypus_FORMAT_GOF (VBlockVCFP vb, ContextP ctx, STRp(gof_str))
 {
     int64_t gof;
 
-    if (ctx_has_value_in_line_(VB, CTX(INFO_MGOF)) && str_get_int (STRa(gof_str), &gof) &&
+    if (ctx_has_value_in_line (VB, INFO_MGOF) && str_get_int (STRa(gof_str), &gof) &&
         gof == CTX(INFO_MGOF)->last_value.i)
 
         seg_delta_vs_other_localN (VB, ctx, CTX(INFO_MGOF), gof, -1, gof_str_len); // always delta 0. TO DO: more effecient to use SNIP_COPY
@@ -194,7 +194,7 @@ void vcf_seg_playpus_INFO_TCR (VBlockVCFP vb, ContextP ctx, STRp(tcr_str))
 {
     int64_t tcr;
 
-    if (ctx_has_value_in_line_(VB, CTX(INFO_TC)) && ctx_has_value_in_line_(VB, CTX(INFO_TCF))
+    if (ctx_has_value_in_line (VB, INFO_TC) && ctx_has_value_in_line (VB, INFO_TCF)
         && str_get_int (STRa(tcr_str), &tcr) && 
         (tcr == CTX(INFO_TC)->last_value.i - CTX(INFO_TCF)->last_value.i))
 

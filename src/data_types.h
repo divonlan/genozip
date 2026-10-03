@@ -85,7 +85,7 @@ typedef struct DataTypeProperties {
     void (*zip_after_compute)(VBlockP);         // called by main thread after completing compute thread of VB
     void (*zip_set_vb_header_specific)(VBlockP, SectionHeaderVbHeaderP); // main thread from zfile_compress_vb_header: set "specific" fields of VB Header
     void (*zip_set_txt_header_flags)(struct FlagsTxtHeader *f); // main thread from txtheader_compress: set data-type-specific fields of TXT Header
-    rom (*zip_modify)(VBlockP, rom field_start_line, uint32_t remaining_txt_len);                // called by Compute thread to re-write VB before digest and seg
+    rom (*zip_modify)(VBlockP, rom field_start_line, uint32_t remaining_txt_len);  // called by Compute thread to re-write VB before digest and seg
     void (*seg_initialize)(VBlockP);            // called by Compute thread at the beginning of Seg
     rom (*seg_txt_line)(VBlockP, rom field_start_line, uint32_t remaining_txt_len, bool *has_13);  // Called by Compute thread to Seg one line
     rom (*assseg_line)(VBlockP);                // called by ASSSEG to show errornous line before terminating . 

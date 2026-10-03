@@ -13,6 +13,7 @@
 #include "qname.h"
 #include "writer.h"
 #include "huffman.h"
+#include "aligner.h"
 #include "htscodecs/arith_dynamic.h"
 
 typedef struct { // one per PRIM VB
@@ -218,6 +219,7 @@ static inline void sam_load_groups_add_flags (VBlockSAMP vb, PlsgVbInfo *plsg, S
     COPY_TIMER (sam_load_groups_add_flags);
 }
 
+// compute thread
 static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag *g, bytes start, bytes after, uint8_t **next)
 {
     START_TIMER;
@@ -245,9 +247,7 @@ static inline void sam_load_groups_add_seq (VBlockSAMP vb, PlsgVbInfo *plsg, Sag
 
     // pack SEQ data into z_file->sag_seq
     BitsP z_sa_seq = &z_file->sag_seq;
-    { START_TIMER; 
-    sam_seq_pack (vb, z_sa_seq, (*next - start) * 2/*2 bits per base*/, B1STc(vb->textual_seq), vb->seq_len, false, false, HARD_FAIL); 
-    COPY_TIMER (sam_load_groups_add_seq_pack); }
+    sam_seq_pack (vb, z_sa_seq, (*next - start) * 2/*2 bits per base*/, B1ST8(vb->textual_seq), vb->seq_len, false, false); 
 
     *next += vb->seq_len; // ignoring the pointer value, we only consider (*next - start) to be the name of bases (not bytes) in the buffer
 
@@ -322,8 +322,6 @@ static void sam_load_groups_add_aln_cigar (VBlockSAMP vb, PlsgVbInfo *plsg, Sag 
                                            bytes start, bytes after, uint8_t **next, 
                                            pSTRp(out_cigar)) // optional out
 {
-    START_TIMER;
-
     ContextP ctx = CTX (OPTION_SA_CIGAR);
 
     STR0(snip);
@@ -703,6 +701,10 @@ static inline void sam_load_groups_add_grps (VBlockSAMP vb, PlsgVbInfo *plsg, Sa
         vb->line_i = grp_i;
         sam_reset_line (VB);
 
+        // prefetch genomic region for genozip-aligned lines
+        if (sam_piz_has_gpos (VB_SAM))
+            aligner_piz_recon_gpos_fwd_prefetch_genome (VB, false, false); 
+
         reconstruct_from_ctx (VB, SAM_BUDDY, 0, RECON_OFF/*this means: don't consume QNAME (see sam_piz_special_COPY_BUDDY)*/); // set buddy
 
         sam_load_groups_add_qnames (vb, plsg, vb_grps, g, start_qnames, after_qnames, &next_qnames); 
@@ -899,7 +901,7 @@ void sam_piz_after_preproc_vb (VBlockP vb)
     }
 
     if (flag_is_show_vblocks (TASK_PIZ))
-        iprintf ("LOADED_SA(id=%d) vb=%s\n", vb->id, VB_NAME);
+        iprintf ("LOADED_SA(id=%s) vb=%s\n", dis_vb_id(vb->id).s, VB_NAME);
 }
 
 // PIZ main thread: after joining call preprocessing VBs
@@ -909,10 +911,11 @@ void sam_piz_preproc_finalize (Dispatcher dispatcher)
     flag = save_flag;  // also resets flag.preprocessing
     dispatcher_set_task (dispatcher, TASK_PIZ);
 
-    // zero up to 7 bytes at the end of the buffers, so that the last Bits word (if huffman-compressed) doesn't contain uninitialized bytes, angrying valgrind
-    if (z_file->sag_qual.len)   memset (BAFT8(z_file->sag_qual),   0, MIN_(7, z_file->sag_qual.size   - z_file->sag_qual.len));
-    if (z_file->sag_cigars.len) memset (BAFT8(z_file->sag_cigars), 0, MIN_(7, z_file->sag_cigars.size - z_file->sag_cigars.len)); // union with solo_data
-    if (z_file->sag_qnames.len) memset (BAFT8(z_file->sag_qnames), 0, MIN_(7, z_file->sag_qnames.size - z_file->sag_qnames.len));
+    // clear uninitialized bytes in the top word, since huffman will overlay Bits on these
+    // TODO: this is not good enough. valgrind still reports uninitailzed memory access when this buffers are huffman_uncompress'ed
+    buf_clear_unused_bytes_top_word (&z_file->sag_qual); 
+    buf_clear_unused_bytes_top_word (&z_file->sag_cigars); // union with solo_data
+    buf_clear_unused_bytes_top_word (&z_file->sag_qnames); 
 }
 
 static void sam_sag_load_alloc_z (BufferP buf, bool is_precise, uint64_t precise_len, uint64_t estimated_len, MutexP mutex, rom buf_name)

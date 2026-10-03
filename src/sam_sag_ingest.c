@@ -119,13 +119,13 @@ static void sam_zip_prim_ingest_vb_pack_seq (VBlockSAMP vb, Sag *vb_grps, uint32
     for (uint32_t vb_grp_i=0; vb_grp_i < vb_grps_len; vb_grp_i++) {    
         Sag *vb_grp = &vb_grps[vb_grp_i];
 
-        sam_seq_pack (vb, sag_seq, next_bit, Btxt(vb_grp->seq), vb_grp->seq_len, is_bam_format, false, HARD_FAIL);
+        sam_seq_pack (vb, sag_seq, next_bit, (bytes)Btxt(vb_grp->seq), vb_grp->seq_len, is_bam_format, false);
         vb_grp->seq = next_bit / 2; // update from an index into txt_data to an index (bases not bits) into sag_seq
     
         next_bit += vb_grp->seq_len * 2;
     }
 
-    bits_clear_excess_bits_in_top_word (packed_seq_buf, true);
+    bits_clear_excess_bits_in_top_word (packed_seq_buf);
 
     COPY_TIMER (sam_zip_prim_ingest_vb_pack_seq);
 }
@@ -301,6 +301,8 @@ void sam_zip_prim_ingest_solo_data (VBlockSAMP vb)
 
     vb->comp_solo_data_len = BNUM64 (z_file->sag_solo_data, next) - z_file->sag_solo_data.len;
     z_file->sag_solo_data.len  = BNUM64 (z_file->sag_solo_data, next); 
+    
+    buf_clear_unused_bytes_top_word (&z_file->sag_solo_data); // clear uninitialized bytes in the top word, since data will be used as a bitmap
 
     COPY_TIMER (sam_zip_prim_ingest_solo_data);
 }
@@ -366,6 +368,8 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
                     VB_NAME, MAX_SA_QUAL_INDEX, report_support());
 
             buf_append (evb, z_file->sag_qual, uint8_t, comp_qual_buf.data, comp_qual_buf.len, NULL);
+            buf_clear_unused_bytes_top_word (&z_file->sag_qual); // clear uninitialized bytes in the top word, since data will be used as a bitmap
+
             qual_done = achieved_something = true;
             mutex_unlock (qual_mutex);
 
@@ -381,6 +385,8 @@ void sam_zip_prim_ingest_vb (VBlockSAMP vb)
                     VB_NAME, MAX_SA_QNAME_INDEX, report_support());
 
             buf_append (evb, z_file->sag_qnames, uint8_t, comp_qname_buf.data, comp_qname_buf.len, NULL);
+            buf_clear_unused_bytes_top_word (&z_file->sag_qnames); // clear uninitialized bytes in the top word, since data will be used as a bitmap
+
             qname_done = achieved_something = true;
             mutex_unlock (qname_mutex);
 

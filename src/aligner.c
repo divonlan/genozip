@@ -39,13 +39,13 @@ typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
 
 typedef struct {
     PosType64 gpos;
-    int32_t n_matching; // matching bits per hamming
-    int32_t score;        // matching_bits after applying penalty if needed (might be negative)
+    int32_t n_matching; // number of matching bases between seq and genome[gpos]
+    int32_t score;      // matching_bits after applying penalty if needed (might be negative)
     bool is_forward; 
     bool is_perfect;
 } BestAlignment;
 
-#include "aligner_layered.c" // backward compatabilities with reference files up to 15.0.80
+#include "aligner_layered.h" // backward compatabilities with reference files up to 15.0.80
 
 static inline uint32_t nuke_encode_dir (char c, bool is_forward) 
 { 
@@ -66,12 +66,12 @@ static inline uint64_t aligner_get_kmer (Bits𐤐 seq, uint64_t bit_i, bool is_f
     if (!is_forward)
         bit_i = bit_i + 2 - bits_per_hash_in;
 
-    uint64_t word_index = bitset64_wrd(bit_i);
-    int word_offset     = bitset64_idx(bit_i);
+    uint64_t word_index = bits_wrd(bit_i);
+    int word_offset     = bits_idx(bit_i);
 
     uint64_t kmer = seq->words[word_index] >> word_offset; // all the bits of the word, starting from bit_i (so the most significant bits)
 
-    int bits_taken = WORD_SIZE - word_offset;
+    int bits_taken = BITS_IN_WORD - word_offset;
     int bits_still_needed = bits_per_hash_in - bits_taken; 
     
     // case: too many bits 
@@ -80,7 +80,7 @@ static inline uint64_t aligner_get_kmer (Bits𐤐 seq, uint64_t bit_i, bool is_f
 
     // case: not enough bits: get more from next word (caller must ensure sufficient data is available)    
     else if (bits_still_needed > 0) 
-        kmer |= (seq->words[word_index+1] & bitmask64_(bits_still_needed)) << (WORD_SIZE - word_offset);
+        kmer |= (seq->words[word_index+1] & bitmask64_(bits_still_needed)) << (BITS_IN_WORD - word_offset);
 
     if (!is_forward) 
         kmer = bits_revcomp_word (kmer) >> (64 - bits_per_hash_in);
@@ -94,19 +94,17 @@ uint64_t aligner_prefetch_gpos (VBlockP vb, Bits𐤐 seq, uint64_t base_i, bool 
     uint64_t kmer = aligner_get_kmer (seq, base_i*2, is_forward); 
     uint64_t hash = fibonacci_hash (kmer);
 
-    // Locality=1 (only L3 caching) is best (tested). Reason: after reading the GPOS
-    // from refhash, we probably will never access that location again, so caching just causes cache pollution.
-    // However, we cache just in L3, in case the Line Fill Buffer (LFB) was already evicted by the time the code was ready to pick it up. 
+    // Using Locality=0: after reading the GPOS from refhash, we probably will never access that location again.
+    // To test: taskset -c 0 ./genozip --flush-cpu-cache -@1 ...
+    #define LOCALITY_GPOS 0 // 0=non-temporal: This loads the cache line to L1 but does not commit to L2/3 
+    #define PREFETCH_READ_ONLY 0
     if (gpos_bytes == 4)
-        __builtin_prefetch (B32(refhash_buf, hash), 0/*read-only*/, 1/*locality: cache just in L3*/);
+        __builtin_prefetch (B32(refhash_buf, hash), PREFETCH_READ_ONLY, LOCALITY_GPOS);
 
     else { // gpos_bytes == 5
         uint40_t *addr = B40(refhash_buf, hash);
-        __builtin_prefetch (addr, 0, 1);
- 
-        // case: refhash entry spans two cache lines - prefetch the second one too (applicable to 1/16 of 5-byte words)
-        if (CPU_CACHE_LINE (&addr->lo) != CPU_CACHE_LINE (&addr->hi))
-            __builtin_prefetch (addr + 1, 0, 1);
+        __builtin_prefetch (addr,          PREFETCH_READ_ONLY, LOCALITY_GPOS);
+        __builtin_prefetch ((rom)addr + 4, PREFETCH_READ_ONLY, LOCALITY_GPOS); // in 1/16 of the times, the gpos will straddle two cache lines. no harm in issuing this 2nd request always - the CPU detects the duplicate at no cost. 
     }
 
     return hash;
@@ -119,26 +117,31 @@ static Bits aligner_seq_to_bitmap (VBlockP vb, rom𐤐 seq, uint64_t seq_len,
 {
     START_TIMER;
 
-    // convert seq to 2-bit array
     Bits seq_bits = { .nbits  = seq_len * 2, 
                       .nwords = roundup_bits2words64(seq_len * 2), 
                       .words  = bitmap_words,
                       .type   = BUF_REGULAR };
 
-    *seq_is_all_acgt = true; // starting optimistically
+    uint8_t has_non_acgt = 0;
+    uint64_t word_i = 0;
 
-    for (uint64_t base_i=0; base_i < seq_len; base_i++) {
-        uint8_t encoding = nuke_encode (seq[base_i]);
-    
-        if (encoding == 4) { // not A, C, G or T - usually N
-            *seq_is_all_acgt = false;
-            encoding = 0;    // arbitrarily convert 4 (any non-ACGT is 4) to 0 ('A')
+    // convert 32 bases (one 64b word) at a time
+    for (uint64_t base_i = 0; base_i < seq_len; base_i += 32) {
+        uint64_t w = 0;
+        
+        uint64_t bases_in_word = (seq_len - base_i < 32) ? (seq_len - base_i) : 32;
+
+        for (uint64_t k=0; k < bases_in_word; k++) {
+            uint8_t encoding = nuke_encode(seq[k]);
+            has_non_acgt |= encoding; // if encoding==4 (non ACGT), then bit 2 of has_non_acgt will be set 
+            w |= ((uint64_t)(encoding & 3)) << (k * 2); // note: encoding==4 is stored at 0
         }
-    
-        bits_assign2 (&seq_bits, (base_i << 1), encoding);
+
+        bitmap_words[word_i++] = w;
+        seq += 32;
     }
 
-    bits_clear_excess_bits_in_top_word (&seq_bits, false); // bc bitmap_words is uninitialized
+    *seq_is_all_acgt = (has_non_acgt & 4) == 0; 
 
     COPY_TIMER (aligner_seq_to_bitmap);
 
@@ -246,7 +249,9 @@ PosType64 aligner_collect_gpos (VBlockP vb,
 
     // pick up gpos we previously scheduled for pre-fetching
     if (gpos_bytes == 4) {
+        // START_TIMER; // uncomment out when needed (this TIMER adds 10% to the execution time of genozip!)
         gpos = LTEN32 (*B32(refhash_buf, s1_hash));
+        // COPY_TIMER(aligner_load_gpos);
         if (gpos == NO_HASH_ENT32) return NO_GPOS;
     }
 
@@ -274,15 +279,13 @@ PosType64 aligner_collect_gpos (VBlockP vb,
     char *first_word = (char *)&genome->words[gpos / 32/*32 bases per word*/];
     char *last_word  = (char *)&genome->words[(gpos + seq_len - 1) / 32];
     
-    // Locality=3 (fully cache) is best for seg_all_data_lines time (tested). Reason: if this genome 
-    // sequence is the best, we will access it again shortly after to calculate mismatches
+    // For short reads, the genomic sequence is < 64B (=256 bases), so it is in one or two cache lines.
+    // We fetch both without conditionals: if they are the same, the CPU detects the dup for free and prefetches only once.
+    // Note: we fetch the first and last and not first and second: better for seq_len>256: aligner_count_mismatches accesses the last word first if revcomp.
+    #define LOCALITY_GENOME_SEQ 3 // Locality=3 (fully cache) is best for seg_all_data_lines time (benchmarked).
 
-    // note: in case of REVERSE, aligner_count_mismatches accesses the last word first, so we fetch its cache line first
-    __builtin_prefetch (s1_is_fwd ? first_word : last_word, 0/*read-only*/, 3/*fully cached*/);
-    
-    // case: beginning and end of genome sequence are on different cache lines prefetch one more 64B cache line
-    if (CPU_CACHE_LINE (first_word) != CPU_CACHE_LINE (last_word))
-        __builtin_prefetch (s1_is_fwd ? (first_word + CPU_CACHE_LINE_BYTES) : (last_word - CPU_CACHE_LINE_BYTES), 0 , 3);
+    __builtin_prefetch (first_word, PREFETCH_READ_ONLY, LOCALITY_GENOME_SEQ);
+    __builtin_prefetch (last_word,  PREFETCH_READ_ONLY, LOCALITY_GENOME_SEQ);
 
     return gpos;
 }
@@ -320,7 +323,7 @@ static void aligner_evaluate_hooks (
     // We do so in a 3-stage pipeline to parallelize random access RAM reads (from refhash and then genome) with processing:
     // Pipeline stage 1: Initiate prefetch of gpos from refhash[hash]. hash is calculated from the kmer starting at the base after the hook.
     // Pipeline stage 2: Initiate prefetch of the cache lines containing the genomic sequence from genome[gpos]
-    // Pipeline stage 3: Compare hamming distance of the genome[gpos] sequence (already fetched) and our sequence.
+    // Pipeline stage 3: Count mismatches between the genome[gpos] sequence (already fetched) and our sequence.
     for (i=0; i < seq_len; i++) {          
         seq_prev = seq_curr;
         seq_curr = seq_next;
@@ -337,7 +340,7 @@ static void aligner_evaluate_hooks (
           && (gpos1 == NO_GPOS || best->is_forward == false))) {
 
         flush_pipeline:
-            // pipeline stage 3: calculate outcome: use genome sequence prefetched in stage 2 to calculate hamming distance and evaluate the result
+            // pipeline stage 3: calculate outcome: use genome sequence prefetched in stage 2 to count mismatches and evaluate the result
             if (s2_gpos != NO_GPOS &&
                 aligner_update_best (vb, s2_gpos, gpos_R1, gpos1, seq_bits, seq_len, s2_is_fwd, 
                                      genome, genome_nbases, near_perfect_max_mismatches, best)) // true if near-perfect match
@@ -393,10 +396,10 @@ static inline PosType64 aligner_best_match (
     START_TIMER;
 
     // convert seq to a bitmap
-    uint64_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
+    alignas(64) uint64_t seq_bits_words[roundup_bits2words64(seq_len * 2)];
     bool seq_is_all_acgt;
     Bits seq_bits = aligner_seq_to_bitmap (vb, STRa(seq), seq_bits_words, &seq_is_all_acgt);
-    
+
     //ref_print_bases (&seq_bits, "\nseq_bits fwd", true);
     //ref_print_bases (&seq_bits, "seq_bits rev", false);
        
@@ -443,12 +446,12 @@ void aligner_seg_gpos_and_fwd (VBlockP vb,
     ContextP this_strand_ctx = (am_i_R2 && segconf.is_interleaved) ? strand_r2_ctx : strand_ctx;
 
     if (!this_strand_ctx->local.data || (this_strand_ctx->local.size & ~3ULL) * 8 == this_strand_ctx->local.nbits)
-        buf_alloc_do (vb, &this_strand_ctx->local, this_strand_ctx->local.size + sizeof(uint64_t), CTX_GROWTH, NULL, __FUNCLINE);
+        buf_alloc_do (vb, &this_strand_ctx->local, this_strand_ctx->local.size + sizeof(uint64_t), CTX_GROWTH, false, NULL, THIS_CODE_LINE);
 
-    buf_add_bit (&this_strand_ctx->local, gpos_R1 == NO_GPOS ? is_forward // we are not r2, or we are r2 and r1 is unaligned - just store the strand
-                                                             : (is_forward == is_forward_R1)); // pair 1 is aligned - store equality, expected to he 1 in most cases
+    bits_add_bit (&this_strand_ctx->local, gpos_R1 == NO_GPOS ? is_forward // we are not r2, or we are r2 and r1 is unaligned - just store the strand
+                                                              : (is_forward == is_forward_R1)); // pair 1 is aligned - store equality, expected to he 1 in most cases
     
-    // note: this schema is copied also in aligner_recon_get_gpos_and_fwd                                                               
+    // note: this schema is copied also in aligner_piz_recon_gpos_fwd_prefetch_genome                                                               
     //
     // **FORWARD**    ————————SEG————————       ———————————PIZ———————————
     // seq:           0·····j···········L       0·····j    0···········L2   (g=gpos j=junction L=(seq_len-1) L2=L-j)
@@ -598,7 +601,7 @@ static char *alloc_ref (VBlockP vb, STRc(ref_space), uint32_t ref_len)
     }
 }
 
-// get textual reference starting at the lower of gpos, gpos2, and containing seq_len starting for each gpos and gpos2
+// seg: get textual reference starting at the lower of gpos, gpos2, and containing seq_len starting for each gpos and gpos2
 static inline void aligner_get_textual_ref (VBlockP vb, 
                                             PosType64 gpos, PosType64 gpos2, uint32_t seq_len, bool is_forward,
                                             STRc (ref_space), // use if possible, or scratch if not
@@ -661,8 +664,8 @@ static bool aligner_seg_mismatches (VBlockP vb, STR𐤐(seq),
 
 #ifdef DEBUG // DEBUG only due to performance
     if (flag.debug_aligner)
-        iprintf ("%s: mismatches muxed by these ref bases: gpos=%-10"PRIu64"%s %s seq_len=%-3u: ", 
-                 LN_NAME, *gpos, cond_int (*gpos2 != NO_GPOS, " gpos2=", *gpos2), 
+        iprintf ("%s: mismatches muxed by these ref bases: GPOS=%-10"PRIu64"%s %s seq_len=%-3u: ", 
+                 LN_NAME, *gpos, cond_int (*gpos2 != NO_GPOS, " GPOS2=", *gpos2), 
                  is_forward ? "FWD" : "REV", seq_len);
 #endif
 
@@ -773,7 +776,6 @@ MappingType aligner_seg_seq (VBlockP vb, STR𐤐(seq),
     
     ConstBitsP genome;
     PosType64 genome_nbases;
-    
     ref_get_genome (&genome, &genome_nbases);
 
     bool is_forward=false, is_perfect=false, is_perfect_spliced=false, can_match_as_nonspliced=true;
@@ -828,11 +830,11 @@ no_mapping:
     if (gpos2 != NO_GPOS) vb->num_aligned_spliced++;
 
     if (flag.show_aligner)
-        iprintf ("%s: gpos=%-10"PRId64"%s%s%s%s%s%s %s %s\n", LN_NAME, 
+        iprintf ("%s: GPOS=%-10"PRId64"%s%s%s%s%s%s %s %s\n", LN_NAME, 
                  gpos, 
                  cond_int (ctx_has_value_in_line_(vb, gpos_Δ_ctx), " gpos_Δ=", gpos_Δ_ctx->last_value.i), // set in fastq_seg_gpos_R2
-                 cond_int (gpos2 != NO_GPOS, " gpos2=", gpos2), 
-                 cond_int (gpos2 != NO_GPOS, " gpos_gap=", gpos2 - gpos), 
+                 cond_int (gpos2 != NO_GPOS, " GPOS=", gpos2), 
+                 cond_int (gpos2 != NO_GPOS, " GPOS_gap=", gpos2 - gpos), 
                  cond_int (gpos2 != NO_GPOS, " G1=", G1), 
                  cond_int (gpos2 != NO_GPOS, " G2=", gpos2 + (is_forward ? junction : 0)), 
                  cond_int (gpos2 != NO_GPOS, " junc=", junction),
@@ -846,11 +848,90 @@ no_mapping:
          :                      MAPPING_ALIGNED; 
 }
 
-void aligner_recon_get_gpos_and_fwd (VBlockP vb, bool am_i_R2, 
-                                     bool spliced_2nd_segment, 
-                                     PosType64𐤐 gpos, bool𐤐 is_forward) // out
+static void aligner_piz_prefetch_genome_region (PosType64 gpos, bool am_i_R2)
+{
+    ConstBitsP genome;
+    PosType64 genome_nbases;
+    ref_get_genome (&genome, &genome_nbases);
+
+    // fetch up to two cache lines. we don't know yet the true seq_len, so we use a heuristic.
+    uint64_t seq_len_heuristic = 
+        (am_i_R2 && segconf.std_seq_lR2) ? segconf.std_seq_lR2 : segconf.std_seq_len; // note: these segconf.* are 0 for earlier versions (see sections.h). that's ok.  
+    
+    PosType64 end_of_seq_gpos = gpos + (seq_len_heuristic ? (seq_len_heuristic-1) : 0); // a guesstimate
+
+    if (end_of_seq_gpos < genome_nbases) { 
+        #define LOCALITY_GPOS_PIZ 3 // benchmarks the best
+        __builtin_prefetch (&((bytes)genome->words)[gpos / 4],            PREFETCH_READ_ONLY, LOCALITY_GPOS_PIZ);
+        __builtin_prefetch (&((bytes)genome->words)[end_of_seq_gpos / 4], PREFETCH_READ_ONLY, LOCALITY_GPOS_PIZ); // no overhead if prefetching the same cache line twice (CPU detects)
+    }
+}
+
+static void aligner_piz_get_forward (VBlockP vb, bool am_i_R2, bool spliced_2nd_segment)
+{
+    START_TIMER;
+
+    declare_seq_contexts; 
+    bool is_forward;
+    
+    bool is_interleaved_r2 = (segconf.is_interleaved && VB_DT(FASTQ) && vb->line_i % 2); // FASTQ file or FASTQ component of a Deep file
+
+    // second segment in a spliced alignment: gpos is delta vs first segment's gpos, and is_forward is the same
+    if (spliced_2nd_segment) 
+        is_forward = ctx_get_last_value (strand_ctx).i;   // from first segment (this function)
+
+    // first file of a pair (R1) or a non-pair fastq or sam
+    else if (!am_i_R2 && !is_interleaved_r2) 
+        is_forward = NEXTLOCALBIT (strand_ctx);  
+
+    // 2nd file of a pair (R2) 
+    else if (am_i_R2) {
+        // defect 2023-02-11: until 14.0.30, we allowed dropping SQBITMAP.b250 sections if all the same (since 14.0.31, we 
+        // set no_drop_b250). Due to the defect, if b250 is dropped, we always segged is_forward verbatim and not as a diff to R1.
+        bool defect_2023_02_11 = !bitmap_ctx->b250R1.len32 && EXACT_VER(14); // can only happen up to 14.0.30
+
+        // case: paired read (including all reads in up to v13) - diff vs pair1
+        if (!defect_2023_02_11 && bitmap_ctx->r1_is_aligned) { // always true for files up to v13 and all lines had a is_forward value
+
+            bool is_forward_pair_1 = bits_get (&strand_ctx->localR1, gpos_ctx->next_localR1);
+
+            is_forward = NEXTLOCALBIT (strand_ctx) ? is_forward_pair_1 : !is_forward_pair_1;
+        }
+
+        // case: unpaired read - just take bit
+        else
+            is_forward = NEXTLOCALBIT (strand_ctx);
+    }
+    
+    // R2 in a single-file interleaved FASTQ (v15)
+    else {
+        // case: paired read - diff vs r1
+        if (bitmap_ctx->r1_is_aligned) { 
+            bool is_forward_pair_1 = ctx_get_prev_line_value (strand_ctx).i;
+            is_forward = NEXTLOCALBIT (strand_r2_ctx) ? is_forward_pair_1 : !is_forward_pair_1;
+        }
+
+        // case: unpaired read - just take bit
+        else
+            is_forward = NEXTLOCALBIT (strand_r2_ctx);
+    }
+
+    ctx_set_last_value (vb, strand_ctx, (int64_t)is_forward);
+
+    COPY_TIMER (aligner_piz_get_forward);
+}
+
+// calculates gpos and fwd and prefetches the genomic region
+void aligner_piz_recon_gpos_fwd_prefetch_genome (VBlockP vb, bool am_i_R2, bool spliced_2nd_segment)
 {    
+    START_TIMER;
+
     declare_seq_contexts;
+    PosType64 gpos;
+    
+    // set strand_ctx->last_value to is_forward
+    aligner_piz_get_forward (vb, am_i_R2, spliced_2nd_segment);
+
     bool is_interleaved_r2 = (segconf.is_interleaved && VB_DT(FASTQ) && vb->line_i % 2); // FASTQ file or FASTQ component of a Deep file
 
     // spliced alignment: (this schema is copied also in aligner_seg_gpos_and_fwd)
@@ -869,54 +950,56 @@ void aligner_recon_get_gpos_and_fwd (VBlockP vb, bool am_i_R2,
 
     // second segment in a spliced alignment: gpos is delta vs first segment's gpos, and is_forward is the same
     if (spliced_2nd_segment) {
-        *is_forward  = strand_ctx->last_value.i;   // from first segment (this function)
-        int64_t G1   = gpos_ctx->last_value.i;     // from first segment (this function)
-        int64_t jnct = junction_ctx->last_value.i; // from fastq_recon_aligned_SEQ 
+        int64_t G1   = ctx_get_last_value (gpos_ctx).i;     // from first segment (this function). 
+        int64_t jnct = ctx_get_last_value (junction_ctx).i; // from fastq_recon_aligned_SEQ 
         int64_t gap  = reconstruct_from_local_int (VB, gpos_gap_ctx, 0, false); 
-        *gpos        = G1 + gap + jnct - (*is_forward ? 0 : vb->seq_len);
+        gpos         = G1 + gap + jnct; // tenative gpos, will be finalized in aligner_reconstruct_seq
+
+        if (flag.show_aligner)
+            iprintf ("line_i_during_prefetch=%s: G1=%"PRId64" junc=%"PRId64" GPOS_gap=%"PRId64" tentative_gpos=%"PRId64"\n", 
+                     LN_NAME, G1, jnct, gap, gpos);
 
         ctx_set_last_value (vb, gpos_gap_ctx, gap);
     }
 
-    // first file of a pair (R1) or a non-pair fastq or sam
-    else if (!am_i_R2 && !is_interleaved_r2) {
-        *gpos = reconstruct_from_local_int (vb, gpos_ctx, 0, RECON_OFF);        
-        *is_forward = NEXTLOCALBIT (strand_ctx);  
-        ctx_set_last_value (vb, strand_ctx, (int64_t)*is_forward);
+    // first read of a pair (R1) or a non-pair fastq or sam. if spliced - this is the 1st segment.
+    else if (!am_i_R2 && !is_interleaved_r2) 
+        gpos = reconstruct_from_local_int (vb, gpos_ctx, 0, RECON_OFF);        
 
-        if (segconf.is_interleaved) bitmap_ctx->r1_is_aligned = PAIR1_ALIGNED;      
-    }
-
-    // 2nd file of a pair (R2) 
+    // 2nd read of a pair (R2) 
     else if (am_i_R2) {
-        *is_forward = fastq_piz_get_r2_is_forward (vb); // MUST be called before gpos reconstruction as it inquires GPOS.localR1.next
-        ctx_set_last_value (vb, strand_ctx, (int64_t)*is_forward);
-
         reconstruct_from_ctx (vb, gpos_ctx->did_i, 0, RECON_OFF); // calls fastq_special_PAIR2_GPOS
-        *gpos = gpos_ctx->last_value.i;
+        gpos = ctx_get_last_value (gpos_ctx).i;
     }
     
-    // R2 in a single-file interleaved FASTQ (v15)
+    // pair-2 in a single-file interleaved FASTQ (v15)
     else {
-        *is_forward = fastq_piz_get_interleaved_r2_is_forward (vb);
-        ctx_set_last_value (vb, strand_ctx, (int64_t)*is_forward);
-
         reconstruct_from_ctx (vb, gpos_r2_ctx->did_i, 0, RECON_OFF); // calls fastq_special_PAIR2_GPOS
-        *gpos = gpos_r2_ctx->last_value.i;
+        gpos = ctx_get_last_value (gpos_r2_ctx).i;
     }
 
     // backcomp: early versions stored NO_GPOS which use to be 0xfffffffff in the GPOS context
-    if (*gpos == NO_HASH_ENT32 && gpos_bytes == 4) 
-        *gpos = NO_GPOS; 
+        if (gpos == NO_HASH_ENT32 && gpos_bytes == 4) 
+        gpos = NO_GPOS; // note: this GPOS should be consumed too
 
-    ctx_set_last_value (vb, gpos_ctx, *gpos); 
+    aligner_piz_prefetch_genome_region (gpos, am_i_R2);
+
+    // store gpos for consumption by aligner_reconstruct_seq. note: if spliced, we store somewhere else, 
+    // because the 1st segment gpos of the r1 read is needed by the r2 read in an interleaved file
+    if (spliced_2nd_segment) gpos_ctx->last_value_spliced = gpos;
+    else                     ctx_set_last_value (vb, gpos_ctx, gpos);
+
+    COPY_TIMER (aligner_piz_recon_gpos_fwd_prefetch_genome);
+    
+    // case: need to account explicitly, because called outside of recon of SEQ field (from the TOPLEVEL filter)
+    if (!spliced_2nd_segment) COPY_TIMER (seg_recon_field[FASTQ_SQBITMAP]); 
 }
 
 // PIZ: SEQ reconstruction - only for reads compressed with the aligner
 void aligner_reconstruct_seq (VBlockP vb, 
-                              uint32_t seq_len, bool am_i_R2, bool is_spliced_seg2, bool is_perfect_alignment, 
+                              uint32_t seq_len, bool am_i_R2, SpliceStatus splice_status, bool is_perfect_alignment, 
                               ReconType reconstruct,
-                              int max_deep_mismatches,        // length of mismatch_base and mismatch_offset arrays  
+                              int max_deep_mismatches,   // length of mismatch_base and mismatch_offset arrays  
                               char *mismatch_base,       // optional out
                               uint32_t *mismatch_offset, // optional out
                               uint32_t *num_mismatches)  // optional out
@@ -924,17 +1007,39 @@ void aligner_reconstruct_seq (VBlockP vb,
     START_TIMER;
     declare_seq_contexts;
 
-    if (!bitmap_ctx->is_loaded) return; // if case we need to skip the SEQ field (for the entire file)
+    if (!bitmap_ctx->is_loaded) return; // if case we need to skip the SEQ field (e.g. --header-only)
     
     if (is_perfect_alignment || buf_is_alloc (&bitmap_ctx->local)) { // not all non-ref
+        
+        bool is_forward = ctx_get_last_value (strand_ctx).i;
 
-        bool is_forward;
+        // in case of SPLICE_SEG_2, we update gpos now that we know seq_len
+        // PosType64 gpos_adjustment = 0;
+        // if (splice_status == SPLICE_SEG_2 && !is_forward) 
+        //     gpos_adjustment = -(int64_t)vb->seq_len; // note: vb->seq_len, not this segments' seq_len! 
+        
+        // gpos was prefetched, now we consume it
         PosType64 gpos;
-        aligner_recon_get_gpos_and_fwd (vb, am_i_R2, is_spliced_seg2, &gpos, &is_forward);
+        if (splice_status == SPLICE_SEG_2) {
+            // case: reverse reverse SPLICE_SEG_2, we finalize gpos now that we know seq_len
+            if (!is_forward)
+                gpos_ctx->last_value_spliced -= vb->seq_len; 
+
+            gpos = gpos_ctx->last_value_spliced;
+        }
+        else
+            gpos = ctx_get_last_value (gpos_ctx).i;
+            
+        // case: we are handling the first segment of a spliced alignment: prefetch the 
+        // 2nd segment's genomic region now to reduce genome random-access latency
+        if (splice_status == SPLICE_SEG_1)
+            aligner_piz_recon_gpos_fwd_prefetch_genome (vb, am_i_R2, true);
 
         if (flag.show_aligner)
-            iprintf ("%s: gpos=%-10"PRId64" %s %s\n", 
-                     LN_NAME, gpos, is_forward ? "FWD" : "REV", is_perfect_alignment ? "PERFECT" : "");
+            iprintf ("%s: %-5s%-10"PRId64" %s %s %s\n", 
+                     LN_NAME, (rom[]){ "GPOS=", "G1=", "G2=" }[splice_status], gpos, 
+                     is_forward ? "FWD" : "REV", is_perfect_alignment ? "PERFECT" : "       ",
+                     cond_int (ctx_has_value_in_line_(vb, gpos_Δ_ctx), " gpos_Δ=", gpos_Δ_ctx->last_value.i)); // set in fastq_special_PAIR2_GPOS
 
         if (gpos == NO_GPOS) { 
             bitmap_ctx->next_local += seq_len; // up to v13 ; not sure if this still can happen since v14
@@ -952,7 +1057,7 @@ void aligner_reconstruct_seq (VBlockP vb,
             if (flag.debug_aligner)
                 iprintf ("%s: mismatches muxed by these ref bases: gpos=%-10"PRIu64" %s seq_len=%-3u: %s", 
                         LN_NAME, gpos, is_forward ? "FWD" : "REV", vb->seq_len,
-                        is_spliced_seg2 ? "+" : "");
+                        splice_status == SPLICE_SEG_2 ? "+" : "");
 #endif
             char *recon = BAFTtxt;
             for (uint32_t i=0; i < seq_len; i++) {

@@ -89,7 +89,7 @@ void vcf_seg_INFO_VRS_Starts (VBlockVCFP vb, ContextP ctx, STRp(arr))
 {
     PosType32 pos = DATA_LINE(vb->line_i)->pos;
 
-    str_split_ints (arr, arr_len, 2, ',', start, true);
+    str_split_unsigneds (arr, arr_len, 2, ',', start, true);
     
     if (!n_starts || 
         (!VT0(SNP) && !VT0(DEL) && !VT0(INS)) ||
@@ -117,7 +117,7 @@ SPECIAL_RECONSTRUCTOR_DT (vcf_piz_special_VRS_Starts)
 
 void vcf_seg_INFO_VRS_Ends (VBlockVCFP vb, ContextP ctx, STRp(arr))
 {
-    str_split_ints (arr, arr_len, 2, ',', end, true);
+    str_split_unsigneds (arr, arr_len, 2, ',', end, true);
     
     if (!n_ends)
         seg_by_ctx (VB, STRa(arr), ctx, arr_len); 

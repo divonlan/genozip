@@ -74,17 +74,19 @@ WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes)
 // Seg: called before seg, to store the point to which we might roll back
 static bool ctx_set_rollback (VBlockP vb, ContextP ctx, bool override_id)
 {
-    if (ctx->rback_id == vb->rback_id && !override_id) return false; // ctx already in rollback point 
+    if (ctx->rback.id == vb->rback_id && !override_id) return false; // ctx already in rollback point 
     
-    ctx->rback_local_len       = ctx->local.len32;
-    ctx->rback_nodes_len       = ctx->nodes.len32;
-    ctx->rback_txt_len         = ctx->txt_len;
-    ctx->rback_local_num_words = ctx->local_num_words;
-    ctx->rback_b250_count      = ctx->b250.count;
-    ctx->rback_last_value      = ctx->last_value;
-    ctx->rback_last_delta      = ctx->last_delta;
-    ctx->rback_last_txt        = ctx->last_txt;
-    ctx->rback_id              = vb->rback_id;
+    ctx->rback = (struct rback){
+        .b250_count    = ctx->b250.count,
+        .local_len     = ctx->local.len32,
+        .local_n_words = ctx->v_local_n_words,
+        .nodes_len     = ctx->nodes.len32,
+        .txt_len       = ctx->txt_len,
+        .last_value    = ctx->last_value,
+        .last_delta    = ctx->last_delta,
+        .last_txt      = ctx->last_txt,
+        .id            = vb->rback_id
+    };
     return true;
 }
 
@@ -230,19 +232,18 @@ bool seg_set_last_txt_store_value (VBlockP vb, ContextP ctx, STRp(value), StoreT
                                 .len   = value_len };
 
     bool stored = false;
-
+    ValueType last_value;
+    
     if (store_type == STORE_INT) 
-        stored = str_get_int (STRa(value), &ctx->last_value.i);
+        stored = str_get_int (STRa(value), &last_value.i);
     
     else if (store_type == STORE_FLOAT) 
-        stored = str_get_float (STRa(value), &ctx->last_value.f, NULL, NULL);
+        stored = str_get_float (STRa(value), &last_value.f, NULL, NULL);
 
-    if (stored) {
-        ctx->last_line_i   = vb->line_i;    
-        ctx->last_sample_i = vb->sample_i;
-    }
-    else 
-        ctx_set_encountered (vb, ctx);
+    if (stored)
+        ctx_set_last_value_maybe_in_sample (vb, ctx, last_value);
+    else
+        ctx_set_encountered_maybe_in_sample (vb, ctx);
 
     return stored;
 }
@@ -500,7 +501,7 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 // note: caller must set ctx->ltype=LT_DYN_INT*
 void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes)
 {
-    ctx_set_last_value (vb, ctx, n);
+    ctx_set_last_value_maybe_in_sample (vb, ctx, n);
 
     dyn_int_append (vb, ctx, n, add_bytes);
 
@@ -662,7 +663,7 @@ void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
         ctx->last_delta = delta;
     }
 
-    ctx_set_last_value (vb, ctx, value_n);
+    ctx_set_last_value_maybe_in_sample (vb, ctx, value_n);
 }
 
 // note: seg_initialize should set STORE_INT and LT_DYN* for this ctx
@@ -692,7 +693,7 @@ WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value,
 
     dyn_int_append (vb, ctx, ctx->last_delta, 0); 
 
-    ctx_set_last_value (vb, ctx, value);
+    ctx_set_last_value_maybe_in_sample (vb, ctx, value);
 
     return seg_by_ctx (VB, STRa(delta_snip), ctx, add_bytes);
 }
@@ -757,7 +758,7 @@ WordIndex seg_array_(VBlockP vb, ContextP container_ctx, Did stats_conslidation_
     con->repeats = (con_rep_special && expected_num_repeats == n_items) ? CON_REPEATS_IS_SPECIAL : n_items;
 
     if (container_ctx->flags.store == STORE_INT) 
-        ctx_set_last_value (vb, container_ctx, (int64_t)0);
+        ctx_set_last_value_maybe_in_sample (vb, container_ctx, (int64_t)0);
 
     for (uint32_t i=0; i < n_items; i++) { // value_len will be -1 after last number
 
@@ -1258,7 +1259,7 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
     if (add_nul) BNXTc (ctx->local) = 0;
 
     if (add_bytes) ctx->txt_len += add_bytes;
-    ctx->local_num_words++;
+    ctx->v_local_n_words++;
 
     if (lookup_type == LOOKUP_SIMPLE) 
         seg_simple_lookup (vb, ctx, 0);
@@ -1267,7 +1268,7 @@ void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data
         seg_lookup_with_length (vb, ctx, data_len, 0);
 }
 
-void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup, unsigned add_bytes) 
+void seg_integer_fixed (VBlockP vb, ContextP ctx, void *restrict number, bool with_lookup, unsigned add_bytes) 
 {
     buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, C_LOCAL);
 
@@ -1285,7 +1286,7 @@ void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup
     }
 
     if (add_bytes) ctx->txt_len += add_bytes;
-    ctx->local_num_words++;
+    ctx->v_local_n_words++;
 
     if (with_lookup)     
         seg_by_ctx (vb, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
@@ -1382,17 +1383,14 @@ fallback:
     seg_by_ctx (vb, STRa(value), ctx, add_bytes);
 }
 
-static void seg_set_hash_hints (VBlockP vb, int third_num)
+static void seg_set_hash_hints (VBlockP vb, int third)
 {
-    if (third_num == 1) vb->num_lines_at_1_3 = vb->line_i + 1;
-    else                vb->num_lines_at_2_3 = vb->line_i + 1;
+    if (third >= 2) return; // should never happen
 
-    for_vctx {
-        if (!vctx->nodes.len32 || vctx->global_hash.len32) continue; // our service is not needed - global_hash for this dict already exists or no nodes
+    vb->num_lines_at_⅓[third] = vb->line_i + 1;
 
-        if (third_num == 1) vctx->nodes_len_at_1_3 = vctx->nodes.len32;
-        else                vctx->nodes_len_at_2_3 = vctx->nodes.len32;
-    }
+    for_vctx_that (vctx->nodes.len32 && !vctx->global_hash.len32) 
+        vctx->nodes_len_at_⅓[third] = vctx->nodes.len32;
 }
 
 // double the number of lines if we've run out of lines
@@ -1410,7 +1408,7 @@ static void seg_verify_file_size (VBlockP vb)
     // sanity checks
     ASSERT (vb->recon_size >= 0, "%s: recon_size=%d is negative", VB_NAME, vb->recon_size);
 
-    for (Did sf_i=0; sf_i < vb->ca.num_contexts; sf_i++) 
+    for (Did sf_i=0; sf_i < vb->ca._num_contexts; sf_i++) 
         recon_size += CTX(sf_i)->txt_len;
     
     if ((vb->recon_size != recon_size || flag.debug_recon_size) && !flag.show_bam) { 
@@ -1480,9 +1478,11 @@ void zip_modify (VBlockP vb)
     ASSERT (vb->lines.len <= vb->txt_data.len, "%s: Expecting lines.len=%"PRIu64" < txt_data.len=%"PRIu64, 
             VB_NAME, vb->lines.len, vb->txt_data.len); // 64 bit test in case of memory corruption
 
+    ctx_initialize_vb_non_buffer_fields (vb);
+
     zip_set_num_lines (vb); // set estimated number of lines
 
-    vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
+    vb->scratch.nameר = ר("scratch"); // initialize so we don't need to worry about it later
     
     rom line = B1STtxt;
     char *optimized = B1STtxt;
@@ -1586,7 +1586,7 @@ void seg_all_data_lines (VBlockP vb)
     
     zip_set_num_lines (vb); // set estimated number of lines
     
-    vb->scratch.name = "scratch"; // initialize so we don't need to worry about it later
+    vb->scratch.nameר = ר("scratch"); // initialize so we don't need to worry about it later
     
     ContextP debug_lines_ctx = NULL;
     if (flag.debug_lines && !segconf_running) { 
@@ -1600,7 +1600,7 @@ void seg_all_data_lines (VBlockP vb)
     if (segconf_running) vb = vb_get_nonpool_vb (VB_ID_SEGCONF);
 
     if (flag_is_show_vblocks (TASK_ZIP)) 
-        iprintf ("SEG(id=%d) vb=%s Ltxt=%u %.*s%s\n", vb->id, VB_NAME, vb->txt_data.len32,
+        iprintf ("SEG(id=%s) vb=%s Ltxt=%u %.*s%s\n", dis_vb_id(vb->id).s, VB_NAME, vb->txt_data.len32,
                  MIN_(64, Ltxt), cond_str (!DTP(is_binary), "txt_data[64]=\"", B1STtxt ? B1STtxt : "(null)"), DTP(is_binary) ? "" : "\"");
 
     ASSERTNOTEMPTY (vb->txt_data); // after this print ^
@@ -1613,8 +1613,10 @@ void seg_all_data_lines (VBlockP vb)
     uint32_t sizeof_line = DT_FUNC_OPTIONAL (vb, sizeof_zip_dataline, 1)(); // 1 - we waste a little bit of memory to avoid making exceptions throughout the code logic
     buf_alloc_zero (vb, &vb->lines, 0, vb->lines.len * sizeof_line, char, 1, "lines");
 
+    // only bother testing for hash_hints in the first round of VBs
+    int third=0; // ∈ [0,2] are we in 1st, 2nd or 3rd third of the vb
+    rom watermarks[3] = { Btxt(Ltxt / 3), Btxt((Ltxt / 3) * 2), BAFTtxt };
     rom line = B1STtxt;
-    bool hash_hints_set_1_3 = false, hash_hints_set_2_3 = false;
     int64_t progress = 0;
     int64_t n_lines_processed=0; // number of lines sent to segging. some of them might have been sent to gencomp. 
     uint32_t remaining_txt_len=0;
@@ -1667,17 +1669,11 @@ void seg_all_data_lines (VBlockP vb)
         if (vb->line_i == vb->lines.len32-1 && line - vb->txt_data.data != vb->txt_data.len)         
             seg_more_lines (vb, sizeof_line);
         
-        // collect stats at the approximate 1/3 or 2/3s marks of the file, to help hash_alloc_global create a hash
+        // collect stats at the approximate ⅓ and ⅔ watermarks of the file, to help hash_alloc_global create a hash
         // table. note: we do this for every vb, not just 1, because hash_alloc_global runs in the first
         // vb a new field/subfield is introduced
-        if (!hash_hints_set_1_3 && BNUMtxt (line) > Ltxt / 3) {
-            seg_set_hash_hints (vb, 1);
-            hash_hints_set_1_3 = true;
-        }
-        else if (!hash_hints_set_2_3 && BNUMtxt (line) > 2 * Ltxt / 3) {
-            seg_set_hash_hints (vb, 2);
-            hash_hints_set_2_3 = true;
-        }
+        if (line > watermarks[third]) 
+            seg_set_hash_hints (vb, third++);
     }
 
     ASSINP (vb->lines.len32 <= CON_MAX_REPEATS, // because top_level.repeats = vb->lines.len

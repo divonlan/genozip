@@ -264,7 +264,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BD_BI)
         SNIPi1 (SNIP_LOOKUP, vb->seq_len * 2);
 
         buf_alloc_exact (vb, bdbi_ctx->interlaced, vb->seq_len * 2, char, "interlaced");
-        reconstruct_one_snip (VB, bdbi_ctx, WORD_INDEX_NONE, STRa(snip), RECON_ON, __FUNCLINE);    
+        reconstruct_one_snip (VB, bdbi_ctx, WORD_INDEX_NONE, STRa(snip), RECON_ON, THIS_CODE_LINE);    
 
         memcpy (B1STc(bdbi_ctx->interlaced), recon, vb->seq_len * 2);
         Ltxt -= vb->seq_len * 2; // erase
@@ -429,7 +429,7 @@ static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t AM, unsi
         AM != 253 && AM != 254) { // note: 253,254 are valid, but highly improbable values
 
         int32_t SM;
-        if (!sam_seg_peek_int_field (vb, OPTION_SM_i, vb->idx_SM_i, 0, 255, false, &SM)) goto fallback;
+        if (!sam_seg_peek_int_field (vb, OPTION_SM_i, vb->idx.SM_i, 0, 255, false, &SM)) goto fallback;
 
         if (!SM && AM) goto fallback; // usually, AM=0 if SM=0
         
@@ -478,11 +478,11 @@ static void sam_seg_UQ_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t UQ, unsi
     int32_t other; // either AS or NM
 
     // in Novoalign, usually UQ==AS
-    if (MP(NOVOALIGN) && sam_seg_peek_int_field (vb, OPTION_AS_i, vb->idx_AS_i, 0, 1000, true, &other) && other == UQ)
+    if (MP(NOVOALIGN) && sam_seg_peek_int_field (vb, OPTION_AS_i, vb->idx.AS_i, 0, 1000, true, &other) && other == UQ)
         seg_special1 (VB, SAM_SPECIAL_UQ, '1', ctx, add_bytes);
 
     // In GATK produced data, in many cases (~half) UQ==2*NM
-    else if (!MP(NOVOALIGN) && sam_seg_peek_int_field (vb, OPTION_NM_i, vb->idx_NM_i, 0, 0x3fffffff, 
+    else if (!MP(NOVOALIGN) && sam_seg_peek_int_field (vb, OPTION_NM_i, vb->idx.NM_i, 0, 0x3fffffff, 
              false, // bc seg_NM_isam_seg_NM_i inteprets would interpret a set value as "segged already"
              &other) && other*2 == UQ)
         seg_special1 (VB, SAM_SPECIAL_UQ, '2', ctx, add_bytes);
@@ -715,7 +715,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t a
     }
 
     // if we have minimap2-produced ms:i, AS is close to it
-    else if (segconf.sam_ms_type == ms_MINIMAP2 && sam_seg_peek_int_field (vb, OPTION_ms_i, vb->idx_ms_i, -0x8000000, 0x7fffffff, true/*needed for delta*/, NULL)) 
+    else if (segconf.sam_ms_type == ms_MINIMAP2 && sam_seg_peek_int_field (vb, OPTION_ms_i, vb->idx.ms_i, -0x8000000, 0x7fffffff, true/*needed for delta*/, NULL)) 
         seg_delta_vs_other_localN (VB, CTX(OPTION_AS_i), CTX(OPTION_ms_i), as, -1, add_bytes);
 
     else
@@ -904,7 +904,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_DEMUX_MAPQ)
     
     else {
         // note: when reconstructing MAPQ in BAM, FLAG is not known yet, so we peek it here
-        if (!ctx_has_value_in_line_(vb, CTX(SAM_FLAG)))
+        if (!ctx_has_value_in_line (vb, SAM_FLAG))
             ctx_set_last_value (vb, CTX(SAM_FLAG), reconstruct_peek (vb, CTX(SAM_FLAG), 0, 0));
 
         channel_i = (segconf_has(OPTION_MQ_i) && sam_has_mate)?1 : sam_has_prim?2 : 0;
@@ -1076,7 +1076,7 @@ static void sam_seg_cross_mated_Z_fields (VBlockSAMP vb, Did did_i, ZipDataLineS
 {
     ASSSEG0 (dl->SEQ.len, "E2 tag without a SEQ"); 
     ASSINP (field_len == dl->SEQ.len, 
-            "Error in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
+            _ERR"in %s: Expecting E2 data to be of length %u as indicated by CIGAR, but it is %u. E2=%.*s",
             txt_name, dl->SEQ.len, field_len, field_len, field);
 
     PosType32 this_pos = vb->last_int(SAM_POS);
@@ -1349,111 +1349,6 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, DictId dict_id
         unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (1/*type - eg "i"*/ + 1/*\t or \n*/);
         container_seg (vb, con_ctx, con, ((char[]){ CON_PX_SEP, type, CON_PX_SEP }), 3, container_add_bytes);
     }
-}
-
-static inline ContainerP sam_seg_array_multi_ctx_get_con (VBlockSAMP vb, ContextP con_ctx, uint32_t n_items, uint8_t type, bool is_bam)
-{
-    // case: cached with correct type
-    if (con_ctx->con_cache.param == -(int8_t)type) { // already initialized
-        ContainerP con = { .h = B1ST(Container_0, con_ctx->con_cache) };
-
-        if (con_nitems (con) == 1 + n_items) return con; // this is the container we need
-    }
-
-    ASSERT (n_items+1 <= MAX_FIELDS, "n_times=%u is too many", n_items);
-
-    buf_alloc (vb, &con_ctx->con_cache, 0, 1, con_sizeof_(1 + n_items), 0, "con_cache");
-
-    ContainerP con = { .h = B1ST(Container_0, con_ctx->con_cache) }; 
-    con_initialize (con, 1 + n_items);
-    con.h->drop_final_item_sep = true;
-    con.h->items[0]            = (ContainerItem){ .translator = SAM2BAM_ARRAY_SELF_M  }; // item[0] is translator-only item - to translate the Container itself in case of reconstructing BAM 
-
-    StoreType store_type = aux_field_store_flag[type];
-    ASSERT (store_type, "%s: Invalid type \"%c\" in array of %s", LN_NAME, type, con_ctx->tag_name);
-
-    for (uint32_t i=0; i < n_items; i++) {
-        con.h->items[i+1] = (ContainerItem){ 
-            .dict_id    = sub_dict_id (con_ctx->dict_id, '0'+i),
-            .separator  = { [0]=aux_sep_by_type[IS_BAM_ZIP][type], [1]=',' },
-            .translator = aux_field_translator (type) // instructions on how to transform array items if reconstructing as BAM (array[0] is the subtype of the array)
-        }; 
-        
-        ContextP item_ctx = ctx_get_ctx (vb, con.h->items[i+1].dict_id);
-        item_ctx->flags.store = store_type;
-
-        if (store_type == STORE_INT || is_bam) {
-            item_ctx->ltype = aux_field_to_ltype[type];
-            item_ctx->local_is_lten = true; // we store in local in LTEN (as in BAM) and *not* in machine endianity
-        }
-
-        if (store_type == STORE_FLOAT)
-            sam_seg_initialize_for_float (vb, item_ctx);
-    }
-
-    ctx_consolidate_stats_(VB, con_ctx, con);
-
-    con_ctx->con_cache.param = -(int8_t)type; // this also used as "is_initialized". negative to indicate multi-context (positive is single-context)
-
-    return con;
-}
-
-// an array - each element go into a its own context, multiple repeats. items are segged as dynamic integers or floats, or a callback is called to seg them.
-void sam_seg_array_multi_ctx (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, ContextP con_ctx, uint8_t type, uint32_t expected_n_subctxs,
-                              rom array, int/*signed*/ array_len) // SAM: comma separated array ; BAM : arrays original width and machine endianity
-{   
-    ASSERT (expected_n_subctxs >= 2, "expecting n_subctxs=%u >= 2", expected_n_subctxs);
-
-    bool is_bam = IS_BAM_ZIP;
-
-    uint32_t n_subctxs = (is_bam || !array_len) ? array_len : (1 + str_count_char (STRa(array), ','));
-    
-    // if array does not have the expected length, seg as single-context array 
-    if (expected_n_subctxs != n_subctxs) {
-        sam_seg_array_one_ctx (vb, dl, con_ctx->dict_id, type, STRa(array), NULL, NULL);
-        return;
-    }
-    
-    // prepare array container - a one context per element. array type is stored as a prefix
-    ContainerP con = sam_seg_array_multi_ctx_get_con (vb, con_ctx, n_subctxs, type, is_bam);
-
-    int width = aux_width[type];
-
-    if (is_bam)
-        for (uint32_t i=0; i < n_subctxs; i++) {
-            ContextP item_ctx = ctx_get_ctx (vb, con.h->items[i+1].dict_id);
-            
-            buf_insert_do (VB, &item_ctx->local, width, item_ctx->local.len, &array[i * width], 1, C_LOCAL, __FUNCLINE);
-            
-            item_ctx->txt_len += width;
-        }
-
-    else if (aux_field_store_flag[type] == STORE_INT) { // SAM - integers
-        str_split_ints (array, array_len, n_subctxs, ',', item, true);
-
-        for (uint32_t i=0; i < n_subctxs; i++) {
-            ContextP item_ctx = ctx_get_ctx (vb, con.h->items[i+1].dict_id);
-            
-            // note: &items[i] contains the data because in little endian LSB comes first. TO DO: verify that value fits in width
-            buf_insert_do (VB, &item_ctx->local, width, item_ctx->local.len, &items[i], 1, C_LOCAL, __FUNCLINE);
-        }
-
-        con_ctx->txt_len += array_len; // not ideal, but saves us the need to measure lengths of the items
-    }
-
-    else { // SAM - floats
-        str_split (array, array_len, n_subctxs, ',', item, true);
-
-        for (uint32_t i=0; i < n_subctxs; i++) {
-            ContextP item_ctx = ctx_get_ctx (vb, con.h->items[i+1].dict_id);
-            seg_add_to_local_string (VB, item_ctx, STRi(item, i), LOOKUP_NONE, item_lens[i]);
-        }
-
-        con_ctx->txt_len += n_subctxs-1; // commas
-    }
-
-    unsigned container_add_bytes = is_bam ? (4/*count*/ + 1/*type*/) : (2/*type - eg "i,"*/ + 1/*\t or \n*/);
-    container_seg (vb, con_ctx, con, ((char[]){ CON_PX_SEP, type, ',', CON_PX_SEP }), 4, container_add_bytes);
 }
 
 static void sam_seg_set_last_value_f_from_aux (VBlockSAMP vb, Did did_i, bool is_bam,
@@ -1762,8 +1657,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_bam,
         case _OPTION_t0_Z: COND (segconf.sam_has_ultima_t0, sam_seg_ultima_t0 (vb, dl, STRa(value), add_bytes));
         
         // cpu
-        case _OPTION_Y0_i: COND (MP(CPU) && sam_seg_peek_int_field (vb, OPTION_AS_i, vb->idx_AS_i, 0, 10000, true, NULL), seg_delta_vs_other_dictN (VB, CTX(OPTION_Y0_i), CTX(OPTION_AS_i), numeric.i, 10, add_bytes));
-        case _OPTION_Y1_i: COND (MP(CPU) && sam_seg_peek_int_field (vb, OPTION_XS_i, vb->idx_XS_i, 0, 10000, true, NULL), seg_delta_vs_other_localN (VB, CTX(OPTION_Y1_i), CTX(OPTION_XS_i), numeric.i, 1000, add_bytes));
+        case _OPTION_Y0_i: COND (MP(CPU) && sam_seg_peek_int_field (vb, OPTION_AS_i, vb->idx.AS_i, 0, 10000, true, NULL), seg_delta_vs_other_dictN (VB, CTX(OPTION_Y0_i), CTX(OPTION_AS_i), numeric.i, 10, add_bytes));
+        case _OPTION_Y1_i: COND (MP(CPU) && sam_seg_peek_int_field (vb, OPTION_XS_i, vb->idx.XS_i, 0, 10000, true, NULL), seg_delta_vs_other_localN (VB, CTX(OPTION_Y1_i), CTX(OPTION_XS_i), numeric.i, 1000, add_bytes));
         case _OPTION_XL_Z: COND (MP(CPU), sam_seg_CPU_XL_Z (vb, STRa(value), add_bytes));
         
         // Agilent

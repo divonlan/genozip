@@ -45,10 +45,11 @@
 #include "tip.h"
 #include "reconstruct.h"
 #include "license.h"
+#include "qname.h"
 
 // mechanism to print a specific message upon exception
-static _Thread_local rom catch_msg=0, catch_func=0;
-static _Thread_local uint32_t catch_line=0;
+static _Thread_local rom catch_msg=0;
+static _Thread_local Caller catch_caller = {};
 
 static int process_argc = 0;
 static char **process_argv = 0; 
@@ -168,7 +169,7 @@ static LONG WINAPI windows_exception_handler (EXCEPTION_POINTERS *ep)
 {
     if (catch_msg) {
         progress_newline(); 
-        fprintf (stderr, _ERR "%s:%u: %s\n", catch_func, catch_line, catch_msg);
+        fprintf (stderr, _ERR "%s:%u: %s\n", CALLERff(catch_caller), catch_msg);
     }
 
     else
@@ -239,7 +240,7 @@ static noreturn void signal_handler_bug (int signum)
 {
     if (catch_msg) {
         progress_newline(); 
-        fprintf (stderr, _ERR "%s:%u: %s\n", catch_func, catch_line, catch_msg);
+        fprintf (stderr, _ERR "%s:%u: %s\n", CALLERff(catch_caller), catch_msg);
     }
 
     else {
@@ -296,11 +297,10 @@ static void error_init_signal_handlers (void)
 #endif
 
 // set the error message to be displayed in case of an exception (segfault etc)
-void catch_exception_do (rom msg, FUNCLINE)
+void catch_exception_do (rom msg, Caller caller)
 {
-    catch_func = func;  // note: catch_* are thread-local variables
-    catch_line = code_line; 
-    catch_msg  = msg; 
+    catch_caller = caller;  // note: catch_* are thread-local variables
+    catch_msg    = msg; 
 }
 
 void uncatch_exception (void)
@@ -335,6 +335,7 @@ static void error_free_all (void)
     flags_finalize();
     chrom_finalize();
     ref_finalize (true);
+    qname_finalize();
     vb_destroy_pool (POOL_MAIN, true);
     vb_destroy_pool (POOL_BGZF, true);
     vb_destroy_vb (&evb);
@@ -373,12 +374,12 @@ noreturn void error_exit (bool show_stack, bool is_error)
         if (is_error) {
             // cancel all other threads before closing z_file, so other threads don't attempt to access it 
             // (eg. z_file->data_type) and get a segmentation fault.
-            threads_cancel_other_threads();
+            threads_cancel_other_threads(); // <--- BREAKPOINT BRK
 
             close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
             close (2);
 
-            url_close_remote_file_stream (NULL);  // <--- BREAKPOINT BRK
+            url_close_remote_file_stream (NULL);  
 
             file_kill_external_compressors(); 
         }
@@ -415,10 +416,10 @@ noreturn void error_exit (bool show_stack, bool is_error)
     exit (is_error ? EXIT_GENERAL_ERROR : EXIT_OK);
 } 
 
-noreturn void error_assert_failed (FUNCLINE, rom format, ...)
+noreturn void error_assert_failed (Caller caller, rom format, ...)
 {
     progress_newline();    
-    fprintf (stderr, "%s "_ERR"%s:%u %s%s: ", str_time().s, func, code_line, version_str().s, license_get_number().s);
+    fprintf (stderr, "%s "_ERR"%s:%u %s%s: ", str_time().s, CALLERf, version_str().s, license_get_number().s);
 
     va_list args;                        
     va_start (args, format);              
@@ -464,9 +465,9 @@ void warn (rom format, ...)
     fflush (stderr);     
 }
 
-noreturn void error_asspiz (VBlockP vb, FUNCLINE, rom format, ...)
+noreturn void error_asspiz (VBlockP vb, Caller caller, rom format, ...)
 {
-    DO_ONCE { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
+    DO_ONCE_OR_STALL { /* first thread to fail at this point prints error and starts exit flow, other threads stall */ \
         StrText4K s;
         int s_len = 0;
 
@@ -477,7 +478,7 @@ noreturn void error_asspiz (VBlockP vb, FUNCLINE, rom format, ...)
 
         progress_newline(); 
         fprintf (stderr, "%s "_ERR"%s: %s:%u biopsy-bytes=%"PRIu64",%u line_in_file(1-based)=%"PRId64"%s %s%s stack=%s %s: ", 
-                str_time().s, LN_NAME, func, code_line,
+                str_time().s, LN_NAME, CALLERf,
                 vb->vb_position_txt_file, vb->recon_size, 
                 writer_get_txt_line_i ((VBlockP)(vb), vb->line_i), 
                 cond_int (Z_DT(VCF), " sample_i=", vb->sample_i), 
@@ -494,8 +495,6 @@ noreturn void error_asspiz (VBlockP vb, FUNCLINE, rom format, ...)
         
         error_exit (true, true);
     }
-    
-    else stall(); // other threads stall while waiting for the first thread ^ to exit
 }
 
 noreturn void error_restart (rom add_cmd_option, rom format, ...)
@@ -513,7 +512,7 @@ noreturn void error_restart (rom add_cmd_option, rom format, ...)
 
     if (flag.restarted) exit_on_error (true); // if this is already a restarted process - we don't restart again
 
-    DO_ONCE { // prevent recursive entry due to a failed ASSERT in the cleanup process
+    DO_ONCE_OR_STALL { // prevent recursive entry due to a failed ASSERT in the cleanup process
 
         // we cannot restart if we're compressing multiple z_files - as all will be compressed again
         int max_allowed_files_to_restart = flag.deep ? 1 GB // unlimited - single z_file
@@ -607,9 +606,6 @@ noreturn void error_restart (rom add_cmd_option, rom format, ...)
         exit (GetExitCodeProcess (pi.hProcess, &exit_code) ? exit_code : 1);
 #endif
     }
-
-    else
-        stall(); // wait to be killed by first thread that is executing in DO_ONCE
 }
 
 void error_initialize (int argc, char *argv[])

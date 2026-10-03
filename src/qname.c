@@ -17,6 +17,7 @@
 #include "dyn_int.h"
 #include "reconstruct.h"
 #include "multiplexer.h"
+#include "hash.h"
 
 mSTRl(copy_qname, NUM_QTYPES, 16);
 sSTRl(copy_q5name, 16);
@@ -75,6 +76,7 @@ static void qname_generate_qfs_with_mate (QnameFlavorStruct *qfs)
     strcpy (&qfs->name[strlen(qfs->name)], "@");
     
     // examples
+    qfs->examples_malloced = true; // examples strings are allocated on the heap for this flavor
     for (int i=0; i < QFS_MAX_EXAMPLES; i++) {
         if (!qfs->example[i]) break;
 
@@ -914,11 +916,28 @@ uint64_t qname_calc_hash (QType q, CompIType comp_i/*only used in PIZ*/, STRp(qn
         
     if (!qname_len) return 0;
 
-    uint8_t data[qname_len];
-    for (int i=0; i < qname_len; i++)
+    alignas(8) uint8_t data[qname_len];
+
+    // mix up qname for better hash distribution
+    int i=0;
+    
+    // full words - SWAR optimization (removing this loop will not modify the resulting data)
+    for (; i+8 <= qname_len; i+=8) {
+        uint64_t first = *(unaligned_uint64_t *)(qname + i);
+        uint64_t last  = *(unaligned_uint64_t *)(qname + qname_len - i - 8);
+        first -= 0x2121212121212121ULL;  // substract 33 from every byte (note: this assumes every byte >= 33. If not, then this won't be equivalent to the scalar version, but that's ok)
+        last  &= 0x0303030303030303ULL;  // keep 2 LSb of every byte
+        last = __builtin_bswap64 (last); // reverse the 8 bytes of the word 
+        *(uint64_t *)(data + i) = (first & 0x3f3f3f3f3f3f3f3fULL) | (last << 6); // every byte: 6 LSb comes from first and 2 MSb from from last LSb
+    }
+
+    // tail - scalar
+    for (; i < qname_len; i++)
         data[i] = ((((uint8_t *)qname)[i]-33) & 0x3f) | ((((uint8_t *)qname)[qname_len-i-1] & 0x3) << 6);
 
-    uint64_t hash = (type == CRC64) ? crc64 (0, data, qname_len) : crc32 (0, data, qname_len);
+    uint64_t hash = (type == CRC64) ? crc64 (0, data, qname_len) 
+                                    : hash_crc32 ((rom)data, qname_len);
+
     if (is_last != unknown) hash = (hash & 0xfffffffffffffffe) | is_last;
 
     return hash;
@@ -1067,4 +1086,13 @@ static void seg_qname_mgi_new_cb (VBlockP vb, ContextP ctx, STRp(copy))
 
     else
         seg_numeric_or_not (vb, ctx, STRa(copy), copy_len);
+}
+
+// free all allocated memory
+void qname_finalize (void)
+{
+    for (QnameFlavorStruct *qfs=&qf[0]; qfs < &qf[NUM_QFs]; qfs++) 
+        if (qfs->examples_malloced)    
+            for (int i=0; i < QFS_MAX_EXAMPLES; i++) 
+                FREE (qfs->example[i]);
 }

@@ -29,7 +29,7 @@ void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t s1, unsigned ad
     ContextP ctx = CTX (OPTION_s1_i);
     
     int32_t cm = 0;
-    sam_seg_peek_int_field (vb, OPTION_cm_i, vb->idx_cm_i, 1, 1000000, true/*needed for delta*/, &cm); // cm assigned only if successful
+    sam_seg_peek_int_field (vb, OPTION_cm_i, vb->idx.cm_i, 1, 1000000, true/*needed for delta*/, &cm); // cm assigned only if successful
 
     if (segconf_running) {
         // calculate average (s1:i / cm:i) x32

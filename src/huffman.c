@@ -80,10 +80,14 @@ static inline int huffman_compress_init_bits (STR8c(comp), BitsP bits, uint64_t 
     *next_bit = shift * 8;
 
     *bits = (Bits){ .nbits  = (comp_len + shift) * 8,    // note: possibly only partially covering last word
+                    .size   = ROUNDUP8(comp_len + shift),
                     .nwords = ROUNDUP8(comp_len + shift) / 8,
                     .words  = (uint64_t *)(comp - shift), // shift to bring address to word boundary
-                    .type   = BITS_STANDALONE };
-
+                    .type   = BITS_OVERLAY,
+                    .nameר  = ר(__FUNCTION__) };
+    
+    bits_clear_excess_bits_in_top_word (bits);
+    
     return shift;
 }
 
@@ -92,7 +96,7 @@ static inline void huffman_compress_finalize_bits (ContextP zctx, BitsP bits, ui
     ASSERT (next_bit <= bits->nbits, "bits overflow: expecting next_bit=%"PRIu64" <= nbits=%"PRIu64" for %s",
             next_bit, bits->nbits, zctx->tag_name);
 
-    bits_truncate (bits, next_bit);
+    bits_resize (bits, next_bit);
 
     uint32_t updated_comp_len = roundup_bits2bytes(next_bit) - shift; // number of bytes
     ASSERT (updated_comp_len <= *comp_len, "compression overflow: available %u bytes but generated %u bytes", *comp_len, updated_comp_len);
@@ -118,8 +122,9 @@ static inline void huffman_compress_finalize_bits (ContextP zctx, BitsP bits, ui
 #define huffman_uncompress_init_bits                                        \
     Bits bits = { .nbits  = 64000000000ULL, /* some very large number */    \
                   .nwords = 1000000000ULL,                                  \
-                  .type   = BITS_STANDALONE,                                \
-                  .words  = (uint64_t *)ROUNDDOWN8 ((uint64_t)comp) }; /* shift back to align with a 64b word boundary (counting on pointers being up to 64 bit) */ \
+                  .type   = BITS_OVERLAY,                                \
+                  .words  = (uint64_t *)ROUNDDOWN8 ((uint64_t)comp), /* shift back to align with a 64b word boundary (counting on pointers being up to 64 bit) */ \
+                  .nameר  = ר(__FUNCTION__) };                                 \
     uint64_t bit_i = (comp - (bytes)bits.words) * 8; /* note: if we shifted .words back, the initial value of bit_i will point to were the data actually starts */
 
 #define huffman_uncompress_comp_len (roundup_bits2bytes(bit_i) - (comp - (bytes)bits.words))
@@ -300,8 +305,7 @@ static void huffman_show (HuffmanCodesP h)
             else                           
                 iprintf ("%s: code of %-3d", zctx->tag_name, c);
 
-            Bits bits = { .nwords = 1, .nbits = h->code_n_bits[c], .words = &h->codes[c], .type = BUF_REGULAR };
-            bits_print (&bits);    
+            iprintf ("%s", bits_word_to_01_string (h->codes[c], h->code_n_bits[c]).s); // some number of bits <= 64
         }
 }
 
@@ -323,7 +327,7 @@ static void huffman_generate_codes (ContextP zctx, HuffmanCodesP h, uint32_t num
 
         int c = h->nodes[i].c; // also == i-1
 
-        Bits bits = { .nwords = 1, .nbits = 64, .words = &h->codes[c], .type = BUF_REGULAR };
+        Bits bits = { .nwords = 1, .nbits = 64, .words = &h->codes[c], .type = BUF_REGULAR, .nameר = ר(__FUNCTION__) };
         
         int node, parent;
         for (node = i; node != h->roots[0]; node = parent) {
@@ -577,8 +581,9 @@ int huffman_uncompress_len (Did did_i, bytes comp, uint32_t uncomp_len)
 
     Bits bits = { .nbits  = 64000000000ULL, // some very large number
                   .nwords = 1000000000ULL,
-                  .type   = BITS_STANDALONE,
-                  .words  = (uint64_t *)ROUNDDOWN8 ((uint64_t)comp) }; // shift back to align with a 64b word boundary (counting on pointers being up to 64 bit)
+                  .type   = BITS_OVERLAY,
+                  .words  = (uint64_t *)ROUNDDOWN8 ((uint64_t)comp), /* shift back to align with a 64b word boundary (counting on pointers being up to 64 bit) */
+                  .nameר  = ר(__FUNCTION__) };
 
     // note: if we shifted .words back, the initial value of bit_i will point to were the data actually starts
     uint64_t bit_i = (comp - (bytes)bits.words) * 8;
@@ -808,6 +813,8 @@ void nico_produce_compressor (Did did_i, bool is_deep_cigar)
 // any thread: compress one cigar with big numbers inline
 uint32_t nico_compress_cigar (VBlockP vb, Did did_i, BamCigarOpP cigar, uint32_t n_cigar_op, STR8c(comp)) 
 {
+    START_TIMER;
+
     decl_zctx (did_i);
     ASSHUFFEXISTS;
 
@@ -847,6 +854,7 @@ uint32_t nico_compress_cigar (VBlockP vb, Did did_i, BamCigarOpP cigar, uint32_t
         iprintf ("%s: n_cigar_op=%u comp_len=%u ratio=%.1f\n", 
                  zctx->tag_name, n_cigar_op, comp_len, ((double)(n_cigar_op*4)+2) / (double)comp_len);
 
+    COPY_TIMER (nico_compress_cigar);
     return comp_len;
 }
 

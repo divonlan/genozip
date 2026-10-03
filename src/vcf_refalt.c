@@ -378,7 +378,7 @@ void vcf_piz_refalt_parse (VBlockVCFP vb)
 
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_obsolete_dvcf)
 {
-    ABORT0 ("Error: use Genozip up to 15.0.41");
+    ABORT0 ("use Genozip up to 15.0.41");
     return NO_NEW_VALUE;
 }
 

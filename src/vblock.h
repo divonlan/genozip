@@ -40,22 +40,68 @@ typedef struct {
 
 #define MAX_ROLLBACK_CTXS 100
 
+// note: VBlocks are allocated aligned to 64B, and Contexts and Buffers with in it are 
+// manually curated to be 64B aligned and verified in vb_initialize_nonpool_vb(). Wy not alignas(64)? see comment in typedef Buffer.
 #define VBLOCK_COMMON_FIELDS \
-    /************* fields that survive buflist_free_vb *************/ \
+    /* § 0-7 */ \
     Buffer buffer_list;           /* a buffer containing an array of pointers to all buffers allocated or overlayed in this VB (either by the main thread or its compute thread). */\
-    VBID id;                      /* id of vb within the vb pool (-1 is the external vb) */\
+    /* § 8   */ \
+    VBID id;                      /* index of vb within the vb pool, or negative for one of the non-pool VBs */\
     DataType data_type;           /* type of this VB. In PIZ, this is the z_file data_type, NOT flag.out_dt */\
     DataType data_type_alloced;   /* type of this VB was allocated as. could be different that data_type, see vb_get_vb */\
-    VBlockPoolType pool;          /* the VB pool to which this VB belongs */ \
     volatile bool in_use;         /* this vb is in use. MUST be last in this section (expected by buflist_free_vb) */\
-    /********** end of fields that survive buflist_free_vb **********/ \
+    /* § 9-15 */ \
+    uint64_t padding[7];          /* padding so that ca is 64B-aligned */ \
+    \
+    /********** 64B aligned (single cache line): Contexts and Buffers **********/ \
+    ContextArray ca;              /* ZIP/PIZ. 64B aligned and sized (> 99% of size of VBlock)*/ \
+    Buffer txt_data;              /* ZIP: txt_data as read from disk and uncompressed - either the txt header (in evb) or the VB data lines */\
+                                  /* PIZ: reconstructed data */\
+    Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB; in Deep: .count counts deepable lines in VB */\
+                                  /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is BAFT(txt_data). */\
+    Buffer z_data;                /* ZIP/PIZ: all headers and section data as read from disk */\
+    Buffer gz_blocks;             /* ZIP: an array of GzBlockZip tracking the uncompression of BGZF/ILxM blocks in comp_txt_data into txt_data.  */\
+                                  /* PIZ: an array of BgzfBlockPiz */ \
+    union { \
+        Buffer frozen_state;      /* PIZ: reconstruction state - frozen during reconstruct_peek */ \
+        Buffer ra_buf;            /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
+    };\
+    Buffer spiced_pw;             /* ZIP/PIZ: used by crypt_generate_aes_key() */\
+    union { \
+        Buffer z_data_test;       /* ZIP: for use of codec_assign_best_codec */ \
+        Buffer reread_prescription;/* ZIP SAM/BAM DEPN: list of lines to be re-read at seg initialize */\
+        Buffer optimized_txt_data;/* ZIP: --optimized: txt_data being re-written, if it cannot be re-written in place */ \
+        Buffer bai_linear;        /* PIZ BGZF VB : data for preparing BAI linear index */\
+    }; \
+    Buffer comp_txt_data;         /* ZIP/PIZ: source-compressed data as read/written from/to disk */ \
+    Buffer z_section_headers;     /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
+    Buffer scratch;               /* helper buffer: used by many functions. before usage, assert that its free, and buf_free after. */\
+    \
+    union { \
+        Buffer gencomp_lines;     /* ZIP SAM: array of GencompLineIEntry: SAM-SA: primary/dependent lines */ \
+        Buffer optimized_line;    /* ZIP: re-written line in case of --optimize */ \
+        Buffer flusher_blocks;    /* PIZ writer vb */ \
+        Buffer bai_stats;         /* PIZ BGZF VB : collect per-contig info on mapped/placed-unmapped reads for BAI file. .count counts unmapped-unplaced reads. */\
+    }; \
+    \
+    union { \
+        Buffer dt_specific_vb_header_payload; /* ZIP/PIZ VBs: generic name for dt-specific data like vb_plan */ \
+        Buffer vb_plan;           /* SAM MAIN: reconstruction plan for this VB */ \
+        Buffer bai_chunks;        /* PIZ BGZF VB : information for R-tree index in BAI file */\
+        Buffer tbi_contigs;       /* SHOW_BAI evb: used if showing a TBI file */\
+    }; \
+    Buffer show_headers_buf;      /* ZIP --show-headers VB: collects output of --show-headers during compress, displaying vb is written so that it appears in the same order as written to disk */\
+    Buffer section_list;          /* ZIP: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
+    Buffer codec_bufs[NUM_CODEC_BUFS];  /* memory allocation for compressor so it doesn't do its own malloc/free */ \
+    /********** END OF 64B aligned (ca's first fields are 64B aligned, and the final ones are not) **********/ \
     \
     VBIType vblock_i;             /* VB 1-based sequential number in the dispatcher (or 0 if not in dispatcher) */\
     CompIType comp_i;             /* ZIP/PIZ: txt component within z_file that this VB belongs to  */ \
     bool is_last_vb_in_txt_file;  /* ZIP: this VB is the last VB in its txt_file (excluding gencomp VBs)  */ \
+    \
     union { \
-    Codec txt_codec;              /* ZIP: if compute thread is expected to decompress scratch into txt_data, this is the codec. If not, CODEC_UNKNOWN. */ \
-    bool is_txt_header;           /* PIZ BGZF VBs: is this data from PLAN_TXTHEADER */ \
+        Codec txt_codec;          /* ZIP: if compute thread is expected to decompress scratch into txt_data, this is the codec. If not, CODEC_UNKNOWN. */ \
+        bool is_txt_header;       /* PIZ: BGZF VBs: is this data from PLAN_TXTHEADER */ \
     };  \
     \
     /* compute thread stuff */ \
@@ -72,10 +118,8 @@ typedef struct {
     DeferredField deferred_q[DEFERRED_Q_SZ];/* ZIP/PIZ: contexts who's seg/recon is deferred to the end of the line */ \
     \
     /* tracking lines */\
-    Buffer lines;                 /* ZIP: An array of *DataLine* - the lines in this VB; in Deep: .count counts deepable lines in VB */\
-                                  /* PIZ: array of (num_lines+1) x (char *) - pointer to within txt_data - start of each line. last item is BAFT(txt_data). */\
     BitsP is_dropped;             /* PIZ: a bits with a bit set is the line is marked for dropping by container_reconstruct */ \
-    uint32_t num_lines_at_1_3, num_lines_at_2_3; /* ZIP VB=1 the number of lines segmented when 1/3 + 2/3 of estimate was reached  */\
+    uint32_t num_lines_at_⅓[2];   /* ZIP: the number of lines segmented when ⅓ and ⅔ of Ltxt was reached  */\
     uint32_t debug_line_hash;     /* Seg: adler32 of line, used if Seg modifies line */\
     bool debug_line_hash_skip;    /* Seg: don't calculate debug_line_hash as line is skipped */\
     \
@@ -88,7 +132,7 @@ typedef struct {
     uint32_t sample_i;            /* ZIP/PIZ: VCF: current sample in line (0-based) */ \
     LineIType line_i;             /* ZIP/PIZ: current line in VB (0-based) being segmented/reconstructed */\
     Did curr_item;                /* PIZ: item being reconstructed */ \
-    int64_t rback_id;             /* ZIP: sequential number of current rollback point */ \
+    int32_t rback_id;             /* ZIP: sequential number of current rollback point */ \
     uint32_t line_start;          /* ZIP/PIZ: position of start of line currently being segged / reconstructed in vb->txt_data */\
     uint32_t line_bgzf_uoffset;   /* ZIP: offset in uncompressed bgzf block of the start of the current line (current_bb_i) */  \
     \
@@ -102,22 +146,20 @@ typedef struct {
     rom drop_curr_line;           /* PIZ: line currently in reconstruction is to be dropped due a filter (value is filter name) */\
     uint32_t num_nondrop_lines;   /* PIZ: number of lines NOT dropped as a result of drop_curr_line */\
     \
-    union {                                     \
-    struct { /* ZIP */                          \
-    uint32_t num_rollback_ctxs;   /* ZIP: Seg rollback contexts */ \
-    Did rollback_dids[MAX_ROLLBACK_CTXS];       \
-    };                                          \
-    struct { /* PIZ */                          \
-    uint32_t con_stack_len;                     \
-    ConStack con_stack[MAX_CON_STACK]; /* PIZ: current containers being reconstructed ([0] is always a top level container) */ \
-    };                                          \
-    struct { /* PIZ BGZF VB (for BAI writing)*/ \
-        uint32_t first_rname, last_rname; /* need to be unsigned so rname=-1 (unmapped) is last*/ \
-        PosType32 first_pos,  last_pos;         \
-    };                                          \
-    };                                          \
-    \
-    Buffer frozen_state;          /* PIZ: reconstruction state - frozen during reconstruct_peek */ \
+    union {                                         \
+        struct { /* ZIP */                          \
+            uint32_t num_rollback_ctxs;   /* ZIP: Seg rollback contexts */ \
+            Did rollback_dids[MAX_ROLLBACK_CTXS];   \
+        };                                          \
+        struct { /* PIZ */                          \
+            uint32_t con_stack_len;                 \
+            ConStack con_stack[MAX_CON_STACK]; /* PIZ: current containers being reconstructed ([0] is always a top level container) */ \
+        };                                          \
+        struct { /* PIZ BGZF VB (for BAI writing)*/ \
+            uint32_t first_rname, last_rname; /* need to be unsigned so rname=-1 (unmapped) is last*/ \
+            PosType32 first_pos,  last_pos;         \
+        };                                          \
+    };                                              \
     \
     /* data for dictionary, txt_header and recon_plan compressing */ \
     char *fragment_start;        \
@@ -127,74 +169,36 @@ typedef struct {
     \
     RangeP range;                 /* ZIP: used for compressing the reference ranges and also refhash (make-ref or internal). SAM PIZ: used for reconstructing SEQ */ \
     \
-    ProfilerVb profile; \
+    𝓅𝓇ℴ𝒻𝒾𝓁ℯ (Profiler_Vb profile;) \
     \
     /* bgzf - for handling bgzf-compressed files */ \
     void *gz_deflate_mem;         /* memory allocation for gz compressor libraries */ \
     struct libdeflate_decompressor *libdef_decomp_mem; \
     uint64_t vb_mgzip_i;          /* ZIP: index into txt_file->mgzip_isizes of the first MGZIP block in vb->gz_blocks. This first gz_block might have been partially consumed by the previous VB (vb->gz_blocks.consumed_by_prev_vb bytes of it) */ \
-    Buffer gz_blocks;             /* ZIP: an array of GzBlockZip tracking the uncompression of BGZF/ILxM blocks in comp_txt_data into txt_data.  */\
-                                  /* PIZ: an array of BgzfBlockPiz */ \
     \
     /* random access, chrom, pos */ \
-    Buffer ra_buf;                /* ZIP only: array of RAEntry - copied to z_file at the end of each vb compression, then written as a SEC_RANDOM_ACCESS section at the end of the genozip file */\
     WordIndex chrom_node_index;   /* ZIP and PIZ: index and name of chrom of the current line. Note: since v12, this is redundant with last_int (CHROM) */ \
     STR(chrom_name);              /* since v12, this redundant with last_txtx/last_txt_len (CHROM) */ \
     uint32_t seq_len;             /* PIZ - last calculated seq_len (as defined by each data_type) */\
     uint32_t longest_seq_len;     /* ZIP/PIZ SAM/BAM/FASTQ: largest seq_len of textual SEQ in this VB. Transmitted through SectionHeaderVbHeader.longest_seq_len */\
     \
     /* crypto stuff */\
-    Buffer spiced_pw;             /* used by crypt_generate_aes_key() */\
     int bi;                       /* used by AES */ \
     uint8_t aes_round_key[240];   /* for 256 bit aes */\
     uint8_t aes_iv[AES_BLOCKLEN]; \
     \
     /* file data */\
-    Buffer z_data;                /* all headers and section data as read from disk */\
-    union { \
-    Buffer z_data_test;           /* ZIP: for use of codec_assign_best_codec */ \
-    Buffer reread_prescription;   /* ZIP SAM/BAM DEPN: list of lines to be re-read at seg initialize */\
-    Buffer optimized_txt_data;    /* ZIP: --optimized: txt_data being re-written, if it cannot be re-written in place */ \
-    Buffer bai_linear;            /* PIZ BGZF VB : data for preparing BAI linear index */\
-    }; \
-    Buffer txt_data;              /* ZIP: txt_data as read from disk and uncompressed - either the txt header (in evb) or the VB data lines */\
-                                  /* PIZ: reconstructed data */\
-    Buffer comp_txt_data;         /* ZIP/PIZ: source-compressed data as read/written from/to disk */ \
-    Buffer z_section_headers;     /* PIZ and Pair-1 reading in ZIP-Fastq: an array of unsigned offsets of section headers within z_data */\
-    Buffer scratch;               /* helper buffer: used by many functions. before usage, assert that its free, and buf_free after. */\
     int16_t z_next_header_i;      /* next header of this VB to be encrypted or decrypted */\
-    \
-    ContextArray ca;    \
     \
     /* reference range lookup caching */ \
     RangeP prev_range;            /* previous range returned by ref_seg_get_range */ \
     uint32_t prev_range_range_i;  /* range_i used to calculate previous range */ \
     WordIndex prev_range_chrom_node_index; /* chrom used to calculate previous range */ \
     \
-    /* ref_iupac quick lookup */\
-    ConstRangeP iupacs_last_range; \
-    PosType64 iupacs_last_pos, iupacs_next_pos; \
-    \
-    union { \
-    Buffer gencomp_lines;         /* ZIP SAM: array of GencompLineIEntry: SAM-SA: primary/dependent lines */ \
-    Buffer optimized_line;        /* ZIP: re-written line in case of --optimize */ \
-    Buffer flusher_blocks;        /* PIZ writer vb */ \
-    Buffer bai_stats;             /* PIZ BGZF VB : collect per-contig info on mapped/placed-unmapped reads for BAI file. .count counts unmapped-unplaced reads. */\
-    }; \
-    \
-    union { \
-    Buffer dt_specific_vb_header_payload; /* ZIP/PIZ VBs: generic name for dt-specific data like vb_plan */ \
-    Buffer vb_plan;               /* SAM MAIN: reconstruction plan for this VB */ \
-    Buffer bai_chunks;            /* PIZ BGZF VB : information for R-tree index in BAI file */\
-    Buffer tbi_contigs;           /* SHOW_BAI evb: used if showing a TBI file */\
-    }; \
-    \
     /* Information content stats - how many bytes does this section have more than the corresponding part of the vcf file */\
-    Buffer show_headers_buf;      /* ZIP --show-headers VB: collects output of --show-headers during compress, displaying vb is written so that it appears in the same order as written to disk */\
-    Buffer section_list;          /* ZIP: all the sections non-dictionary created in this vb. we collect them as the vb is processed, and add them to the zfile list in correct order of VBs. */\
     union { \
-    uint32_t num_sequences;       /* ZIP: FASTA: num DESC lines encountered in this VB */ \
-    uint32_t num_aligned_perfect; /* ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
+        uint32_t num_sequences;   /* ZIP: FASTA: num DESC lines encountered in this VB */ \
+        uint32_t num_aligned_perfect; /* ZIP: SAM/BAM/FASTQ: number of perfect matches found by aligner */ \
     }; \
     uint32_t num_aligned;         /* ZIP: SAM/BAM/FASTQ: number of lines successfully aligned by the aligner. for stats */ \
     uint32_t num_aligned_spliced; /* ZIP: SAM/BAM/FASTQ: number of lines successfully aligned by the aligner. for stats */ \
@@ -208,9 +212,12 @@ typedef struct {
     \
     /* Codec stuff */ \
     Codec codec_using_codec_bufs; /* codec currently using codec_bufs */\
-    Buffer codec_bufs[NUM_CODEC_BUFS]; /* memory allocation for compressor so it doesn't do its own malloc/free */ 
-    #define final_member codec_bufs[NUM_CODEC_BUFS-1]
-    // ^^^ MUST END WITH A 64 bit member (which Buffer does) ^^^^
+    \
+    /* ref_iupac quick lookup */\
+    ConstRangeP iupacs_last_range; \
+    PosType64 iupacs_last_pos, iupacs_next_pos; 
+    #define final_member iupacs_next_pos
+    // ^^^ MUST END WITH A 64 bit member (which PosType64 does) so the dt-specific part is word-aligned  ^^^^
 
 typedef struct VBlock {
     VBLOCK_COMMON_FIELDS
@@ -234,9 +241,9 @@ extern void vb_destroy_vb_do (VBlockP *vb_p, rom func);
 
 extern void vb_dehoard_memory (bool release_to_kernel);
 
-extern VBlockP vb_initialize_nonpool_vb (VBID vb_id, DataType dt, Task task);
+extern VBlockP vb_initialize_nonpool_vb (VBIDIndex nonpool, DataType dt, Task task);
 extern void vb_change_datatype_nonpool_vb (VBlockP *vb_p, DataType new_dt);
-extern VBlockP vb_get_nonpool_vb (VBID vb_id);
+extern VBlockP vb_get_nonpool_vb (VBIDIndex nonpool);
 
 static inline bool vb_is_gencomp (VBlockP vb) 
 {   
@@ -247,22 +254,26 @@ static inline bool vb_is_gencomp (VBlockP vb)
 // vb_pool stuff
 // -------------
 
+#define MAX_POOL_VBS 4096
+
 typedef struct VBlockPool {
     rom name;
     uint32_t size;              // size of memory allocated for this struct
-    uint32_t num_vbs;           // length of array of pointers to VBlock
-    uint32_t num_allocated_vbs; // number of VBlocks allocated ( <= num_vbs )
-    uint32_t num_in_use;        // number of VBlocks currently in use ( <= num_allocated )
+    VBIDIndex num_vbs;          // length of array of pointers to VBlock
+    VBIDIndex num_allocated_vbs;// number of VBlocks allocated ( <= num_vbs )
+    VBIDIndex num_in_use;       // number of VBlocks currently in use ( <= num_allocated )
     VBlockP vb[];               // variable length
 } VBlockPool;
 
 extern void vb_create_pool (VBlockPoolType type);
 extern VBlockPool *vb_get_pool (VBlockPoolType type, FailType soft_fail);
-extern VBlockP vb_get_from_pool (VBlockPoolP pool, VBID vb_id);
+extern VBlockP vb_get_from_pool (VBlockPoolP pool, VBIDIndex index);
 extern void vb_destroy_pool (VBlockPoolType type, bool destroy_pool);
 extern uint32_t vb_pool_get_num_in_use (VBlockPoolType type, VBID *id_in_use);
 extern bool vb_pool_is_full (VBlockPoolType type);
 extern bool vb_pool_is_empty (VBlockPoolType type);
+extern rom pool_name (VBlockPoolType type);
+extern StrText dis_vb_id (VBID vb_id);
 
 extern bool vb_is_processed (VBlockP vb);
 extern void vb_set_is_processed (VBlockP vb);

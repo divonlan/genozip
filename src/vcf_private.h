@@ -163,16 +163,15 @@ typedef struct VBlockVCF {
     #define DOUBLE_MAX_ALLELES 32  // 2x MAX_ALLELES (must be an integer macro)
     int64_t ad_values[MAX_ALLELES];
     
-    #define first_idx idx_AN        // ZIP: INFO fields indices within INFO
     // IMPORTANT: when adding, add to X() in vcf_parse_info_subfields
-    int16_t idx_AN, idx_AC, idx_AF, idx_MLEAC, idx_MLEAF, idx_AC_Hom, idx_AC_Het, idx_AC_Hemi, idx_QD, idx_DP, idx_SF, 
-            idx_AS_SB_TABLE, idx_END, idx_SVLEN, idx_CIPOS, idx_BaseCounts, idx_DPB,
-            idx_SVTYPE, idx_HOMSEQ, idx_DUPHOMSEQ, idx_SVINSSEQ, idx_DUPSVINSSEQ, idx_LEFT_SVINSSEQ,
-            idx_platformnames, idx_datasetnames, idx_callsetnames, idx_AF1000G, idx_RefMinor,
-            idx_COMMON; 
-
-    #define has(f)   (vb->idx_##f != -1)
-    #define after_idx mux_PLn
+    struct {
+        int16_t AN, AC, AF, MLEAC, MLEAF, AC_Hom, AC_Het, AC_Hemi, QD, DP, SF, 
+                AS_SB_TABLE, END, SVLEN, CIPOS, BaseCounts, DPB,
+                SVTYPE, HOMSEQ, DUPHOMSEQ, SVINSSEQ, DUPSVINSSEQ, LEFT_SVINSSEQ,
+                platformnames, datasetnames, callsetnames, AF1000G, RefMinor,
+                COMMON; 
+        #define has(f) (vb->idx.f >= 0) // -1=subfield not in this line's INFO; -2=appears more than once in this line's INFO
+    } idx;
 
     #define is_deferred(did_i) (bitset_get (VB_VCF->is_deferred_, (did_i)))
     uint64_t is_deferred_[(NUM_VCF_FIELDS + 63)/64]; // PIZ: bitmap: 1 for fields whose reconstruction is deferred. note: only pre-defined fields are deferrable. note: here and not in Context, so we can erase them quickly in vcf_reset_line
@@ -214,7 +213,7 @@ extern VcfVersion vcf_header_get_version (void);
 #define SEGCONF_MAX_WIDTH 63
 #define SEGCONF_RECORD_WIDTH(did_i, width) if (segconf_running && (width) <= SEGCONF_MAX_WIDTH && z_file) (*B32(ZCTX(did_i)->width_count, width))++
 
-#define BII(x) B(InfoItem, vb->ca.contexts[VCF_INFO].info_items, vb->idx_##x)
+#define BII(x) B(InfoItem, vb->ca.contexts[VCF_INFO].info_items, vb->idx.x)
 
 extern void vcf_seg_field_fallback (VBlockVCFP vb, ContextP ctx, STRp(value));
 extern void vcf_seg_string (VBlockVCFP vb, ContextP ctx, STRp(value));
@@ -478,7 +477,7 @@ extern void vcf_seg_INFO_REFLEN (VBlockVCFP vb, ContextP ctx, STRp(reflen_str));
 extern void vcf_seg_INFO_CIPOS (VBlockVCFP vb, ContextP ctx, STRp(cipos));
 extern void vcf_seg_INFO_CIEND (VBlockVCFP vb, ContextP ctx, STRp(ciend));
 extern void vcf_seg_HOMSEQ (VBlockVCFP vb, ContextP ctx, STRp(homseq));
-extern void vcf_seg_BND_mate (VBlockVCFP vb, STRp(id), STRp(mate_id), uint64_t hash);
+extern void vcf_seg_BND_mate (VBlockVCFP vb, STRp(id), STRp(mate_id), uint32_t hash);
 extern ContextP vcf_seg_sv_SAMPLES (VBlockVCFP vb, rom samples, uint32_t remaining_txt_len, ContextP *ctxs, uint32_t n_ctxs);
 extern ContextP vcf_seg_sv_copy_mate (VBlockVCFP vb, ContextP ctx, STRp(value), int tw, int her_tw, bool seg_only_if_mated, unsigned add_bytes);
 
@@ -542,7 +541,7 @@ eSTRl(copy_VCF_ID_snip);
 eSTRl(copy_INFO_AF_snip);
 eSTRl(copy_BaseCounts_sum);
 
-#define VCF_ERR_PREFIX { progress_newline(); fprintf (stderr, "Error %s:%u in variant %.*s:%"PRId64": ", __FUNCLINE, STRf(vb->chrom_name), vb->last_int (VCF_POS)); }
+#define VCF_ERR_PREFIX { progress_newline(); fprintf (stderr, "Error %s:%u in variant %.*s:%"PRId64": ", __FUNCTION__, __LINE__, STRf(vb->chrom_name), vb->last_int (VCF_POS)); }
 #define ASSVCF(condition, format, ...) ({ if (!(condition)) { VCF_ERR_PREFIX; fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); exit_on_error(true); }})
 #define ASSVCF0(condition, msg)        ASSVCF ((condition), msg "%s", "")
 #define WARNVCF(format, ...)           ({ if (!flag.quiet)  { VCF_ERR_PREFIX; fprintf (stderr, format "\n", __VA_ARGS__); } })

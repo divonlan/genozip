@@ -16,7 +16,7 @@ bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, 
 {
     ASSWRET (buf->type == BUF_REGULAR, false, 
              _FYI "Failed to dump buffer.type=%s name=%s while putting %s", 
-             buf_type_name (buf), buf->name ? buf->name : "(null)", filename);
+             buf_type_name (buf), unר(buf->nameר), filename);
 
     int fn_len = strlen(filename);
     char update_filename[fn_len + 10];
@@ -51,16 +51,16 @@ bool buf_dump_to_file (rom filename, ConstBufferP buf, unsigned buf_word_width, 
 void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src, 
                   uint64_t bytes_per_entry, // how many bytes are counted by a unit of .len
                   uint64_t src_start_entry, uint64_t max_entries,  // if 0 copies the entire buffer 
-                  FUNCLINE,
+                  Caller caller,
                   rom dst_name) // dst buffer settings, or take from src if 0
 {
     ASSERTNOTNULL (src);
     ASSERTNOTNULL (dst);
 
-    ASSERT (src->data, "called from %s:%u: src->data is NULL", func, code_line);
+    ASSERT (src->data, "called from %s:%u: src->data is NULL", CALLERf);
     
     ASSERT (!max_entries || src_start_entry < src->len, 
-            "buf_copy of %s called from %s:%u: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, buf_desc(src).s, func, code_line, src_start_entry, src->len);
+            "buf_copy of %s called from %s:%u: src_start_entry=%"PRIu64" is larger than src->len=%"PRIu64, buf_desc(src).s, CALLERf, src_start_entry, src->len);
 
     uint64_t num_entries = src->len - MIN_(src_start_entry, src->len);
     if (max_entries && max_entries < num_entries) num_entries = max_entries;
@@ -69,7 +69,7 @@ void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src,
     if (!bytes_per_entry) bytes_per_entry=1;
     
     if (num_entries) {
-        buf_alloc_(dst_vb, dst, 0, num_entries * bytes_per_entry, 1, 1, dst_name ? dst_name : src->name, func, code_line); 
+        buf_alloc_(dst_vb, dst, 0, num_entries * bytes_per_entry, 1, 1, dst_name ? dst_name : unר(src->nameר), caller); 
 
         if (dst != src || src_start_entry >= num_entries)
             memcpy (dst->data, &src->data[src_start_entry * bytes_per_entry], num_entries * bytes_per_entry);
@@ -81,12 +81,12 @@ void buf_copy_do (VBlockP dst_vb, BufferP dst, ConstBufferP src,
 }   
 
 // removes a section from the buffer
-void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len, FUNCLINE)
+void buf_remove_do (BufferP buf, unsigned sizeof_item, uint64_t remove_start, uint64_t remove_len, Caller caller)
 {
     if (!remove_len) return;
 
     ASSERT (remove_start + remove_len <= buf->len, "called from %s:%u: Out of range: remove_start=%"PRIu64" + remove_len=%"PRIu64" > buf->len=%"PRIu64" buf=%s",
-            func, code_line, remove_start, remove_len, buf->len, buf_desc(buf).s);
+            CALLERf, remove_start, remove_len, buf->len, buf_desc(buf).s);
 
     if (remove_len != buf->len) { // skip in common case of deleting entire buffer 
         uint64_t remove_start_byte = remove_start * sizeof_item;
@@ -110,15 +110,15 @@ void buf_add (BufferP buf, STRp(data)) // assumes buf->len is in bytes
     buf_add_do (buf, data, data_len);
 }
 
-void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name, FUNCLINE) 
+void buf_insert_do (VBlockP vb, BufferP buf, unsigned width, uint64_t insert_at, const void *new_data, uint64_t new_data_len, rom name, Caller caller) 
 { 
     if (!new_data_len) return;
 
-    buf_alloc_(vb ? vb : buf->vb, buf, new_data_len + (width==1)/*room for \0 or separator if char*/, 0, width, CTX_GROWTH, name, func, code_line); 
+    buf_alloc_(vb ? vb : buf->vb, buf, new_data_len + (width==1)/*room for \0 or separator if char*/, 0, width, CTX_GROWTH, name, caller); 
 
     if (insert_at != buf->len) {
         ASSERT (insert_at < buf->len, "called from %s:%u: expecting insert_at=%"PRIu64" <= buf->len=%"PRIu64" in buf=%s", 
-                func, code_line, insert_at, buf->len, buf_desc(buf).s);
+                CALLERf, insert_at, buf->len, buf_desc(buf).s);
 
         memmove (&buf->data[(insert_at + new_data_len) * width], &buf->data[insert_at * width], (buf->len - insert_at) * width);
     }
@@ -134,7 +134,7 @@ void buf_append_string (VBlockP vb, BufferP buf, rom str)
     uint64_t len = strlen (str); 
     ASSERT (len < 10000000, "len=%"PRIu64" too long, looks like a bug", len);
 
-    buf_add_more (vb, buf, str, len, buf->name ? buf->name : "string_buf"); // allocates one char extra
+    buf_add_more (vb, buf, str, len, buf->nameר ? unר(buf->nameר) : "string_buf"); // allocates one char extra
     *BAFTc (*buf) = '\0'; // string terminator without increasing buf->len
 }
 
@@ -207,128 +207,7 @@ char *buf_foreach_line (BufferP buf,
     return 0; // never reaches here
 }   
 
-//---------------------
-// Bits stuff
-//---------------------
 
-// adds "more_bits" to the bitmap, and optionally allocates memory beyond the end of the bitmap 
-// to avoid future allocations. optionally initializes (only) the new bits added.
-BitsP buf_alloc_bits_do (VBlockP vb, BufferP buf, uint64_t more_bits, uint64_t preallocate_at_least_bits, BitsInitType init_to, float grow_at_least_factor, rom name, FUNCLINE)
-{
-    ASSERT0 (buf->type == BUF_UNALLOCATED || buf->type == BUF_REGULAR, "buf needs to be BUF_UNALLOCATED or BUF_REGULAR");
-
-    uint64_t old_nbits  = buf->nbits;
-    uint64_t old_nwords = buf->nwords;
-    buf->nbits += more_bits;   
-    buf->nwords = roundup_bits2words64 (buf->nbits);
-    
-    // case: we're adding more words
-    if (buf->nwords != old_nwords) {
-        buf_alloc_(vb, buf, buf->nwords - old_nwords, preallocate_at_least_bits / 64, 
-                   sizeof(uint64_t), grow_at_least_factor, name, func, code_line);
-
-        // we need to clear the unused bits in the high word, however we can't use bits_clear_excess_bits_in_top_word because
-        // it is read-modify-write, in which read, reads uninitialized memory. instead, we just the zero the entire new word
-        buf->words[buf->nwords-1] = 0;
-    }
-    
-    // clear / set only added bits
-    if (init_to == CLEAR && buf->nbits > old_nbits) 
-        bits_clear_region (buf, old_nbits, buf->nbits - old_nbits);           
-    
-    else if (init_to == SET && buf->nbits > old_nbits) 
-        bits_set_region (buf, old_nbits, buf->nbits - old_nbits);           
-
-    return buf;
-}
-
-// creates and optionally initializes a bitmap of requested "exact_bits" 
-BitsP buf_alloc_bits_exact_do (VBlockP vb, BufferP buf, uint64_t exact_bits, BitsInitType init_to, float grow_at_least_factor, rom name, FUNCLINE)
-{
-    ASSERT0 (buf->type == BUF_UNALLOCATED || buf->type == BUF_REGULAR, "buf needs to be BUF_UNALLOCATED or BUF_REGULAR");
-
-    buf->nwords = roundup_bits2words64 (exact_bits);
-    buf->nbits  = exact_bits;   
-    
-    buf_alloc_(vb, buf, 0, buf->nwords, sizeof(uint64_t), grow_at_least_factor, name, func, code_line);
-
-    bits_clear_excess_bits_in_top_word (buf, false);
-
-    // clear / set all bits
-    if (init_to == CLEAR) 
-        bits_clear_region (buf, 0, exact_bits);
-
-    else if (init_to == SET) 
-        bits_set_region (buf, 0, exact_bits);
-
-    return buf;
-}
-
-BitsP buf_overlay_bits_do (VBlockP vb,
-                           BufferP top_buf, BufferP bottom_buf,  
-                           uint64_t start_byte_in_bottom_buf,
-                           uint64_t nbits,
-                           FUNCLINE, rom name)
-{
-    uint64_t nwords = roundup_bits2words64 (nbits);
-
-    buf_overlay_do (evb, top_buf, bottom_buf, start_byte_in_bottom_buf, false, func, code_line, name);
-
-    top_buf->nbits  = nbits;
-    top_buf->nwords = nwords;
-    return top_buf;
-}
-
-// convert a Buffer from a z_file section whose len is in char to a bits
-Bits *buf_zfile_buf_to_bits (BufferP buf, uint64_t nbits)
-{
-    ASSERT (roundup_bits2bytes (nbits) <= buf->len, "nbits=%"PRId64" indicating a length of at least %"PRId64", but buf->len=%"PRId64,
-            nbits, roundup_bits2bytes (nbits), buf->len);
-
-    Bits *bits = buf;
-    bits->nbits  = nbits;
-    bits->nwords = roundup_bits2words64 (bits->nbits);
-
-    ASSERT (roundup_bits2bytes64 (nbits) <= buf->size, "buffer to small: buf->size=%"PRId64" but bits has %"PRId64" words and hence requires %"PRId64" bytes",
-            (uint64_t)buf->size, bits->nwords, bits->nwords * sizeof(uint64_t));
-
-    LTEN_bits (bits);
-
-    bits_clear_excess_bits_in_top_word (bits, false);
-
-    return bits;
-}
-
-void buf_add_bit (BufferP buf, int64_t new_bit) 
-{
-    Bits *bar = buf;
-
-    ASSERT (bar->nbits < buf->size * 8, "no room in Buffer %s to extend the bitmap", buf->name);
-    bar->nbits++;     
-    if (bar->nbits % 64 == 1) { // starting a new word                
-        bar->nwords++;
-        bar->words[bar->nwords-1] = new_bit; // LSb is as requested, other 63 bits are 0
-    } 
-    else
-        bits_assign (bar, bar->nbits-1, new_bit);  
-}
- 
-uint64_t buf_extend_bits (BufferP buf, int64_t num_new_bits) 
-{
-    Bits *bar = buf;
-
-    ASSERT (bar->nbits + num_new_bits <= buf->size * 8, "Error in %s:%u: no room in Buffer %s to extend the bitmap: nbits=%"PRIu64", num_new_bits=%"PRId64", buf->size=%"PRIu64, 
-            __FUNCLINE, buf->name, bar->nbits, num_new_bits, (uint64_t)buf->size);
-    
-    uint64_t next_bit = bar->nbits;
-
-    bar->nbits += num_new_bits;     
-    bar->nwords = roundup_bits2words64 (bar->nbits);
-    bits_clear_excess_bits_in_top_word (bar, true);
-
-    return next_bit;
-}
- 
 //---------------------
 // Endianity stuff
 //---------------------
@@ -342,12 +221,12 @@ void LTEN_interlace_d32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐
 void LTEN_interlace_d64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { for_buf𐤐 (int64_t, num, *buf) *num = LTEN64 (INTERLACE(int64_t, *num)); }
 
 void BGEN_u8_buf  (Buffer𐤐 buf, UNUSED LocalType *lt) {}
-void BGEN_u16_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if ( flag.is_lten) for_buf𐤐 (uint16_t, num, *buf) *num = BGEN16 (*num); }
-void BGEN_u32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if ( flag.is_lten) for_buf𐤐 (uint32_t, num, *buf) *num = BGEN32 (*num); }
-void BGEN_u64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if ( flag.is_lten) for_buf𐤐 (uint64_t, num, *buf) *num = BGEN64 (*num); }
-void LTEN_u16_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if (!flag.is_lten) for_buf𐤐 (uint16_t, num, *buf) *num = LTEN16 (*num); }
-void LTEN_u32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if (!flag.is_lten) for_buf𐤐 (uint32_t, num, *buf) *num = LTEN32 (*num); }
-void LTEN_u64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { if (!flag.is_lten) for_buf𐤐 (uint64_t, num, *buf) *num = LTEN64 (*num); }
+void BGEN_u16_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { ℒ𝒾𝓉ℰ (for_buf𐤐 (uint16_t, num, *buf) *num = BGEN16 (*num);) }
+void BGEN_u32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { ℒ𝒾𝓉ℰ (for_buf𐤐 (uint32_t, num, *buf) *num = BGEN32 (*num);) }
+void BGEN_u64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { ℒ𝒾𝓉ℰ (for_buf𐤐 (uint64_t, num, *buf) *num = BGEN64 (*num);) }
+void LTEN_u16_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { ℬ𝒾ℊℰ (for_buf𐤐 (uint16_t, num, *buf) *num = LTEN16 (*num);) }
+void LTEN_u32_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { ℬ𝒾ℊℰ (for_buf𐤐 (uint32_t, num, *buf) *num = LTEN32 (*num);) }
+void LTEN_u64_buf (Buffer𐤐 buf, UNUSED LocalType *lt) { ℬ𝒾ℊℰ (for_buf𐤐 (uint64_t, num, *buf) *num = LTEN64 (*num);) }
 
 // number of columns is trasmitted in the count, except if this is a matrix of VCF samples, in which case param=0 and we take 
 // the number of columns to be the number of samples in the VCF header
@@ -368,19 +247,19 @@ void BGEN_transpose_u##n##_buf (BufferP buf, LocalType *lt)                     
                                                                                     \
     uint32_t cols = BGEN_transpose_num_cols (buf);                                  \
     uint32_t rows = buf->len / cols;                                                \
-                                                                                    \
-    buf_alloc (buf->vb, &buf->vb->scratch, 0, buf->len, uint##n##_t, 1, "scratch"); \
-    ARRAY (uint##n##_t, target, buf->vb->scratch);                                  \
+    BufferP scratch = &buf->vb->scratch;                                            \
+    buf_alloc (buf->vb, scratch, 0, buf->len, uint##n##_t, 1, "scratch");           \
+    ARRAY (uint##n##_t, target, *scratch);                                          \
     ARRAY (uint##n##_t, transposed, *buf);                                          \
                                                                                     \
     for (uint32_t c=0; c < cols; c++)                                               \
         for (uint32_t r=0; r < rows; r++)                                           \
             target[r * cols + c] = transposed[c * rows + r];                        \
                                                                                     \
-    buf->vb->scratch.len = buf->len;                                                \
-    buf_copy (buf->vb, buf, &buf->vb->scratch, uint##n##_t, 0, 0, C_LOCAL); /* copy and not move, so we can keep local's memory for next vb */ \
+    scratch->len = buf->len;                                                        \
+    buf_copy (NULL, buf, scratch, uint##n##_t, 0, 0, C_LOCAL); /* copy and not move, so we can keep local's memory for next vb */ \
                                                                                     \
-    buf_free (buf->vb->scratch);                                                    \
+    buf_free (*scratch);                                                            \
                                                                                     \
     if (lt) *lt = LT_UINT##n; /* no longer transposed */                            \
     if (n == 16) BGEN_u16_buf (buf, NULL);                                          \
@@ -397,12 +276,13 @@ void BGEN_ptranspose_u##n##_buf (BufferP buf, LocalType *lt)                    
 {                                                                                                       \
     if (!buf->len) return;                                                                              \
                                                                                                         \
+    VBlockP vb = buf->vb;                                                                               \
     uint32_t rows = vcf_header_get_num_samples(); /* rows in transposed matrix*/                        \
-    uint32_t cols = buf->vb->lines.len;           /* cols in transposed matrix  */                      \
+    uint32_t cols = vb->lines.len;           /* cols in transposed matrix  */                           \
                                                                                                         \
     /* note: "missing" array is already untransposed as vcf_piz_init_vb hoists it untranspose first */  \
-    ARRAY (bool, missing, buf->vb->ca.contexts[VCF_COPY_SAMPLE].local);                                 \
-    ARRAY_alloc (uint##n##_t, full, rows * cols, false, buf->vb->scratch, buf->vb, "scratch");          \
+    ARRAY (bool, missing, vb->ca.contexts[VCF_COPY_SAMPLE].local);                                      \
+    ARRAY_alloc (uint##n##_t, full, rows * cols, false, vb->scratch, vb, "scratch");                    \
                                                                                                         \
     /* generate "full" a rows x cols matrix (still transposed) with values set from buf, and missing values left uninitialized */ \
     uint##n##_t *data = B1ST(uint##n##_t, *buf);                                                        \
@@ -418,7 +298,7 @@ void BGEN_ptranspose_u##n##_buf (BufferP buf, LocalType *lt)                    
             if (!missing[c * rows + r])                                                                 \
                 *data++ = full[r * cols + c];                                                           \
                                                                                                         \
-    buf_free (buf->vb->scratch);                                                                        \
+    buf_free (vb->scratch);                                                                        \
                                                                                                         \
     if (lt) *lt = LT_UINT##n; /* no longer transposed */                                                \
     if (n == 16) BGEN_u16_buf (buf, NULL);                                                              \

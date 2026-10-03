@@ -46,17 +46,17 @@ extern void zfile_output_processed_vb_ext (VBlockP vb, bool background);
 extern uint64_t zfile_read_genozip_header_get_offset (bool as_is);
 extern bool zfile_read_genozip_header (SectionHeaderGenozipHeaderP header, FailType fail_type);
 
-extern SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec, SectionType expected_sec_type, FUNCLINE);
+extern SectionHeaderUnion zfile_read_section_header_do (VBlockP vb, Section sec, SectionType expected_sec_type, Caller caller);
 #define zfile_read_section_header(vb, sec, expected_sec_type) \
-    zfile_read_section_header_do ((VBlockP)(vb), (sec), (expected_sec_type), __FUNCLINE)
+    zfile_read_section_header_do ((VBlockP)(vb), (sec), (expected_sec_type), THIS_CODE_LINE)
 
 #define SECTION_SKIPPED ((int32_t)-1)
 extern int32_t zfile_read_section_do (FileP file, VBlockP vb, uint32_t original_vb_i, 
                                       BufferP data /* buffer to append */, rom buf_name,
                                       SectionType expected_sec_type, 
-                                      Section sec, FUNCLINE); 
+                                      Section sec, Caller caller); 
 #define zfile_read_section(file,vb,original_vb_i,data,buf_name,expected_sec_type,sec) \
-    zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sec), __FUNCLINE)
+    zfile_read_section_do ((file),(VBlockP)(vb),(original_vb_i),(data),(buf_name),(expected_sec_type),(sec), THIS_CODE_LINE)
 
 extern void zfile_uncompress_section (VBlockP vb, SectionHeaderUnionP section_header, BufferP uncompressed_data, rom uncompressed_data_buf_name, uint32_t expected_vb_i, SectionType expected_section_type);
 extern void zfile_uncompress_section_into_buf (VBlockP vb, SectionHeaderUnionP section_header_p, uint32_t expected_vb_i, SectionType expected_section_type, BufferP dst_buf, char *dst);

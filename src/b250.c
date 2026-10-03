@@ -233,7 +233,9 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
     uint_fast8_t orig_wi_len, prev_orig_wi_len=0;
     WordIndex needs_conversion_threadshold = ctx->ol_nodes.len32;
 
-    bool one_up_ok = (ctx->nodes.len + ctx->ol_nodes.len32 > 1024); // note: in small dictionaries introducing an extra symbol WORD_INDEX_ONE_UP worsens compression
+    // note: in small dictionaries introducing an extra symbol WORD_INDEX_ONE_UP worsens compression.
+    // we never allow it in pair, as both pairs need to the same b250 data, but ctx->ol_nodes.len32 is different (R2 already includes everything)  
+    bool one_up_ok = !flag.pair && (ctx->nodes.len + ctx->ol_nodes.len32 > 1024); 
     
     // scan backwards as type is in MSB which is the last byte in each yet-to-be-converted b250
     while (src >= first) {
@@ -281,8 +283,18 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
             // note: in deep the sections don't always match as a deeped read will have copy-from-deep, but if its mate is missing from SAM, it will be segged differently.
             // since we don't error if deep, it is possible that fastq files that are not aligned paired-end will be segged as such if they are close enough
             // so that their VBs get divvied up by txtfile_read_vblock in the same way, and paired VBs have the same number of lines. no harm. 
-            !flag.deep)
-            ABORTINP (NO_PAIR_FMT_PREFIX "%s %s.b250 is not identical to R1)", txt_name, VB_NAME, ctx->tag_name);
+            !flag.deep) {
+            
+            DO_ONCE_OR_STALL {
+                buf_dump_to_file ("b250_mismatch.R1.b250", &ctx->b250R1,  1, false, false, true, false);
+                buf_dump_to_file ("b250_mismatch.R2.b250", &ctx->b250,    1, false, false, true, false);
+                buf_dump_to_file ("b250_mismatch.dict",    &ZCTX(ctx->did_i)->dict, 1, false, false, true, false); // note: for QNAME contexts, did_i is the same in vctx/zctx
+                ABORT (NO_PAIR_FMT_PREFIX "%s %s.b250 is not identical to R1. qname_line0[QNAME1]=%s vb_size=%s n_lines=%u b250.len=%u R1.vb_i=%u R1.n_lines=%u b250R1.len=%u). Three diagnostic files written to disk: b250_mismatch.*", 
+                    txt_name, VB_NAME, ctx->tag_name, segconf.qname_line0[QNAME1].s, 
+                    str_size (segconf.vb_size).s, vb->lines.len32, ctx->b250.len32,
+                    fastq_get_R1_vb_i(vb), fastq_get_R1_num_lines(vb), ctx->b250R1.len32);
+            }
+        }
     }
     
     COPY_TIMER (b250_zip_generate); // codec_assign measures its own time
@@ -296,38 +308,38 @@ bool b250_zip_generate (VBlockP vb, ContextP ctx)
 // PIZ
 // ------
 
-WordIndex b250_piz_decode (bytes *b, bool advance, B250Size b250_size, rom ctx_name)
+WordIndex b250_piz_decode (ConstBufferP b250, uint32_t *restrict index, bool advance, B250Size b250_size, rom ctx_name)
 {
-    ASSERT (*b, "*b is NULL in ctx=%s", ctx_name);
+    #define RETURN(res,n) ({ if (advance) { *index += (n); } return (WordIndex)(res); })
 
-    #define RETURN(res,n) ({ if (advance) { *b += (n); } return (WordIndex)(res); })
+    bytes b = B8(*b250, *index);
 
     // case: files starting 15.0.39
     if (b250_size == B250_VARL) { 
-        uint8_t msb = (*b)[0];
+        uint8_t msb = b[0];
         
         if ((msb >> 7) == 0) // 1 byte (7 bit)
             RETURN (((msb == VARL_ONE_UP) ? WORD_INDEX_ONE_UP : msb), 1);
 
         else if ((msb >> 6) == 0b10) { // 2 bytes (14 bits)
-            uint16_t word = BGEN16 (GET_UINT16 (*b));
+            uint16_t word = BGEN16 (GET_UINT16 (b));
             RETURN ((word == VARL_EMPTY   ? WORD_INDEX_EMPTY
                    : word == VARL_MISSING ? WORD_INDEX_MISSING
                    :                        (word & 0x3fff) + VARL_MIN_2B), 2);  
         }
 
         else if ((msb >> 5) == 0b110) { // 3 bytes (21 bits)
-            WordIndex wi = (BGEN24 (GET_UINT24 (*b)) & 0x1fffff) + VARL_MIN_3B; // if embedding this expression directly into the RETURN macro the & operation seems to be ignored. I can't figure out why.
+            WordIndex wi = (BGEN24 (GET_UINT24 (b)) & 0x1fffff) + VARL_MIN_3B; // if embedding this expression directly into the RETURN macro the & operation seems to be ignored. I can't figure out why.
             RETURN (wi, 3);
 }
         else { // 4 bytes (29 bits)
-            WordIndex wi = BGEN32 (GET_UINT32 (*b)) & 0x1fffffff;
+            WordIndex wi = BGEN32 (GET_UINT32 (b)) & 0x1fffffff;
             RETURN (wi, 4);
         }
     }
 
     // case: files up to 15.0.37
-    else switch ((*b)[0]) {
+    else switch (*b) {
         case BASE250_MOST_FREQ0 : RETURN (0, 1);
         case BASE250_MOST_FREQ1 : RETURN (1, 1);
         case BASE250_MOST_FREQ2 : RETURN (2, 1);
@@ -338,16 +350,16 @@ WordIndex b250_piz_decode (bytes *b, bool advance, B250Size b250_size, rom ctx_n
             WordIndex value;
             switch (b250_size) {
                 case B250_BYTES_1: 
-                    value = (*b)[0]; 
+                    value = b[0]; 
                     RETURN (value, 1);
                 case B250_BYTES_2:
-                    value = ((uint32_t)(*b)[0] << 8) | (uint32_t)(*b)[1]; // careful not to use BGEN as string might not be aligned to word boundary
+                    value = ((uint32_t)b[0] << 8) | (uint32_t)b[1]; // careful not to use BGEN as string might not be aligned to word boundary
                     RETURN (value, 2);
                 case B250_BYTES_3:
-                    value = ((uint32_t)(*b)[0] << 16) | ((uint32_t)(*b)[1] << 8) | (uint32_t)(*b)[2]; 
+                    value = ((uint32_t)b[0] << 16) | ((uint32_t)b[1] << 8) | (uint32_t)b[2]; 
                     RETURN (value, 3);
                 case B250_BYTES_4:
-                    value = ((uint32_t)(*b)[0] << 24) | ((uint32_t)(*b)[1] << 16) | ((uint32_t)(*b)[2] << 8) | (uint32_t)(*b)[3]; 
+                    value = ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | (uint32_t)b[3]; 
                     RETURN (value, 4);
                 default:
                     ABORT ("Invalid b250_size=%u", b250_size);
@@ -355,4 +367,62 @@ WordIndex b250_piz_decode (bytes *b, bool advance, B250Size b250_size, rom ctx_n
         }
         #undef RETURN
     }
+}
+
+// ------------------------------------------------------------------------------------------------------
+// Diagnostics:
+// Files b250_mismatch.R1.b250 b250_mismatch.R2.b250 b250_mismatch.dict expected in the current directory
+// ------------------------------------------------------------------------------------------------------
+noreturn void b250_mistmatch_diagnose (void)
+{
+    ContextP ctx = &evb->ca.contexts[0];
+
+    file_get_file (evb, "b250_mismatch.dict",    &ctx->dict,   C_DICT,   0, VERIFY_NONE, false);
+    file_get_file (evb, "b250_mismatch.R1.b250", &ctx->b250R1, "b250R1", 0, VERIFY_NONE, false);
+    file_get_file (evb, "b250_mismatch.R2.b250", &ctx->b250,   C_B250,   0, VERIFY_NONE, false);
+
+    ctx->word_list.len = str_count_char (B1STc(ctx->dict), ctx->dict.len32, 0);
+    dict_io_dict_build_word_list_one (ctx);
+
+    ctx->b250_size = ctx->pair_b250_size = B250_VARL;
+
+    ctx_init_iterator (ctx);
+    ctx_init_pair_iter (ctx);
+
+    if (!flag.quiet) 
+        printf ("i\twi_R1\tb250_R1\tsnip_R1\twi_R2\tb250_R2\tsnip_R2\n");
+
+    for (uint32_t i=0; 
+         ctx->pair_b250_iter.next_b250 < ctx->b250R1.len32 && ctx->iterator.next_b250 < ctx->b250.len32 ; 
+         i++) {
+        
+        STR(snip_R1);
+        uint32_t start_R1 = ctx->pair_b250_iter.next_b250; 
+        WordIndex wi_R1 = ctx_get_next_snip (evb, ctx, true,  pSTRa(snip_R1));
+        uint32_t len_R1 = ctx->pair_b250_iter.next_b250 - start_R1;
+
+        STR(snip_R2); 
+        uint32_t start_R2 = ctx->iterator.next_b250; 
+        WordIndex wi_R2 = ctx_get_next_snip (evb, ctx, false, pSTRa(snip_R2));
+        uint32_t len_R2 = ctx->iterator.next_b250 - start_R2;
+        
+        bool snip_mismatch = !str_issame (snip_R1, snip_R2);
+        bool wi_mismatch = (wi_R1 != wi_R2);
+        bool b250_mismatch = len_R1 != len_R2 || memcmp (B8(ctx->b250R1, start_R1), B8(ctx->b250, start_R2), len_R1);
+        char hex_R1[16], hex_R2[16];
+
+        if (!flag.quiet || snip_mismatch || wi_mismatch || b250_mismatch) 
+            printf ("%d:\t%d\t%s\t%.*s\t%d\t%s\t%.*s\t%s\n", i, 
+                    wi_R1, str_to_hex_(B8(ctx->b250R1, start_R1), len_R1, hex_R1, true), STRf(snip_R1), 
+                    wi_R2, str_to_hex_(B8(ctx->b250,   start_R2), len_R2, hex_R2, true), STRf(snip_R2),
+                    snip_mismatch?"snip_mismatch" : wi_mismatch?"word_index_mismatch" : b250_mismatch?"b250_mismatch" : "");
+    }
+
+    ASSINP (ctx->pair_b250_iter.next_b250 == ctx->b250R1.len32, 
+            "R1 b250 not exhausted: next=%u len=%u", ctx->pair_b250_iter.next_b250, ctx->b250R1.len32);
+
+    ASSINP (ctx->iterator.next_b250 == ctx->b250.len32, 
+            "R2 b250 not exhausted: next=%u len=%u", ctx->iterator.next_b250, ctx->b250.len32);
+
+    exit_ok;
 }

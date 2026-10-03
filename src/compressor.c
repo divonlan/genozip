@@ -64,7 +64,7 @@ uint32_t comp_compress (VBlockP vb,
 
     // allocate what we think will be enough memory. usually this alloc does nothing, as the memory we pre-allocate for z_data is sufficient (zero for safety)
     buf_alloc_zero (vb, z_data, compressed_offset + est_compressed_len + encryption_padding_reserve, 0, char, 1.25, 
-                    z_data->name ? z_data->name : z_data == &vb->z_data_test ? "z_data_test" : "z_data");
+                    z_data->nameר ? unר(z_data->nameר) : z_data == &vb->z_data_test ? "z_data_test" : "z_data");
 
     // compress the data, if we have it...
     if (data_uncompressed_len) {

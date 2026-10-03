@@ -1,4 +1,4 @@
-#define GENOZIP_CODE_VERSION "15.0.91"
+#define GENOZIP_CODE_VERSION "15.0.92"
 // ⇑ MUST be first line, analyzed by scripts ⇑
 
 #pragma once

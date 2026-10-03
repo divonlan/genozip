@@ -93,16 +93,16 @@ Digest ref_get_genome_digest (void)       { return gref.genome_digest;          
 DigestAlg ref_get_genome_digest_alg (void){ return gref.genome_digest_alg;           }
 ContigPkgP ref_get_ctgs (void)            { return &gref.ctgs;                       }
 uint32_t ref_num_contigs (void)           { return gref.ctgs.contigs.len32;          }
-BitsP ref_get_genome_is_set (void)        { return gref.genome_is_set;               }
+BitsP ref_get_genome_is_set (void)        { return &gref.genome_is_set;              }
 uint64_t ref_get_max_gpos (void)          { RangeP last_r = BLST(Range, gref.ranges); return last_r->gpos + ref_size(last_r) - 1; }
 
 static void reoverlay_ranges_on_loaded_genome (int64_t delta_bytes);
 
 void ref_get_genome (const Bits **genome, PosType64 *genome_nbases)
 {
-    ASSERT0 (!genome || gref.genome, "Reference file not loaded");
+    ASSERT0 (!genome || gref.genome.len, "Reference file not loaded");
     
-    if (genome) *genome = gref.genome;
+    if (genome) *genome = &gref.genome;
     if (genome_nbases) *genome_nbases = gref.genome_nbases;
 }
 
@@ -112,12 +112,12 @@ void ref_set_access_mode (ReferenceAccessMode genome_mode, ReferenceAccessMode r
     long page_size = sysconf (_SC_PAGESIZE);
     uintptr_t page_mask = ~(page_size - 1);
     
-    void *genome_start_page  = (void*)((uintptr_t)gref.genome_buf.data & page_mask);
+    void *genome_start_page  = (void*)((uintptr_t)gref.genome.data & page_mask);
     void *refhash_start_page = (void*)((uintptr_t)refhash_buf.data & page_mask);
 
     // genome access 
-    ASSERTW (madvise (genome_start_page, gref.genome_buf.size, genome_mode == REF_ACCESS_RANDOM ? MADV_RANDOM : MADV_SEQUENTIAL) == 0,
-             _WRN "madvise of genome (%p, %"PRIu64")s failed: %s", genome_start_page, gref.genome_buf.size, strerror (errno));
+    ASSERTW (madvise (genome_start_page, gref.genome.size, genome_mode == REF_ACCESS_RANDOM ? MADV_RANDOM : MADV_SEQUENTIAL) == 0,
+             _WRN "madvise of genome (%p, %"PRIu64")s failed: %s", genome_start_page, gref.genome.size, strerror (errno));
 
     // refhash access        
     if (refhash_exists()) 
@@ -219,8 +219,8 @@ rom ref_get_textual_seq (VBlockP vb, PosType64 gpos, STRc𐤐(ref), bool revcomp
     } };
 
     // sanity
-    ASSERT0 (gref.genome, "Reference file not loaded");
-    ASSERTINRANGE (gpos, 0, gref.genome->nbits / 2);
+    ASSERT0 (gref.genome.len, "Reference file not loaded");
+    ASSERTINRANGE (gpos, 0, gref.genome.nbits / 2);
 
     // save 3 flanking bytes on each side that might be temporarily over-written
     uint32_t save_before = *(unaligned_uint32_t *)&ref[-4];
@@ -235,17 +235,17 @@ rom ref_get_textual_seq (VBlockP vb, PosType64 gpos, STRc𐤐(ref), bool revcomp
     PosType64 new_gpos = gpos - left_extra_bases; // beginning of full byte
 
     char *new_ref = ref - (revcomp ? right_extra_bases : left_extra_bases);       
-    uint32_t new_ref_len = ref_len + left_extra_bases + right_extra_bases; 
-
+    uint32_t new_ref_len = ref_len + left_extra_bases + right_extra_bases; // a multple of 4
+    
     // generate the expanded sequence - writing 4 bases at a time
     if (!revcomp) {
-        bytes b = &((bytes)gref.genome->words)[new_gpos / 4];
+        bytes b = &((bytes)gref.genome.words)[new_gpos / 4];
  
         for (uint32_t i=0; i < new_ref_len; i += 4)
             *(unaligned_uint32_t *)&new_ref[i] = s.b4_int[*b++]; 
     }
     else {
-        bytes b = &((bytes)gref.genome->words)[new_gpos / 4] + new_ref_len/4 - 1;
+        bytes b = &((bytes)gref.genome.words)[new_gpos / 4] + new_ref_len/4 - 1;
 
         for (int32_t i=0; i < new_ref_len; i += 4) // writing memory forward is faster
             *(unaligned_uint32_t *)&new_ref[i] = s_rev.b4_int[*b--]; 
@@ -254,17 +254,16 @@ rom ref_get_textual_seq (VBlockP vb, PosType64 gpos, STRc𐤐(ref), bool revcomp
     // restore possibly over-written flanking data
     *(unaligned_uint32_t *)&ref[-4] = save_before;
     *(unaligned_uint32_t *)&ref[ref_len] = save_after;
-    
+
     COPY_TIMER (ref_get_textual_seq);
     return ref;
 }
-
 void ref_set_genome_is_used (PosType64 gpos, uint32_t len)
 {
     if (len == 1)
-        bits_set (gref.genome_is_set, gpos); 
+        bits_set (&gref.genome_is_set, gpos); 
     else 
-        bits_set_region (gref.genome_is_set, gpos, len);
+        bits_set_region (&gref.genome_is_set, gpos, len);
 }
 
 static inline bool ref_has_is_set (void)
@@ -278,7 +277,7 @@ void ref_get_is_set_bytemap (VBlockP vb, PosType64 gpos, uint32_t num_bases, boo
     ASSERTNOTINUSE (*is_set);
     buf_alloc_exact (vb, *is_set, num_bases, uint8_t, buf_name);
 
-    bits_bit_to_byte (B1ST8(*is_set), gref.genome_is_set, gpos, num_bases); 
+    bits_bit_to_byte (B1ST8(*is_set), &gref.genome_is_set, gpos, num_bases); 
     
     if (rev_comp)
         str_reverse_in_place (STRb(*is_set));
@@ -289,12 +288,12 @@ void ref_unload_reference (void)
 {
     // case: the reference has been modified and we can't use it for the next file
     if (IS_REF_INTERNAL || IS_REF_EXT_STORE || IS_REF_STORED_PIZ) {
-        buf_free (gref.genome_buf);
+        buf_free (gref.genome);
         buf_free (gref.ranges);
         buf_free (gref.iupacs_buf);
         buf_free (gref.ref_external_ra);
         buf_free (gref.ref_file_section_list);
-        buf_free (gref.genome_is_set_buf);
+        buf_free (gref.genome_is_set);
         FREE (gref.ref_fasta_name);
         ref_lock_free();
         contigs_free (&gref.ctgs);
@@ -314,14 +313,14 @@ void ref_destroy_genome (void)
         for_buf (Range, r, gref.ranges)
             FREE (r->ref.words);
     
-    buf_destroy (gref.genome_buf);
-    buf_destroy (gref.genome_is_set_buf);
+    buf_destroy (gref.genome);
+    buf_destroy (gref.genome_is_set);
 }
 
 void ref_destroy_reference (void)
 {
-    if (flag.show_cache && gref.genome_buf.type == BUF_SHM) 
-        iprintf ("%sdestroy genome_buf attached to shm\n", _SHOW_CACHE);
+    if (flag.show_cache && gref.genome.type == BUF_SHM) 
+        iprintf ("%sdestroy genome attached to shm\n", _SHOW_CACHE);
 
     buflist_sort (evb, false);
 
@@ -342,7 +341,7 @@ void ref_destroy_reference (void)
 
     refhash_destroy(); // must be before ref_cache_detach
 
-    ref_cache_detach(); // after destroying genome_buf and refhash_buf
+    ref_cache_detach(); // after destroying genome and refhash_buf
 
     // note: we keep gref.filename, in case it needs to be loaded again
     rom save_filename  = gref.filename;
@@ -383,7 +382,7 @@ ConstRangeP ref_piz_get_range (VBlockP vb, FailType soft_fail)
             ctx_get_words_snip (ZCTX(CHROM), vb->chrom_node_index), vb->chrom_node_index);
     if (ref_contig_index == WORD_INDEX_NONE) return NULL; // soft fail
     
-    ASSPIZ (ref_contig_index < gref.ranges.len32 || soft_fail, "Expecting ref_contig_index=%d < gref.ranges.len=%"PRIu64 " in %s. FYI: ZCTX(CHROM)->chrom2ref_map.len=%"PRIu64, 
+    ASSPIZ (ref_contig_index < gref.ranges.len32 || soft_fail, "Expecting ref_contig_index=%d < gref.ranges.len=%"PRIu64 " in %s. ZCTX(CHROM)->chrom2ref_map.len=%"PRIu64, 
             ref_contig_index, gref.ranges.len, ref_get_filename(), ZCTX(CHROM)->chrom2ref_map.len); // 64 bit printing on error
     if (ref_contig_index >= gref.ranges.len32) return NULL; // soft fail
 
@@ -568,7 +567,7 @@ static void ref_uncompress_one_range (VBlockP vb)
     // case 3: PIZ, reading a compacted reference - we receive the correct is_set in the SEC_REF_IS_SET section and don't change it
 
 
-    // case: if compacted, this SEC_REF_IS_SET sections contains r->is_set and its first/last_pos contain the coordinates
+    // case: if compacted, this SEC_REF_IS_SET section contains r->is_set and its first/last_pos contain the coordinates
     // of the range, while the following SEC_REFERENCE section contains only the bases for which is_set is 1, 
     // first_pos=0 and last_pos=(num_1_bits_in_is_set-1)
     if (is_compacted) {
@@ -794,8 +793,8 @@ bool ref_load_stored_reference (void)
     // --make-reference, stored in GENOZIP_HEADER.genome_digest
     if (flag.reading_reference && VER(15)) {
         START_TIMER;
-        uint64_t bytes_to_digest = VER2(15,82) ? gref.genome_buf.nwords * sizeof (uint64_t) : gref.genome_buf.nwords/*defect 2026-04-12*/;  
-        Digest digest = digest_do (gref.genome_buf.data, bytes_to_digest, gref.genome_digest_alg, "genome"); 
+        uint64_t bytes_to_digest = VER2(15,82) ? gref.genome.nwords * sizeof (uint64_t) : gref.genome.nwords/*defect 2026-04-12*/;  
+        Digest digest = digest_do (gref.genome.data, bytes_to_digest, gref.genome_digest_alg, "genome"); 
         COPY_TIMER_EVB (ref_load_digest);
 
         // verify that digest of genome is memory is as calculated by make-reference (since v15). If not, its a bug.
@@ -808,7 +807,7 @@ bool ref_load_stored_reference (void)
             // marked as "is_populated". This is just for extra safety.
             else {
                 ref_cache_remove_do (true, false);
-                ABORTINP ("Error: Found bad reference cached in memory. It has now been removed. Please try again. %s", report_support());
+                ABORTINP (_ERR"Found bad reference cached in memory. It has now been removed. Please try again. %s", report_support());
             }
         }
         else
@@ -825,31 +824,31 @@ bool ref_load_stored_reference (void)
 
         // finalizing loading the genome and refhash, and detaching read-write shm.
         ref_cache_done_populating(); 
-        int64_t delta_bytes = gref.cache->genome_data - gref.genome_buf.data; // address delta
+        int64_t delta_bytes = gref.cache->genome_data - gref.genome.data; // address delta
 
         // re-attach to read-only shm
-        buf_attach_bits_to_shm (evb, &gref.genome_buf, gref.cache->genome_data, gref.genome_nbases * 2, "genome_buf");
-        if (flag.show_cache) iprintf ("%sre-attached genome_buf (%"PRIu64" bases) to READONLY shm\n", _SHOW_CACHE, gref.genome_nbases);
+        buf_attach_bits_to_shm (evb, &gref.genome, gref.cache->genome_data, gref.genome_nbases * 2, "genome");
+        if (flag.show_cache) iprintf ("%sre-attached genome (%"PRIu64" bases) to READONLY shm\n", _SHOW_CACHE, gref.genome_nbases);
         reoverlay_ranges_on_loaded_genome (delta_bytes); 
         
         if (refhash_exists()) {
-            buf_attach_to_shm (evb, &refhash_buf, gref.cache->genome_data + gref.genome_buf.size, refhash_buf.len, "refhash_buf");
+            buf_attach_to_shm (evb, &refhash_buf, gref.cache->genome_data + gref.genome.size, refhash_buf.len, "refhash_buf");
             refhash_buf.len = refhash_buf.size;
             if (flag.show_cache) iprintf ("%sre-attached refhash_buf (len=%"PRIu64") to READONLY shm\n", _SHOW_CACHE, refhash_buf.len);
         }
     }
 
     // case: using REF_EXT_STORE with a cached reference file: generate a private genome, as it will be compacted for writing to SEC_REFERENCE
-    if (flag.reading_reference && IS_REF_EXT_STORE && gref.genome_buf.type == BUF_SHM) {
-        buf_free (gref.genome_buf); // free SHM buffer
-        buf_alloc_bits_exact (evb, &gref.genome_buf, gref.genome_nbases * 2, NOINIT, 0, "gref.genome_buf");
+    if (flag.reading_reference && IS_REF_EXT_STORE && gref.genome.type == BUF_SHM) {
+        buf_free (gref.genome); // free SHM buffer
+        buf_alloc_bits_exact (evb, &gref.genome, gref.genome_nbases * 2, NOINIT, 0, "gref.genome");
 
-        memcpy (B1ST8(gref.genome_buf), gref.cache->genome_data, gref.genome_buf.nwords * sizeof(uint64_t));
+        memcpy (B1ST8(gref.genome), gref.cache->genome_data, gref.genome.nwords * sizeof(uint64_t));
 
-        if (flag.show_cache) iprintf ("%sREF_EXT_STORE: allocating genome_buf and copying genome from shm into it\n", _SHOW_CACHE);
+        if (flag.show_cache) iprintf ("%sREF_EXT_STORE: allocating genome and copying genome from shm into it\n", _SHOW_CACHE);
 
         // re-overlay the ranges on the writeable copy of the genome
-        reoverlay_ranges_on_loaded_genome (gref.genome_buf.data - gref.cache->genome_data); 
+        reoverlay_ranges_on_loaded_genome (gref.genome.data - gref.cache->genome_data); 
     }
 
     if (flag.only_headers) return loaded_reference;
@@ -870,8 +869,7 @@ bool ref_load_stored_reference (void)
         }
 
         else {
-            buf_free (gref.genome_is_set_buf); 
-            gref.genome_is_set = NULL;
+            buf_destroy (gref.genome_is_set); 
 
             for_buf (Range, r, gref.ranges) 
                 memset (&r->is_set, 0, sizeof (r->is_set)); // un-overlay
@@ -889,9 +887,9 @@ Digest reference_re_digest_genome (DigestAlg alg, bool full_genome_digest)
     START_TIMER;
     gref.genome_digest_alg = alg;
 
-    uint64_t bytes_to_digest = full_genome_digest ? gref.genome_buf.nwords * sizeof (uint64_t) : gref.genome_buf.nwords/*defect 2026-04-12*/;  
+    uint64_t bytes_to_digest = full_genome_digest ? gref.genome.nwords * sizeof (uint64_t) : gref.genome.nwords/*defect 2026-04-12*/;  
 
-    gref.genome_digest = digest_do (gref.genome_buf.data, bytes_to_digest, gref.genome_digest_alg, "genome"); 
+    gref.genome_digest = digest_do (gref.genome.data, bytes_to_digest, gref.genome_digest_alg, "genome"); 
 
     COPY_TIMER_EVB (reference_re_digest_genome);
     return gref.genome_digest;
@@ -1069,9 +1067,8 @@ static bool ref_remove_flanking_regions (RangeP r, uint64_t *start_flanking_regi
     // note: ref_prepare_range_for_compress is responsible not to send us 0-bit ranges
     bool has_any_bit = bits_find_first_set_bit (&r->is_set, start_flanking_region_len);
 
-    char bits[65];
     ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set but r->num_set=%"PRId64" (r->is_set.nbits=%"PRIu64"). is_set(first 64 bits)=%s", 
-            BNUM (gref.ranges, r), r->chrom_name, r->num_set, r->is_set.nbits, bits_to_substr (&r->is_set, 0, 64, bits)); 
+            BNUM (gref.ranges, r), r->chrom_name, r->num_set, r->is_set.nbits, bits_to_01_string (&r->is_set, 0, 64).s); 
 
     has_any_bit = bits_find_prev_set_bit (&r->is_set, r->is_set.nbits, &last_1);
     ASSERT (has_any_bit, "range %u (%s) has no bits set in r->is_set (#2)", BNUM (gref.ranges, r), r->chrom_name); // this should definitely never happen, since we already know the range has bits
@@ -1099,7 +1096,8 @@ static bool ref_remove_flanking_regions (RangeP r, uint64_t *start_flanking_regi
     return is_compact_needed;
 }
 
-// we compact one range by squeezing together all the bases that have is_set=1. return true if compacted
+// REF_EXT_STORE / REF_INTERNAL: we compact one range by squeezing together all the bases 
+// that have is_set=1. return true if compacted
 static bool ref_compact_ref (RangeP r)
 {
     if (!r || !r->num_set) return false;
@@ -1122,7 +1120,7 @@ static bool ref_compact_ref (RangeP r)
         uint64_t len_1 = (has_any_bit ? start_0_offset : r->is_set.nbits) - start_1_offset;
 
         // do actual compacting - move set region to be directly after the previous set region (or at the begining if its the first)
-        bits_copy (&r->ref, compact_len * 2, &r->ref, (start_flanking_region_len + start_1_offset) * 2, len_1 * 2);
+        bits_sink_range (&r->ref, compact_len * 2, (start_flanking_region_len + start_1_offset) * 2, len_1 * 2, false);
         compact_len += len_1;
 
         if (!has_any_bit) break; // case: we're done- this 1 region goes to the end the range - there are no more clear regions
@@ -1133,8 +1131,7 @@ static bool ref_compact_ref (RangeP r)
     }
 
     // set length of ref - this is the data that will be compressed
-    r->ref.nbits  = compact_len * 2;
-    r->ref.nwords = roundup_bits2words64 (r->ref.nbits); 
+    bits_resize (&r->ref, compact_len * 2);
 
     return true;
 }
@@ -1248,7 +1245,7 @@ static void ref_prepare_range_for_compress (VBlockP vb)
             return;
         }
 
-        r->is_set.nbits = 0; // nothing to with this range - perhaps copied and cleared in ref_copy_compressed_sections_from_reference_file
+        bits_resize (&r->is_set, 0); // nothing to with this range - perhaps copied and cleared in ref_copy_compressed_sections_from_reference_file
     }
     
     vb->dispatch = DATA_EXHAUSTED;
@@ -1279,7 +1276,7 @@ void ref_compress_ref (void)
     if (IS_REF_INTERNAL || IS_REF_EXT_STORE) 
         for_buf2 (Range, r, range_i, gref.ranges) 
             if (bits_is_fully_clear (&r->is_set)) 
-                r->is_set.nbits = 0; // unused contig
+                bits_resize (&r->is_set, 0); // unused contig
 
     if (gref.ranges.rtype != RT_MAKE_REF)
         ref_contigs_compress_stored();  
@@ -1381,7 +1378,7 @@ void ref_set_reference (rom filename, ReferenceType ref_type, bool is_explicit)
         if (!env || !env[0]) return; 
 
         bool is_dir = file_is_dir (env);
-        WARN_IF (IS_ZIP && is_dir, _FYI "Ignoring $%s=%s because it is a directory. "_TIP"Use --reference or set $GENOZIP_REFERENCE to a file", GENOZIP_REFERENCE, env);
+        WARN_IF (IS_ZIP && is_dir, _FYI "Ignoring $%s=%s because it is a directory. "_TIP"Use --reference or set $GENOZIP_REFERENCE to a file\n", GENOZIP_REFERENCE, env);
 
         if (is_dir) return; // nothing to set (note: in PIZ, this will be called again with a file name after getting it from the genozip_header)        
         
@@ -1428,8 +1425,7 @@ void ref_set_reference (rom filename, ReferenceType ref_type, bool is_explicit)
     memcpy ((char*)gref.filename, filename, filename_len);
 
     // note: usually, Windows agrees to open paths with either / or \ - but when running in gdb, only / is accepted
-    if (flag.is_windows)
-        str_replace_letter ((char*)gref.filename, filename_len, '\\', '/');
+    𝓌𝒾𝓃 (str_replace_letter ((char*)gref.filename, filename_len, '\\', '/');)
 }
 
 // called when loading an external reference
@@ -1515,7 +1511,7 @@ bool ref_is_external_loaded (void)
 // do we have a reference (EXTERNAL, STORED, ....)
 bool ref_is_loaded (void)
 {
-    return gref.genome && gref.genome->nbits;
+    return gref.genome.nbits > 0;
 }
 
 // ZIP & PIZ: import external reference
@@ -1600,13 +1596,14 @@ static void overlay_ranges_on_loaded_genome (RangesType type)
 
             PosType64 nbases = rc->max_pos - rc->min_pos + 1;
 
-            ASSERT (r->gpos + nbases <= gref.genome->nbits / 2, "adding range \"%s\": r->gpos(%"PRId64") + nbases(%"PRId64") (=%"PRId64") is beyond gref.genome->nbits/2=%"PRIu64" (genome_nbases=%"PRId64")",
-                    r->chrom_name, r->gpos, nbases, r->gpos+nbases, gref.genome->nbits/2, gref.genome_nbases);
+            ASSERT (r->gpos + nbases <= gref.genome.nbits / 2, "adding range \"%s\": r->gpos(%"PRId64") + nbases(%"PRId64") (=%"PRId64") is beyond gref.genome->nbits/2=%"PRIu64" (genome_nbases=%"PRId64")",
+                    r->chrom_name, r->gpos, nbases, r->gpos+nbases, gref.genome.nbits/2, gref.genome_nbases);
 
-            bits_overlay (&r->ref, gref.genome, r->gpos*2, nbases*2);
+            // note: contigs have a gpos that is a multiple of 64, so r->ref and r->is_set words don't overlap with other contigs
+            bits_overlay (&r->ref, &gref.genome, r->gpos*2, nbases*2, "Range.ref");
 
             if (ref_has_is_set()) 
-                bits_overlay (&r->is_set, gref.genome_is_set, r->gpos, nbases);
+                bits_overlay (&r->is_set, &gref.genome_is_set, r->gpos, nbases, "Range.is_set");
         }
     }
 }
@@ -1669,7 +1666,7 @@ void ref_initialize_ranges (RangesType type)
     gref.genome_nbases = ROUNDUP64 (ref_contigs_get_genome_nbases()) + 64; // round up to the nearest 64 bases, and add one word, needed by aligner_update_best for bit shifting overflow
 
     if (ref_has_is_set()) 
-        gref.genome_is_set = buf_alloc_bits_exact (evb, &gref.genome_is_set_buf, gref.genome_nbases, CLEAR, 0, "genome_is_set_buf");
+        buf_alloc_bits_exact (evb, &gref.genome_is_set, gref.genome_nbases, CLEAR, 0, "genome_is_set_buf");
 
     // we protect genome->ref while uncompressing reference data, and genome->is_set while segging
     ref_lock_initialize();
@@ -1677,13 +1674,13 @@ void ref_initialize_ranges (RangesType type)
     // either get shm, or allocate process memory for the genome
     if (flag.no_cache || !flag.reading_reference || !ref_cache_initialize_genome()) {
         // if the genome allocated in previous file is way bigger - destroy the buffer first to save memory
-        if (gref.genome_buf.size > gref.genome_nbases / 4 * 1.25)
-            buf_destroy (gref.genome_buf);
+        if (gref.genome.size > gref.genome_nbases / 4 * 1.25)
+            buf_destroy (gref.genome);
 
-        gref.genome_buf.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
+        gref.genome.can_be_big = true; // supress warning in case of an extra large genome (eg plant genomes)
         // initialize genome to 0 (since 14.0.33) - this is required, because there are small gaps between and after the contigs so that each
         // contig's GPOS is a multiple of 64. Our aligner might include gaps in the alignments. See also: defect "2023-03-10 uninitialized edge of external reference.txt"    
-        gref.genome = buf_alloc_bits_exact (evb, &gref.genome_buf, gref.genome_nbases * 2, CLEAR, 0, "gref.genome_buf");
+        buf_alloc_bits_exact (evb, &gref.genome, gref.genome_nbases * 2, CLEAR, 0, "gref.genome");
     }
 
     overlay_ranges_on_loaded_genome (type);
@@ -1822,7 +1819,7 @@ void ref_verify_organism (VBlockP vb)
 {
     double percent_aligned = percent (vb->num_aligned + (VB_DT(FASTQ) ? fastq_get_num_deeped (vb): 0), vb->lines.len32);
 
-    WARN_IF (percent_aligned < 80, 
+    WARN_IF (percent_aligned < 80 && !flag.anonymize, 
              _WRN "Only %2.1f%% of the %s reads processed so far match the reference file. Using a reference file more representative of the organism(s) in the data will result in much better compression (tested: %s).\n\n"
              _TIP "A reference file may be assessed for its fit for the data with --assess-reference. See: %s", 
              percent_aligned, str_int_commas (vb->lines.len32).s, VB_NAME, WEBSITE_ASSESS_REF);

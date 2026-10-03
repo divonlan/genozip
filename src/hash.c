@@ -9,6 +9,8 @@
 #include <math.h>
 #ifdef __x86_64__
 #include <immintrin.h>
+#elif defined __aarch64__
+#include <arm_acle.h>
 #endif
 #include "context.h"
 #include "file.h"
@@ -28,13 +30,13 @@
 uint32_t hash_next_size_up (uint64_t size, bool allow_huge)
 {
     // if user set a low --vblock, use this as the limit for the hash table size too, but don't restrict tighter than 16MB
-    size = MIN_(size, MAX_(16000000, segconf.vb_size));
+    size = MIN_(size, MAX_(16 MB, segconf.vb_size));
 
     // primary numbers just beneath the powers of 2^0.5 (and 2^0.25 for the larger numbers)
-    // minimum ~16K to prevent horrible miscalculations in edge cases that result in dramatic slow down
+    // minimum ~46K to prevent horrible miscalculations in edge cases that result in dramatic slow down
     static uint32_t hash_sizes[] = { 
-        // 16381, 23167, 32749, 46337, 
-        65521, 92681, 131071, 
+        // 16381, 23167, 
+        32749, 46337, 65521, 92681, 131071, 
         185363, 262139, 370723, 524287, 741431, 1048573, 1482907, 2097143, 2965819, 4194301, 5931641, 8388593, 
         11863279, 16777213, 19951579, 23726561, 28215799, 33554393, 39903161, 47453111, 56431601, 67108859,
         94906265, 134217757, 189812533, 268435459, 379625083, 536870923 };
@@ -77,7 +79,7 @@ static void hash_alloc_local (VBlockP vb, ContextP vctx)
         // 3X the expected number of entries to reduce hash contention
         vctx->local_hash.len32 = hash_next_size_up (vctx->num_new_entries_prev_merged_vb, false);
 
-    // if known to small, use hash table of ~ 64K
+    // if known to small, use hash table of ~ 32K
     else if (DT_(vb, seg_is_small)(vb, vctx->dict_id))
         vctx->local_hash.len32 = hash_next_size_up(1, false);
     
@@ -125,12 +127,12 @@ uint32_t hash_get_estimated_entries (VBlockP vb, ContextP zctx, ConstContextP vc
     // which mostly show up in n1, and then a long tail of low frequency entries. The comparison of n2 to n3,
     // assuming that the new snips first introduced in them are mostly low frequency ones, will give us a more accurate predication
     // of the gradient appearance of new snips
-    double n1 = vctx->nodes_len_at_1_3;
-    double n2 = vctx->nodes_len_at_2_3 ? ((double)vctx->nodes_len_at_2_3 - (double)vctx->nodes_len_at_1_3) : 0;
+    double n1 = vctx->nodes_len_at_⅓[0];
+    double n2 = vctx->nodes_len_at_⅓[1] ? ((double)vctx->nodes_len_at_⅓[1] - (double)vctx->nodes_len_at_⅓[0]) : 0;
     double n3 = (double)vctx->nodes.len - n1 - n2;
 
-    double n1_lines      = (double)vb->num_lines_at_1_3;
-    double n2_lines      = (double)vb->num_lines_at_2_3 - n1_lines;
+    double n1_lines      = (double)vb->num_lines_at_⅓[0];
+    double n2_lines      = (double)vb->num_lines_at_⅓[1] - n1_lines;
     double n2_n3_lines   = (double)vb->lines.len - n1_lines;
     double n3_lines      = (double)vb->lines.len - n1_lines - n2_lines;
 
@@ -141,7 +143,7 @@ uint32_t hash_get_estimated_entries (VBlockP vb, ContextP zctx, ConstContextP vc
 
     double n2n3_density_ratio = n3_density ? n2_density/n3_density : 0;    
 
-    // my secret formula for arriving at these numbers: https://docs.google.com/spreadsheets/d/1UijOuPgquZ71kEdB7kUf1OYUMs-Xhu2gAOOHgy6QCIQ/edit#gid=0
+    // formula for arriving at these numbers: https://docs.google.com/spreadsheets/d/1UijOuPgquZ71kEdB7kUf1OYUMs-Xhu2gAOOHgy6QCIQ/edit#gid=0
     static struct { 
     uint64_t   vbs,     factor; } growth_plan[] = { 
     /* 0  */ { 0,       1       },
@@ -239,22 +241,31 @@ void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
     hash_populate_from_nodes (zctx);
 }
 
-static inline uint32_t hash_crc32 (STRp(snip))
+uint32_t hash_crc32 (STRp(snip))
 {
-#ifdef __SSE4_2__ // x64 only
-    // Note: this is CRC-32C (Castagnoli, 0x1EDC6F41), not the same as zlib's CRC-32 (0x04C11DB7)
-    uint64_t crc = 0;
+    // Note: this is CRC-32C (Castagnoli, 0x1EDC6F41), not the same as zlib's CRC-32 (0x04C11DB7) - either is fine for us
+#ifdef __x86_64__ 
+    uint64_t crc = 0; // 32 MSb are unused, but intrinsics require a 64b argument
+    #define C64 ({ crc = _mm_crc32_u64(crc, *(unaligned_uint64_t *)&snip[i]); i += 8; })
+    #define C32 ({ crc = _mm_crc32_u32(crc, *(unaligned_uint32_t *)&snip[i]); i += 4; })
+    #define C16 ({ crc = _mm_crc32_u16(crc, *(unaligned_uint16_t *)&snip[i]); i += 2; })
+    #define C8  ({ crc = _mm_crc32_u8 (crc,                         snip[i]);         })
+#elif defined __aarch64__
+    uint32_t crc = 0;
+    #define C64 ({ crc = __crc32cd(crc, *(unaligned_uint64_t *)&snip[i]); i += 8; })
+    #define C32 ({ crc = __crc32cw(crc, *(unaligned_uint32_t *)&snip[i]); i += 4; })
+    #define C16 ({ crc = __crc32ch(crc, *(unaligned_uint16_t *)&snip[i]); i += 2; })
+    #define C8  ({ crc = __crc32cb(crc,                         snip[i]);         })
+#endif
+
+#if defined __x86_64__ || defined __aarch64__
+    uint32_t i = 0; 
     
     // full words
-    uint32_t i=0; for (; i + 8 <= snip_len; i += 8)  
-        crc = _mm_crc32_u64 (crc, *(unaligned_uint64_t *)&snip[i]); 
-
-    // note: using switch - compiled to a jump table - rather than 3 'if's each with a 50% misprediction rate
-    #define C32 crc = _mm_crc32_u32(crc, *(unaligned_uint32_t *)&snip[i]); i += 4
-    #define C16 crc = _mm_crc32_u16(crc, *(unaligned_uint16_t *)&snip[i]); i += 2
-    #define C8  crc = _mm_crc32_u8 (crc,                         snip[i])
+    while (i + 8 <= snip_len) C64;
 
     // tail - comprised of up to 7 bytes, handled with up to 3 crc32 instructions: maybe a 32b, then maybe a 16b, then maybe a byte
+    // note: using switch - likely compiled to a jump table - no branch prediction overhead
     switch (snip_len & 7) {
         case 0:               break;
         case 1:           C8; break;
@@ -265,10 +276,11 @@ static inline uint32_t hash_crc32 (STRp(snip))
         case 6: C32; C16;     break;
         case 7: C32; C16; C8; break;
     }
-    return (uint32_t)crc;
 #else
-    return crc32 (0, STRa(snip));
+    uint32_t crc = crc32 (0, STRa(snip));
 #endif
+
+    return (uint32_t)crc;
 }
 
 // search for snip in singletons - returns true and result if found

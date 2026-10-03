@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------
-//   aligner_layers.c
+//   aligner_layered.h
 //   Copyright (C) 2020-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //

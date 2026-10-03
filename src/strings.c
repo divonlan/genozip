@@ -23,8 +23,6 @@
 
 alignas(64) const bool is_printable[256] = { ['\t']=1, ['\n']=1, ['\r']=1, [32 ... 126]=1 };
 
-alignas(64) const bool is_ACGT[256] = { ['A']=true, ['C']=true, ['G']=true, ['T']=true };
-
 alignas(64) const bool is_ACGTN[256] = { ['A']=true, ['C']=true, ['G']=true, ['T']=true, ['N']=true };
 
 // valid characters in a FASTQ sequence
@@ -32,6 +30,8 @@ alignas(64) const bool is_fastq_seq[256] = {
     ['A']=true, ['C']=true, ['D']=true, ['G']=true, ['H']=true, ['K']=true, ['M']=true, ['N']=true, 
     ['R']=true, ['S']=true, ['T']=true, ['V']=true, ['W']=true, ['Y']=true, ['U']=true, ['B']=true 
 };
+
+rom string_anchor = "(null_anchor)"; // corresponding to relative string value of 0
 
 char *str_tolower (rom in, char *out /* out allocated by caller - can be the same as in */)
 {
@@ -183,36 +183,121 @@ StrText str_bases (uint64_t num_bases)
     return s;
 }
 
-// returns length
-uint32_t str_int_ex (int64_t n, char *str /* out */, bool add_nul_terminator)
+// returns length (excluding optional NUL)
+uint32_t str_hex_ex (int64_t n, char *restrict str, bool uppercase, bool add_nul_terminator)
 {
-    uint32_t len=0;
+    // 256-entry lookup tables for 2-hex-digit pairs ("00", "01", ..., "FF")
+    static alignas(64) const char hex_lower[512] = 
+        "000102030405060708090a0b0c0d0e0f" "101112131415161718191a1b1c1d1e1f"
+        "202122232425262728292a2b2c2d2e2f" "303132333435363738393a3b3c3d3e3f"
+        "404142434445464748494a4b4c4d4e4f" "505152535455565758595a5b5c5d5e5f"
+        "606162636465666768696a6b6c6d6e6f" "707172737475767778797a7b7c7d7e7f"
+        "808182838485868788898a8b8c8d8e8f" "909192939495969798999a9b9c9d9e9f"
+        "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf" "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf"
+        "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf" "d0d1d2d3d4d5d6d7d8d9dadbdcdddedf"  
+        "e0e1e2e3e4e5e6e7e8e9eaebecedeeef" "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"; 
 
-    if (n==0) {
-        str[0] = '0';
-        len=1;
+    static alignas(64) const char hex_upper[512] = 
+        "000102030405060708090A0B0C0D0E0F" "101112131415161718191A1B1C1D1E1F"
+        "202122232425262728292A2B2C2D2E2F" "303132333435363738393A3B3C3D3E3F"
+        "404142434445464748494A4B4C4D4E4F" "505152535455565758595A5B5C5D5E5F"
+        "606162636465666768696A6B6C6D6E6F" "707172737475767778797A7B7C7D7E7F"
+        "808182838485868788898A8B8C8D8E8F" "909192939495969798999A9B9C9D9E9F"
+        "A0A1A2A3A4A5A6A7A8A9AAABACADAEAF" "B0B1B2B3B4B5B6B7B8B9BABBBCBDBEBF"
+        "C0C1C2C3C4C5C6C7C8C9CACBCCCDCECF" "D0D1D2D3D4D5D6D7D8D9DADBDCDDDEDF"  
+        "E0E1E2E3E4E5E6E7E8E9EAEBECEDEEEF" "F0F1F2F3F4F5F6F7F8F9FAFBFCFDFEFF";
+
+    bool negative = (n < 0);
+    uint64_t u = ABS64(n);
+
+    // Maximum 16 hex digits for 64-bit int + 1 minus sign + padding
+    char out[20];
+    char *ptr = out + sizeof(out);
+
+    const char *hex_table = uppercase ? hex_upper : hex_lower;
+
+    // process 2 hex digits (1 byte) per iteration
+    while (u >= 256) {
+        uint32_t byte_val = (uint32_t)(u & 0xFF);
+        u >>= 8;
+        ptr -= 2;
+        memcpy (ptr, &hex_table[byte_val * 2], 2);
     }
 
+    // handle remaining 1 or 2 hex digits
+    if (u < 16) {
+        static const char digits_lower[] = "0123456789abcdef";
+        static const char digits_upper[] = "0123456789ABCDEF";
+        *--ptr = uppercase ? digits_upper[u] : digits_lower[u];
+    } else {
+        ptr -= 2;
+        memcpy (ptr, &hex_table[u * 2], 2);
+    }
+
+    if (negative) 
+        *--ptr = '-';
+
+    // copy formatted hex string to str
+    size_t len = (out + sizeof(out)) - ptr;
+    memcpy (str, ptr, len);
+
+    if (add_nul_terminator) 
+        str[len] = '\0';
+
+    return len;
+}
+
+// returns length, excluding optional NUL
+uint32_t str_int_ex (int64_t n, char *restrict str, bool add_nul_terminator)
+{
+    static alignas(64) const char digit_pairs[200] = 
+        "00010203040506070809" "10111213141516171819"
+        "20212223242526272829" "30313233343536373839"
+        "40414243444546474849" "50515253545556575859"
+        "60616263646566676869" "70717273747576777879"
+        "80818283848586878889" "90919293949596979899";
+
+    // shortcut for common case of 0 to 9
+    if (IN_RANGX (n, 0, 9)) {
+        str[0] = '0' + n;
+        if (add_nul_terminator) str[1] = '\0';
+        return 1;
+    }        
+
+    bool negative = (n < 0);
+    uint64_t u = ABS64(n);
+
+    // local scratchpad: 20 digits max for uint64_t + 1 minus sign + padding
+    char out[24];
+    char *ptr = out + sizeof(out);
+
+    // process 2 digits per step using 100-base reduction
+    while (u >= 100) {
+        uint32_t rem = (uint32_t)(u % 100);
+        u /= 100;
+        ptr -= 2;
+        memcpy (ptr, &digit_pairs[rem * 2], 2);
+    }
+
+    // emit remaining tail digit(s): either 1 or 2 digits left in `u`
+    if (u < 10) 
+        *--ptr = '0' + u;
     else {
-        bool is_negative = (n<0);
-        if (is_negative) n = -n;
-
-        char rev[50] = {}; // "initialize" to avoid compiler warning
-        while (n) {
-            rev[len++] = '0' + n % 10;
-            n /= 10;
-        }
-        // now reverse it
-        for (uint32_t i=0; i < len; i++) str[i + is_negative] = rev[len-i-1];
-
-        if (is_negative) {
-            str[0] = '-';
-            len++;
-        }
+        ptr -= 2;
+        memcpy (ptr, &digit_pairs[u * 2], 2);
     }
 
-    if (add_nul_terminator) str[len] = '\0'; // string terminator
-    return len; // excluding the \0
+    if (negative) 
+        *--ptr = '-';
+
+    // copy formatted string to str
+    size_t len = (out + sizeof(out)) - ptr;
+    memcpy (str, ptr, len);
+
+    if (add_nul_terminator) 
+        str[len] = '\0';
+
+    return len;
 }
 
 StrText str_int_s (int64_t n)
@@ -250,41 +335,6 @@ StrText1K str_str_s_(rom label, STRp(str))
     }
 
     return s;
-}
-
-// returns length
-uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool add_nul_terminator)
-{
-    uint32_t len=0;
-
-    if (n==0) {
-        str[0] = '0';
-        len=1;
-    }
-
-    else {
-        bool is_negative = (n<0);
-        if (is_negative) n = -n;
-
-        char rev[50] = {}; // "initialize" to avoid compiler warning
-        while (n) {
-            int hexit = n % 16;
-            rev[len++] = (hexit < 10) ? ('0' + hexit)
-                       : uppercase    ? ('A' + (hexit-10))
-                       :                ('a' + (hexit-10));
-            n /= 16;
-        }
-        // now reverse it
-        for (uint32_t i=0; i < len; i++) str[i + is_negative] = rev[len-i-1];
-
-        if (is_negative) {
-            str[0] = '-';
-            len++;
-        }
-    }
-
-    if (add_nul_terminator) str[len] = '\0'; // string terminator
-    return len;
 }
 
 // returns true if string is a valid "simple" float (i.e. not exponential notation, no leading zeros, must begin and end with a digit, may be an integer)
@@ -653,7 +703,7 @@ differ:
 #define ASSSPLIT(condition, format, ...) ({\
     if (!(condition)) { \
         if (enforce_msg || flag.debug_split) {   \
-            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCLINE); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); \
+            progress_newline(); fprintf (stderr, "Error in %s:%u: ", __FUNCTION__, __LINE__); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "%s", report_support_if_unexpected()); \
             if (enforce_msg) exit_on_error(true); /* same as ASSERT */ \
         } \
         return 0; /* just return 0 if we're not asked to enforce */ \
@@ -821,22 +871,26 @@ rom str_split_by_tab_do (STR𐤐(str),
 
 // get up to n_lines from str. ignores subsequent lines.
 // returns lines, with their lengths excluding \n and \r
-uint32_t str_split_by_lines_do (STR𐤐(str), uint32_t max_lines, rom𐤐 *restrict lines, uint32_t *restrict line_lens)
+// final line may or may not end with a \n
+uint32_t str_split_by_lines_do (STR𐤐(str), uint32_t max_lines, rom𐤐 *restrict lines, uint32_t *restrict line_lens, bool skip_final_line_if_no_newline)
 {
     // IMPORTANT: restrict: since lines[] elements do actually alias str, they should never be dereferenced!
 
     rom after = str + str_len;
     uint32_t i; for (i=0; i < max_lines && str < after; i++) {
         rom nl = memchr (str, '\n', after - str);
-        if (nl) {
-            lines[i] = str;
-            line_lens[i] = nl - str;
-            if (nl != str && nl[-1] == '\r') line_lens[i]--;
-
-            str = nl + 1;
+        if (!nl) { // case: final line is not \n-terminated
+            if (skip_final_line_if_no_newline)
+                break;
+            else
+                nl = after; 
         }
-        else 
-            break; // we're done
+
+        lines[i] = str;
+        line_lens[i] = nl - str;
+        if (nl != str && nl[-1] == '\r') line_lens[i]--;
+
+        str = nl + 1;
     }
 
     return i;
@@ -1028,14 +1082,6 @@ uint32_t str_split_by_container_do (STR𐤐(str), ContainerP con, STR𐤐(con_pr
     return items - save_items;
 }
 
-// remove \r (ASCII Carriage Return) from each lines[] that has it as its final character, but decrementing the matching line_lens
-void str_remove_CR_do (uint32_t n_lines, rom *lines, uint32_t *line_lens)
-{
-    for (uint32_t i=0; i < n_lines; i++)
-        if (line_lens[i] >= 1 && lines[i][line_lens[i]-1] == '\r') 
-            line_lens[i]--;
-}
-
 // replace the last character in each item with \0. these are generated by str_split, so expecting a separator after each string
 void str_nul_separate_do (STR𐤐s(item))
 {
@@ -1080,7 +1126,8 @@ void str_trim (qSTR𐤐(str))
 
 // splits a string with up to (max_items-1) separators (doesn't need to be nul-terminated) to up to or exactly max_items integers
 // returns the actual number of items, or 0 is unsuccessful
-uint32_t str_split_ints_do (STR𐤐(str), uint32_t max_items, char sep, bool exactly, int base,
+uint32_t str_split_ints_do (STR𐤐(str), uint32_t max_items, char sep, bool exactly, 
+                            int base, // 0 means based 10 non-negative
                             int64_t *restrict items)  // out - array of integers
                        
 {
@@ -1089,8 +1136,11 @@ uint32_t str_split_ints_do (STR𐤐(str), uint32_t max_items, char sep, bool exa
 
     uint32_t item_i;
     for (item_i=0; item_i < max_items && str < after; item_i++, str++) {
-        items[item_i] = (base==16) ? strtoull (str, (char **)&str, base) // allows parsing 64bit (unsigned) hexes
-                                   : strtoll (str, (char **)&str, base);
+        if (!base) // most common case 
+            items[item_i] = fast_atoi (str, (char **)&str);
+        else
+            items[item_i] = (base==16) ? strtoull (str, (char **)&str, base) // allows parsing 64bit (unsigned) hexes
+                                       : strtoll (str, (char **)&str, base);
 
         if (item_i < max_items-1 && *str != sep && *str != 0) {
             item_i=0;
@@ -1262,21 +1312,17 @@ void str_query_user (rom query,
 rom str_win_error_(uint32_t error)
 {
     static char msg[100];
-#ifdef _WIN32
-    FormatMessageA (FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,                   
-                    NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg, sizeof (msg), NULL);
-#endif
+
+    𝓌𝒾𝓃(FormatMessageA (FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,                   
+                         NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg, sizeof (msg), NULL);)
+
     return msg;
 }
 
 rom str_win_error (void)
 {
-#ifdef _WIN32
-    uint32_t error = GetLastError();
-    return str_win_error_(error);
-#else
-    return "";
-#endif
+    return 𝓌𝒾𝓃(str_win_error_(GetLastError())) 
+           X𝓌𝒾𝓃("");
 }
 
 // C<>G A<>T c<>g a<>t ; IUPACs: R<>Y K<>M B<>V D<>H W<>W S<>S N<>N (+ lowercase); other ASCII 32->126 preserved ; other = 0
@@ -1491,13 +1537,9 @@ uint32_t str_unpack_bases (char *restrict dst, bytes𐤐 packed, uint32_t num_ba
         uint32_t base2 = actg[(b >> 4) & 3];
         uint32_t base3 = actg[(b >> 6) & 3];
 
-#if defined __LITTLE_ENDIAN__
-        uint32_t word = base0 | (base1 << 8) | (base2 << 16) | (base3 << 24);
-#elif defined __BIG_ENDIAN__
-        uint32_t word = base3 | (base2 << 8) | (base1 << 16) | (base0 << 24);
-#else
-#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
-#endif    
+        uint32_t word = ℒ𝒾𝓉ℰ (base0 | (base1 << 8) | (base2 << 16) | (base3 << 24))
+                        ℬ𝒾ℊℰ (base3 | (base2 << 8) | (base1 << 16) | (base0 << 24));
+
         *(unaligned_uint32_t *)dst = word; // single write for 4 bases
     }
 

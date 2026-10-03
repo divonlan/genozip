@@ -141,7 +141,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_X_LM_RM)
 {    
     if (!reconstruct) return NO_NEW_VALUE;
 
-    str_split_ints (snip, snip_len, 2, ',', item, true);
+    str_split_ints (snip, snip_len, 2, ',', item, true); // delta can be negative
     int seq_len = items[0];
     int delta   = items[1];
 
@@ -300,7 +300,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_X_IL)
 static char X_HIN_prediction (VBlockVCFP vb, int alt_i)
 {
     STRlast (x_hil_str, INFO_X_HIL);
-    str_split_ints (x_hil_str, x_hil_str_len, N_ALTS, ',', x_hil, true);
+    str_split_unsigneds (x_hil_str, x_hil_str_len, N_ALTS, ',', x_hil, true);
     if (!n_x_hils) return 0; // invalid HIL -> not predictable
     
     AltType *alt = ALTi(alt_i);
@@ -417,7 +417,7 @@ static int X_HIL_prediction (VBlockVCFP vb, int alt_i, bool use_reference)
 
 void vcf_seg_INFO_X_HIL (VBlockVCFP vb, ContextP ctx, STRp(hil_str))
 {
-    str_split_ints (hil_str, hil_str_len, N_ALTS, ',', hil, true);
+    str_split_unsigneds (hil_str, hil_str_len, N_ALTS, ',', hil, true);
 
     bool use_reference = !!flag.reference;
     bool predicted = (n_hils == N_ALTS);
@@ -545,7 +545,7 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_VARIANT_TYPE)
 
 void vcf_seg_INFO_FILTERED_HAPS (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    if (ctx_has_value_in_line_(vb, CTX(INFO_ASSEMBLED_HAPS))) 
+    if (ctx_has_value_in_line (vb, INFO_ASSEMBLED_HAPS)) 
         seg_delta_vs_other_localS (VB, ctx, CTX(INFO_ASSEMBLED_HAPS), STRa(value), -1);
 
     else

@@ -6,6 +6,10 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+// libbsc usage history
+// 14.0.19 - initial integration of version 3.1.0
+// 15.0.47 - upgrade to version 3.3.4
+
 #include "compressor.h"
 #include "vblock.h"
 #include "bsc/libbsc.h"

@@ -23,10 +23,10 @@ void vcf_isaac_seg_initialize (VBlockVCFP vb)
 
 void vcf_seg_FORMAT_GQX (VBlockVCFP vb, ContextP ctx, STRp(gqx))
 {        
-    bool no_ht = !ctx_encountered (VB, FORMAT_GT) || CTX(FORMAT_GT)->gt.ht[0] == '.'; 
+    bool no_ht = !ctx_encountered_in_sample (VB, FORMAT_GT) || CTX(FORMAT_GT)->gt.ht[0] == '.'; 
     
     int channel_i = no_ht                            ? 0
-                  : !ctx_encountered (VB, FORMAT_GQ) ? 1
+                  : !ctx_encountered_in_sample (VB, FORMAT_GQ) ? 1
                   :                                    2;
 
     ContextP chan_ctx = seg_mux_get_channel_ctx (VB, FORMAT_GQX, &vb->mux_GQX, channel_i);
@@ -42,8 +42,8 @@ SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_GQX)
 {
     rom gt = last_txt (VB, FORMAT_GT);
 
-    int channel_i = (!ctx_encountered (VB, FORMAT_GT) || *gt == '.') ? 0
-                  : !ctx_encountered (VB, FORMAT_GQ)                 ? 1
+    int channel_i = (!ctx_encountered_in_sample (VB, FORMAT_GT) || *gt == '.') ? 0
+                  : !ctx_encountered_in_sample (VB, FORMAT_GQ)                 ? 1
                   :                                                    2;
 
     return reconstruct_demultiplex (vb, ctx, STRa(snip), channel_i, new_value, reconstruct);

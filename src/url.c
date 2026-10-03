@@ -363,7 +363,7 @@ static void url_read_string_do (rom url, rom user, rom password,
     if (!exit_code) 
         return; // curl/wget itself is good - we may have or not an error in "error" from the server or in case of no connection
 
-    ωιη (if (exit_code == ENFILE) return;) // Windows: we didn't read all the data on the pipe - that's ok
+    𝓌𝒾𝓃 (if (exit_code == ENFILE) return;) // Windows: we didn't read all the data on the pipe - that's ok
 
     // case: for non-HTTP urls (eg ftp:// file://) or for HTTP urls where the error occurred before connecting
     // to the webserver (eg bad url) the error comes in stderr, and curl exit code is non-0.

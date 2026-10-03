@@ -33,7 +33,7 @@ void sam_seg_STAR_jI (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(raw), bool is_b
 #endif
 
     else {
-        str_split_ints (raw, raw_len, n_vals, ',', val64, true);
+        str_split_ints (raw, raw_len, n_vals, ',', val64, true); // values can be negative
         if (!n_val64s) goto fallback;
 
         for (int i=0; i < n_vals; i++)

@@ -133,7 +133,7 @@ void vcf_seg_FORMAT_PS_PID (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, 
 
     // case: this is PS and we also have PID on this line - they are usually the same POS (so no need to lookback)
     else if (ctx->did_i == FORMAT_PS && CTX(FORMAT_PID)->ps_type == PS_POS_REF_ALT && 
-             ctx_encountered (VB, FORMAT_PID) && vcf_seg_FORMAT_PS_PID_ps_matches_pid (vb, STRa(value)))
+             ctx_encountered_in_sample (VB, FORMAT_PID) && vcf_seg_FORMAT_PS_PID_ps_matches_pid (vb, STRa(value)))
         seg_special0 (VB, VCF_SPECIAL_PS_BY_PID, ctx, value_len);
 
     // case: this line is in the same Phase Set as the previous line
@@ -187,7 +187,7 @@ void vcf_seg_FORMAT_PS_PID_missing_value (VBlockVCFP vb, ContextP ctx, rom end_o
     // special case: a missing PS which follows a PID='.' - we generate a SPECIAL which then uses 
     // ctx->value_is_missing to achieve the same effect as WORD_INDEX_MISSING, so that b250 is have near-all SNIP_SPECIAL.
     // note: we DONT generate a SPECIAL if PS is '.'
-    if (ctx->did_i == FORMAT_PS && ctx_encountered (VB, FORMAT_PID) && 
+    if (ctx->did_i == FORMAT_PS && ctx_encountered_in_sample (VB, FORMAT_PID) && 
         (CTX(FORMAT_PID)->ps_type == PS_POS_REF_ALT || CTX(FORMAT_PID)->ps_type == PS_UNKNOWN) &&    
         vb->last_txt_len(FORMAT_PID)==1 && *last_txt(VB, FORMAT_PID)=='.') {
 

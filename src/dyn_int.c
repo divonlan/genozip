@@ -14,9 +14,9 @@
 #include "file.h"
 #include "local_type.h"
 
-static LocalType lt_order[] = { 0/*uninitialzed*/, LT_UINT8, LT_INT8, LT_UINT16, LT_INT16, LT_UINT32, LT_INT32, LT_INT64 }; // seniority levels
-static LocalType lt_order_hex[] = { -1,            LT_hex8,  -1,      LT_hex16,  -1,       LT_hex32,  -1,       LT_hex64 }; // LT_DYN_INT_h
-static LocalType lt_order_HEX[] = { -1,            LT_HEX8,  -1,      LT_HEX16,  -1,       LT_HEX32,  -1,       LT_HEX64 }; // LT_DYN_INT_H
+static alignas(8) LocalType lt_order[] = { 0/*uninitialzed*/, LT_UINT8, LT_INT8, LT_UINT16, LT_INT16, LT_UINT32, LT_INT32, LT_INT64 }; // seniority levels
+static alignas(8) LocalType lt_order_hex[] = { -1,            LT_hex8,  -1,      LT_hex16,  -1,       LT_hex32,  -1,       LT_hex64 }; // LT_DYN_INT_h
+static alignas(8) LocalType lt_order_HEX[] = { -1,            LT_HEX8,  -1,      LT_HEX16,  -1,       LT_HEX32,  -1,       LT_HEX64 }; // LT_DYN_INT_H
 
 rom dyn_int_lt_order_name (uint8_t dyn_lt_order)
 {
@@ -102,7 +102,7 @@ void dyn_int_transpose (VBlockP vb, ContextP ctx)
 
     // case: copy back transposed array: rows X cols elements
     if (!missing)
-        buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, __FUNCLINE, C_LOCAL); // copy and not move, so we can keep local's memory for next vb
+        buf_copy_do (vb, &ctx->local, &vb->scratch, lt_width(ctx), 0, 0, THIS_CODE_LINE, C_LOCAL); // copy and not move, so we can keep local's memory for next vb
 
     // case: copy to local only the available data (i.e. not uninitialized scratch elements due to copied samples)
     else {
@@ -315,7 +315,7 @@ void dyn_int_append (VBlockP vb, ContextP ctx, int64_t value, unsigned add_bytes
     }
     
     if (add_bytes) ctx->txt_len += add_bytes;
-    ctx->local_num_words++;
+    ctx->v_local_n_words++;
 }
 
 // ZIP only
@@ -342,7 +342,7 @@ void dyn_int_append_nothing_char (VBlockP vb, ContextP ctx, unsigned add_bytes)
     }
     
     if (add_bytes) ctx->txt_len += add_bytes;
-    ctx->local_num_words++;
+    ctx->v_local_n_words++;
 }
 
 // PIZ: store value in history

@@ -7,7 +7,6 @@
 //   and subject to penalties specified in the license.
 
 #pragma once
-
 #define _FILE_OFFSET_BITS 64
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +17,7 @@
 #include <stdalign.h>
 
 #include "website.h"
+#include "pointeר.h"
 
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"    // needed for our #pragma GENDICT
 #ifdef __clang__ 
@@ -25,15 +25,33 @@
 #endif
 
 #ifdef _WIN32 // Windows-only code (greek letters than visually resemble "win")
-#define ωιη(x) x
+#define 𝓌𝒾𝓃(x) x /* note: to cancel highlighting: Ctrl-, Unicode Highlight */
+#define X𝓌𝒾𝓃(x) // NOT Windows
 #else
-#define ωιη(x) 
+#define 𝓌𝒾𝓃(x) 
+#define X𝓌𝒾𝓃(x) x 
+#endif
+
+#ifdef __linux__
+#define ℓ𝒾𝓃𝓊𝓍(x) x
+#define Xℓ𝒾𝓃𝓊𝓍(x)
+#else
+#define ℓ𝒾𝓃𝓊𝓍(x)
+#define Xℓ𝒾𝓃𝓊𝓍(x) x
+#endif
+
+#ifdef __APPLE__
+#define 𝓂𝒶𝒸(x) x
+#else
+#define 𝓂𝒶𝒸(x)
 #endif
 
 #ifdef __x86_64__
 #define χ64(x) x
+#define Xχ64(x)
 #else
 #define χ64(x)
+#define Xχ64(x) x
 #endif
 
 #define UNUSED __attribute__((unused))
@@ -117,14 +135,6 @@ typedef int32_t TaxonomyId;
 #define TB *((uint64_t)1<<40)
 #define PB *((uint64_t)1<<50)
 
-typedef packed_enum { 
-    NO_POOL=-1, 
-    POOL_MAIN,  // used for all VBs, except non-pool VBs and BGZF VBs
-    POOL_BGZF,  // PIZ only: used for BGZF-compression dispatcher
-    POOL_MISC,  // Used for tasks that are embedded in the main PIZ or ZIP: for now: TASK_READ_TXT_HEADER
-    NUM_POOL_TYPES } VBlockPoolType;
-#define POOL_NAMES { "MAIN", "BGZF", "MISC" }
-
 // ------------------------------------------------------------------------------------------------------------------------
 // pointers used in header files - so we don't need to include the whole .h (and avoid cyclicity and save compilation time)
 // ------------------------------------------------------------------------------------------------------------------------
@@ -142,6 +152,7 @@ typedef const struct ContainerItem *ConstContainerItemP;
 typedef struct Context *restrict ContextP;
 #define CTX_NONE ((ContextP)0)
 typedef const struct Context *restrict ConstContextP;
+typedef struct CtxNode *CtxNodeP;
 typedef struct SectionHeader *SectionHeaderP;
 typedef const struct SectionHeader *ConstSectionHeaderP;
 typedef const struct SectionEnt *Section;
@@ -424,8 +435,26 @@ extern CommandType primary_command;
 #define IS_BIOPSY_BYTES  (flag.command == BIOPSY_BYTES)
 #define IS_SHOW_FLAVOR   (flag.command == SHOW_FLAVOR)
 #define IS_RM_CACHE      (flag.command == RM_CACHE)
-typedef enum { VB_ID_EVB=-1, VB_ID_WRITER=-2, VB_ID_SEGCONF=-3, VB_ID_SCAN_VB=-4, VB_ID_COMPRESS_DEPN=-5, VB_ID_NONE=-999 } VBID;
-#define NUM_NONPOOL_VBs 5
+
+typedef packed_enum { 
+    NO_POOL,
+    POOL_MAIN,    // used for all VBs, except non-pool VBs and BGZF VBs
+    POOL_BGZF,    // PIZ only: used for BGZF-compression dispatcher
+    POOL_MISC,    // Used for tasks that are embedded in the main PIZ or ZIP: for now: TASK_READ_TXT_HEADER
+    POOL_NONPOOL, // pseudo-pool for NonPoolVBs
+    NUM_POOLS
+} VBlockPoolType;
+#define POOL_NAMES    { "NO_POOL", "MAIN", "BGZF", "MISC", "NONPOOL" }
+
+typedef packed_enum   { VB_ID_EVB, VB_ID_WRITER, VB_ID_SEGCONF, VB_ID_SCAN_VB, VB_ID_COMP_DEPN, NUM_NONPOOL_VBs } NonPoolVBs; 
+#define NONPOOL_NAMES {      "EVB",     "WRITER",     "SEGCONF",     "SCAN_VB",     "COMP_DEPN" }
+
+typedef uint16_t VBIDIndex;
+typedef struct { // 2 bytes
+    VBlockPoolType pool : 3;
+    VBIDIndex index     : 12; // index in pool: [0, MAX_POOL_VBS)
+    uint16_t unused     : 1;
+} VBID; 
 
 // tasks
 typedef packed_enum { TASK_NONE, /*dispatcher tasks →*/ TASK_ZIP, TASK_PIZ, TASK_PIZ_REF, TASK_LOAD_EXT_REF, TASK_LOAD_STORED_REF, TASK_MAKE_REF_COMP, TASK_COMPRESS_REF, TASK_LOAD_REFHASH, TASK_MRH_DECIDE_OCCUPIER, TASK_MRH_OCCUPY, TASK_MRH_COMPRESS, TASK_UNCOMP_RECON_PLAN, TASK_COMP_TXT_HEADER, TASK_READ_TXT_HEADER, TASK_BAMASS_READ, TASK_BAMASS_LINK, TASK_ASSIGN_DICT_CODECS, TASK_COMP_DICTS, TASK_READ_DICTS_REF, TASK_READ_DICTS, TASK_BGZF,  /*non-dispatcher tasks →*/ TASK_EVB, TASK_WVB, TASK_SEGCONF, TASK_COMP_DEPN_BUF, TASK_FASTA_FILTER_GREP, TASK_SCAN_FOR_DEPN, NUM_TASKS } Task;
@@ -447,13 +476,16 @@ typedef int ThreadId;
 // atomics
 #define load_relaxed(var)        __atomic_load_n    (&var, __ATOMIC_RELAXED)
 #define load_acquire(var)        __atomic_load_n    (&var, __ATOMIC_ACQUIRE)
-#define store_relaxed(var,value) __atomic_store_n   (&var, (value), __ATOMIC_RELAXED); 
-#define store_release(var,value) __atomic_store_n   (&var, (value), __ATOMIC_RELEASE); 
+#define store_relaxed(var,value) __atomic_store_n   (&var, (value), __ATOMIC_RELAXED)
+#define store_release(var,value) __atomic_store_n   (&var, (value), __ATOMIC_RELEASE) 
 #define add_relaxed(var, delta)  __atomic_add_fetch (&var, (typeof(var))(delta), __ATOMIC_RELAXED) // returns value after 
 #define sub_relaxed(var, delta)  __atomic_sub_fetch (&var, (typeof(var))(delta), __ATOMIC_RELAXED) // returns value after 
 #define increment_relaxed(var)   add_relaxed (var, 1) // returns value after incrementing
 #define decrement_relaxed(var)   sub_relaxed (var, 1) // returns value after decrementing
 #define test_and_set_relaxed(var) __atomic_test_and_set (&var, __ATOMIC_RELAXED)
+#define cas_weak_relaxed(var,   expected, desired)  __atomic_compare_exchange_n (&(var), &(expected), (desired), true,  __ATOMIC_RELAXED, __ATOMIC_RELAXED)
+#define cas_strong_relaxed(var, expected, desired)  __atomic_compare_exchange_n (&(var), &(expected), (desired), false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)
+#define cas_strong_rel_acq(var, expected, desired)  __atomic_compare_exchange_n (&(var), &(expected), (desired), false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)
 
 // macros with arguments that evaluate only once 
 #define MIN_(a, b) ({ typeof(a) _a_=(a); typeof(b) _b_=(b); (_a_ < _b_) ? _a_ : _b_; }) // GCC / clang "statement expressions" extension: https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html#Statement-Exprs
@@ -461,6 +493,8 @@ typedef int ThreadId;
 #ifndef ABS
 #define ABS(a) ({ typeof(a) _a_=(a); (_a_ >= 0) ? _a_ : -_a_; })
 #endif
+static inline uint64_t ABS64 (int64_t n) { return (n < 0) ? (uint64_t)(0 - (uint64_t)n) : (uint64_t)n; } // works for INT64_MIN too
+
 #ifndef SQR 
 #define SQR(x) ((x)*(x)) 
 #endif
@@ -497,17 +531,20 @@ static inline uint64_t fibonacci (uint64_t n, int n_bits) { return ((n * 1140071
 #define IS_FLAG(flag, mask) (((flag) & (mask)) == (mask))
 
 #define SWAP(a,b)     ({ typeof(a) tmp = a; a = b; b = tmp; })
-#define SWAPbits(a,b) ({ uint64_t  tmp = a; a = b; b = tmp; })  // meant for bit fields (of any type uint8_t -> uint64_t)
+#define SWAPbits(a,b) ({ uint64_t  tmp = a; a = b; b = tmp; })  // for unsigned bit fields
 
 // safe snprintf for multiple-step string building 
-#define SNPRINTF(out/*StrText* */, format, ...) \
+#define SNPRINTF(out/*StrText*/, format, ...) \
     ({ out##_len += snprintf (&out.s[out##_len], sizeof(out.s)-out##_len, (format), __VA_ARGS__); out##_len = MIN_(out##_len, sizeof(out.s)); })
 
-#define SNPRINTF0(out/*StrText* */, str) \
+#define SNPRINTF0(out/*StrText*/, str) \
     ({ out##_len += snprintf (&out.s[out##_len], sizeof(out.s)-out##_len, (str)); out##_len = MIN_(out##_len, sizeof(out.s)); })
 
 // note: second caller will skip block, even if first caller is still executing it
 #define DO_ONCE static bool do_once=0; if (!test_and_set_relaxed (do_once))
+
+// one lucky thread gets to execute the code, other threads stall
+#define DO_ONCE_OR_STALL static bool do_once=0; if (test_and_set_relaxed (do_once)) stall(); else
 
 // Strings - declarations
 #define SNIP(len) uint32_t snip_len=(len); char snip[len]
@@ -594,11 +631,10 @@ static inline uint64_t fibonacci (uint64_t n, int n_bits) { return ((n * 1140071
 #define _S(x) x, STRLEN(x)
 #define _8(x) (bytes)x, STRLEN(x)
 #define STRBw(buf,txtword) Bc ((buf), (txtword).index), (txtword).len // used with TxtWord
-#define FUNCLINE rom func, uint32_t code_line
-#define __FUNCLINE __FUNCTION__, __LINE__
 #define ARRAYp(name) uint32_t n_##name##s, rom name##s[], uint32_t name##_lens[] // function parameters
 #define ARRAYa(name) n_##name##s, name##s, name##_lens // function arguments
 
+// Temporary saving
 #define SAVE_VALUE(var) typeof(var) save_##var = var 
 #define TEMP_VALUE(var,temp) typeof(var) save_##var = var ; var = (temp)
 #define RESET_VALUE(var) SAVE_VALUE(var) ; var=(typeof(var))(uint64_t)0
@@ -756,7 +792,7 @@ extern StrText license_get_number (void);
 extern rom report_support (void);
 extern rom report_support_if_unexpected (void);
 extern noreturn void error_assertinp_failed (rom format, ...);
-extern noreturn void error_assert_failed (FUNCLINE, rom format, ...);
+extern noreturn void error_assert_failed (Caller caller, rom format, ...);
 extern noreturn void error_restart (rom add_cmd_option, rom format, ...);
 extern void warn (rom format, ...);
 
@@ -770,7 +806,7 @@ extern void warn (rom format, ...);
 #define ABORTINP(format, ...)                error_assertinp_failed ((format), ##__VA_ARGS__ )//({ progress_newline(); fprintf (stderr, "%s: ", global_cmd); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); fflush (stderr); exit_on_error(false);})
 #define ABORTINP0(string)                    ABORTINP (string "%s", "")
 
-#define ASSERT(condition, format, ...)       ({ if (__builtin_expect (!(condition), 0)) error_assert_failed (__FUNCLINE, (format), ##__VA_ARGS__); })
+#define ASSERT(condition, format, ...)       ({ if (__builtin_expect (!(condition), 0)) error_assert_failed (THIS_CODE_LINE, (format), ##__VA_ARGS__); })
 #define ASSERT0(condition, string)           ASSERT (condition, string "%s", "")
 #define ASSERTISNULL(p)                      ASSERT (!p, "expecting %s to be NULL", #p)
 #define ASSERTNOTNULL(p)                     ASSERT (p, "%s is NULL", #p)
@@ -779,12 +815,14 @@ extern void warn (rom format, ...);
 #define ASSERTISZERO(n)                      ASSERT (!(n), "%s!=0", #n)
 #define ASSERTINRANGE(n, min, after)         ASSERT (IN_RANGE((n), (min), (after)), "%s=%"PRId64" ∉ [%"PRId64",%"PRId64")", #n, (int64_t)(n), (int64_t)(min), ((int64_t)(after)))
 #define ASSERTINRANGX(n, min, max)           ASSERT (IN_RANGX((n), (min), (max)),   "%s=%"PRId64" ∉ [%"PRId64",%"PRId64"]", #n, (int64_t)(n), (int64_t)(min), ((int64_t)(max)))
-#define ABORT(format, ...)                   error_assert_failed (__FUNCLINE, (format), ##__VA_ARGS__)
+#define ASSERT_SIZEOF(type, expected_size)   _Static_assert(sizeof(type) == (expected_size), "Expecting sizeof(" #type ") == " #expected_size) /* compile-time assertion */
+#define ABORT(format, ...)                   error_assert_failed (THIS_CODE_LINE, (format), ##__VA_ARGS__)
 #define ABORT0(string)                       ABORT (string "%s", "")
 
 // Report an error: print always regardless of flag.quiet
 #define ASSRET(condition, ret, format, ...)  ({ if (__builtin_expect (!(condition), 0)) { warn ((format), ##__VA_ARGS__); return ret; } })
 #define ASSGOTO(condition, format, ...)      ({ if (__builtin_expect (!(condition), 0)) { warn ((format), ##__VA_ARGS__); goto error; } })
+
 
 // A warning: report, but not if flag.quiet
 #define WARN(format, ...)                    ({ if (!flag.quiet) warn ((format), ##__VA_ARGS__); })

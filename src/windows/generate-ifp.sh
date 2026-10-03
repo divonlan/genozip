@@ -15,6 +15,15 @@ if [[ `pwd` != *windows* ]]; then
     exit 1
 fi
 
+if (( $# != 3 )); then
+    echo "Usage: $0 home_dir installers_dir windows_dir <--- directories in Windows foramt C:\..."
+    exit 0
+fi
+
+root_dir="$1"
+installers_dir="$2"
+windows_dir="$3"
+
 template=genozip-installer.template.ifp
 
 if [ ! -f $template ]; then
@@ -27,18 +36,9 @@ version=$(head -n1 ../version.h |cut -d\" -f2)
 lines=`wc -l $template | cut -d" " -f1`
 head=$(( `grep -n __LICENSE__ $template | cut -d: -f1` - 1 )) # __LICENSE__ must be on a stand-alone line
 tail=$(( $lines - $head - 1 ))
-windows_dir=`echo $PWD | sed "s/^\/mnt\/c/C:/g" | sed "s/\//\\\\\\\\\\\\\\\\/g"`
-
-cd ../..
-root_dir=`echo $PWD | sed "s/^\/mnt\/c/C:/g" | sed "s/\//\\\\\\\\\\\\\\\\/g"`
-cd - > /dev/null
-
-cd ../../installers
-installers_dir=`echo $PWD | sed "s/^\/mnt\/c/C:/g" | sed "s/\//\\\\\\\\\\\\\\\\/g"`
-cd - > /dev/null
 
 exe_mb=5.4 # not sure if this needs to be accurate
-license_kb=11.0
+license_kb=32
 
 rm -f genozip-installer.ifp
 
@@ -47,9 +47,9 @@ rm -f genozip-installer.ifp
 
 (head -$head $template ; sed "s/'/\\\\f1\\\\rquote\\\\f0 /g" LICENSE.for-installer.txt | sed "s/$/\\\\par\r/g"; tail -$tail $template) \
 | sed s/__VERSION__/${version}/g \
-| sed "s/__ROOT_DIR__/${root_dir}/g" \
-| sed "s/__WINDOWS_DIR__/${windows_dir}/g" \
-| sed "s/__INSTALLERS__/${installers_dir}/g" \
+| sed "s|__ROOT_DIR__|${root_dir}|g" \
+| sed "s|__WINDOWS_DIR__|${windows_dir}|g" \
+| sed "s|__INSTALLERS__|${installers_dir}|g" \
 | sed "s/__EXE_MB__/${exe_mb}/g" \
 | sed "s/__LICENSE_KB__/${license_kb}/g" \
 > genozip-installer.ifp

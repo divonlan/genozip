@@ -40,13 +40,8 @@ typedef struct stream_ {
     FILE *from_stream_stdout;
     FILE *from_stream_stderr;
     FILE *to_stream_stdin;
-#ifdef _WIN32
-    HANDLE pid;
-    DWORD exit_status;
-#else
-    pid_t pid;
-    int exit_status; // if the process already exited and we got its code, the code will be here and pid==0;
-#endif
+    𝓌𝒾𝓃(HANDLE) X𝓌𝒾𝓃(pid_t) pid;
+    𝓌𝒾𝓃(DWORD)  X𝓌𝒾𝓃(int)   exit_status;
 } Stream;
 
 // exit codes names of the genozip process
@@ -351,11 +346,7 @@ int stream_close (StreamP *stream, StreamCloseMode close_mode)
         stream_close (&(*stream)->substream, close_mode);
 
     if ((*stream)->pid && close_mode == STREAM_KILL_PROCESS) 
-#ifdef _WIN32
-        TerminateProcess ((*stream)->pid, 9); // ignore errors
-#else
-        kill ((*stream)->pid, 9); // ignore errors
-#endif
+        𝓌𝒾𝓃(TerminateProcess) X𝓌𝒾𝓃(kill) ((*stream)->pid, 9); // ignore errors
 
     int exit_code = EXIT_OK; 
     if ((*stream)->pid && close_mode != STREAM_DONT_WAIT_FOR_PROCESS)
@@ -379,14 +370,20 @@ int stream_wait_for_exit (StreamP stream,
     if (!stream->pid) return stream->exit_status; // we've already waited for this process and already have the exit status;
 
 #ifdef _WIN32
+    HANDLE h = stream->pid; // save handle as another thread can free stream under our feet
+
     // wait for child, so that the terminal doesn't print the prompt until the child is done
-    WaitForSingleObject (stream->pid, INFINITE);
+    WaitForSingleObject (h, INFINITE);
     
-    ASSERTW (GetExitCodeProcess (stream->pid, &stream->exit_status), _WRN "GetExitCodeProcess() failed: %s", stream_windows_error());
-    CloseHandle (stream->pid);
+    DWORD exit_status; // local var incase stream doesn't exist anymroe
+    ASSERTW (GetExitCodeProcess (h, &exit_status), _WRN "GetExitCodeProcess() failed: %s", stream_windows_error());
+    CloseHandle (h); 
+
+    if (stream) stream->exit_status = exit_status; // not atomic but better than nothing
 
 #else
-    START_TIMER_ALWAYS;
+    struct timespec timer; 
+    clock_gettime(CLOCK_REALTIME, &timer);
 
     int exit_status;
     waitpid (stream->pid, &exit_status, 0); 
@@ -394,7 +391,7 @@ int stream_wait_for_exit (StreamP stream,
     stream->exit_status = WIFEXITED (exit_status) ? WEXITSTATUS (exit_status) : exit_status;
 
     ASSERTW (killed || WIFEXITED (exit_status), _ERR "Child process pid=%d exited abnormally (i.e. not via exit()). I waited for it %u milliseconds",          
-             stream->pid, (unsigned)(CHECK_TIMER / 1000000ULL));
+             stream->pid, (unsigned)(clock_delta(timer) / 1000000ULL));
 
     // in Windows, the main process fails to CreateProcess it exits. In Unix, it is the child process that 
     // fails to execv, and exits and code EXIT_STREAM. The main process catches it here, and exits silently.
@@ -419,11 +416,9 @@ void stream_abort_if_cannot_run (rom exec_name, rom reason)
 {
     StreamP stream = stream_create (0, 1024, 1024, 0, 0, 0, 0, reason, exec_name, NULL); // will abort if cannot run
 
-// in Windows, the main process fails to CreateProcess and exits. In Unix, it is the child process that 
-// fails to execv, and exits and code EXIT_STREAM. The main process catches it in stream_wait_for_exit, and exits.
-#ifndef _WIN32
-    stream_wait_for_exit (stream, false); // exits if child process exited with code EXIT_STREAM
-#endif
+    // in Windows, the main process fails to CreateProcess and exits. In Unix, it is the child process that 
+    // fails to execv, and exits and code EXIT_STREAM. The main process catches it in stream_wait_for_exit, and exits.
+    X𝓌𝒾𝓃(stream_wait_for_exit (stream, false)); // exits if child process exited with code EXIT_STREAM
 
     // if we reach here, everything's good - the exec can run.
     stream_close (&stream, STREAM_KILL_PROCESS);

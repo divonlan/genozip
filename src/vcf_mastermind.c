@@ -73,7 +73,7 @@ static bool vcf_seg_INFO_MMID3_gene (VBlockP vb, ContextP ctx, STRp(mmid3_gene),
 {
     STRlast (gene, INFO_GENE);
 
-    if (ctx_encountered (VB, INFO_GENE) && str_issame (gene, mmid3_gene)) 
+    if (ctx_encountered_in_line (VB, INFO_GENE) && str_issame (gene, mmid3_gene)) 
         seg_by_ctx (VB, STRa(copy_gene_snip), ctx, mmid3_gene_len);
     else
         seg_by_ctx (VB, STRa(mmid3_gene), ctx, mmid3_gene_len);
@@ -103,7 +103,7 @@ void vcf_seg_INFO_MMID3 (VBlockVCFP vb, ContextP ctx, STRp(value))
 // Example: MMURI3=https://mastermind.genomenon.com/detail?mutation=NC_000001.10%3Ag.69511A%3EG&ref=cvr
 void vcf_seg_INFO_MMURI3 (VBlockVCFP vb, ContextP ctx, STRp(value))
 {
-    if (ctx_encountered (VB, INFO_HGVSG)) {
+    if (ctx_encountered_in_line (VB, INFO_HGVSG)) {
         STRlast (hgvsg, INFO_HGVSG);
         char escaped_hgvsg[hgvsg_len * 3 + 1];
 

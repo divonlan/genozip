@@ -41,7 +41,7 @@ void sam_seg_bismark_XM_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
         !has(XM_Z) || !vb->bisulfite_strand || vb->comp_i != SAM_COMP_MAIN) return;
 
     STR(xm);
-    sam_seg_get_aux_Z (vb, vb->idx_XM_Z, pSTRa(xm), IS_BAM_ZIP);
+    sam_seg_get_aux_Z (vb, vb->idx.XM_Z, pSTRa(xm), IS_BAM_ZIP);
     uint32_t xm_i = 0;
 
     RangeP range = NULL;

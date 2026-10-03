@@ -161,7 +161,7 @@ void sam_cigar_binary_to_textual (VBlockP vb,
     START_TIMER;
 
     if (!n_cigar_op) {
-        buf_alloc (vb, textual_cigar, 2, 0, char, 100, textual_cigar->name ? NULL : "textual_cigar");
+        buf_alloc (vb, textual_cigar, 2, 0, char, 100, textual_cigar->nameר ? NULL : "textual_cigar");
         BNXTc (*textual_cigar) = '*';
         *BAFTc (*textual_cigar) = 0; // nul terminate
         goto finish;
@@ -181,20 +181,20 @@ void sam_cigar_binary_to_textual (VBlockP vb,
         else                        len += 9;
     }
 
-    buf_alloc (vb, textual_cigar, len + 1 /* for \0 */, 100, char, 0, textual_cigar->name ? NULL : "textual_cigar");
+    buf_alloc (vb, textual_cigar, len + 1 /* for \0 */, 100, char, 0, textual_cigar->nameר ? NULL : "textual_cigar");
 
     char *restrict next = BAFTc (*textual_cigar);
 
     if (!reverse)
         for (int i=0; i < n_cigar_op; i++) {
             BamCigarOp op = cigar[i];
-            next += str_int_fast (op.n, next);
+            next += str_int (op.n, next);
             *next++ = cigar_op_to_char[op.op];
         }
     else
         for (int i=n_cigar_op-1; i >= 0 ; i--) {
             BamCigarOp op = cigar[i];
-            next += str_int_fast (op.n, next);
+            next += str_int (op.n, next);
             *next++ = cigar_op_to_char[op.op];
         }
 
@@ -545,7 +545,7 @@ bool squank_seg (VBlockP vb, ContextP ctx, STRp(cigar), uint32_t only_if_seq_len
 
     ctx->local.len32 = BNUM(ctx->local, next);
 
-    ctx->local_num_words++;
+    ctx->v_local_n_words++;
 
     if (ctx->did_i == SAM_CIGAR) // SAM_CIGAR field - go through CIGAR special first
         seg_special2 (VB, SAM_SPECIAL_CIGAR, SQUANK, seq_len_source, ctx, add_bytes);
@@ -663,7 +663,7 @@ static bool sam_cigar_seg_is_predicted_by_saggy_SA (VBlockSAMP vb, STRp(textual_
         // updated by another thread. A pathological case can occur in which a file has SA:Z with and without
         // HtoS and another threads sets it the "wrong" way for us. In that case, we simply keep is_same=false.
         thool expected = unknown;
-        if (__atomic_compare_exchange_n (&segconf.SA_HtoS, &expected, has_htos, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+        if (cas_strong_relaxed (segconf.SA_HtoS, expected, has_htos))
             is_same = true;
 
         goto done;
@@ -707,7 +707,7 @@ static void sam_cigar_update_random_access (VBlockSAMP vb, ZipDataLineSAM𐤐 dl
 
 void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint32_t last_cigar_len, STRp(seq_data), STRp(qual_data), uint32_t add_bytes)
 {
-    START_TIMER
+    START_TIMER;
     
     decl_ctx (SAM_CIGAR);
     ContextP seq_len_ctx;
@@ -787,7 +787,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint32_t last_cigar_le
     // case: copy from "length=" item of QNAME (only if CIGAR is a simple M)
     else if (segconf.seq_len_dict_id.num                                                   && // QNAME flavor has "length=""
              vb->binary_cigar.len32 == 1 && B1ST(BamCigarOp, vb->binary_cigar)->op == BC_M && // this CIGAR is a single-op M
-             ctx_has_value_in_line (vb, segconf.seq_len_dict_id, &seq_len_ctx)) {              // note: if copied from buddy, value is set in sam_seg_QNAME
+             ctx_has_value_in_line_by_dict_id (vb, segconf.seq_len_dict_id, &seq_len_ctx)) {              // note: if copied from buddy, value is set in sam_seg_QNAME
 
         // note: often, length= indicates the FASTQ read length, which may be longer than in SAM due to cropping and trimming
         cigar_snip[2] = COPY_QNAME_LENGTH;
@@ -819,7 +819,7 @@ void sam_seg_CIGAR (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, uint32_t last_cigar_le
     // case: long CIGAR, and length can be deduced from qname length= (not simple cigar) (15.0.69)
     else if (last_cigar_len > MAX_CIGAR_LEN_IN_DICT && cigar_snip_len == 2 && 
              segconf.seq_len_dict_id.num &&
-             ctx_has_value_in_line (vb, segconf.seq_len_dict_id, &seq_len_ctx) && // note: if copied from buddy, value is set in sam_seg_QNAME
+             ctx_has_value_in_line_by_dict_id (vb, segconf.seq_len_dict_id, &seq_len_ctx) && // note: if copied from buddy, value is set in sam_seg_QNAME
              dl->SEQ.len + vb->hard_clip[0] + vb->hard_clip[1] == seq_len_ctx->last_value.i)
         squank_seg (VB, ctx, vb->last_cigar, last_cigar_len, 0/*always*/, SQUANK_BY_QNAME_length, add_bytes); 
 
@@ -927,7 +927,7 @@ static uint32_t inline sam_cigar_piz_get_seq_len_from_qname (VBlockSAMP vb)
         return len_ctx->last_value.i;
 
     // case 3: QNAME is copied from a buddy - buddy_line_i is stored in QNAME.last_value.i in sam_piz_special_COPY_BUDDY
-    else if (ctx_has_value_in_line_(vb, CTX(SAM_QNAME))) {
+    else if (ctx_has_value_in_line (vb, SAM_QNAME)) {
         LineIType buddy_line_i = CTX(SAM_QNAME)->last_value.i;
         return piz_get_history (len_ctx, buddy_line_i);
     }
@@ -1121,7 +1121,7 @@ void sam_reconstruct_main_cigar_from_sag (VBlockSAMP vb, bool do_htos, ReconType
     // case: cigar is stored in dict 
     if (a->cigar.piz.is_word) {
         rom cigar_snip;
-        ctx_get_snip_by_word_index_do (CTX(OPTION_SA_CIGAR), a->cigar.piz.index, &cigar_snip, &cigar_len, __FUNCLINE);
+        ctx_get_snip_by_word_index_do (CTX(OPTION_SA_CIGAR), a->cigar.piz.index, &cigar_snip, &cigar_len, THIS_CODE_LINE);
         buf_add_more (VB, &vb->scratch, cigar_snip, cigar_len, "scratch");
 
         // case: we need to replace soft-clipping (S) with hard-clipping (H)
@@ -1151,7 +1151,7 @@ uint32_t sam_reconstruct_SA_cigar_from_SA_Group (VBlockSAMP vb, SAAln *a, bool a
 
     if (a->cigar.piz.is_word) {
         rom cigarS;
-        ctx_get_snip_by_word_index_do (CTX(OPTION_SA_CIGAR), a->cigar.piz.index, &cigarS, &cigar_len, __FUNCLINE);
+        ctx_get_snip_by_word_index_do (CTX(OPTION_SA_CIGAR), a->cigar.piz.index, &cigarS, &cigar_len, THIS_CODE_LINE);
         RECONSTRUCT (cigarS, cigar_len);
     }
 

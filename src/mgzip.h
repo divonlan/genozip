@@ -112,8 +112,8 @@ extern void bgzf_insert_back_segconf_blocks (VBlockP vb);
 extern void mgzip_return_segconf_blocks (VBlockP vb);
 extern uint32_t mgzip_get_max_block_size (void);
 
-extern void inc_disk_gz_uncomp_or_trunc_(FileP file, uint64_t inc, FUNCLINE);
-#define inc_disk_gz_uncomp_or_trunc(file, inc) inc_disk_gz_uncomp_or_trunc_((file), (inc), __FUNCLINE)
+extern void inc_disk_gz_uncomp_or_trunc_(FileP file, uint64_t inc, Caller caller);
+#define inc_disk_gz_uncomp_or_trunc(file, inc) inc_disk_gz_uncomp_or_trunc_((file), (inc), THIS_CODE_LINE)
 
 // library / level discovery
 extern void bgzf_initialize_discovery (FileP file);

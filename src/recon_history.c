@@ -97,7 +97,7 @@ void reconstruct_to_history (VBlockP vb, ContextP ctx)
         // not a textual snip (eg SNIP_SPECIAL) - reconstruct and then copy
         else { 
             rom txt = BAFTtxt;
-            reconstruct_one_snip (vb, ctx, wi, STRa(snip), RECON_ON, __FUNCLINE);
+            reconstruct_one_snip (vb, ctx, wi, STRa(snip), RECON_ON, THIS_CODE_LINE);
             
             *hw = (HistoryWord){ .index = ctx->dropped_txt.len32, .len = (BAFTtxt - txt), .lookup = LookupPerLine };
 
@@ -146,7 +146,7 @@ void recon_history_get_historical_snip (VBlockP vb, ContextP ctx, LineIType budd
     }
 
     ASSPIZ (char_index < buf->len, "buddy word ctx=%s buddy_line_i=%d char_index=%"PRIu64" is out of range of buffer %s len=%"PRIu64, 
-            ctx->tag_name, buddy_line_i, char_index, buf->name, buf->len);
+            ctx->tag_name, buddy_line_i, char_index, unר(buf->nameר), buf->len);
 
     *snip = Bc (*buf, char_index);
     *snip_len = word.len;

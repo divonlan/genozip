@@ -27,7 +27,7 @@
 
 // memory management for codecs - tesing shows that compress allocates 4 times, and decompress 2 times. Allocations are the same set of sizes
 // every call to compress/decompress with the same parameters, independent on the contents or size of the compressed/decompressed data.
-void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, unsigned *buf_i, FUNCLINE)
+void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, unsigned *buf_i, Caller caller)
 {
     rom names[NUM_CODEC_BUFS] = { "codec_bufs[0]", "codec_bufs[1]", "codec_bufs[2]", "codec_bufs[3]",
                                   "codec_bufs[4]", "codec_bufs[5]", "codec_bufs[6]" };
@@ -37,15 +37,15 @@ void *codec_alloc_do (VBlockP vb, uint64_t size, float grow_at_least_factor, uns
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (!buf_is_alloc (&vb->codec_bufs[i])) {
             vb->codec_bufs[i].can_be_big = true; // LZMA, for example, can allocate ~4GB buffers in --best
-            buf_alloc_(vb, &vb->codec_bufs[i], 0, size, 1, grow_at_least_factor, names[i], func, code_line);
-            // printf ("%s:%u codec_alloc: buf_i=%u %"PRIu64" bytes\n", func, code_line, i, size);
+            buf_alloc_(vb, &vb->codec_bufs[i], 0, size, 1, grow_at_least_factor, names[i], caller);
+            // printf ("%s:%u codec_alloc: buf_i=%u %"PRIu64" bytes\n", CALLERf, i, size);
             if (buf_i) *buf_i = i;
             return vb->codec_bufs[i].data;
         }
-    ABORT ("%s: called from %s:%u codec_alloc could not find a free buffer", VB_NAME, func, code_line);
+    ABORT ("%s: called from %s:%u codec_alloc could not find a free buffer", VB_NAME, CALLERf);
 }
 
-void codec_free_do (void *vb_, void *addr, FUNCLINE)
+void codec_free_do (void *vb_, void *addr, Caller caller)
 {
     VBlockP vb = (VBlockP)vb_;
 
@@ -53,13 +53,13 @@ void codec_free_do (void *vb_, void *addr, FUNCLINE)
 
     for (unsigned i=0; i < NUM_CODEC_BUFS ; i++) 
         if (vb->codec_bufs[i].data == addr) {
-            // printf ("%s:%u codec_free:buf=%u\n", func, code_line, i);
-            buf_free_do (&vb->codec_bufs[i], func, code_line);
+            // printf ("%s:%u codec_free:buf=%u\n", CALLERf, i);
+            buf_free_do (&vb->codec_bufs[i], caller);
             return;
         }
 
-    ABORT ("Error: codec_free_do called from %s:%u: failed to find buffer to free. vb_i=%d codec=%s addr=%p", 
-           func, code_line, vb->vblock_i, codec_name(vb->codec_using_codec_bufs), addr);
+    ABORT ("codec_free_do called from %s:%u: failed to find buffer to free. vb_i=%d codec=%s addr=%p", 
+           CALLERf, vb->vblock_i, codec_name(vb->codec_using_codec_bufs), addr);
 }
 
 void codec_destroy_all (VBlockP vb)
@@ -263,6 +263,10 @@ Codec codec_assign_best_codec (VBlockP vb,
     if (!codec_args[*selected_codec].is_simple) 
         goto return_selected;
 
+    // if we're just creating sections in R1 for pairing R2 for biopsy - just compress fast, no need to test.
+    else if (flag.biopsy_R1)
+        *selected_codec = CODEC_RANB;
+
     // if --best, we accept a codec that's been selected by 5 previous VBs in a row
     else if (flag.best && zselected_codec != CODEC_UNKNOWN && zselected_codec_count >= BEST_LOCK_IN_THREASHOLD)
         *selected_codec = zselected_codec;
@@ -400,7 +404,7 @@ void codec_assign_best_qual_codec (VBlockP vb, Did did_i,
 
     mutex_lock (zctx->assign_codec_mutex[true]); 
 
-    // case: a previous VB already determined that the did_i doesn't need one of the complex codec
+    // case: a previous VB already determined that the did_i doesn't need one of the complex codecs
     if (zctx->qual_codec == CODEC_NONE) {
         ctx->ltype = LT_BLOB;  
         goto done;
@@ -481,8 +485,9 @@ void codec_show_time (VBlockP vb, rom name, rom subname, Codec codec)
         (strcmp (flag.show_time, "compressor_arith" ) && (codec==CODEC_ARTW || codec==CODEC_ARTw || codec==CODEC_ARTB || codec==CODEC_ARTw)) || 
         (strcmp (flag.show_time, "compressor_bz2"   ) && codec==CODEC_BZ2 )) {
 
-        vb->profile.next_name    = name;
-        vb->profile.next_subname = subname;
+#ifdef PROFILE        
+        vb->profile.next = (ProfilerNext){ name, subname };
+#endif
     }
 }
 

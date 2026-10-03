@@ -456,11 +456,11 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType s
         // if this is the beginning of field header line 
         else if (THIS == '#' && (i==0 || PREV == '\n' || PREV == '\r')) {
 
-            ASSINP0 (*Bc(*vcf_header, i+1) != '#', "Error: Missing VCF field/samples header line");  
+            ASSINP0 (*Bc(*vcf_header, i+1) != '#', _ERR"Missing VCF field/samples header line");  
 
             // note: we don't memcmp to the entire VCF_FIELD_NAMES, bc some files have spaces instead of tabs
             ASSINP (vcf_header->len - i > STRLEN(VCF_FIELD_NAMES) && !memcmp ("#CHROM", Bc(*vcf_header, i), 6), 
-                    "Error: Invalid VCF field/samples header line, found (partial): \"%.*s\"", (int)MIN_(vcf_header->len - i, STRLEN(VCF_FIELD_NAMES)), Bc(*vcf_header, i));
+                    _ERR"Invalid VCF field/samples header line, found (partial): \"%.*s\"", (int)MIN_(vcf_header->len - i, STRLEN(VCF_FIELD_NAMES)), Bc(*vcf_header, i));
 
             // ZIP: if first vcf file ; PIZ: everytime - copy the header to the global
             if (!buf_is_alloc (&vcf_field_name_line) || IS_PIZ) 
@@ -472,13 +472,13 @@ static bool vcf_header_set_globals (rom filename, BufferP vcf_header, FailType s
             // note: a VCF file without samples may or may not have a "FORMAT" in the header, i.e. tab_count==7 or 8 (8 or 9 fields).
             // however, even if it has a FORMAT in the header, it won't have a FORMAT column in the data
 
-            ASSINP (tab_count >= 7, "Error: Invalid VCF field/samples header line - it contains only %d fields, expecting at least 8", tab_count+1);
+            ASSINP (tab_count >= 7, _ERR"Invalid VCF field/samples header line - it contains only %d fields, expecting at least 8", tab_count+1);
 
             return true; 
         }
     }
 
-    ABORT ("Error: invalid VCF file - it does not contain a field header line; tab_count=%u", tab_count+1);
+    ABORT ("invalid VCF file - it does not contain a field header line; tab_count=%u", tab_count+1);
 }
 
 // genocat: remove FORMAT and sample names from the vcf header line, in case of --drop-genotypes

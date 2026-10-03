@@ -75,7 +75,7 @@ bool is_fasta (STRp(txt_data), bool *need_more/*optional*/)
         return false; // fail fast
 
     #define NUM_TEST_LINES 10
-    str_split_by_lines (txt_data, txt_data_len, NUM_TEST_LINES);
+    str_split_by_lines (txt_data, txt_data_len, NUM_TEST_LINES, true);
 
     #define CANT_TELL ({ if (need_more) { \
                             *need_more = true; /* we can't tell yet - need more data */ \
@@ -162,7 +162,7 @@ int32_t fasta_unconsumed (VBlockP vb, uint32_t first_i)
         bool data_found = false;
         for (uint32_t i=0; i < Ltxt; i++) {
             // just don't allow now-obsolete ';' rather than trying to disentangle comments from descriptions
-            ASSINP (txt[i] != ';', "Error: %s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
+            ASSINP (txt[i] != ';', _ERR"%s contains a ';' character - this is not supported for reference files. Contig descriptions must begin with a >", txt_name);
         
             // if we've encountered a new DESC line after already seeing sequence data, move this DESC line and
             // everything following to the next VB
@@ -243,11 +243,6 @@ void fasta_zip_initialize (void)
         comment_redirect_snip_len += 2;
     }
 
-    // with REF_EXTERNAL, user is telling as this is FAF.
-    // we just copy all reference contigs. this are not needed for uncompression, just for --coverage/--idxstats
-    if (IS_REF_EXTERNAL && z_file->num_txts_so_far == 1) // single file, or first of pair (and never Deep)
-        ctx_populate_zf_ctx_from_contigs (ref_get_ctgs()); 
-
     if (flag.bam_assist) {
         qname_zip_initialize(); // note: might also be called during segconf from fasta_segconf_is_qualless_fastq. no harm.
         fastq_bamass_populate();
@@ -286,7 +281,7 @@ void fasta_zip_after_compute (VBlockP vb)
 static bool fasta_segconf_is_qualless_fastq (VBlockP vb)
 {
     #define NUM_FASTQ_TEST_LINES 2000
-    str_split_by_lines (vb->txt_data.data, vb->txt_data.len32, NUM_FASTQ_TEST_LINES);
+    str_split_by_lines (vb->txt_data.data, vb->txt_data.len32, NUM_FASTQ_TEST_LINES, true);
 
     if (n_lines < 16 && !txt_file->no_more_blocks) 
         return false; // not enough lines to determine (except of segconf is the entire file) 
@@ -349,7 +344,7 @@ void fasta_seg_initialize (VBlockP vb)
     if (segconf_running) {
         DC = *B1STtxt; // note: common: '>', very old FASTA: ';', downloaded from NCBI: '@'
         
-        ASSINP (is_fasta (STRb(vb->txt_data), NULL), "Error: %s is not a valid FASTA file. Solution: use --input generic", txt_name);
+        ASSINP (is_fasta (STRb(vb->txt_data), NULL), _ERR"%s is not a valid FASTA file. Solution: use --input generic", txt_name);
     
         // case: this FASTA looks more like a FASTQ without QUAL data - better off segged as FASTQ with reference support and QNAME handling 
         if (!flag.make_reference && !flag.no_faf && !flag.ext_indexing &&
@@ -445,6 +440,8 @@ bool fasta_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id)
 // note: we store the DESC container in its own ctx rather than just directly in LINEMETA, to make it easier to grep
 static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, bool *has_13)
 {
+    START_TIMER;
+
     SAFE_NUL (&line[line_len]);
     
     // we store the contig name in a dictionary only (no b250), to be used if this fasta is used as a reference
@@ -497,7 +494,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
         }
 
         else {
-            ASSINP (is_new || segconf_running, "Error: bad FASTA file - sequence \"%.*s\" appears more than once", STRf(chrom_name));
+            ASSINP (is_new || segconf_running, _ERR"bad FASTA file - sequence \"%.*s\" appears more than once", STRf(chrom_name));
          
             vb->ra_initialized = true;
         }
@@ -505,6 +502,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
 
     vb->last_line = FASTA_LINE_DESC;    
     SAFE_RESTORE;
+    COPY_TIMER (fasta_seg_desc_line);
 }
 
 static void fast_seg_comment_line (VBlockFASTAP vb, STRp (line), bool *has_13)
@@ -549,8 +547,10 @@ static void fasta_set_seq_type (VBlockFASTAP vb, STRp(seq))
 
 static void fasta_seg_seq_line_do (VBlockFASTAP vb, uint32_t line_len, bool is_first_line_in_contig)
 {
-    Context *lm_ctx  = CTX(FASTA_LINEMETA);
-    Context *seq_ctx = CTX(FASTA_NONREF);
+    START_TIMER;
+
+    ContextP lm_ctx  = CTX(FASTA_LINEMETA);
+    ContextP seq_ctx = CTX(FASTA_NONREF);
 
     // line length is same as previous SEQ line
     if (!is_first_line_in_contig && ctx_has_value_in_line_(vb, lm_ctx) && line_len == lm_ctx->last_value.i) 
@@ -573,12 +573,16 @@ static void fasta_seg_seq_line_do (VBlockFASTAP vb, uint32_t line_len, bool is_f
 
     seq_ctx->txt_len     += line_len;
     seq_ctx->local.len32 += line_len;
+
+    COPY_TIMER (fasta_seg_seq_line_do);
 } 
 
 static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line), 
                                 bool is_last_line_vb_no_newline, bool is_last_line_in_contig, 
                                 bool has_13)
 {
+    START_TIMER;
+
     vb->lines_this_contig++;
 
     *DATA_LINE (vb->line_i) = (ZipDataLineFASTA){ .seq_data_start = BNUMtxt (line),
@@ -620,6 +624,8 @@ static void fasta_seg_seq_line (VBlockFASTAP vb, STRp(line),
 
     if (segconf.fasta_has_contigs)
         random_access_increment_last_pos (VB, line_len); 
+
+    COPY_TIMER (fasta_seg_seq_line);
 }
 
 // Fasta format(s): https://en.wikipedia.org/wiki/FASTA_format
@@ -720,7 +726,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_SEQ)
     if (flag.header_only_fast) // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast
         vb->drop_curr_line = "header_only_fast";     
     else 
-        reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, RECON_ON, __FUNCLINE);    
+        reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip+1, snip_len-1, RECON_ON, THIS_CODE_LINE);    
 
     // case: --sequential, and this seq line is the last line in the vb, and it continues in the next vb
     if (  flag.sequential && // if we are asked for a sequential SEQ
@@ -746,7 +752,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_COMMENT)
     if (flag.header_only_fast)  // note that flags_update_piz_one_z_file rewrites --header-only as flag.header_only_fast
         vb->drop_curr_line = "header_only_fast";     
     else 
-        reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, RECON_ON, __FUNCLINE);    
+        reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, snip, snip_len, RECON_ON, THIS_CODE_LINE);    
 
     vb->last_line = FASTA_LINE_COMMENT;
 
@@ -787,7 +793,7 @@ bool fasta_piz_is_vb_needed (VBIType vb_i)
     piz_uncompress_all_ctxs (VB, PUR_FASTA_WRITER_INIT);
 
     ContextP desc_ctx = CTX(FASTA_DESC);
-    desc_ctx->iterator.next_b250 = B1ST8 (desc_ctx->b250); 
+    desc_ctx->iterator.next_b250 = 0; 
 
     uint32_t num_descs = random_access_num_chroms_start_in_this_vb (vb->vblock_i);
     ASSERT0 (vb_i > 1 || num_descs, "Expecting num_descs>0 in vb_i==1");
@@ -838,7 +844,7 @@ SPECIAL_RECONSTRUCTOR_DT (fasta_piz_special_DESC)
     vb->contig_grepped_out = false;
 
     char *desc_start = BAFTtxt;
-    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, STRa(snip), RECON_ON, __FUNCLINE);    
+    reconstruct_one_snip (VB, ctx, WORD_INDEX_NONE, STRa(snip), RECON_ON, THIS_CODE_LINE);    
     *BAFTtxt = 0; // for strstr and strcspn
 
     // if --grep: here we decide whether to show this contig or not

@@ -201,22 +201,19 @@ typedef struct VBlockSAM {
     Buffer textual_cigar;          // ZIP: Seg of BAM, PIZ: store CIGAR in sam_cigar_analyze
     Buffer binary_cigar;           // ZIP/PIZ: BAM-style CIGAR representation, generated in sam_cigar_analyze. binary_cigar.next is used by sam_seg_SEQ
     Buffer meth_call;              // ZIP/PIZ: prediction of methylation call in Bismark format: z/Z: unmethylated/methylated C in CpG ; x/X in CHG h/H in CHH ; u/U unknown context ; . not C. prm8[0] is bisulfite_strand ('C' or 'G') 
-    Buffer md_M_is_ref;            // Seg: bitmap of length ref_and_seq_consumed (corresponding to M, X and = CIGAR ops): 1 for a base matching the reference, 0 for non-matching, according to MD:Z
-    Buffer unconverted_bitmap;     // ZIP: Bisulfite conversion: mismatches vs unconverted reference - used for MD:Z prediction
+    Bits unconverted_bitmap;       // ZIP: Bisulfite conversion: mismatches vs unconverted reference - used for MD:Z prediction
+    Bits md_M_is_ref;              // Seg: bitmap of length ref_and_seq_consumed (corresponding to M, X and = CIGAR ops): 1 for a base matching the reference, 0 for non-matching, according to MD:Z
 
     // Seg: 0-based index into AUX fields, -1 means field is not present in this line
     // When adding, also update sam_seg_idx_aux
-    #define first_sam_zip_vb_ff_per_line idx_NM_i
-    int16_t idx_NM_i, idx_MD_Z, idx_SA_Z, idx_XG_Z, idx_NH_i, idx_HI_i, idx_IH_i,
-            idx_X0_i, idx_X1_i, idx_XA_Z, idx_AS_i, idx_XS_i, idx_XM_i,
-            idx_CC_Z, idx_CP_i, idx_ms_i, idx_SM_i,
-            idx_UB_Z, idx_BX_Z, idx_CB_Z, idx_GX_Z, idx_GN_Z, idx_CR_Z, idx_CY_Z,
-            idx_XO_Z, idx_YS_Z, idx_XB_A, idx_XM_Z, idx_XB_Z,
-            idx_dq_Z, idx_iq_Z, idx_sq_Z, idx_ZA_Z, idx_ZB_Z,
-            idx_pr_i, idx_qs_i, idx_ws_i, idx_ZM_B, idx_xq_i, idx_XQ_i,
-            idx_cm_i;
-    #define has(f)   (vb->idx_##f  != -1)
-    #define has_MD   (has(MD_Z) && segconf_has(OPTION_MD_Z))
+    struct{
+        int16_t NM_i, MD_Z, SA_Z, XG_Z, NH_i, HI_i, IH_i, X0_i, X1_i, XA_Z, AS_i, XS_i, 
+                XM_i, CC_Z, CP_i, ms_i, SM_i, UB_Z, BX_Z, CB_Z, GX_Z, GN_Z, CR_Z, CY_Z,
+                XO_Z, YS_Z, XB_A, XM_Z, XB_Z, dq_Z, iq_Z, sq_Z, ZA_Z, ZB_Z, pr_i, qs_i, 
+                ws_i, ZM_B, xq_i, XQ_i, cm_i;
+        #define has(f)  (vb->idx.f != -1)
+        #define has_MD  (has(MD_Z) && segconf_has(OPTION_MD_Z))
+    } idx;
 
     #define first_sam_piz_vb_ff_per_line mate_line_i
     LineIType mate_line_i;         // Seg/PIZ: the mate of this line. 
@@ -237,7 +234,9 @@ typedef struct VBlockSAM {
     rom *auxs;                     
     uint32_t *aux_lens;
 
-    ContainerP aux_con;       // AUX container being reconstructed
+    ContainerP aux_con;            // AUX container being reconstructed
+
+    rom textual_seq_str;           // ZIP/PIZ: BAM: points into textual_seq SAM: points into txt_data
 
     // current line CIGAR stuff
     rom last_cigar;                // ZIP: last textual CIGAR (PIZ: use vb->textual_cigar instead)
@@ -253,11 +252,9 @@ typedef struct VBlockSAM {
     uint32_t insertions;           // number of inserted bases according to CIGAR
     uint32_t introns;              // number of introns ('N' CIGAR ops) - note: number of N ops, not number of bases
 
-    rom textual_seq_str;           // ZIP/PIZ: BAM: points into textual_seq SAM: points into txt_data
-
     // current line Deep stuff
     PosType64 deep_gpos;           // PIZ Deep: tell FASTQ to copy from reference at this gpos
-    PizDeepSeqFlags piz_deep_flags;   // PIZ Deep: flags before they are placed in deep_ents 
+    PizDeepSeqFlags piz_deep_flags;// PIZ Deep: flags before they are placed in deep_ents 
     uint32_t piz_deep_flags_index; // PIZ Deep: index in deep_ents 
     uint32_t num_deep_mismatches;  // PIZ Deep: same as mismatch_bases_by_SEQ if reconstructed from SAM alignment, but mismatch_bases_by_SEQ is not used when reconstructing from our aligner
     #define MAX_DEEP_SEQ_MISMATCHES 1024
@@ -268,17 +265,12 @@ typedef struct VBlockSAM {
     union {
     const struct SAAln *sa_aln;    // ZIP/PIZ DEPN: SAG_BY_SA: Alignment withing SA Group of this line 
     const struct CCAln *cc_aln;    // ZIP/PIZ DEPN: SAG_BY_CC: Prim alignment
-    const struct SoloAln *solo_aln;  // ZIP/PIZ DEPN: SAG_BY_SOLO: Prim alignment
+    const struct SoloAln *solo_aln;// ZIP/PIZ DEPN: SAG_BY_SOLO: Prim alignment
     };
     uint16_t prim_aln_index_in_SA_Z; // ZIP DEPN SAG_BY_SA: index of PRIM alignment in my SA:Z (1-based)
 
-    #define after_sam_vb_zero_per_line consec_is_set_chrom
+    #define after_sam_vb_zero_per_line mux_XS
     // --------- END OF current line ----------
-
-    // REF_INTERNAL and REF_EXT_STORE: the current length of a consecutive range of is_set
-    WordIndex consec_is_set_chrom;
-    PosType32 consec_is_set_pos;
-    uint32_t consec_is_set_len;
  
     Multiplexer4 mux_XS;
     Multiplexer4 mux_PNEXT, mux_MAPQ;
@@ -291,17 +283,18 @@ typedef struct VBlockSAM {
     Multiplexer3 mux_NH;           // ZIP: DEMUX_BY_BUDDY_MAP
     Multiplexer7 mux_tp;           // ZIP: ULTIMA_tp (number of channels matches TP_NUM_BINS)
 
-    // Deep stuff    
-    Buffer deep_index;             // PIZ: entry per prim_line - uint32_t index into deep_ents
-    Buffer deep_ents;              // PIZ: Deep: QNAME(compressed for files >15.0.65), SEQ(packed) and QUAL(compressed) for each reconstructed list
-    
+    // REF_INTERNAL and REF_EXT_STORE: the current length of a consecutive range of is_set
+    WordIndex consec_is_set_chrom;
+    PosType32 consec_is_set_pos;
+    uint32_t consec_is_set_len;
+
     // gencomp stuff
     uint32_t main_vb_info_i;       // ZIP SAM MAIN: index of entry in z_file->vb_info[0] for this VB
     uint32_t num_gc_lines;         // ZIP: number of lines removed from this VB and sent to gencomp (0 if not MAIN VB)
 
     // sag stuff
-    const struct Sag *sag;         // ZIP/PIZ DEPN: sag of this line (pointer into ZIP: z_file->sag_grps PIZ:prim_vb->sag_grps), NULL if none. Note: this is NOT reset in every line, because in prim we just increment this with each line
     uint32_t plsg_i;               // PIZ: prim_vb: index of this VB in the plsg array  
+    const struct Sag *sag;         // ZIP/PIZ DEPN: sag of this line (pointer into ZIP: z_file->sag_grps PIZ:prim_vb->sag_grps), NULL if none. Note: this is NOT reset in every line, because in prim we just increment this with each line
     Buffer sag_grps;               // ZIP/PIZ: an SA group is a group of alignments, including the primary alignment
     Buffer sag_alns;               // ZIP/PIZ: array of {RNAME, STRAND, POS, CIGAR, NM, MAPQ} of the alignment
     Buffer qname_count;            // ZIP: count the number of each qname_hash in this VB (if needed)
@@ -311,22 +304,22 @@ typedef struct VBlockSAM {
     uint32_t comp_cigars_len;      // ZIP PRIM SAG_BY_SA: compressed length of CIGARS of this VB as it appears in in-memory sags
     uint32_t comp_solo_data_len;   // ZIP PRIM SAG_BY_SOLO: compressed length of solo data of this VB as it appears in in-memory sags
     };
-    bool check_for_gc;             // ZIP: true if Seg should check for gencomp lines
-    DepnClipping depn_clipping_type; // ZIP: In this VB, for depn lines that have a clipping, what type of clipping do they have
     SAGroup first_grp_i;           // ZIP PRIM: the index of first group of this PRIM VB, in z_file->sag_grps 
+    DepnClipping depn_clipping_type; // ZIP: In this VB, for depn lines that have a clipping, what type of clipping do they have
+    bool check_for_gc;             // ZIP: true if Seg should check for gencomp lines
     bool seg_found_prim_line;      // Seg MAIN: a prim line was found in the VB
     bool seg_found_depn_line;      // Seg MAIN: a prim line was found in the VB
 
-    // data used in genocat --show-sex
-    WordIndex x_index, y_index, a_index; // word index of the X, Y and chr1 chromosomes
-    uint64_t x_bases, y_bases, a_bases;  // counters of number chromosome X, Y and chr1 bases
+    // QUAL stuff
+    bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
 
+    // Deep stuff    
+    Buffer deep_index;             // PIZ: entry per prim_line - uint32_t index into deep_ents
+    Buffer deep_ents;              // PIZ: Deep: QNAME(compressed for files >15.0.65), SEQ(packed) and QUAL(compressed) for each reconstructed list
+        
     // buddied Seg
     Buffer line_textual_cigars;    // Seg of BAM (not SAM): an array of textual CIGARs referred to from DataLine->CIGAR
     uint32_t supplementary_count, secondary_count, saggy_near_count, mate_line_count, depn_far_count; // for stats
-
-    // QUAL stuff
-    bool has_qual;                 // Seg: This VB has at least one line with non-missing qual
 
     // stats
     uint32_t deep_stats[NUM_DEEP_STATS]; // ZIP/PIZ: stats collection regarding Deep - one entry for each in DeepStatsZip/DeepStatsPiz
@@ -538,7 +531,7 @@ extern void sam_seg_idx_aux (VBlockSAMP vb);
 extern ValueType sam_piz_peek_OPTION (VBlockSAMP vb, ContextP option_ctx, pSTRp(txt)/*optional*/, bool *exists/*optional*/);
 
 extern uint32_t sam_seg_get_aux_int (VBlockSAMP vb, int16_t idx, int32_t *number, bool is_bam, int32_t min_value, int32_t max_value, FailType soft_fail);
-#define sam_seg_get_aux_int_(vb,tag) ({ int32_t value; sam_seg_get_aux_int (vb, vb->idx_##tag, &value, IS_BAM_ZIP, -0x80000000, 0x7fffffff, HARD_FAIL); value; })
+#define sam_seg_get_aux_int_(vb,tag) ({ int32_t value; sam_seg_get_aux_int (vb, vb->idx.tag, &value, IS_BAM_ZIP, -0x80000000, 0x7fffffff, HARD_FAIL); value; })
 
 extern void sam_seg_get_aux_Z (VBlockSAMP vb, int16_t idx, pSTRp (snip), bool is_bam);
 extern char sam_seg_get_aux_A (VBlockSAMP vb, int16_t idx, bool is_bam);
@@ -551,8 +544,8 @@ typedef void (*SegBuddiedCallback)(VBlockSAMP, ContextP, STRp(value), unsigned a
 extern void sam_seg_buddied_Z_fields (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, MatedZFields f, STRp(value), SegBuddiedCallback seg_cb, unsigned add_bytes);
 extern void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int64_t my_value, int32_t *mate_value, MultiplexerP mux, STRp(copy_snip), unsigned add_bytes);
 
-#define STRauxZ(name,is_bam) (vb->auxs[vb->idx_##name]+((is_bam) ? 3 : 5)), (vb->aux_lens[vb->idx_##name]-((is_bam) ? 4 : 5))
-#define TXTWORDauxZ(name,is_bam) ((TxtWord){ .index = BNUMtxt (vb->auxs[vb->idx_##name]+((is_bam) ? 3 : 5)), .len = vb->aux_lens[vb->idx_##name]-((is_bam) ? 4 : 5) }) 
+#define STRauxZ(name,is_bam) (vb->auxs[vb->idx.name]+((is_bam) ? 3 : 5)), (vb->aux_lens[vb->idx.name]-((is_bam) ? 4 : 5))
+#define TXTWORDauxZ(name,is_bam) ((TxtWord){ .index = BNUMtxt (vb->auxs[vb->idx.name]+((is_bam) ? 3 : 5)), .len = vb->aux_lens[vb->idx.name]-((is_bam) ? 4 : 5) }) 
 
 // POS / PNEXT stuff
 extern PosType32 sam_seg_POS (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, WordIndex prev_line_chrom, unsigned add_bytes);
@@ -599,14 +592,12 @@ extern StrText sam_piz_display_aln_cigar (VBlockP vb, const SAAln *a);
 
 // SEQ stuff
 extern void sam_seg_SEQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(seq), unsigned add_bytes);
-extern bool sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STRp(seq), bool bam_format, bool revcomp, FailType soft_fail);
+extern void sam_seq_pack (VBlockSAMP vb, Bits *packed, uint64_t next_bit, STR8𐤐(seq), bool bam_format, bool revcomp);
 extern rom sam_seg_analyze_set_one_ref_base (VBlockSAMP vb, bool is_depn, PosType32 pos, char base, uint32_t ref_consumed, RangeP *range_p, RefLock *lock);
 extern void sam_zip_report_monochar_inserts (void);
 
 // BAM sequence format
-extern const char bam_base_codes[16];
 extern rom bam_seq_display (bytes seq, uint32_t seq_len);
-extern uint32_t sam_seq_copy (char *dst, rom src, uint32_t src_start_base, uint32_t n_bases, bool revcomp, bool is_bam_format);
 
 // QUAL stuff
 extern void sam_seg_QUAL_initialize (VBlockSAMP vb);
@@ -869,24 +860,22 @@ static inline char sam_seg_bam_type_to_sam_type (char type)
     return (type=='c' || type=='C' || type=='s' || type=='S' || type=='I') ? 'i' : type;
 }
 
-static inline char sam_seg_sam_type_to_bam_type (char type, int64_t n)
-{
-    LocalType test[6] = { LT_UINT8, LT_INT8, LT_UINT16, LT_INT16, LT_UINT32, LT_INT32 }; // preference to UINT
-    
-    if (type != 'i') return type; // all SAM types except 'i' are the same in BAM
-
-    // i converts to one of 6: C,c,S,s,I,i
-    for (int i=0 ; i < 6; i++)
-        if (IN_RANGX (n, lt_min (test[i]), lt_max (test[i])))
-            return lt_desc[test[i]].sam_type;
-    
-    return 0; // number out of range
-}
+extern char sam_seg_sam_type_to_bam_type (char type, int64_t n);
 
 extern DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_bam, rom tag, char bam_type, char bam_array_subtype, STRp(value), ValueType numeric, int16_t idx);
 
 typedef struct { char s[200]; } DisFlagsStr;
 extern DisFlagsStr sam_dis_flags (SamFlags flags);
+
+static inline bool sam_piz_has_gpos (VBlockSAMP vb)
+{
+    // case: no GPOS in this VB: 1. no line aligned with aligner, 2. DEPN VB (segged with copy-from-prim)
+    // note: in Deep, we can't rely on z_file->z_flags.aligner because it refers to the FASTQ components, not SAM
+    if (!CTX(SAM_GPOS)->is_loaded) return false;
+
+    PEEK_SNIP (SAM_SQBITMAP); 
+    return snip[3] == '1'; // [3] is "aligner_used"
+}
 
 // -------------------
 // SAM-private globals

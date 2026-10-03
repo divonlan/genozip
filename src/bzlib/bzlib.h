@@ -22,6 +22,7 @@
 #pragma once
 
 #include <inttypes.h>
+#include "../genozip.h" //divon
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,8 +60,8 @@ typedef
 
       void *state;
 
-      void *(*bzalloc)(void *,int,int,const char *,uint32_t);
-      void (*bzfree)(void *,void *,const char *,uint32_t);
+      void *(*bzalloc)(void *,int,int,Caller);
+      void (*bzfree)(void *,void *,Caller);
       void *opaque;
    } 
    bz_stream;

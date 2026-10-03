@@ -11,6 +11,12 @@
 #include "context.h"
 #include "file.h"
 
+// non-ACGTN iupac codes are uppercased, otherwise 0: http://www.bioinformatics.org/sms/iupac.html
+alignas(64) const char base2iupac[256] = { 
+    ['U']='U', ['R']='R', ['Y']='Y', ['S']='S', ['W']='W', ['K']='K', ['M']='M', ['B']='B', ['D']='D', ['H']='H', ['V']='V',
+    ['u']='U', ['r']='R', ['y']='Y', ['s']='S', ['w']='W', ['k']='K', ['m']='M', ['b']='B', ['d']='D', ['h']='H', ['v']='V' 
+};
+
 //----------------------
 // make-reference side
 //----------------------

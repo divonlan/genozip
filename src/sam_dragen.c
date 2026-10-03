@@ -41,7 +41,7 @@ void sam_dragen_seg_sd_f (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(sd), ValueT
 SPECIAL_RECONSTRUCTOR (sam_piz_special_sd)
 {
     ContextP as_ctx;
-    ASSPIZ0 (ctx_has_value_in_line (vb, _OPTION_AS_i, &as_ctx), "AS:i was not reconstructed for this line");
+    ASSPIZ0 (ctx_has_value_in_line_by_dict_id (vb, _OPTION_AS_i, &as_ctx), "AS:i was not reconstructed for this line");
 
     int channel_i = sd_channel_i (vb->seq_len, as_ctx->last_value.i);
 

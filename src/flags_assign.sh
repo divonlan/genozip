@@ -14,13 +14,13 @@ fi
 
 # assign integer flags to boolean members of flag struct
 
-out=flags_assign.c
+out=flags_assign.h
 
 members=`grep "#define _" flags.c | grep "&fint" | cut -d"." -f2 | cut -d, -f1 | sort | uniq`
 
-cat > $out << END
+cat > $out.tmp << END
 // ------------------------------------------------------------------
-//   flags_assign.c
+//   $out
 //   Copyright (C) 2026-2026 Genozip Limited. Patent Pending.
 //   Please see terms and conditions in the file LICENSE.txt
 //
@@ -36,3 +36,6 @@ $(for m in $members; do printf "    if (fint.$m) flag.$m = fint.$m; \\" ; echo ;
 
 END
 # ^^ empty line to terminate final backslash
+
+# create the file "atomically" only when fully ready, because its dependents in the Makefile are waiting on it
+mv -f $out.tmp $out

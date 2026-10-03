@@ -37,15 +37,17 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BSBOLT_YS)
 }
 
 // enter methylatble bases into the INTERNAL reference in their unconverted form 
-// (not currently used as bisulfite features are disabled for REF_INTERNAL (bug 648), and not thoroughly tested)
+// NOTE: function not currently used as bisulfite features are disabled for REF_INTERNAL (bug 648), and not thoroughly tested
 void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
 {
+    START_TIMER;
+
     if (!IS_REF_INTERNAL || // analyzing sets bases in an internal reference - not needed if not internal
         has_MD ||           // analyzing MD sets the same bases
         !has(XB_Z) || !vb->bisulfite_strand || vb->comp_i != SAM_COMP_MAIN) return;
 
     STR(xb);
-    sam_seg_get_aux_Z (vb, vb->idx_XB_Z, pSTRa(xb), IS_BAM_ZIP);
+    sam_seg_get_aux_Z (vb, vb->idx.XB_Z, pSTRa(xb), IS_BAM_ZIP);
     uint32_t xb_i = 0;
 
     RangeP range = NULL;
@@ -54,10 +56,10 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
     PosType32 pos = dl->POS;
     uint32_t number=0;
 
-    #define set_number ({ if (!number) {                                \
-                              char *after;                              \
-                              number = strtol (&xb[xb_i], &after, 10);  \
-                              xb_i += after - &xb[xb_i];                \
+    #define set_number ({ if (!number) {                               \
+                              char *after;                             \
+                              number = fast_atoi (&xb[xb_i], &after);  \
+                              xb_i += after - &xb[xb_i];               \
                           }; number; })                                            
 
     for_cigar (vb->binary_cigar) {
@@ -101,6 +103,8 @@ void sam_seg_bsbolt_XB_Z_analyze (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
             dis_binary_cigar (VB, B1ST(BamCigarOp, vb->binary_cigar), vb->binary_cigar.len32, &vb->scratch).s, xb_i, xb_len);
 
     if (range) ref_unlock (&lock);
+
+    COPY_TIMER (sam_seg_bsbolt_XB_Z_analyze);
 }
 
 static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), rom extra)
@@ -116,6 +120,8 @@ static void show_wrong_xb (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), rom e
 // X/x=methylated/unmethylated CpG ; Y/y=CHG Z/z=CHH ; numbers=gaps
 void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), unsigned add_bytes)
 {
+    START_TIMER;
+
     alignas(64) static const char bsbolt_to_bismark[256] = { ['X']='Z', ['x']='z', ['Y']='X', ['y']='x', ['Z']='H', ['z']='h' };    
 
     // in PRIM and DEPN we dont have the methylation call because we didn't seg SEQ vs reference. To do: generate methylation call prediction in this case too/
@@ -136,7 +142,7 @@ void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), unsigned
     while (xb_i < XB_len && bis_i < after_bis) {
         if (IS_DIGIT(XB[xb_i])) {
             char *after;
-            uint32_t n = strtol (&XB[xb_i], &after, 10);
+            uint32_t n = fast_atoi (&XB[xb_i], &after);
             if (bis_i + n > dl->SEQ.len) goto fallback;
 
             memset (&bis[bis_i], '.', n);
@@ -163,7 +169,7 @@ void sam_seg_bsbolt_XB (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(XB), unsigned
     sam_seg_bismark_XM_Z (vb, dl, OPTION_XB_Z, SAM_SPECIAL_BSBOLT_XB, STRb(vb->scratch), add_bytes);
 
     buf_free (vb->scratch);
-    return;
+    goto done;
  
 fallback:
     if (flag.show_wrong_xb && !segconf_running) 
@@ -172,6 +178,9 @@ fallback:
     buf_free (vb->scratch);
 
     seg_add_to_local_string (VB, CTX(OPTION_XB_Z), STRa(XB), LOOKUP_SIMPLE, add_bytes);
+
+done:
+    COPY_TIMER (sam_seg_bsbolt_XB);
 }
 
 SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_BSBOLT_XB)

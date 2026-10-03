@@ -42,7 +42,7 @@ void vcf_seg_svaba_ID (VBlockVCFP vb, STRp(id))
 {
     decl_ctx(VCF_ID);
 
-    str_split_ints (id, id_len, 2, ':', id, true);
+    str_split_unsigneds (id, id_len, 2, ':', id, true);
     if (n_ids != 2) {
         seg_by_ctx (VB, STRa(id), ctx, id_len);
         return;

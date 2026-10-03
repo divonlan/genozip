@@ -14,9 +14,9 @@
 #include "sorter.h"
 
 typedef struct { 
-    rom mutex_name;  
-    rom func; 
     int64_t accumulator;
+    rom mutex_name;
+    Caller caller; 
     uint32_t code_line; 
     uint32_t lock_count; // multiple muteces (e.g. same mutex in different contexts of VBs) can be locked concurrently
 } LockPoint;
@@ -32,8 +32,8 @@ void mutex_initialize_do (Mutex *mutex, rom name, rom func)
                 "pthread_mutex_init failed for %s from %s: %s", name, func, strerror (ret)); 
     }
 
-    mutex->name        = name;
-    mutex->initialized = func;
+    mutex->name = (uintptr_t)name;
+    mutex->initialized = true;
 }
 
 void mutex_destroy_do (Mutex *mutex, rom func) 
@@ -44,31 +44,33 @@ void mutex_destroy_do (Mutex *mutex, rom func)
     memset (mutex, 0, sizeof (Mutex));
 }
 
-bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)   
+bool mutex_lock_do (Mutex *mutex, bool blocking, Caller caller)   
 { 
-    ASSERT (mutex->initialized, "called from %s: mutex not initialized", func);
+    ASSERT (mutex->initialized, "called from %s:%u: mutex not initialized", CALLERf);
 
-    bool show = mutex_is_show (mutex->name);
+    bool show = mutex_is_show ((rom)(uintptr_t)mutex->name);
 
-    if (show) iprintf ("LOCKING : Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
+    if (show) iprintf ("LOCKING : Mutex %s by thread %"PRIu64" %s:%u\n", (rom)(uintptr_t)mutex->name, (uint64_t)pthread_self(), CALLERf);
 
     int ret;
     if (blocking) {
-        START_TIMER;
+        𝓅𝓇ℴ𝒻𝒾𝓁ℯ (ProfilerTime start_time = (flag.show_time_comp_i == COMP_ALL) ? get_timer_start() : NULL_TIMER;)
+
         ret = pthread_mutex_lock (&mutex->mutex);
 
         if (__builtin_expect (flag.show_time_comp_i != COMP_NONE, false)) { // test same condition as START_TIMER 
-            if (!lp[code_line].mutex_name) { // first lock at this lockpoint
-                ASSERT (code_line <= MAX_CODE_LINE, "mutex_lock at %s:%u: cannot lock a mutex in a code_line > %u", func, code_line, MAX_CODE_LINE);
-                lp[code_line] = (LockPoint){ .mutex_name = mutex->name, .func = func, .code_line = code_line };
+            if (!lp[caller.code_line].mutex_name) { // first lock at this lockpoint
+                ASSERT (caller.code_line <= MAX_CODE_LINE, "mutex_lock at %s:%u: cannot lock a mutex in a code_line > %u", CALLERf, MAX_CODE_LINE);
+                lp[caller.code_line] = (LockPoint){ .mutex_name = (rom)(uintptr_t)mutex->name, .caller = caller };
             }
 
             else 
-                if (lp[code_line].func != func) 
+                if (lp[caller.code_line].caller.funcר != caller.funcר) 
                     WARN_ONCE (_FYI "Two calls to mutex_lock exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
-                               lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, mutex->name, func, code_line);
+                               lp[caller.code_line].mutex_name, CALLERff(lp[caller.code_line].caller), (rom)(uintptr_t)mutex->name, CALLERf);
                 
-            lp[code_line].accumulator += CHECK_TIMER; // luckily, we're protected by the mutex...
+            if (flag.show_time_comp_i == COMP_ALL)
+                𝓅𝓇ℴ𝒻𝒾𝓁ℯ (lp[caller.code_line].accumulator += get_timer_delta (start_time)); // luckily, we're protected by the mutex...
         }
     }
     
@@ -77,39 +79,39 @@ bool mutex_lock_do (Mutex *mutex, bool blocking, rom func, uint32_t code_line)
         if (ret == EBUSY) return false;
     }
 
-    increment_relaxed (lp[code_line].lock_count);
+    increment_relaxed (lp[caller.code_line].lock_count);
 
-    ASSERT (!ret, "called from %s by thread=%"PRIu64": pthread_mutex_lock failed on mutex->name=%s: %s", 
-            func, (uint64_t)pthread_self(), mutex && mutex->name ? mutex->name : "(null)", strerror (ret)); 
+    ASSERT (!ret, "called from %s:%u by thread=%"PRIu64": pthread_mutex_lock failed on mutex->name=%s: %s", 
+            CALLERf, (uint64_t)pthread_self(), mutex && mutex->name ? (rom)(uintptr_t)mutex->name : "(null)", strerror (ret)); 
 
-    mutex->lock_func = func; // mutex->lock_func is protected by the mutex
+    mutex->locked = true; // mutex->locked is protected by the mutex
 
-    if (show) iprintf ("LOCKED  : Mutex %s by thread %"PRIu64"\n", mutex->name, (uint64_t)pthread_self());
+    if (show) iprintf ("LOCKED  : Mutex %s by thread %"PRIu64"\n", (rom)(uintptr_t)mutex->name, (uint64_t)pthread_self());
 
     return true;
 }
 
-void mutex_unlock_do (Mutex *mutex, FUNCLINE) 
+void mutex_unlock_do (Mutex *mutex, Caller caller) 
 { 
-    ASSERT (mutex->initialized, "called from %s:%u mutex not initialized", func, code_line);
-    ASSERT (mutex->lock_func, "called from %s:%u by thread=%"PRIu64": mutex %s is not locked", 
-            func, code_line, (uint64_t)pthread_self(), mutex->name);
+    ASSERT (mutex->initialized, "called from %s:%u mutex not initialized", CALLERf);
+    ASSERT (mutex->locked, "called from %s:%u by thread=%"PRIu64": mutex %s is not locked", 
+            CALLERf, (uint64_t)pthread_self(), (rom)(uintptr_t)mutex->name);
 
-    mutex->lock_func = NULL; // mutex->lock_func is protected by the mutex
+    mutex->locked = false; // mutex->locked is protected by the mutex
 
-    decrement_relaxed (lp[code_line].lock_count);
+    decrement_relaxed (lp[caller.code_line].lock_count);
 
     int ret = pthread_mutex_unlock (&mutex->mutex); 
-    ASSERT (!ret, "called from %s:%u: pthread_mutex_unlock failed for %s: %s", func, code_line, mutex->name, strerror (ret)); 
+    ASSERT (!ret, "called from %s:%u: pthread_mutex_unlock failed for %s: %s", CALLERf, mutex->name, strerror (ret)); 
 
-    if (mutex_is_show (mutex->name))
-        iprintf ("UNLOCKED: Mutex %s by thread %"PRIu64" %s\n", mutex->name, (uint64_t)pthread_self(), func);
+    if (mutex_is_show ((rom)(uintptr_t)mutex->name))
+        iprintf ("UNLOCKED: Mutex %s by thread %"PRIu64" %s:%u\n", (rom)(uintptr_t)mutex->name, (uint64_t)pthread_self(), CALLERf);
 }
 
-bool mutex_wait_do (Mutex *mutex, bool blocking, FUNCLINE)   
+bool mutex_wait_do (Mutex *mutex, bool blocking, Caller caller)   
 {
-    if (mutex_lock_do (mutex, blocking, func, code_line)) {
-        mutex_unlock_do (mutex, func, code_line);
+    if (mutex_lock_do (mutex, blocking, caller)) {
+        mutex_unlock_do (mutex, caller);
         return true;
     }
     
@@ -130,16 +132,16 @@ void serializer_destroy_do (SerializerP ser, rom func)
     mutex_destroy_do (&ser->mutex, func);
 }
 
-void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
+void serializer_lock_do (SerializerP ser, VBIType vb_i, Caller caller)
 {
     #define WAIT_TIME_USEC 5000
     #define TIMEOUT (30*60) // 30 min
 
     for (unsigned i=0; ; i++) {
-        mutex_lock_do (&ser->mutex, true, func, code_line);
+        mutex_lock_do (&ser->mutex, true, caller);
 
         ASSERT (ser->vb_i_last < vb_i, "called from %s:%u: Expecting vb_i_last=%u < vb->vblock_i=%u. serializer=%s", 
-                func, code_line, ser->vb_i_last, vb_i, ser->mutex.name);
+                CALLERf, ser->vb_i_last, vb_i, ser->mutex.name);
         
         if (ser->vb_i_last == vb_i - 1) { // its our turn now
             ser->vb_i_last++; // next please
@@ -147,12 +149,12 @@ void serializer_lock_do (SerializerP ser, VBIType vb_i, FUNCLINE)
         }
         
         // not our turn, wait 5ms and try again
-        mutex_unlock_do (&ser->mutex, func, code_line);
+        mutex_unlock_do (&ser->mutex, caller);
         usleep (WAIT_TIME_USEC);
 
         // timeout after approx 30 minutes
         ASSERT (i < TIMEOUT * (1000000 / WAIT_TIME_USEC), "called from %s:%u: Timeout (%u sec) while waiting for serializer %s in vb=%u. vb_i_last=%u", 
-                func, code_line, TIMEOUT, ser->mutex.name, vb_i, ser->vb_i_last);
+                CALLERf, TIMEOUT, ser->mutex.name, vb_i, ser->vb_i_last);
     }
 }
 
@@ -173,7 +175,8 @@ void mutex_show_bottleneck_analsyis (void)
     for (int i=0; i <= MAX_CODE_LINE; i++) {
         if (!lp[i].accumulator) break; // done, since its sorted
 
-        iprintf ("%-9s %-23s %s:%u\n", str_int_commas (lp[i].accumulator / 1000000).s, lp[i].mutex_name, lp[i].func, lp[i].code_line);
+        iprintf ("%-9s %-23s %s:%u\n", str_int_commas (lp[i].accumulator / 1000000).s, 
+                 lp[i].mutex_name, CALLERff(lp[i].caller));
     }
 }
 
@@ -184,23 +187,23 @@ void mutex_who_is_locked (void)
         LockPoint my_lp = lp[i]; // make a copy for a bit of thread safety
         if (my_lp.mutex_name && my_lp.lock_count)
             printf ("Mutex locked: %s locked in %s:%u. %s\n", 
-                    my_lp.mutex_name, (my_lp.func ? my_lp.func : ""), my_lp.code_line, 
+                    my_lp.mutex_name, CALLERff(my_lp.caller), 
                     cond_int (my_lp.lock_count > 1, "num_locks_from_different_objects=", my_lp.lock_count));
     }
 }
 
 // call so join time will reported in by profiler (in --show-time)
-void thread_join_lock_point (rom thread_name, TimeSpecType profiler_timer, FUNCLINE)
+void thread_join_lock_point (rom thread_name, ProfilerTime start_time, Caller caller)
 {
-    if (!lp[code_line].mutex_name) { // first lock at this lockpoint
-        ASSERT (code_line <= MAX_CODE_LINE, "pthreads_join at %s:%u: cannot lock a mutex in a code_line > %u", func, code_line, MAX_CODE_LINE);
-        lp[code_line] = (LockPoint){ .mutex_name = thread_name, .func = func, .code_line = code_line };
+    if (!lp[caller.code_line].mutex_name) { // first lock at this lockpoint
+        ASSERT (caller.code_line <= MAX_CODE_LINE, "pthreads_join at %s:%u: cannot lock a mutex in a code_line > %u", CALLERf, MAX_CODE_LINE);
+        lp[caller.code_line] = (LockPoint){ .mutex_name = thread_name, .caller = caller };
     }
 
     else 
-        if (lp[code_line].func != func) 
+        if (lp[caller.code_line].caller.funcר != caller.funcר) 
             WARN_ONCE (_FYI "Two calls to mutex_lock/pthreads_join exist on the same code_line: %s @ %s:%u and %s @ %s:%u - --show-time will show their combined time. To solve, add an empty line to shift the code line number of one of them",
-                        lp[code_line].mutex_name, lp[code_line].func, lp[code_line].code_line, thread_name, func, code_line);
+                        lp[caller.code_line].mutex_name, CALLERff(lp[caller.code_line].caller), thread_name, CALLERf);
 
-    add_relaxed (lp[code_line].accumulator, CHECK_TIMER); 
+    add_relaxed (lp[caller.code_line].accumulator, get_timer_delta (start_time)); 
 }

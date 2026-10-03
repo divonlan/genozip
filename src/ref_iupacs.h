@@ -10,6 +10,8 @@
 
 #include "genozip.h"
 
+extern const char base2iupac[256];
+
 // make-reference side
 extern void ref_iupacs_compress (void);
 extern void ref_iupacs_after_compute (VBlockP vb);
@@ -17,10 +19,7 @@ extern void ref_iupacs_after_compute (VBlockP vb);
 extern void ref_iupacs_add_do (VBlockP vb, uint64_t idx, char iupac);
 static inline void ref_iupacs_add (VBlockP vb, uint64_t idx, char base)
 {
-    // true for multi-base iupac codes, except N: http://www.bioinformatics.org/sms/iupac.html
-    static const char base2iupac[256] = { ['U']='U', ['R']='R', ['Y']='Y', ['S']='S', ['W']='W', ['K']='K', ['M']='M', ['B']='B', ['D']='D', ['H']='H', ['V']='V',
-                                          ['u']='U', ['r']='R', ['y']='Y', ['s']='S', ['w']='W', ['k']='K', ['m']='M', ['b']='B', ['d']='D', ['h']='H', ['v']='V' };                                        
-    if (base2iupac[(int)base]) ref_iupacs_add_do (vb, idx, base2iupac[(int)base]);
+    if (base2iupac[(uint8_t)base]) ref_iupacs_add_do (vb, idx, base2iupac[(uint8_t)base]);
 }
 
 #define IUPAC_IS_INCLUDED(ref_base,vcf_base) hxcgcb

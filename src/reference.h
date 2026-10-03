@@ -26,15 +26,15 @@
 // not set yet, it is necesarry to lock the mutex and test again, and initialize if still not set.
 
 typedef struct Range {
-    Bits ref;                    // actual reference data - 2-bit array
-    Bits is_set;                 // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
-    int64_t num_set;             // used by ref_prepare_range_for_compress: number of set bits in in_set
+    Bits ref;           // actual reference data - 2-bit array
+    Bits is_set;        // a 1-bit array - SEG: a pos is set if seg set this reference PIZ: is set if SEC_REF_IS_SET said so
+    int64_t num_set;    // used by ref_prepare_range_for_compress: number of set bits in in_set
     STR (chrom_name);
-    WordIndex chrom;             // index to the contig of the in the CHROM of the file from which this reference was loaded.
-    uint32_t range_id;           // index of range within Buffer ranges
-    uint32_t range_i;            // range ordinal number within contig
-    PosType64 first_pos, last_pos; // the range that includes all loci (note: in ZIP-INTERNAL it might include unset loci too)
-    PosType64 gpos;                // position of this range in the "global position" 
+    WordIndex chrom;    // index to the contig of the in the CHROM of the file from which this reference was loaded.
+    uint32_t range_id;  // index of range within Buffer ranges
+    uint32_t range_i;   // range ordinal number within contig
+    PosType64 first_pos, last_pos;  // the range that includes all loci (note: in ZIP-INTERNAL it might include unset loci too)
+    PosType64 gpos;     // position of this range in the "global position". note: Contigs in reference files have a gpos which is a multiple of 64 (see ref_make_prepare_ranges_for_compress)
 } Range;
 
 #define ref_size(r) ((r) ? ((r)->last_pos - (r)->first_pos + 1) : 0)
@@ -139,7 +139,6 @@ extern void ref_cache_ls (void);
 
 // encoding of A,C,G,T to 0-3 - everything else in is 4
 static inline uint32_t nuke_encode (char c) { 
-    extern const uint8_t _nuke_encode[256];
     return _nuke_encode[(uint8_t)c]; // note: L1 memory lookup (1-4 cycles) is much faster than conditional moves
 }
 

@@ -39,8 +39,8 @@ typedef struct { char s[20]; } DisplayPrintId;
 extern DisplayPrintId dis_dict_id (DictId dict_id);
 #define dtype_name_z(dict_id) DTPZ(dtype_names)[dict_id_type(dict_id)]
 
-// constant expressions (if s is a string literal) - these generate the same dict_id.num as dict_id_make()
-// note: for creating static containers, use { .dict_id.num = DICT_ID_MAKE... }
+// constant expressions (s is a string literal): computed in compile-time.
+// for identical run-time logic (if not a string literal), use dict_id_make()
 
 // Type 1 - first character is 192->255
 #define DICT_ID_MAKE1_1(s) ((((uint64_t)(s[0] | 0xc0))))

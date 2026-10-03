@@ -324,6 +324,9 @@
 #pragma GENDICT INFO_VRS_States=DTYPE_1=VRS_States                           // <ID=VRS_States,Number=.,Type=String,Description="The literal sequence states used for the GA4GH VRS Alleles corresponding to the values in the REF and ALT fields">
 #pragma GENDICT INFO_Genes=DTYPE_1=Genes            // <ID=Genes,Number=1,Type=String,Description="Genes predicted to be impacted by varian">
 
+// ANNOVAR: See: https://annovar.openbioinformatics.org/en/latest/articles/VCF/
+#pragma GENDICT INFO_ANNOVAR_DATE=DTYPE_1=ANNOVAR_DATE
+ 
 // Structural variants - 1000 Genome Project conventions : https://www.internationalgenome.org/wiki/Analysis/Variant%20Call%20Format/VCF%20(Variant%20Call%20Format)%20version%204.0/encoding-structural-variants/
 #pragma GENDICT INFO_SVLEN=DTYPE_1=SVLEN            // <ID=SVLEN,Number=1,Type=Integer,Description="Difference in length between REF and ALT alleles"> 
 #pragma GENDICT INFO_SVTYPE=DTYPE_1=SVTYPE          // <ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant"> 
@@ -917,3 +920,4 @@ SPECIAL (VCF, 98, DEMUX_BY_COMMON,     vcf_piz_special_DEMUX_BY_COMMON);        
  
 #define dict_id_is_vcf_info_sf   dict_id_is_type_1
 #define dict_id_is_vcf_format_sf dict_id_is_type_2
+#define ctx_is_VCF_FORMAT(ctx) (VB_DT(VCF) && dict_id_is_vcf_format_sf ((ctx)->dict_id))

@@ -10,14 +10,13 @@
 #include "genozip.h"
 #include "file.h"
 #include "progress.h"
-#include "profiler.h" // for TimeSpecType
 #include "flags.h"
 #include "dispatcher.h"
 
 static bool progress_newline_since_update = false; // note: might be not 100% with threads, but that's ok
 
 static bool test_mode;
-static TimeSpecType component_start_time;
+static struct timespec component_start_time;
 static float last_percent=0;
 static int last_seconds_so_far=-1;
 static rom component_name=NULL;
@@ -26,7 +25,7 @@ static uint32_t last_secs_remaining=0xffff0000;
 
 static StrText progress_ellapsed_time (void)
 {
-    TimeSpecType tb; 
+    struct timespec tb; 
     clock_gettime (CLOCK_REALTIME, &tb); 
     
     int seconds_so_far = ((tb.tv_sec - component_start_time.tv_sec)*1000 + ((int64_t)tb.tv_nsec - (int64_t)component_start_time.tv_nsec) / 1000000) / 1000; 
@@ -69,7 +68,7 @@ void progress_erase (void)
 
 void progress_new_component (rom new_component_name, 
                              rom message, // can be NULL
-                             TimeSpecType *start_time) // optional: if time already started (e.g. when reading txt_header)
+                             struct timespec *start_time) // optional: if time already started (e.g. when reading txt_header)
 {
     StrText4K prefix = {};
 
@@ -123,7 +122,7 @@ void progress_update (Task task, double portion, double portion_of_task, bool do
     char progress_str[200];
     if (flag.quiet && !flag.show_tasks) return; 
 
-    TimeSpecType tb; 
+    struct timespec tb; 
     clock_gettime (CLOCK_REALTIME, &tb); 
     
     int seconds_so_far = ((tb.tv_sec-component_start_time.tv_sec)*1000 + (tb.tv_nsec-component_start_time.tv_nsec) / 1000000) / 1000; 

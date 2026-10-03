@@ -6,6 +6,10 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
+// IGZIP hisotry:
+// 15.0.43: initial integration of igzip, from ISAL version 2.31.0
+// 15.0.92: updating the assembler code of ARM (only) to 2.32.1 and starting using it (disabled before due to bugginess)
+
 #include <errno.h>
 #include <math.h>
 
@@ -169,19 +173,19 @@ static BgzfBlockStr display_bb (GzBlockZip *bb)
     return s;
 }
 
-static void *gz_alloc (void *vb_, unsigned items, unsigned size, FUNCLINE)
+static void *gz_alloc (void *vb_, unsigned items, unsigned size, Caller caller)
 {
-    return codec_alloc_do ((VBlockP )vb_, (uint64_t)items * (uint64_t)size, 1, NULL, func, code_line); // all bzlib buffers are constant in size between subsequent compressions
+    return codec_alloc_do ((VBlockP )vb_, (uint64_t)items * (uint64_t)size, 1, NULL, caller); // all bzlib buffers are constant in size between subsequent compressions
 }
 
 static void gz_alloc_deflator (VBlockP vb, FlagsMgzip mgzip_flags)
 {
     ASSERTISNULL (vb->gz_deflate_mem);
 
-    vb->gz_deflate_mem = LIB(LIBDEFLATE19) ? libdeflate_alloc_compressor (vb, mgzip_flags.level, __FUNCLINE)
+    vb->gz_deflate_mem = LIB(LIBDEFLATE19) ? libdeflate_alloc_compressor (vb, mgzip_flags.level, THIS_CODE_LINE)
                        : LIB(LIBDEFLATE7)  ? libdeflate_alloc_compressor_1_7 (mgzip_flags.level, vb)
-                       : LIB(ZLIB)         ? gz_alloc (vb, 1, sizeof (z_stream), __FUNCLINE)
-                       : LIB(IGZIP)        ? gz_alloc (vb, 1, igzip_level_buf_lens[mgzip_flags.level], __FUNCLINE)
+                       : LIB(ZLIB)         ? gz_alloc (vb, 1, sizeof (z_stream), THIS_CODE_LINE)
+                       : LIB(IGZIP)        ? gz_alloc (vb, 1, igzip_level_buf_lens[mgzip_flags.level], THIS_CODE_LINE)
                        :                     ({ ABORT ("unrecognized library=%u", mgzip_flags.library); NULL; }); // invalid library
 
     if (LIB(ZLIB))
@@ -192,7 +196,7 @@ static void gz_free_deflator (VBlockP vb, FlagsMgzip mgzip_flags)
 {
     ASSERTNOTNULL (vb->gz_deflate_mem);
 
-    if (LIB(LIBDEFLATE19))   libdeflate_free_compressor (vb->gz_deflate_mem, __FUNCLINE);
+    if (LIB(LIBDEFLATE19))   libdeflate_free_compressor (vb->gz_deflate_mem, THIS_CODE_LINE);
     else if LIB(LIBDEFLATE7) libdeflate_free_compressor_1_7 (vb->gz_deflate_mem);
     else                     codec_free (vb, vb->gz_deflate_mem);
 
@@ -425,12 +429,12 @@ uint32_t mgzip_get_max_block_size (void)
     }
 }
 
-void inc_disk_gz_uncomp_or_trunc_(FileP file, uint64_t inc, FUNCLINE)
+void inc_disk_gz_uncomp_or_trunc_(FileP file, uint64_t inc, Caller caller)
 {
     add_relaxed (file->disk_gz_uncomp_or_trunc, inc);
 
     if (flag.show_gz_uncomp)
-        iprintf ("%s:%u: disk_gz_uncomp_or_trunc + %"PRIu64"\t= %"PRIu64"\n", func, code_line, inc, file->disk_gz_uncomp_or_trunc); 
+        iprintf ("%s:%u: disk_gz_uncomp_or_trunc + %"PRIu64"\t= %"PRIu64"\n", CALLERf, inc, file->disk_gz_uncomp_or_trunc); 
 }
 
 static bool is_header_prefix (bytes header, STR8p(prefix))
@@ -514,7 +518,7 @@ bool bgzf_read_and_uncomp_final_block (rom filename, qSTRp(uncomp))
             mgzip_block_verify_header (NULL, fp, comp+i, comp_len-i, true, (GzipFlags){ .extra=1 }, _8(BGZF_PREFIX)) == GZ_SUCCESS) {
             fclose (fp);
 
-            struct libdeflate_decompressor *libdef_decomp_mem = libdeflate_alloc_decompressor (evb, __FUNCLINE);
+            struct libdeflate_decompressor *libdef_decomp_mem = libdeflate_alloc_decompressor (evb, THIS_CODE_LINE);
 
             size_t uncomp_len_size_t; 
 
@@ -525,7 +529,7 @@ bool bgzf_read_and_uncomp_final_block (rom filename, qSTRp(uncomp))
 
             *uncomp_len = uncomp_len_size_t;
 
-            libdeflate_free_decompressor (&libdef_decomp_mem, __FUNCLINE);
+            libdeflate_free_decompressor (&libdef_decomp_mem, THIS_CODE_LINE);
 
             return (ret == LIBDEFLATE_SUCCESS);
         }
@@ -647,7 +651,7 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
     uint8_t *next_blk = B8(file->gz_data, params.gz_hdr_len) - 1;
     uint32_t bsize=0, isize=0, n_blks=0;
     do {
-        next_blk = memmem (next_blk + 1, BAFT8(file->gz_data) - next_blk, params.gz_hdr, params.gz_hdr_len);
+        next_blk = memmem (next_blk + 1, BAFT8(file->gz_data) - (next_blk + 1), params.gz_hdr, params.gz_hdr_len);
         n_blks++;
     }
     // if codec is variable length (is_valid_isize doesn't work well), we take the extra precaution of verifying its bsize makes sense  
@@ -1033,7 +1037,7 @@ void mgzip_uncompress_vb (VBlockP vb, Codec codec)
     ASSERTNOTEMPTY (vb->gz_blocks);
 
     ASSERTISNULL (vb->libdef_decomp_mem);
-    vb->libdef_decomp_mem = libdeflate_alloc_decompressor(vb, __FUNCLINE);
+    vb->libdef_decomp_mem = libdeflate_alloc_decompressor(vb, THIS_CODE_LINE);
 
     uint32_t total_vb_isizes = 0;
     for_buf (GzBlockZip, bb, vb->gz_blocks) {
@@ -1045,7 +1049,7 @@ void mgzip_uncompress_vb (VBlockP vb, Codec codec)
     ASSERT (total_vb_isizes >= Ltxt, "%s: Expecting total_vb_isizes=%u >= Ltxt=%u. codec=%s", 
             VB_NAME, total_vb_isizes, Ltxt, codec_name (txt_file->effective_codec));
 
-    libdeflate_free_decompressor (&vb->libdef_decomp_mem, __FUNCLINE); // also sets libdef_decomp_mem to NULL
+    libdeflate_free_decompressor (&vb->libdef_decomp_mem, THIS_CODE_LINE); // also sets libdef_decomp_mem to NULL
 
     buf_destroy (vb->comp_txt_data); // now that we are finished decompressing we can release the memory (we won't need this buffer for a while so better destroy)
 
@@ -1113,7 +1117,7 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *fp)
     char uncomp_block[BGZF_MAX_BLOCK_SIZE];
 
     ASSERTISNULL (vb->libdef_decomp_mem);
-    vb->libdef_decomp_mem = libdeflate_alloc_decompressor(vb, __FUNCLINE);
+    vb->libdef_decomp_mem = libdeflate_alloc_decompressor(vb, THIS_CODE_LINE);
 
     for_buf (RereadLine, line, vb->reread_prescription) {
         
@@ -1145,7 +1149,7 @@ void bgzf_reread_uncompress_vb_as_prescribed (VBlockP vb, FILE *fp)
         }
     }
 
-    libdeflate_free_decompressor (&vb->libdef_decomp_mem, __FUNCLINE); // also sets libdef_decomp_mem to NULL
+    libdeflate_free_decompressor (&vb->libdef_decomp_mem, THIS_CODE_LINE); // also sets libdef_decomp_mem to NULL
 }
 
 void bgzf_libdeflate_1_7_initialize (void)
@@ -1326,9 +1330,9 @@ static void bgzf_compress_one_block (VBlockP vb, const BgzfBlockPiz *restrict bl
     // happen theoretically (maybe) if the original data was compressed with a higher level, and an uncompressible 64K block was
     // compressed to just under 64K while in our compression level it is just over 64K.
     if (!recomp_len) { 
-        void *high_compressor = libdeflate_alloc_compressor (vb, LIBDEFLATE_MAX_LEVEL, __FUNCLINE); // libdefate's highest level
+        void *high_compressor = libdeflate_alloc_compressor (vb, LIBDEFLATE_MAX_LEVEL, THIS_CODE_LINE); // libdefate's highest level
         recomp_len = libdeflate_deflate_compress (high_compressor, Btxt (block->txt_index), block->txt_size, BAFTc (vb->comp_txt_data), BGZF_MAX_CDATA_SIZE);
-        libdeflate_free_compressor (high_compressor, __FUNCLINE);
+        libdeflate_free_compressor (high_compressor, THIS_CODE_LINE);
     }
 
     ASSERT (recomp_len, "cannot compress block with %u bytes into a BGZF block with %u bytes", block->txt_size, BGZF_MAX_BLOCK_SIZE);
@@ -1589,10 +1593,10 @@ void show_gz (rom filename)
     // read a bunch of gz data from file
     bool is_analyzed = flag.explicit_quiet, is_emvl_empty_block = false;
 
-    ASSINP (file_exists (filename), "Error: file not found: %s", filename);
+    ASSINP (file_exists (filename), _ERR"file not found: %s", filename);
     
     uint64_t file_size = file_get_size (filename), file_remaining=file_size, offset=0;
-    ASSINP (file_size, "Error: file is empty: %s", filename);
+    ASSINP (file_size, _ERR"file is empty: %s", filename);
 
     FILE *fp = fopen (filename, READ);
     ASSERT (fp, "Failed to open %s: %s", filename, arch_str_error());
@@ -1602,7 +1606,7 @@ void show_gz (rom filename)
     // file_get_file (evb, filename, &evb->z_data, "z_data", 100 MB, VERIFY_NONE, false);
 
     // uncompress first gz block of gz_data
-    evb->libdef_decomp_mem = libdeflate_alloc_decompressor (evb, __FUNCLINE);
+    evb->libdef_decomp_mem = libdeflate_alloc_decompressor (evb, THIS_CODE_LINE);
     buf_alloc_exact (evb, evb->txt_data, 5 * evb->z_data.size, char, "txt_data");
     int size_width=0;
 
@@ -1759,20 +1763,20 @@ void show_gz (rom filename)
 done:
     buf_free (evb->z_data);
     buf_free (evb->txt_data);
-    libdeflate_free_decompressor (&evb->libdef_decomp_mem, __FUNCLINE);
+    libdeflate_free_decompressor (&evb->libdef_decomp_mem, THIS_CODE_LINE);
 }
 
 
 // called from --dump_gz_block=𝑛 
 void dump_gz_block (rom filename) 
 {
-    ASSINP (file_exists (filename), "Error: file not found: %s", filename);
+    ASSINP (file_exists (filename), _ERR"file not found: %s", filename);
     
     uint64_t file_size = file_get_size (filename);
-    ASSINP (file_size, "Error: file is empty: %s", filename);
+    ASSINP (file_size, _ERR"file is empty: %s", filename);
 
     FILE *fp = fopen (filename, READ);
-    ASSERT (fp, "WARNING: Failed to open %s. fopen: %s", filename, strerror (errno));
+    ASSERT (fp, _WRN"Failed to open %s. fopen: %s", filename, strerror (errno));
 
     char data[64 KB];
     BgzfHeader *h = (BgzfHeader *)data;

@@ -57,7 +57,7 @@ void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t np, unsign
     if (segconf.pacbio_subreads && np == 1)
         seg_by_did (VB, "1", 1, OPTION_np_i, add_bytes); // in subreads, we expect np=1 all-the-same
 
-    else if (segconf_has(OPTION_ec_f) && ctx_has_value_in_line_(vb, CTX(OPTION_ec_f))) 
+    else if (segconf_has(OPTION_ec_f) && ctx_has_value_in_line (vb, OPTION_ec_f)) 
         seg_delta_vs_other_localN (VB, CTX(OPTION_np_i), CTX(OPTION_ec_f), np, -1, add_bytes);
 
     else 
@@ -80,7 +80,7 @@ void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qs, unsign
 
     // in subreads: e.g. QNAME=m54284U_210913_013042/0/6137_11205 qe=11205 qs=6137  
     if (segconf.pacbio_subreads) {
-        if (segconf_qf_id (QNAME1) == QF_PACBIO_rng && ctx_has_value_in_line_(VB, CTX(SAM_Q2NAME)) && qs == CTX(SAM_Q2NAME)->last_value.i)
+        if (segconf_qf_id (QNAME1) == QF_PACBIO_rng && ctx_has_value_in_line (VB, SAM_Q2NAME) && qs == CTX(SAM_Q2NAME)->last_value.i)
             seg_by_ctx (VB, STRa(copy_Q2NAME_int), ctx, add_bytes);
 
         else
@@ -111,7 +111,7 @@ void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qe, unsign
 
     // in subreads: e.g. QNAME=m54284U_210913_013042/0/6137_11205 qe=11205 qs=6137  
     if (segconf.pacbio_subreads) {
-        if (segconf_qf_id (QNAME1) == QF_PACBIO_rng && ctx_has_value_in_line_(VB, CTX(SAM_Q3NAME)) && qe == CTX(SAM_Q3NAME)->last_value.i)
+        if (segconf_qf_id (QNAME1) == QF_PACBIO_rng && ctx_has_value_in_line (VB, SAM_Q3NAME) && qe == CTX(SAM_Q3NAME)->last_value.i)
             seg_by_ctx (VB, STRa(copy_Q3NAME_int), ctx, add_bytes);
 
         else
@@ -121,7 +121,7 @@ void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qe, unsign
     // in ccs: qe = qs + seq_len
     else {
         int32_t qs;
-        if (sam_seg_peek_int_field (vb, OPTION_qs_i, vb->idx_qs_i, 0, 0x7ffffff, true, &qs) && qs + dl->SEQ.len == qe) 
+        if (sam_seg_peek_int_field (vb, OPTION_qs_i, vb->idx.qs_i, 0, 0x7ffffff, true, &qs) && qs + dl->SEQ.len == qe) 
             seg_special0 (VB, SAM_SPECIAL_PACBIO_qe, ctx, add_bytes);
         
         else
@@ -153,9 +153,9 @@ void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t we, unsign
     // prediction (subreads data): we ~= ws + (sum(ip) + sum (pw) + seq_len)
     if (flag.best && // summing ip/pw add time - not worth the tiny benefit of this method unless --best
         segconf_has(OPTION_we_i) && // condition for ip and pw sum to be calculated
-        sam_seg_peek_int_field (vb, OPTION_ws_i, vb->idx_ws_i, 0, 0x7ffffff, true, &ws)  &&
-        ctx_has_value_in_line_(vb, CTX(OPTION_ip_B_C)) && 
-        ctx_has_value_in_line_(vb, CTX(OPTION_pw_B_C))) {
+        sam_seg_peek_int_field (vb, OPTION_ws_i, vb->idx.ws_i, 0, 0x7ffffff, true, &ws)  &&
+        ctx_has_value_in_line (vb, OPTION_ip_B_C) && 
+        ctx_has_value_in_line (vb, OPTION_pw_B_C)) {
      
         int64_t sum_ip = CTX(OPTION_ip_B_C)->last_value.i;
         int64_t sum_pw = CTX(OPTION_pw_B_C)->last_value.i;
@@ -208,9 +208,9 @@ bool sam_seg_pacbio_qual (VBlockSAMP vb, STRp(qual)/*textual*/, unsigned add_byt
 
     ASSINP (has(dq_Z) && has(iq_Z) && has(sq_Z), "%s: Expecting line to have dq:Z, iq:Z and sq:Z but some are missing", LN_NAME);
 
-    STR(iq); sam_seg_get_aux_Z (vb, vb->idx_iq_Z, pSTRa(iq), IS_BAM_ZIP);
-    STR(sq); sam_seg_get_aux_Z (vb, vb->idx_sq_Z, pSTRa(sq), IS_BAM_ZIP);
-    STR(dq); sam_seg_get_aux_Z (vb, vb->idx_dq_Z, pSTRa(dq), IS_BAM_ZIP);
+    STR(iq); sam_seg_get_aux_Z (vb, vb->idx.iq_Z, pSTRa(iq), IS_BAM_ZIP);
+    STR(sq); sam_seg_get_aux_Z (vb, vb->idx.sq_Z, pSTRa(sq), IS_BAM_ZIP);
+    STR(dq); sam_seg_get_aux_Z (vb, vb->idx.dq_Z, pSTRa(dq), IS_BAM_ZIP);
 
     if (dq_len != qual_len || iq_len != qual_len || sq_len != qual_len) return false;
 

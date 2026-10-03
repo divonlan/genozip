@@ -36,8 +36,8 @@ void agilent_seg_RX (VBlockP vb_, ContextP ctx, STRp(rx), unsigned add_bytes)
     else { // SAM/BAM
         STR(za); STR(zb);
         bool is_bam = IS_BAM_ZIP;
-        sam_seg_get_aux_Z (vb, VB_SAM->idx_ZA_Z, pSTRa(za), is_bam);
-        sam_seg_get_aux_Z (vb, VB_SAM->idx_ZB_Z, pSTRa(zb), is_bam);
+        sam_seg_get_aux_Z (vb, VB_SAM->idx.ZA_Z, pSTRa(za), is_bam);
+        sam_seg_get_aux_Z (vb, VB_SAM->idx.ZB_Z, pSTRa(zb), is_bam);
 
         use_special = has(ZA_Z) && has(ZB_Z) && za_len >= 3 && zb_len >= 3 && !memcmp (rx, za, 3) && !memcmp (rx+4, zb, 3);
     }
@@ -83,9 +83,9 @@ void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_bytes)
 // e.g. "FFF FDF" (used for SAM and FASTQ)
 SPECIAL_RECONSTRUCTOR (agilent_special_AGENT_QX)
 {
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, '3', 0}, 2, reconstruct, __FUNCLINE); // note: nul-termianted as expected of a dictionary snip
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, '3', 0}, 2, reconstruct, THIS_CODE_LINE); // note: nul-termianted as expected of a dictionary snip
     if (reconstruct) RECONSTRUCT1 (' ');
-    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, '3', 0}, 2, reconstruct, __FUNCLINE);
+    reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, (char[]){ SNIP_LOOKUP, '3', 0}, 2, reconstruct, THIS_CODE_LINE);
     
     return NO_NEW_VALUE;
 }

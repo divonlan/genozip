@@ -135,8 +135,7 @@ static RefCacheState ref_cache_handle_existing (uint64_t data_size,
 
         attempt_grab:
         // case: we successfully beat any other process to setting creaton_ts, so we can now populate the cache.
-        if (__atomic_compare_exchange_n (&gref.cache->creation_ts, &original_creation_ts, now, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
-
+        if (cas_strong_rel_acq (gref.cache->creation_ts, original_creation_ts, now)) {
             // reset for safety (note: original shm allocation is reset by OS)
             memset (gref.cache->genome_data, 0, data_size);
             return CACHE_POPULATING;
@@ -376,9 +375,7 @@ bool ref_cache_initialize_genome (void)
     uint64_t original_creation_ts = ALOAD (creation_ts); 
 
     // grab (=set) the creation_ts field - that would indicate that we are the creators
-    if (!original_creation_ts &&
-        __atomic_compare_exchange_n (&gref.cache->creation_ts, &expected, now, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
-
+    if (!original_creation_ts && cas_strong_rel_acq (gref.cache->creation_ts, expected, now))
         gref.cache_state = CACHE_POPULATING;
 
     else
@@ -402,12 +399,10 @@ bool ref_cache_initialize_genome (void)
         if (flag.show_cache) iprintf ("%sPOPULATING\n", _SHOW_CACHE);
     }
 
-    gref.genome = &gref.genome_buf;
-
 cache_ok:
-    buf_attach_bits_to_shm (evb, &gref.genome_buf, gref.cache->genome_data, gref.genome_nbases * 2, "genome_buf");
+    buf_attach_bits_to_shm (evb, &gref.genome, gref.cache->genome_data, gref.genome_nbases * 2, "genome");
     if (flag.show_cache) 
-        iprintf ("%sattached genome_buf (%"PRIu64" bases) to %s shm\n", 
+        iprintf ("%sattached genome (%"PRIu64" bases) to %s shm\n", 
                  _SHOW_CACHE, gref.genome_nbases, gref.cache_state == CACHE_READY ? "READONLY" : "READWRITE");
 
     // attach the cache data (read-write if CACHE_POPULATING - we will switch to read-only in ref_cache_done_populating; read-only if CACHE_READY)
@@ -451,17 +446,14 @@ void ref_cache_remove (void)
     ref_load_external_reference (&chrom_ctx); // this will call ref_cache_remove_do
 }
 
-unsigned ref_cache_iterator (RefCacheIteratorCallback (callback), bool dormant_only)
+static unsigned ref_cache_iterator (RefCacheIteratorCallback (callback), bool dormant_only)
 {
     unsigned count = 0;
 
 #ifdef USE_SYSV_SHM
 
 #ifdef __linux__
-    ASSERTNOTINUSE (evb->scratch);
-    file_get_file (evb, "/proc/sysvipc/shm", &evb->scratch, "scratch", 1 MB, VERIFY_ASCII, false);
-
-    str_split_by_lines (evb->scratch.data, evb->scratch.len, 1000);
+    file_split_lines ("/proc/sysvipc/shm", "/proc/sysvipc/shm", VERIFY_NONE);
 
     for (int i=1; i < n_lines; i++) { // note: skipping first line - its a header
         if (line_lens[i] < 20) continue; 
@@ -495,6 +487,8 @@ unsigned ref_cache_iterator (RefCacheIteratorCallback (callback), bool dormant_o
         
         shmdt (cache);
     }
+
+    ℓ𝒾𝓃𝓊𝓍(buf_destroy (data)); // allocated by file_split_lines
 
 #elif defined USE_POSIX_SHM
     DIR *dir = opendir (SHM_NAME_DIR);
@@ -653,7 +647,7 @@ void ref_cache_remove_do (bool cache_exists, bool verbose)
 // remove all Genozip cache shm segments 
 void ref_cache_remove_all (RefCacheRemoveType rm_type)
 {
-    if (rm_type == REF_CACHE_REMOVE_DORMANT && flag.is_windows) return; // not supported for Windows
+    𝓌𝒾𝓃(if (rm_type == REF_CACHE_REMOVE_DORMANT) return;) // not supported for Windows
     
     unsigned n_removed = ref_cache_iterator (do_remove, rm_type == REF_CACHE_REMOVE_DORMANT);
     
@@ -715,7 +709,7 @@ void ref_cache_ls (void)
 void ref_cache_detach (void)
 {
     if (gref.cache_state != CACHE_READY ||
-        gref.genome_buf.type == BUF_SHM || refhash_buf.type == BUF_SHM) // actually detach only when both genome_buf and refhash are freed
+        gref.genome.type == BUF_SHM || refhash_buf.type == BUF_SHM) // actually detach only when both genome and refhash are freed
         return;
 
 #ifdef USE_SYSV_SHM

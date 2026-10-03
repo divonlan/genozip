@@ -21,4 +21,7 @@ extern bool b250_zip_generate (VBlockP vb, ContextP ctx);
 
 
 // PIZ
-extern WordIndex b250_piz_decode (bytes *b, bool advance, B250Size b250_size, rom ctx_name);
+extern WordIndex b250_piz_decode (ConstBufferP b250, uint32_t *restrict index, bool advance, B250Size b250_size, rom ctx_name);
+
+// Diagnostics
+extern noreturn void b250_mistmatch_diagnose (void);

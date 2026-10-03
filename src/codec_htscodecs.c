@@ -49,7 +49,7 @@ static bool codec_hts_compress (VBlockP vb, ContextP ctx,
     unsigned buf_i = 0;
     
     if (get_line_cb) {
-        uncompressed = codec_alloc_do (vb, *uncompressed_len, 1, &buf_i, __FUNCLINE);
+        uncompressed = codec_alloc_do (vb, *uncompressed_len, 1, &buf_i, THIS_CODE_LINE);
         
         for_line {
             STRw (line);

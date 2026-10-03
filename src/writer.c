@@ -162,7 +162,7 @@ int64_t writer_get_txt_line_i (VBlockP vb, LineIType line_in_vb/*0-based (if MAI
                                                            : (factor * p->num_lines); 
     }
     
-    WARN_ONCE ("%s:%u: Secondary error while preparing error message: Unexpectedly, unable to find current line %s/%u in recon_plan", __FUNCLINE, VB_NAME, line_in_vb);
+    WARN_ONCE ("%s:%u: Secondary error while preparing error message: Unexpectedly, unable to find current line %s/%u in recon_plan", THIS_CODE_LINE, VB_NAME, line_in_vb);
     return 0;
 }
 
@@ -380,7 +380,7 @@ void writer_z_initialize (void)
         // we add is_dropped_buf to the wvb buffer list. allocation will occur in main thread when writer 
         // create the plan, for VBs on the boundary of head/tail/lines, otherwise in reconstruction compute thread.
         if (v->needs_recon && (flag.maybe_lines_dropped_by_reconstructor || flag.maybe_lines_dropped_by_writer))
-            buf_set_promiscuous_do (wvb, &v->is_dropped_buf, "is_dropped_buf", __FUNCLINE);
+            buf_set_promiscuous_do (wvb, &v->is_dropped_buf, "is_dropped_buf", THIS_CODE_LINE);
         
         // conditions in which VB should be written. if false, but needs_recon, VB is still read, but not written (eg reading aux files)
         v->needs_write = 
@@ -1265,7 +1265,7 @@ static void writer_main_loop (VBlockP wvb) // same as wvb global variable
                 if (!flag.downsample) {
 
                     if (flag_is_show_vblocks (TASK_PIZ)) // only displayed for entire VBs, not line ranges etc 
-                        iprintf ("VB_FLUSH_FULL_VB(id=%d) vb=%s/%d txt_data.len=%u\n", v->vb->id, comp_name (v->vb->comp_i), v->vb->vblock_i, v->vb->txt_data.len32);
+                        iprintf ("VB_FLUSH_FULL_VB(id=%s) vb=%s/%d txt_data.len=%u\n", dis_vb_id(v->vb->id).s, comp_name (v->vb->comp_i), v->vb->vblock_i, v->vb->txt_data.len32);
 
                     writer_flush_vb (dispatcher, wvb, false, false);   // flush any remaining unflushed wvb lines from previous VBs
                     writer_flush_vb (dispatcher, v->vb, false, false); // write entire VB
@@ -1404,7 +1404,8 @@ static bool writer_handover (VbInfo *v, VBlockP vb)
     mutex_unlock (v->wait_for_data); 
 
     if (flag_is_show_vblocks (TASK_PIZ)) 
-        iprintf ("HANDED_OVER(task=%s id=%d) vb_i=%s/%u txt_data.len=%u\n", task_name (TASK_PIZ), vb->id, comp_name(v->comp_i), vb->vblock_i, Ltxt);
+        iprintf ("HANDED_OVER(task=%s id=%s) vb_i=%s/%u txt_data.len=%u\n", 
+                 task_name (TASK_PIZ), dis_vb_id (vb->id).s, comp_name(v->comp_i), vb->vblock_i, Ltxt);
 
     return true;
 }

@@ -22,7 +22,8 @@
 #define IS_ALPHANUMERIC(c) (IS_LETTER(c)  || IS_DIGIT(c))
 #define IS_NON_WS(c)       IN_RANGX((c), 33, 126)
 #define IS_QUAL_SCORE(c)   IN_RANGX((c), 33, 126) // this is faster than a lookup table, because it is used for testing QUAL data, therefore almost always true, so the CPU branch predictor will almost always correct
-#define IS_ACGT(c)         (({ extern const bool is_ACGT[256];      is_ACGT[(uint8_t)(c)];      })) // much faster than conditionals (branches), esp in a loop of e.g. 100+ bases
+extern const uint8_t _nuke_encode[256];
+#define IS_ACGT(c)         (({ _nuke_encode[(uint8_t)(c)] != 4; })) // much faster than conditionals (branches), esp in a loop of e.g. 100+ bases
 #define IS_ACGTN(c)        (({ extern const bool is_ACGTN[256];     is_ACGTN[(uint8_t)(c)];     }))
 #define IS_FASTQ_SEQ(c)    (({ extern const bool is_fastq_seq[256]; is_fastq_seq[(uint8_t)(c)]; }))
 #define IS_PRINTABLE(c)    (({ extern const bool is_printable[256]; is_printable[(uint8_t)(c)]; }))
@@ -99,15 +100,6 @@ static inline bool str_issameR_ (STRp(str1), STRp(str2)) // true if the same
 }
 #define str_issameR(str1,str2) str_issameR_ (str1, str1##_len, str2, str2##_len)
 
-static inline bool str_issame_rev_(STRp(str1), STRp(str2)) // true if the same
-{
-    if (str1_len != str2_len) return false;
-    for (uint32_t i=0; i < str1_len; i++)
-        if (str1[i] != str2[str1_len-i-1]) return false;
-    return true;
-}
-#define str_issame_rev(str1,str2) str_issame_rev_ (str1, str1##_len, str2, str2##_len)
-
 extern bool str_is_zero (STR𐤐(str));
 
 extern bool str_case_compare (rom str1, rom str2, bool *identical); // similar to stricmp that doesn't exist on all platforms
@@ -161,23 +153,19 @@ static inline uint32_t str_count_mismatches (rom str1, rom str2, uint32_t len)
     return count;
 }
 
-static inline unsigned homopolymer_len (STRp(seq), uint32_t start)
-{
-    char base = seq[start];
-    for (uint32_t i=start+1; i < seq_len; i++)
-        if (seq[i] != base) return i - start;
-
-    return seq_len - start;
-}
-
 // count the number of consecutive occurances of a character
-static inline uint64_t str_count_consecutive_char (rom str, uint64_t len, char c)
+static inline uint32_t str_count_consecutive_char (rom str, uint32_t len, char c)
 {
-    uint64_t i=0;
+    uint32_t i=0;
     for (i=0; i < len; i++)
         if (str[i] != c) break;
 
     return i;
+}
+
+static inline unsigned homopolymer_len (STRp(seq), uint32_t start)
+{
+    return str_count_consecutive_char (&seq[start], seq_len - start, seq[start]);
 }
 
 static inline rom str_a_an (rom s) {
@@ -208,7 +196,7 @@ extern StrText1K str_str_s_(rom label, STRp(str));
 #define cond_str(cond, label, str)  ((cond) ? ({ rom str_=(str); str_str_s_((label), str_, strlen (str_)).s; }) : "") /* note: str evaluates once, but only if cond is true */
 #define cond_stra(cond, label, str) ((cond) ? str_str_s_((label), str, str_len).s : "") 
 
-extern rom str_to_hex_(bytes𐤐 data, uint32_t data_lepn, char *restrict hex_str, bool with_dot);
+extern rom str_to_hex_(bytes𐤐 data, uint32_t data_len, char *restrict hex_str, bool with_dot);
 static inline StrText str_to_hex (bytes data, uint32_t data_len) // note: for data_len up to 39 (truncated if longer)
 {
     StrText s;
@@ -217,9 +205,10 @@ static inline StrText str_to_hex (bytes data, uint32_t data_len) // note: for da
 }
 
 // string length of an integer. #include <math.h> if using this.
+// note: we don't use a lookup table approach because calls aren't frequent enough to keep table in L1 cache
 static inline unsigned str_int_len (int64_t n_)
 { 
-    uint64_t n = ABS(n_); // longest possible number: -9,223,372,036,854,775,808 - 20 characters (without commas)
+    uint64_t n = ABS64(n_); // longest possible number: -9,223,372,036,854,775,808 - 20 characters (without commas)
     return (n_ < 0) +
            (n<10ULL?1 : n<100ULL?2 : n<1000ULL?3 : n<10000ULL?4 : n<100000ULL?5 : n<1000000ULL?6 : n<10000000ULL?7 
           : n<100000000ULL?8 : n<1000000000ULL?9 : n<10000000000ULL?10 : n<100000000000ULL?11 : n<1000000000000ULL?12 
@@ -227,17 +216,11 @@ static inline unsigned str_int_len (int64_t n_)
           : n<100000000000000000ULL?17: n<1000000000000000000ULL?18 : 19); 
 }
 
-extern uint32_t str_int_ex (int64_t n, char *str /* out */, bool add_nul_terminator);
-static inline uint32_t str_int (int64_t n, char *str /* out */) { return str_int_ex (n, str, true); }
+extern uint32_t str_int_ex (int64_t n, char *restrict str /* out */, bool add_nul_terminator);
+static inline uint32_t str_int (int64_t n, char *restrict str /* out */) { return str_int_ex (n, str, true); }
 
-static inline uint32_t str_int_fast (int64_t n, char *str /* out */) // faster if many of the numbers are expected to be single-digit
-{ 
-    if (n <= 9) { *str = '0' + n; return 1; }
-    else return str_int_ex (n, str, false); 
-}
-
-extern uint32_t str_hex_ex (int64_t n, char *str /* out */, bool uppercase, bool add_nul_terminator);
-static inline uint32_t str_hex (int64_t n, char *str /* out */, bool uppercase) { return str_hex_ex (n, str, uppercase, true); }
+extern uint32_t str_hex_ex (int64_t n, char *restrict str /* out */, bool uppercase, bool add_nul_terminator);
+static inline uint32_t str_hex (int64_t n, char *restrict str /* out */, bool uppercase) { return str_hex_ex (n, str, uppercase, true); }
 
 extern bool str_get_int (STR𐤐(str), int64_t *restrict value); 
 extern bool str_get_uint16 (STR𐤐(str), uint16_t *restrict value);
@@ -306,9 +289,13 @@ extern rom str_split_by_tab_do (STR𐤐(str), uint32_t *restrict n_flds, rom𐤐
     str = str_split_by_tab_do ((str), (max_len), &n_flds, flds, fld_lens, (has_13), (exactly), (ignore_excess), (enforce))
 #define STRfld(i) STRi(fld,(i))
 
-extern uint32_t str_split_by_lines_do (STR𐤐(str), uint32_t max_lines, rom𐤐 *restrict lines, uint32_t *restrict line_lens);
-#define str_split_by_lines(str,str_len,max_lines) \
-    STR_ARRAY (line, (max_lines)) = str_split_by_lines_do ((str), (str_len), max_lines, lines, line_lens)
+// returns lines. final line may or may not be \n-terminated.
+#define MAX_STRINGS_IN_ARRAY 250000 // limit to prevent stack overflow (we should probably limit by actual stack size and/or allocate dynamically if too big)
+extern uint32_t str_split_by_lines_do (STR𐤐(str), uint32_t max_lines, rom𐤐 *restrict lines, uint32_t *restrict line_lens, bool skip_final_line_if_no_newline);
+#define str_split_by_lines(str,str_len,max_lines_,skip_final_line_if_no_newline) \
+    uint32_t max_lines = max_lines_ ? max_lines_ : ((!skip_final_line_if_no_newline) + str_count_char ((str), (str_len), '\n')); \
+    ASSERT (max_lines <= MAX_STRINGS_IN_ARRAY, "Too many lines for %s: %u. Genozip can handle up to %u.", #str, max_lines-(!skip_final_line_if_no_newline), MAX_STRINGS_IN_ARRAY);\
+    STR_ARRAY (line, max_lines) = str_split_by_lines_do ((str), (str_len), max_lines, lines, line_lens, (skip_final_line_if_no_newline))
 
 extern uint32_t str_split_ints_do (STR𐤐(str), uint32_t max_items, char sep, bool exactly, int base, int64_t *restrict items);
 
@@ -316,6 +303,11 @@ extern uint32_t str_split_ints_do (STR𐤐(str), uint32_t max_items, char sep, b
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
     int64_t name##s[n_##name##s]; \
     n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), 10, name##s); 
+
+#define str_split_unsigneds(str,str_len,max_items,sep,name,exactly) \
+    uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
+    int64_t name##s[n_##name##s]; \
+    n_##name##s = str_split_ints_do ((str), (str_len), n_##name##s, (sep), (exactly), 0, name##s); 
 
 #define str_split_hexs(str,str_len,max_items,sep,name,exactly) \
     uint32_t n_##name##s = (max_items) ? (max_items) : str_count_char ((str), (str_len), (sep)) + 1; \
@@ -331,9 +323,6 @@ extern uint32_t str_split_floats_do (STR𐤐(str), uint32_t max_items, char sep,
 extern bool str_item_i (STR𐤐(str), char sep, uint32_t requested_item_i, 𐤐STR𐤐(item));
 extern bool str_item_i_int (STRp(str), char sep, uint32_t requested_item_i, int64_t *restrict item);
 extern bool str_item_i_float (STRp(str), char sep, uint32_t requested_item_i, double *restrict item);
-
-extern void str_remove_CR_do (uint32_t n_lines, pSTRp(line));
-#define str_remove_CR(name) str_remove_CR_do (n_##name##s, name##s, name##_lens)
 
 extern void str_nul_separate_do (STR𐤐s(item));
 #define str_nul_separate(name) str_nul_separate_do (n_##name##s, name##s, name##_lens)

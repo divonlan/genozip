@@ -37,7 +37,7 @@ void vcf_giab_seg_initialize (VBlockVCFP vb)
 void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, STRp(ips))
 {
     STRlast (igt, FORMAT_IGT);
-    bool is_phased = (ctx_encountered (VB, FORMAT_IGT) && igt_len == 3 && igt[1] == '|');
+    bool is_phased = (ctx_encountered_in_sample (VB, FORMAT_IGT) && igt_len == 3 && igt[1] == '|');
 
     ContextP channel_ctx = 
         seg_mux_get_channel_ctx (VB, FORMAT_IPS, &vb->mux_IPS, is_phased);
@@ -50,7 +50,7 @@ void vcf_seg_FORMAT_IPS (VBlockVCFP vb, ZipDataLineVCF𐤐 dl, ContextP ctx, STR
 SPECIAL_RECONSTRUCTOR (vcf_piz_special_MUX_BY_IGT_PHASE)
 {    
     STRlast (igt, FORMAT_IGT);
-    bool is_phased = (ctx_encountered (VB, FORMAT_IGT) && igt_len == 3 && igt[1] == '|');
+    bool is_phased = (ctx_encountered_in_sample (VB, FORMAT_IGT) && igt_len == 3 && igt[1] == '|');
 
     HasNewValue ret = reconstruct_demultiplex (vb, ctx, STRa(snip), is_phased, new_value, reconstruct);
 
@@ -65,7 +65,7 @@ void vcf_seg_FORMAT_IGT (VBlockVCFP vb, ContextP ctx, STRp(igt))
 {
     seg_set_last_txt (VB, ctx, STRa(igt)); // consumed by vcf_seg_FORMAT_IPS
 
-    if (!ctx_encountered (VB, FORMAT_GT) || vcf_num_samples != 3 || igt_len > 3 ||
+    if (!ctx_encountered_in_sample (VB, FORMAT_GT) || vcf_num_samples != 3 || igt_len > 3 ||
         igt_len != CTX(FORMAT_GT)->gt.prev_ploidy * 2 - 1) {
         seg_by_ctx (VB, STRa(igt), ctx, igt_len);
         return;

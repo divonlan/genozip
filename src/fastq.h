@@ -25,7 +25,7 @@
 #define FASTQ_GPOS          SAM_GPOS
 #define FASTQ_GPOS_DELTA    SAM_GPOS_DELTA
 #define FASTQ_GPOS_R2       SAM_GPOS_R2    // 15.0.58: used for interleaved files
-#define FASTQ_GPOS_GAP      SAM_GPOS_GAP // 15.0.83
+#define FASTQ_GPOS_GAP      SAM_GPOS_GAP   // 15.0.83
 #define FASTQ_JUNCTION      SAM_JUNCTION
 #define FASTQ_STRAND        SAM_STRAND
 #define FASTQ_STRAND_R2     SAM_STRAND_R2  // 15.0.58: used for interleaved files
@@ -135,7 +135,7 @@ extern void fastq_zip_after_compress (VBlockP vb);
 extern void fastq_zip_after_compute (VBlockP vb);
 extern bool fastq_zip_use_pair_assisted (DictId dict_id, SectionType st);
 extern bool fastq_zip_use_pair_identical (DictId dict_id);
-extern uint32_t fastq_zip_get_seq_len (VBlockP vb, uint32_t line_i) ;
+extern uint32_t fastq_zip_get_seq_len (VBlockP vb, uint32_t line_i);
 extern uint32_t fastq_get_num_deeped (VBlockP vb);
 extern bool fastq_seg_is_big (ConstVBlockP vb, DictId dict_id, DictId st_dict_id);
 

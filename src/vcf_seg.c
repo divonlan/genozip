@@ -348,6 +348,11 @@ void vcf_segconf_finalize (VBlockP vb_)
     if (segconf_has(FORMAT_LAA) && segconf_has(FORMAT_LAD) && !segconf_has(FORMAT_AD) && !segconf_has(FORMAT_PL))
         segconf.vcf_local_alleles = true;
 
+    if (segconf_has(INFO_ANNOVAR_DATE)) {
+        segconf.vcf_is_annovar = true;
+        stats_add_one_program (_S("ANNOVAR"));
+    }
+
     // in gnomAD, we have a huge number of INFO fields in various permutations - generating a huge INFO dictionary, but which compresses very very well
     if (segconf.vcf_is_gnomad)
         ZCTX(VCF_INFO)->dict_len_excessive = true; // don't warn if excessive
@@ -396,7 +401,7 @@ void vcf_segconf_finalize (VBlockP vb_)
     for_vctx_that (vctx->header_info.vcf.Type == VCF_Float && !vctx->is_stats_parent) 
         if (vctx->nodes.len32 > vctx->b250.count / 2) {
             ContextP parent_ctx = vctx->st_did_i == DID_NONE ? vctx : CTX(vctx->st_did_i);
-            if (parent_ctx->did_i < z_file->ca.num_contexts)
+            if (parent_ctx->did_i < z_file->ca._num_contexts)
                 ZCTX(parent_ctx->did_i)->seg_to_local = STORE_FLOAT; // note: zctx expected to exist, as it was created from the header
 #ifdef DEBUG
             else 
@@ -438,7 +443,7 @@ void vcf_seg_finalize (VBlockP vb_)
     add_relaxed (z_file->mate_line_count, vb->mate_line_count);
 }
 
-// Compute thread: after each VB is compressed and merge (VB order is arbitrary)
+// Compute thread: after each VB is compressed and merged (VB order is arbitrary)
 void vcf_zip_after_compress (VBlockP vb)
 {
     if (VB_VCF->PL_mux_by_DP == unknown) 

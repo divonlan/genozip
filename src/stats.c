@@ -39,7 +39,7 @@ float src_comp_ratio=0, all_comp_ratio=0;
 
 void stats_add_one_program (STRp(prog_name))
 {
-    stats_programs.name = "stats_programs"; // initialize name (note: destroyed between files, so needs to be reinitialized)
+    stats_programs.nameר = ר("stats_programs"); // initialize name (note: destroyed between files, so needs to be reinitialized)
 
     buf_append (evb, stats_programs, char, prog_name, prog_name_len, "stats_programs");
 
@@ -438,8 +438,8 @@ static void stats_output_file_metadata (void)
                 
                 bufprintf (evb, &features, "tlen_pred=%.1f%%;", percent (z_file->sam_num_tlen_pred, num_alignments));
 
-                if (z_file->sam_num_seq_by_aln) // seg SEQ vs internal or external reference according to SAM alignment 
-                    bufprintf (evb, &features, "seq_by_sam_aln=%.1f%%;", percent (z_file->sam_num_seq_by_aln, num_alignments));
+                if (z_file->sam_num_by_sam_aln) // seg SEQ vs internal or external reference according to SAM alignment 
+                    bufprintf (evb, &features, "seq_by_sam_aln=%.1f%%;", percent (z_file->sam_num_by_sam_aln, num_alignments));
 
                 if (z_file->sam_num_by_prim)    // seg SEQ vs PRIM VB 
                     bufprintf (evb, &features, "seq_by_prim=%.1f%%;", percent (z_file->sam_num_by_prim, num_alignments)); 
@@ -447,8 +447,8 @@ static void stats_output_file_metadata (void)
                 if (z_file->sam_num_by_saggy)    // seg SEQ vs saggy line
                     bufprintf (evb, &features, "seq_by_saggy=%.1f%%;", percent (z_file->sam_num_by_saggy, num_alignments)); 
 
-                if (z_file->sam_num_aligned)    // seg SEQ vs external reference using our aligner
-                    bufprintf (evb, &features, "seq_by_aligner (perfect)=%.1f%% (%.1f%%);", percent (z_file->sam_num_aligned, num_alignments), percent (z_file->sam_num_aligned_perfect, num_alignments)); // report even if num_aligned=0 (i.e. wrong reference)           
+                if (z_file->sam_num_genozip_aln)    // seg SEQ vs external reference using our aligner
+                    bufprintf (evb, &features, "seq_by_aligner (perfect)=%.1f%% (%.1f%%);", percent (z_file->sam_num_genozip_aln, num_alignments), percent (z_file->sam_num_genozip_aln_perfect, num_alignments)); // report even if num_aligned=0 (i.e. wrong reference)           
 
                 if (z_file->sam_num_verbatim)   // seg SEQ by storing verbatim
                     bufprintf (evb, &features, "seq_by_verbatim=%.1f%%;", percent (z_file->sam_num_verbatim, num_alignments));
@@ -848,7 +848,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
     int64_t all_comp_dict=0, all_uncomp_dict=0, all_comp_b250=0, all_comp_local=0, all_z_size=0;
 
     // prepare data
-    #define NUM_SBL (NUM_SEC_TYPES + z_file->ca.num_contexts + 2) // 2 for consolidated groups
+    #define NUM_SBL (NUM_SEC_TYPES + z_file->ca._num_contexts + 2) // 2 for consolidated groups
     ARRAY_alloc (StatsByLine, sbl, NUM_SBL, true, sbl_buf, evb, "stats");
 
     #define ST_NAME(st) (&st_name(st)[4]) // cut off "SEC_" 
@@ -917,7 +917,7 @@ void stats_generate (void) // specific section, or COMP_NONE if for the entire f
         s->did_i              = str_int_commas ((uint64_t)zctx->did_i); 
         s->words              = str_uint_commas_limit (n_words, 99999);
         s->dict_words         = str_uint_commas_limit (MIN_(zctx->nodes.len, n_words), 99999); // MIN_ is a workaround - not sure why nodes.len sometimes exceeds the dictionary words on the file (eg in TOPLEVEL)
-        s->local_words        = str_uint_commas_limit (zctx->local_num_words, 99999);
+        s->local_words        = str_uint_commas_limit (zctx->z_local_n_words, 99999);
         s->failed_ston_words  = str_uint_commas_limit (zctx->num_failed_singletons, 99999);
         s->pc_hash_occupancy  = percent (zctx->nodes.len, zctx->global_hash.len32);
         s->pc_ston_hash_occup = percent (zctx->ston_ents.len, zctx->global_hash.len32);
@@ -1110,9 +1110,9 @@ void stats_show_seg_summary (void)
     #define SUMMARIZE(x, total, level)        if (z_file->x && (total)) iprintf ("%.*s" #x "=%"PRIu64" (%1.1f%%)\n", level*2, "          ",         z_file->x, percent (z_file->x, total));
     #define SUMMARIZE_(x, total, level, name) if (z_file->x && (total)) iprintf ("%.*s%s=%"PRIu64" (%1.1f%%)\n",    level*2, "          ", (name), z_file->x, percent (z_file->x, total));
     if (num_alignments) iprintf ("sam_num_alignments=%"PRIu64" (100%%)\n", num_alignments);
-    SUMMARIZE(sam_num_seq_by_aln,       num_alignments, 1);
-    SUMMARIZE(sam_num_aligned,          num_alignments, 1);
-    SUMMARIZE(sam_num_aligned_perfect,  num_alignments, 2);
+    SUMMARIZE(sam_num_by_sam_aln,       num_alignments, 1);
+    SUMMARIZE(sam_num_genozip_aln,          num_alignments, 1);
+    SUMMARIZE(sam_num_genozip_aln_perfect,  num_alignments, 2);
     SUMMARIZE(sam_num_verbatim,         num_alignments, 1);
     SUMMARIZE(sam_num_by_prim,          num_alignments, 1);
     SUMMARIZE(sam_num_by_saggy,         num_alignments, 1);

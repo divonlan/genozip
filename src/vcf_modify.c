@@ -59,7 +59,7 @@ void vcf_segconf_finalize_optimizations (VBlockVCFP vb)
     segconf_set_optimize (FORMAT_GQ, segconf_has(FORMAT_GQ));
 
     // optimize all floats. note: segconf_calculate guarantees us that all segconf vctx and zctx are the same at this point
-    for (Did did_i=VCF_FIRST_OPTIONAL_DID; did_i < vb->ca.num_contexts; did_i++) {
+    for (Did did_i=VCF_FIRST_OPTIONAL_DID; did_i < vb->ca._num_contexts; did_i++) {
         decl_zctx (did_i);
         if (segconf_has(did_i) && zctx->header_info.vcf.Type == VCF_Float)
             segconf_set_optimize (did_i, true);
@@ -342,24 +342,29 @@ static char *vcf_phred_optimize (VBlockVCFP vb, ContextP ctx, STRp(snip), char *
 {
     START_TIMER;
 
-    char *save_next = next;
+    // case: a '.' - can't optimize
     if (IS_PERIOD(snip)) fallback: {
-        COPY_TIMER (vcf_phred_optimize);
-        return mempcpy (save_next, snip, snip_len); // format error - don't optimize
+        *next++ = '.'; 
+        goto done;
     }
 
+    rom start = next;
     uint32_t max_items = vcf_get_n_repeats (vb, ctx);
 
     if (ctx->header_info.vcf.Type == VCF_Integer) {
         str_split (snip, snip_len, max_items, ',', item, (max_items>0)); 
         if (!n_items) goto fallback; // not an array of ints, or too long of an array
 
-        for (unsigned i=0; i < n_items; i++) {
-            int64_t val;
-            if (!str_get_int (STRi(item,i), &val)) goto fallback;
-            
-            next = (val < 60) ? mempcpy (next, items[i], item_lens[i])
-                              : mempcpy (next, "60", 2);
+        for (int i=0; i < n_items; i++) {
+            if (IS_PERIODi(item, i)) 
+                *next++ = '.';
+            else {
+                int64_t val;
+                if (!str_get_int (STRi(item,i), &val)) goto fallback;
+                
+                next = (val < 60) ? mempcpy (next, items[i], item_lens[i])
+                                  : mempcpy (next, "60", 2);
+            }
             *next++ = ',';
         }
     }
@@ -382,7 +387,9 @@ static char *vcf_phred_optimize (VBlockVCFP vb, ContextP ctx, STRp(snip), char *
 
     next--; // remove final ','
 
-    ctx->txt_shrinkage += (int32_t)snip_len - (int32_t)(next - save_next);
+    ctx->txt_shrinkage += (int32_t)snip_len - (int32_t)(next - start);
+
+done:
     COPY_TIMER (vcf_phred_optimize);
     return next;
 }
@@ -450,8 +457,8 @@ static char *vcf_optimize_samples (VBlockVCFP vb, STRp(format), rom samples, rom
                 #define H2(c1,c2)    (c1 | (c2<<8))
                 #define H3(c1,c2,c3) (c1 | (c2<<8) | (c3<<16))
 
-                #define CASE2(f,c1,c2)    case H2(c1,c2):    if (!segconf_optimize (FORMAT_##f)) break; 
-                #define CASE3(f,c1,c2,c3) case H3(c1,c2,c3): if (!segconf_optimize (FORMAT_##f)) break; 
+                #define CASE2(f,c1,c2)    case H2(c1,c2):    if (!segconf_optimize (FORMAT_##f)) goto fallback; 
+                #define CASE3(f,c1,c2,c3) case H3(c1,c2,c3): if (!segconf_optimize (FORMAT_##f)) goto fallback; 
 
                 if (fmt_lens[i] == 2)
                     switch (H2(fmts[i][0], fmts[i][1])) {
@@ -554,17 +561,7 @@ rom vcf_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
         
         if (separator != '\n') { // has samples
             *next++ = '\t';
-
-            // case: samples modifications
-            if (segconf_optimize (FORMAT_GL) || segconf_optimize (FORMAT_GP) || 
-                segconf_optimize (FORMAT_PL) || segconf_optimize (FORMAT_PP) || segconf_optimize (FORMAT_PRI)) 
-                next = vcf_optimize_samples (vb, field_start, field_len, next_field, after, next, has_13);
-            
-            // case: no mod - just copy all samples (excluding \r and \n)
-            else {
-                *has_13 = (after[-2] == '\r');
-                next = mempcpy (next, next_field, after - next_field - 1 - *has_13);
-            }
+            next = vcf_optimize_samples (vb, field_start, field_len, next_field, after, next, has_13);
         }
 
         // now that we have completed optimizing the subfields (which required the original FORMAT)

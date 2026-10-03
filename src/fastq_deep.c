@@ -22,7 +22,7 @@ sSTRl(con_decanonize2_snip, con_snip_sizeof(2));
 // used by deep for in-memory storage of SAM alignments
 #define GET_NUMBER_1B_or_5B ({                      \
     uint32_t value = *next++;                       \
-    if (__builtin_expect (value == 255, false))     \
+    if (__builtin_expect (value == 255, false)) /* 255 means this is 4B value which follows */  \
         { value = GET_UINT32 (next); next += 4; }   \
     value; })
 
@@ -65,6 +65,9 @@ void fastq_deep_seg_initialize (VBlockFASTQP vb)
     }
 
     CTX(FASTQ_SQBITMAP)->no_stons = true;
+
+    if (FAF)
+        segconf.deep_no_qual = true;
 }
 
 // called by main thread after ALL FASTQ files are done compressing with Deep
@@ -204,14 +207,14 @@ void fastq_deep_seg_finalize_segconf (uint32_t n_lines)
         // (in bamass, if there are no matches, we just compress normally - no downside)
         if (flag.force_deep || flag.bam_assist) { 
             segconf.deep_qtype       = QNAME1; // assume match is of QNAME1
-            segconf.deep_no_qual     = false;  // assume QUAL matches too
+            segconf.deep_no_qual     = FAF;    // assume QUAL matches too (except if FAF)
             segconf.deep_has_trimmed = true;   // be liberal, allow trimming
         }
         
         else {
             fastq_deep_show_segconf (n_lines, proof_of_first, proof_of_last, 0, 0, 0);
 
-            ABORTINP ("Error: cannot use --%s with this file: based on testing the first %u reads of %s.\n"
+            ABORTINP (_ERR"cannot use --%s with this file: based on testing the first %u reads of %s.\n"
                       "You may compress these files without --%s, or override with --force-%s\n"
                       "First SAM:   %s\nFirst FASTQ: %s%s",
                       deep_or_bamass, n_lines, txt_name, deep_or_bamass, deep_or_bamass, 
@@ -271,7 +274,7 @@ static rom fastq_deep_set_N_qual (VBlockFASTQP vb, STRp(seq), STRp(qual))
     // set deep_N_fq_score if not set already. note: if set, this is definitely the value. if 0, another thread might be attempting to set in concurrently.
     if (!segconf.deep_N_fq_score) { 
         char expected = 0;
-        __atomic_compare_exchange_n (&segconf.deep_N_fq_score, &expected, qual[n-seq], false, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
+        cas_strong_rel_acq (segconf.deep_N_fq_score, expected, qual[n-seq]);
     }
 
     // at this point we can trust that segconf.deep_N_fq_score is non zero and immutable
@@ -347,7 +350,7 @@ static void fastq_deep_seg_segconf (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, S
                 if (sam_seq_offset > 0)
                     segconf.deep_has_trimmed_left = true; // segconf observed trimming left bases 
 
-                uint32_t qual_hash = deep_qual_hash (VB, qual + sam_seq_offset, e->seq_len, false); // possibly trimmed QUAL
+                uint32_t qual_hash = segconf.deep_no_qual ? 0 : deep_qual_hash (VB, qual + sam_seq_offset, e->seq_len, false); // possibly trimmed QUAL
                 if (qual_hash == e->hash.qual) {
                     segconf.n_full_mch[i]++;
                     if (seq_len != e->seq_len) segconf.n_full_mch_trimmed++;
@@ -416,10 +419,7 @@ static inline uint64_t fastq_seg_deep_consume_unique_matching_ent (VBlockFASTQP 
                                      .line_i   = vb->line_i }; // note: since we are consuming this entry, we know that ent->dup is immutably false.
 
     // consume: atomicly set and verify that no other thread beat us to it. note: we will NOT modify if already consumed.
-    bool i_consumed = __atomic_compare_exchange_n (&ent->place,      // set value at this pointer
-                                                   &sam_place.place, // expected old value
-                                                   my_place.place,   // set to this, but only if old value is as expected
-                                                   false, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+    bool i_consumed = cas_strong_relaxed (ent->place, sam_place.place, my_place.place);
 
     if (!i_consumed) { // darn! another thread beat us to consuming
         contention_place = (union ZipZDeepPlace){ .place = ent->place }; // value of consuming FASTQ place as set by the other thread
@@ -548,8 +548,9 @@ static void fastq_seg_deep_do (VBlockFASTQP vb, uint64_t deep_value)
         dyn_int_append (VB, ctx, deep_value, 0);
 
     else { // PAIR_R2
-        uint64_t pair_1_deep_value = reconstruct_from_pair_int (vb, ctx); // consume whether or not used
-
+        uint64_t pair_1_deep_value = reconstruct_from_pair_int (vb, ctx); 
+        ctx->next_localR1++; // consume whether or not used
+        
         // delta carefully to avoid overflow if values are large uint64's
         uint64_t abs_delta = (pair_1_deep_value > deep_value) ? (pair_1_deep_value - deep_value)
                                                               : (deep_value - pair_1_deep_value);                                       
@@ -780,8 +781,13 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_set_deep)
 
     ASSERTNOTEMPTY (z_file->vb_start_deep_line);
     uint64_t txt_deepable_line_i;
+    uint64_t pair_1_deep_value = 0;
 
-    uint64_t pair_1_deep_value = vb->R1_vb_i ? reconstruct_from_pair_int (vb, ctx) : 0; // consume whether or not used
+    // case we are R2: get R1's deep value for delta
+    if (vb->R1_vb_i) { 
+        pair_1_deep_value = reconstruct_from_pair_int (vb, ctx); 
+        ctx->next_localR1++; // consume whether or not used for calculating R2's deep value
+    }
 
     if (snip[0] == '0') // no delta
         txt_deepable_line_i = reconstruct_from_local_int (VB, ctx, 0, RECON_OFF);
@@ -810,6 +816,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_set_deep)
     uint32_t ents_index = *B32 (*deep_index, vb_deepable_line_i);
 
     new_value->p = B8(*deep_ents, ents_index);
+    __builtin_prefetch (new_value->p, 0, 3); // marginally useful
 
     COPY_TIMER (fastq_special_set_deep);
     return HAS_NEW_VALUE; 
@@ -949,7 +956,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
     // 1 item  - trim_len - up to 15.0.22 - trimming with sam_seq_offset=0
     // 2 items - (trim_len, seq_offset), from 15.0.23 - trimming supports sam_seq_offset >= 0 (i.e. left-trimming)
     if (snip_len) {
-        str_split_ints (snip, snip_len, 2, ',', item, false);
+        str_split_unsigneds (snip, snip_len, 2, ',', item, false);
         trim_len = items[0];
         if (n_items == 2) vb->sam_seq_offset = items[1];
     }
@@ -990,10 +997,6 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
     // reconstruct right trim
     if (trim_len - vb->sam_seq_offset)
         reconstruct_from_local_sequence (VB, CTX(FASTQ_NONREF), trim_len - vb->sam_seq_offset, reconstruct);
-
-    // case we are pair-2: advance pair-1 SQBITMAP iterator, and if pair-1 is aligned - also its GPOS iterator
-    if (vb->R1_vb_i/*we are R2*/ && fastq_piz_R1_test_aligned (vb))
-        CTX(FASTQ_GPOS)->localR1.next++; // gpos_ctx->localR1.next is an iterator for both gpos and strand
 
 done:
     CTX(FASTQ_DEEP)->last_value.p = next;

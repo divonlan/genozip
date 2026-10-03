@@ -313,7 +313,7 @@ static uint32_t compress_depn_buf (BufferP comp_buf)
 {
     START_TIMER;
 
-    compress_depn_vb = vb_initialize_nonpool_vb (VB_ID_COMPRESS_DEPN, DT_NONE, TASK_COMP_DEPN_BUF);
+    compress_depn_vb = vb_initialize_nonpool_vb (VB_ID_COMP_DEPN, DT_NONE, TASK_COMP_DEPN_BUF);
     
     uint32_t uncomp_len = depn.thread_data.len32;
     uint32_t comp_len = codec_RANB_est_size (CODEC_RANB, uncomp_len);
@@ -726,8 +726,8 @@ static void gencomp_get_txt_data_from_queue (VBlockP vb, GencompType gct)
         debug_gencomp (vb->comp_i==1 ? "GetTxt PRIM" : "GetTxt DEPN", false, vb);
 
     if (flag_is_show_vblocks (TASK_ZIP)) 
-        iprintf ("TXT_DATA_FROM_GENCOMP_QUEUE(id=%d) vb=%s buf_i=%u Ltxt=%u n_lines=%u\n", 
-                 vb->id, VB_NAME, buf_i, Ltxt, vb->lines.len32);
+        iprintf ("TXT_DATA_FROM_GENCOMP_QUEUE(id=%s) vb=%s buf_i=%u Ltxt=%u n_lines=%u\n", 
+                 dis_vb_id(vb->id).s, VB_NAME, buf_i, Ltxt, vb->lines.len32);
 
     mutex_unlock (gc_protected);
 } 
@@ -939,8 +939,8 @@ void gencomp_reread_lines_as_prescribed (VBlockP vb)
     stream_set_inheritability (fileno (fp), false); // Windows: allow file_remove in case of --replace
 
     if (flag_is_show_vblocks (TASK_ZIP)) 
-        iprintf ("REREAD_DEPN(id=%d) vb=%s n_lines=%u effective_codec=%s\n", 
-                 vb->id, VB_NAME, vb->reread_prescription.len32, codec_name (txt_file->effective_codec));
+        iprintf ("REREAD_DEPN(id=%s) vb=%s n_lines=%u effective_codec=%s\n", 
+                 dis_vb_id(vb->id).s, VB_NAME, vb->reread_prescription.len32, codec_name (txt_file->effective_codec));
 
     if (TXT_IS(BGZF)) 
         bgzf_reread_uncompress_vb_as_prescribed (vb, fp);

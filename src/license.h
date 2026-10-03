@@ -16,7 +16,7 @@ extern void license_set_filename (rom filename);
 extern void license_load (void);
 extern void license_cleanup (void);
 extern StrText license_get_number (void);
-extern rom lic_type_name (int8_t lic_type);
+extern rom lic_name (int8_t lic_type);
 extern rom license_get_one_line (void);
 extern void license_display (bool show_latest);
 extern bool license_allow_tip (void);

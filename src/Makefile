@@ -6,113 +6,161 @@
 #   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 #   and subject to penalties specified in the license.
 
-# Note for Windows: to run this make, you need mingw (for the gcc compiler) and cygwin (for Unix-like tools):
-# Mingw: http://mingw-w64.org/doku.php 
-# Cygwin: https://www.cygwin.com/
+# Note for Windows: to run this make, you need mingw: https://code.visualstudio.com/docs/cpp/config-mingw
 
 OBJDIR_LINUX   := objdir.linux
 OBJDIR_WINDOWS := objdir.windows
 OBJDIR_OSX_ARM := objdir.osx-arm
 
-architecture := $(shell uname -sm | sed -e 's/amd/x86_/')
-architecture := $(subst aarch64,arm64,$(architecture))
+# macros
+define verify_dir
+	$(if $(strip $($(1))),,$(error $(1) is not defined))
+	$(if $(wildcard $($(1))/.),,$(error directory $(1)='$($(1))' does not exist))
+endef
 
+define set_path
+	$(eval $(1) := $(subst \,/,$(strip $(2))))
+	$(call verify_dir,$(1))
+	$(info $(1)='$($(1))')
+endef
+
+#------------------------------------------------------------------------------------------
+# Set architecture, conda, one of: { win_x86, linux_x86, osx_arm64 } and: { arm64, x86_64 }
+#------------------------------------------------------------------------------------------
 ifeq ($(OS),Windows_NT)
-	Windows := 1
-	OBJDIR=$(OBJDIR_WINDOWS)
 	architecture := Windows $(shell uname -m)
-	WSL=wsl
-	CFLAGS += -D_FILE_OFFSET_BITS=64
+else
+	architecture := $(shell uname -sm | sed -e 's/amd/x86_/')
+	architecture := $(subst aarch64,arm64,$(architecture))
 endif
 
-ifeq ($(architecture),Linux x86_64)
+ifeq ($(architecture),Windows x86_64)	
+	win_x86   := 1
+	x86_64    := 1
+
+else ifeq ($(architecture),Linux x86_64)
 	linux_x86 := 1
-	OBJDIR=$(OBJDIR_LINUX)
-endif
+	x86_64    := 1
 
-ifeq ($(architecture),Darwin arm64)
-	osx = arm
+else ifeq ($(architecture),Darwin arm64)
 	osx_arm64 := 1		
-	OBJDIR=$(OBJDIR_OSX_ARM)
-endif
+	arm64     := 1
 
-ifndef OBJDIR
+else
 	fail := $(error Architecture unsupported or could not be identified: architecture="$(architecture)" OS="$(OS)") 
 endif
 
-# ------ Stuff that is only on conda-forge ------
 ifdef BUILD_PREFIX # conda-forge
-	ifdef Windows
-		CC ?= gcc 
+	conda     := 1
+endif
+
+#--------------------------------------------------
+# Settings that is only on conda-forge 
+#--------------------------------------------------
+ifdef conda 
+	ifdef win_x86
+		CC  ?= gcc 
 		CXX ?= g++
-		LDFLAGS  += -L$(PREFIX)/Library/lib
-		CFLAGS   += -I$(PREFIX)/Library/include 
+
+		LDFLAGS += -L$(PREFIX)/Library/lib
+		CFLAGS  += -I$(PREFIX)/Library/include 
 	endif
+	
+	DISTOBJ := distribution.conda.o # note: matches the name in version.c 
 
-	DISTOBJ = $(OBJDIR)/distribution.conda.o # note: matches the name in version.c 
-
-# ------ Stuff that is only on local ------
-else 
-	GENOZIP_HOME  = ../../genozip
-	LATEST_SRC    = ../../genozip-latest/src
-	TEST_DIR      = $(GENOZIP_HOME)/private/test
-	SCRIPTS       = $(GENOZIP_HOME)/private/scripts
-	UTILS         = $(GENOZIP_HOME)/private/utils
-	RELEASES      = $(GENOZIP_HOME)/private/releases
-	PUBLIC        = $(GENOZIP_HOME)/publice
-	GCC_BIN       = /home_local_fs/divon/miniforge3/envs/distribution_gcc-16.1_sysroot-2.17/bin
-
+#--------------------------------------------------
+# Settings if non-conda (local build)
+#--------------------------------------------------
+else 	
 	ifdef DISTRIBUTION # custom destribution, run eg: DISTRIBUTION=special make genozip
-		DISTOBJ = $(OBJDIR)/distribution.$(DISTRIBUTION).o 
+		DISTOBJ := distribution.$(DISTRIBUTION).o 
+	else ifeq ($(USER),divon)
+		DISTOBJ := distribution.devel.o
+		vendor  := 1 
+	else ifeq ($(USERNAME),divon) # check USER and USERNAME separately - in some Windows environments both are set
+		DISTOBJ := distribution.devel.o
+		vendor  := 1 
 	else
-		DISTOBJ = $(OBJDIR)/distribution.github.o # note: matches the name in version.c 
+		DISTOBJ := distribution.github.o # note: matches the name in version.c 
 	endif
 
-	ifeq ($(wildcard $(GCC_BIN)),) # path not found
-		CC ?= gcc 
-		CXX ?= g++
-	else
-		# need old gcc linked to an old sysroot(=glibc) for older Linux machines
-		# up to 15.0.79 used distribution-gcc.8.5 (generate with: conda create -n distribution gcc_linux-64=8.5.0)
-		# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 
-		# starting 15.0.88 distribution-gcc.16.1-sysroot.2.17 (see "development environment.txt")
-		# To see the glibc version genozip requires: 'objdump -T genozip | grep GLIBC_' (the highest version listed)
-		CC ?= $(GCC_BIN)/x86_64-conda-linux-gnu-gcc
-		CXX ?= $(GCC_BIN)/x86_64-conda-linux-gnu-g++
+
+	ifdef vendor
+        ifndef GENOZIP_HOME
+            GENOZIP_HOME := $(HOME)/genozip
+		endif
+        $(call set_path,GENOZIP_HOME,$(GENOZIP_HOME))
+        $(call set_path,LATEST_SRC,$(GENOZIP_HOME)/../genozip-latest/src)
+        $(call set_path,TEST_DIR,$(GENOZIP_HOME)/private/test)
+        $(call set_path,RELEASES,$(GENOZIP_HOME)/private/releases)
+        $(call set_path,INSTALLERS,../installers) # must be relative path
+		
+		ifdef linux_x86 # Linux but not conda
+			# fast, multi-threaded linker, comment out if needed
+			LDFLAGS += -fuse-ld=lld
+
+			# need old gcc linked to an old sysroot(=glibc) for older Linux machines
+			# up to 15.0.79 used distribution-gcc.8.5 (generate with: conda create -n distribution gcc_linux-64=8.5.0)
+			# starting 15.0.80 distribution-gcc.12.4-sysroot.2.17 
+			# starting 15.0.88 distribution-gcc.16.1-sysroot.2.17 (see "development environment.txt")
+			# To see the glibc version genozip requires: 'objdump -T genozip | grep GLIBC_' (the highest version listed)
+			GCC_BIN := /home_local_fs/divon/miniforge3/envs/distribution_gcc-16.1_sysroot-2.17/bin
+            $(call verify_dir,GCC_BIN)
+
+			CC  := $(GCC_BIN)/x86_64-conda-linux-gnu-gcc
+			CXX := $(GCC_BIN)/x86_64-conda-linux-gnu-g++
+
+		else ifdef osx_arm64 # Mac but not conda
+			CFLAGS += -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk 
+		endif
 	endif
 
-	ifdef linux_x86 # Linux but not conda
-		# fast, multi-threaded linker, comment out if needed
-		LDFLAGS += -fuse-ld=lld
-	endif 
-
-	ifdef osx_arm64 # Mac but not conda
-		CFLAGS += -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk 
-	endif
-
+	# not vendor, or not linux
+	CC  ?= gcc
+	CXX ?= g++
+	
 endif 
 
-# ------ Stuff that is both on conda-forge and local ------
-
+#--------------------------------------------------------
+# Flags that are on all platforms and regardless of conda
+#--------------------------------------------------------
 LDFLAGS    += -lpthread -lm 
 CFLAGS     += -Wall -Wstrict-aliasing=2 -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu11 -D_7ZIP_ST -fms-extensions
 CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc 
 OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
-ifdef Windows
-	EXE = .exe
+#--------------------------------
+# OS-specific stuff
+#--------------------------------
+ifdef win_x86
+	OBJDIR  := $(OBJDIR_WINDOWS)
+	EXE     := .exe
 	LDFLAGS := -static -static-libgcc -static-libstdc++ $(LDFLAGS) -lIPHLPAPI -lUrlmon -lDbgHelp # link MingW DLLs staticly (order is important!)
-	AS := nasm
-	x86_64 := 1
-	ASFLAGS := -f win64 -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512 # note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
-	# -lasan needed for -fsanitize=address is not supported by MinGW: https://stackoverflow.com/questions/55018627/cannot-find-lasan-using-address-sanitizer-in-mingw-in-windows-mingw
-endif
+	CFLAGS += -D_FILE_OFFSET_BITS=64
 
-ifdef linux_x86
-	AS := nasm
-	x86_64 := 1
-	ASFLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
+	WSL     := wsl
+	NASM    := nasm
+	MASM    := run-on-wsl.sh asmc -c -10 -win64
+
+	NASM_FLAGS := -f win64 -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512 # note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
+
+	# Use GCC, not Windows, bitfields: allows packing together of members of different types into a bitfield
+	CFLAGS  += -mno-ms-bitfields 
+
+	# note: -lasan needed for -fsanitize=address is not supported by MinGW: https://stackoverflow.com/questions/55018627/cannot-find-lasan-using-address-sanitizer-in-mingw-in-windows-mingw
+
+	ifeq ($(CC),cl) # Microsoft Visual C
+		fail := $(error Only the gcc and clang compilers are currently supported)
+	endif
+
+else ifdef linux_x86
+	OBJDIR  := $(OBJDIR_LINUX)
+	NASM    := nasm
+	MASM    := asmc -c -10 -elf64 -DABI_LINUX 
+	
+	NASM_FLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
+	
 	LDFLAGS += -lrt -rdynamic # rt is required by pthreads ; rdynamic for backtrace_symbols_fd to show function names
 
 	# DEBUGFLAGS += -fsanitize=undefined 
@@ -123,240 +171,239 @@ ifdef linux_x86
 	# 2. Run with: setarch x86_64 -R genozip-debug ... (see internal-docs/address-sanitizer)
 	# DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 
 
-endif
+else ifdef osx_arm64
+	OBJDIR  := $(OBJDIR_OSX_ARM)
 
-ifdef osx_arm64
-	noarch := 1
-	# arm64 := 1 # needed for SMID .S files
-	AS = $(CC) -D__ASSEMBLY__ -c
-	DEBUGFLAGS_AS = -g 
+	CFLAGS     += -march=armv8-a+crc
 	DEBUGFLAGS += -fsanitize=address -Dsanitize_address -fsanitize=undefined
-
-	# clang flags
-	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
-	ARCHS = arm64
-	VALID_ARCHS = arm64 
 endif
 
-ifndef AS
-	noarch := 1
-endif
+SRC_DIRS := \
+	secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
+	htscodecs igzip igzip/aarch64 igzip/x86_64 igzip/noarch
 
-ifdef x86_64 
-# Switch these comments on these CFLAG/CXXFLAG definitions to build for older machines
-# 	CFLAGS   += -march=nehalem -msse4.1 -msse4.2
-# 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=nehalem -msse4.1 -msse4.2 -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE41 
-	CFLAGS   += -march=haswell 
-	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
-endif
+C_SRCS := \
+	genozip.c genols.c context.c context_stats.c container.c strings.c arch.c tip.c seg_id.c dyn_int.c	\
+	data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c 			\
+	threads.c error.c context_validate.c crc64.c stats.c 												\
+	zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c specials.c   \
+	reference.c contigs.c ref_lock.c refhash_make.c refhash_load.c ref_make.c ref_contigs.c 			\
+	ref_iupacs.c ref_cache.c digest.c 																	\
+	vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c vcf_modify.c     	\
+	vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c vcf_qual.c vcf_1000G.c 		\
+	vcf_me.c vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c vcf_svaba.c 		\
+	vcf_pbsv.c vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c vcf_manta.c vcf_pos.c	\
+	vcf_ultima.c vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c vcf_gnomad.c 	\
+	vcf_freebayes.c vcf_local_alleles.c vcf_copy_sample.c vcf_info_DP.c									\
+	sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c	\
+	sam_sa.c bam_seg.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c sam_hisat2.c	\
+	sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
+	sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c 			\
+	sam_blasr.c sam_dragen.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c sam_cpu.c bai.c		\
+	sam_star.c sam_abra2.c sam_minimap2.c sam_modify.c sam_recon_plan_piz.c sam_parse.c					\
+	gencomp_zip.c gencomp_piz.c																			\
+	fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c fastq_aux.c  \
+	fastq_parse.c fastq_10xGen.c deep.c																	\
+	fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c base64.c						\
+	buffer.c buf_struct.c buf_list.c random_access.c sections.c sections_show.c 						\
+	codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c codec_tmpl.c	\
+	codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
+	codec_smux.c codec_oq.c mgzip.c mgzip_sections.c													\
+	txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c 			\
+	vblock.c regions.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c				\
+	version.c huffman.c user_message.c b250.c qname_filter.c txtheader.c 								\
+	\
+	zlib/zutil.c zlib/deflate.c zlib/trees.c 															\
+	\
+	bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c 				\
+	bzlib/huffman.c bzlib/randtable.c 																	\
+	\
+	lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c lzma/CpuArch.c 											\
+	\
+	bsc/libsais.c 																						\
+	\
+	htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c htscodecs/arith_dynamic.c 			\
+	\
+	libdeflate_1.7/deflate_compress.c libdeflate_1.7/utils.c  											\
+	\
+	libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c 							\
+	libdeflate_1.19/gzip_decompress.c libdeflate_1.19/utils.c libdeflate_1.19/x86/cpu_features.c 		\
+	libdeflate_1.19/arm/cpu_features.c libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c 				\
+	\
+ 	xxhash/xxhash.c 																					\
+	\
+	igzip/igzip.c igzip/hufftables_c.c igzip/igzip_base.c igzip/igzip_icf_base.c igzip/adler32_base.c 	\
+	igzip/flatten_ll.c igzip/encode_df.c igzip/igzip_icf_body.c igzip/crc_base.c igzip/huff_codes.c 	\
+	igzip/igzip_inflate.c 
 
-SRC_DIRS = secure zlib bzlib lzma bsc libdeflate_1.7 libdeflate_1.19 libdeflate_1.19/x86 libdeflate_1.19/arm 	\
-		  htscodecs igzip igzip/aarch64 igzip/x86_64 igzip/noarch
+CXX_SRCS := \
+	bsc/bwt.cpp bsc/coder.cpp bsc/detectors.cpp bsc/libbsc.cpp bsc/lzp.cpp bsc/platform.cpp 			\
+    bsc/preprocessing.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/adler32.cpp 
 
-MY_SRCS = genozip.c genols.c context.c container.c strings.c crc64.c stats.c arch.c tip.c seg_id.c dyn_int.c	\
-		  data_types.c bits.c progress.c writer.c zriter.c tar.c chrom.c qname.c tokenizer.c mutex.c threads.c	\
-		  error.c 																								\
-          zip.c piz.c reconstruct.c recon_history.c recon_peek.c seg.c zfile.c aligner.c flags.c specials.c    	\
-		  reference.c contigs.c ref_lock.c refhash_make.c refhash_load.c ref_make.c ref_contigs.c ref_iupacs.c ref_cache.c digest.c \
-		  vcf_piz.c vcf_seg.c vcf_vblock.c vcf_header.c vcf_info.c vcf_samples.c vcf_hgvs.c vcf_modify.c     	\
-		  vcf_format_GT.c vcf_format_PS_PID.c vcf_dbsnp.c vcf_giab.c vcf_vep.c vcf_qual.c vcf_1000G.c vcf_me.c	\
-		  vcf_refalt.c vcf_format.c vcf_illum_gtyping.c vcf_gwas.c vcf_vagrent.c vcf_svaba.c vcf_pbsv.c			\
-		  vcf_icgc.c vcf_snpeff.c vcf_cosmic.c vcf_mastermind.c vcf_isaac.c	vcf_manta.c vcf_pos.c vcf_ultima.c	\
-		  vcf_platypus.c vcf_info_AC_AF_AN.c vcf_format_GQ.c vcf_gatk.c vcf_sv.c vcf_gnomad.c vcf_freebayes.c	\
-		  vcf_local_alleles.c vcf_copy_sample.c	vcf_info_DP.c   												\
-		  sam_seg.c sam_piz.c sam_shared.c sam_header.c sam_md.c sam_nm.c sam_tlen.c sam_cigar.c sam_fields.c  	\
-		  sam_sa.c bam_seg.c bam_seq.c bam_show.c sam_pacbio.c sam_ultima.c sam_xcons.c cram.c agilent.c   		\
-		  sam_seq.c sam_qual.c sam_sag_zip.c sam_sag_piz.c sam_sag_load.c sam_sag_ingest.c sam_sag_scan.c    	\
-		  sam_bwa.c sam_bowtie2.c sam_bsseeker2.c sam_bsbolt.c sam_bismark.c sam_gem3.c sam_tmap.c sam_hisat2.c \
-		  sam_blasr.c sam_dragen.c sam_10xGenomics.c sam_biobambam.c sam_pos.c sam_deep.c sam_cpu.c bai.c		\
-		  sam_star.c sam_abra2.c sam_minimap2.c sam_modify.c sam_recon_plan_piz.c sam_parse.c					\
-		  gencomp_zip.c gencomp_piz.c																			\
-		  fastq.c fastq_desc.c fastq_seq.c fastq_qual.c fastq_deep.c fastq_saux.c fastq_bamass.c fastq_aux.c    \
-		  fastq_parse.c fastq_10xGen.c deep.c																	\
-		  fasta.c gff.c bed.c me23.c locs.c generic.c lookback.c compressor.c base64.c							\
-		  buffer.c buf_struct.c buf_list.c random_access.c sections.c sections_show.c mgzip.c mgzip_sections.c  \
-		  codec.c codec_bz2.c codec_lzma.c codec_acgt.c codec_domq.c codec_bsc.c codec_pacb.c codec_tmpl.c		\
-		  codec_pbwt.c codec_none.c codec_htscodecs.c codec_longr.c codec_normq.c codec_homp.c codec_t0.c		\
-		  codec_smux.c codec_oq.c																				\
-	      txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c 			\
-		  vblock.c regions.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c					\
-		  version.c huffman.c user_message.c b250.c qname_filter.c txtheader.c
-		  
-ZLIB_SRCS  = zlib/zutil.c zlib/deflate.c zlib/trees.c
+# others sources that are not listed in OBJS need for remote builds (conda and mac)
+OTHER_SRCS := \
+	dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h 	\
+	website.h endianness.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h 	\
+	huffman.h sorter.h buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h 	\
+	seg.h text_license.h version.h compressor.h crypt.h genozip.h piz.h vblock.h zfile.h 				\
+	random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h lookback.h 			\
+	tokenizer.h codec_longr_alg.c gencomp.h dict_io.h tip.h deep.h filename.h stats.h multiplexer.h 	\
+	local_type.h reference.h ref_private.h refhash.h refhash_friend.h ref_iupacs.h aligner.h mutex.h 	\
+	mgzip.h threads.h error.h arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h 	\
+	writer_private.h zriter.h bases_filter.h genols.h contigs.h chrom.h vcf.h vcf_private.h sam.h 		\
+	sam_private.h sam_friend.h me23.h fasta.h fasta_friend.h gff.h bed.h locs.h generic.h fastq.h 		\
+	fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h pointeר.h			\
+	flags_assign.h aligner_layered.h 																	\
+	\
+	zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h						\
+	\
+	lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h lzma/Precomp.h 			\
+	lzma/Compiler.h lzma/CpuArch.h lzma/7zWindows.h lzma/7zAsm.masm lzma/7zAsm.S						\
+	\
+	bzlib/bzlib.h bzlib/bzlib_private.h																	\
+	\
+	htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h 				\
+	htscodecs/c_simple_model.h htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h \
+	htscodecs/utils.h htscodecs/varint.h htscodecs/varint2.h htscodecs/utils.h							\
+	\
+	bsc/adler32.h bsc/bwt.h bsc/coder.h bsc/coder_tables.h bsc/filter_tables.h bsc/filters.h 			\
+	bsc/libbsc.h bsc/libsais.h bsc/lzp.h bsc/platform.h bsc/predictor.h bsc/qlfc.h bsc/qlfc_model.h 	\
+	bsc/rangecoder.h																					\
+	\
+	libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 	\
+	libdeflate_1.7/deflate_constants.h libdeflate_1.7/bt_matchfinder.h libdeflate_1.7/hc_matchfinder.h 	\
+	libdeflate_1.7/common_defs.h libdeflate_1.7/lib_common.h libdeflate_1.7/x86_matchfinder_impl.h 		\
+	libdeflate_1.7/compiler_gcc.h libdeflate_1.7/libdeflate.h libdeflate_1.7/matchfinder_common.h		\
+	\
+	libdeflate_1.19/adler32_vec_template.h libdeflate_1.19/crc32_tables.h 								\
+	libdeflate_1.19/crc32_multipliers.h libdeflate_1.19/deflate_constants.h 							\
+	libdeflate_1.19/lib_common.h libdeflate_1.19/bt_matchfinder.h libdeflate_1.19/hc_matchfinder.h 		\
+	libdeflate_1.19/common_defs.h	libdeflate_1.19/libdeflate.h libdeflate_1.19/gzip_constants.h 		\
+	libdeflate_1.19/decompress_template.h libdeflate_1.19/cpu_features_common.h 						\
+	libdeflate_1.19/matchfinder_common.h libdeflate_1.19/deflate_compress.h 							\
+	libdeflate_1.19/ht_matchfinder.h libdeflate_1.19/x86/adler32_impl.h 								\
+	libdeflate_1.19/x86/crc32_impl.h libdeflate_1.19/x86/matchfinder_impl.h 							\
+	libdeflate_1.19/x86/cpu_features.h libdeflate_1.19/x86/crc32_pclmul_template.h 						\
+	libdeflate_1.19/x86/decompress_impl.h libdeflate_1.19/arm/adler32_impl.h 							\
+	libdeflate_1.19/arm/cpu_features.h libdeflate_1.19/arm/crc32_impl.h 								\
+	libdeflate_1.19/arm/matchfinder_impl.h libdeflate_1.19/arm/crc32_pmull_helpers.h 					\
+	libdeflate_1.19/arm/crc32_pmull_wide.h																\
+	\
+	igzip/bitbuf2.h igzip/crc.h igzip/encode_df.h igzip/flatten_ll.h igzip/huff_codes.h igzip/huffman.h \
+	igzip/igzip_checksums.h igzip/igzip_level_buf_structs.h igzip/igzip_lib.h igzip/igzip_wrapper.h 	\
+	igzip/repeated_char_result.h igzip/static_inflate.h igzip/unaligned.h								\
+	\
+	igzip/x86_64/bitbuf2.asm igzip/x86_64/data_struct2.asm igzip/x86_64/heap_macros.asm 				\
+	igzip/x86_64/huffman.asm igzip/x86_64/igzip_compare_types.asm 										\
+	igzip/x86_64/igzip_decode_block_stateless.asm igzip/x86_64/igzip_update_histogram.asm 				\
+	igzip/x86_64/inflate_data_structs.asm igzip/x86_64/lz0a_const.asm igzip/x86_64/multibinary.asm 		\
+	igzip/x86_64/options.asm igzip/x86_64/reg_sizes.asm igzip/x86_64/stdmac.asm							\
+	\
+	igzip/aarch64/aarch64_label.h igzip/aarch64/aarch64_multibinary.h igzip/aarch64/bitbuf2_aarch64.h 	\
+	igzip/aarch64/crc32_aarch64_common.h igzip/aarch64/crc32_gzip_refl_pmull.h 							\
+	igzip/aarch64/crc32_norm_common_pmull.h igzip/aarch64/crc32_refl_common_pmull.h 					\
+	igzip/aarch64/crc_common_pmull.h igzip/aarch64/data_struct_aarch64.h 								\
+	igzip/aarch64/huffman_aarch64.h igzip/aarch64/lz0a_const_aarch64.h igzip/aarch64/options_aarch64.h	\
+	igzip/aarch64/stdmac_aarch64.h igzip/aarch64/crc32_common_crc_ext_cortex_a72.S 						\
+	igzip/aarch64/crc32_common_mix_neoverse_n1.S														\
+	\
+	xxhash/xxhash.h xxhash/xxh_x86dispatch.h
 
-BZLIB_SRCS = bzlib/blocksort.c bzlib/bzlib.c bzlib/compress.c bzlib/crctable.c bzlib/decompress.c bzlib/huffman.c bzlib/randtable.c
-
-LZMA_SRCS  = lzma/LzmaEnc.c lzma/LzmaDec.c lzma/LzFind.c
-
-BSC_C_SRCS = bsc/libsais.c
-
-BSC_CXX_SRCS = bsc/bwt.cpp bsc/coder.cpp bsc/detectors.cpp bsc/libbsc.cpp bsc/lzp.cpp bsc/platform.cpp 			\
-          bsc/preprocessing.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/adler32.cpp 
-
-HTSCODECS_SRC = htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c htscodecs/arith_dynamic.c
-
-LIBDEFLATE_1_7_SRCS = libdeflate_1.7/deflate_compress.c libdeflate_1.7/utils.c  
-
-LIBDEFLATE_1_19_SRCS = libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c libdeflate_1.19/gzip_decompress.c 			\
-		  libdeflate_1.19/utils.c libdeflate_1.19/x86/cpu_features.c libdeflate_1.19/arm/cpu_features.c 									\
-		  libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c
-
-XXHASH_SRCS = xxhash/xxhash.c 
-
-CONDA_DEVS = Makefile ../.gitignore 
-
-CONDA_DOCS = ../LICENSE.txt ../AUTHORS ../README.md
-
-INCLUDES += dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h website.h 					\
-            endianness.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h huffman.h sorter.h						\
-            buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h seg.h text_license.h version.h compressor.h 		\
-            crypt.h genozip.h piz.h vblock.h zfile.h random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h  		\
-		 	lookback.h tokenizer.h codec_longr_alg.c gencomp.h dict_io.h tip.h deep.h filename.h stats.h multiplexer.h local_type.h 		\
-		 	reference.h ref_private.h refhash.h refhash_friend.h ref_iupacs.h aligner.h mutex.h mgzip.h threads.h error.h 					\
-			arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h writer_private.h zriter.h bases_filter.h genols.h 		\
-			contigs.h chrom.h vcf.h vcf_private.h sam.h sam_private.h sam_friend.h me23.h fasta.h fasta_friend.h gff.h bed.h locs.h			\
-			generic.h fastq.h fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h								\
-			flags_assign.c aligner_layered.c																								\
-			\
-			zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h													\
-			\
-			lzma/7zTypes.h lzma/LzFind.h lzma/LzHash.h lzma/LzmaDec.h lzma/LzmaEnc.h 														\
-			\
-			bzlib/bzlib.h bzlib/bzlib_private.h																								\
-			\
-			htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h htscodecs/c_simple_model.h				\
-			htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h htscodecs/utils.h htscodecs/varint.h 					\
-			htscodecs/varint2.h htscodecs/utils.h 																							\
-			\
-			bsc/adler32.h bsc/bwt.h bsc/coder.h bsc/coder_tables.h bsc/filter_tables.h bsc/filters.h bsc/libbsc.h bsc/libsais.h bsc/lzp.h 	\
-			bsc/platform.h bsc/predictor.h bsc/qlfc.h bsc/qlfc_model.h bsc/rangecoder.h														\
- 			\
-			libdeflate_1.7/unaligned.h libdeflate_1.7/deflate_compress.h libdeflate_1.7/arm_matchfinder_impl.h 								\
-			libdeflate_1.7/deflate_constants.h libdeflate_1.7/bt_matchfinder.h libdeflate_1.7/hc_matchfinder.h libdeflate_1.7/common_defs.h	\
-			libdeflate_1.7/lib_common.h libdeflate_1.7/x86_matchfinder_impl.h libdeflate_1.7/compiler_gcc.h libdeflate_1.7/libdeflate.h 	\
-			libdeflate_1.7/matchfinder_common.h 																							\
- 			\
-			libdeflate_1.19/adler32_vec_template.h libdeflate_1.19/crc32_tables.h 									 						\
-			libdeflate_1.19/crc32_multipliers.h libdeflate_1.19/deflate_constants.h libdeflate_1.19/lib_common.h 							\
-			libdeflate_1.19/bt_matchfinder.h libdeflate_1.19/hc_matchfinder.h libdeflate_1.19/common_defs.h	libdeflate_1.19/libdeflate.h	\
-			libdeflate_1.19/gzip_constants.h libdeflate_1.19/decompress_template.h libdeflate_1.19/cpu_features_common.h					\
-			libdeflate_1.19/matchfinder_common.h libdeflate_1.19/deflate_compress.h libdeflate_1.19/ht_matchfinder.h 						\
-			libdeflate_1.19/x86/adler32_impl.h libdeflate_1.19/x86/crc32_impl.h libdeflate_1.19/x86/matchfinder_impl.h						\
-			libdeflate_1.19/x86/cpu_features.h libdeflate_1.19/x86/crc32_pclmul_template.h libdeflate_1.19/x86/decompress_impl.h			\
-			libdeflate_1.19/arm/adler32_impl.h libdeflate_1.19/arm/cpu_features.h libdeflate_1.19/arm/crc32_impl.h                          \
-			libdeflate_1.19/arm/matchfinder_impl.h libdeflate_1.19/arm/crc32_pmull_helpers.h libdeflate_1.19/arm/crc32_pmull_wide.h			\
-			\
-			igzip/bitbuf2.h igzip/crc.h igzip/encode_df.h igzip/flatten_ll.h igzip/huff_codes.h igzip/huffman.h igzip/igzip_checksums.h 	\
-		  	igzip/igzip_level_buf_structs.h igzip/igzip_lib.h igzip/igzip_wrapper.h igzip/repeated_char_result.h igzip/static_inflate.h 	\
-		  	igzip/unaligned.h																												\
-			\
-			igzip/x86_64/bitbuf2.asm igzip/x86_64/data_struct2.asm igzip/x86_64/heap_macros.asm igzip/x86_64/huffman.asm 					\
-			igzip/x86_64/igzip_compare_types.asm igzip/x86_64/igzip_decode_block_stateless.asm igzip/x86_64/igzip_update_histogram.asm 		\
-			igzip/x86_64/inflate_data_structs.asm igzip/x86_64/lz0a_const.asm igzip/x86_64/multibinary.asm igzip/x86_64/options.asm 		\
-			igzip/x86_64/reg_sizes.asm igzip/x86_64/stdmac.asm																				\
-			\
-			igzip/aarch64/aarch64_label.h igzip/aarch64/aarch64_multibinary.h igzip/aarch64/bitbuf2_aarch64.h 								\
-			igzip/aarch64/crc32_aarch64_common.h igzip/aarch64/crc32_gzip_refl_pmull.h igzip/aarch64/crc32_norm_common_pmull.h 				\
-			igzip/aarch64/crc32_refl_common_pmull.h igzip/aarch64/crc_common_pmull.h igzip/aarch64/data_struct_aarch64.h 					\
-			igzip/aarch64/huffman_aarch64.h igzip/aarch64/lz0a_const_aarch64.h igzip/aarch64/options_aarch64.h 								\
-			igzip/aarch64/stdmac_aarch64.h igzip/aarch64/crc32_common_crc_ext_cortex_a72.S igzip/aarch64/crc32_common_mix_neoverse_n1.S		\
-			\
-			xxhash/xxhash.h xxhash/xxh_x86dispatch.h
-
-INSTALLERS := ../installers
-
-IGZIP_SRCS = igzip/igzip.c igzip/hufftables_c.c igzip/igzip_base.c igzip/igzip_icf_base.c igzip/adler32_base.c igzip/flatten_ll.c 			\
-		  igzip/encode_df.c igzip/igzip_icf_body.c igzip/crc_base.c igzip/huff_codes.c igzip/igzip_inflate.c 
-
-IGZIP_X86_ASM_SRCS := igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm igzip/x86_64/igzip_icf_body_h1_gr_bt.asm 					\
-		  igzip/x86_64/igzip_icf_finish.asm igzip/x86_64/rfc1951_lookup.asm igzip/x86_64/adler32_sse.asm 									\
-		  igzip/x86_64/adler32_avx2_4.asm igzip/x86_64/igzip_multibinary.asm igzip/x86_64/igzip_update_histogram_01.asm 					\
-		  igzip/x86_64/igzip_update_histogram_04.asm igzip/x86_64/igzip_decode_block_stateless_01.asm 										\
-		  igzip/x86_64/igzip_decode_block_stateless_04.asm igzip/x86_64/igzip_inflate_multibinary.asm 										\
-		  igzip/x86_64/encode_df_04.asm igzip/x86_64/encode_df_06.asm igzip/x86_64/proc_heap.asm igzip/x86_64/igzip_deflate_hash.asm 		\
-		  igzip/x86_64/igzip_gen_icf_map_lh1_06.asm igzip/x86_64/igzip_gen_icf_map_lh1_04.asm igzip/x86_64/igzip_set_long_icf_fg_04.asm 	\
-		  igzip/x86_64/igzip_set_long_icf_fg_06.asm igzip/x86_64/crc_multibinary.asm igzip/x86_64/crc32_gzip_refl_by8.asm 					\
-		  igzip/x86_64/crc32_gzip_refl_by8_02.asm igzip/x86_64/crc32_gzip_refl_by16_10.asm
-
-IGZIP_ARM_ASM_SRCS := igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
-		  igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
-		  igzip/aarch64/isal_deflate_icf_body_hash_hist.S igzip/aarch64/isal_deflate_icf_finish_hash_hist.S									\
-		  igzip/aarch64/igzip_set_long_icf_fg.S igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
-		  igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 								\
-	  	  igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
-		  igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
-		  igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
-
+#--------------------------------------------
+# CPU-specific source files compilation flags
+#--------------------------------------------
 ifdef x86_64
-IGZIP_ARCH_DIR := igzip/x86_64
-endif
-ifdef arm64
-IGZIP_ARCH_DIR := igzip/aarch64
-IGZIP_SRCS     += igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
-endif
-ifdef noarch
-IGZIP_ARCH_DIR := igzip/noarch
-IGZIP_SRCS     += igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
+	C_SRCS += \
+		xxhash/xxh_x86dispatch.c
+	
+	NASM_SRCS := \
+		igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm igzip/x86_64/igzip_icf_body_h1_gr_bt.asm 					\
+		igzip/x86_64/igzip_icf_finish.asm igzip/x86_64/rfc1951_lookup.asm igzip/x86_64/adler32_sse.asm 									\
+		igzip/x86_64/adler32_avx2_4.asm igzip/x86_64/igzip_multibinary.asm igzip/x86_64/igzip_update_histogram_01.asm 					\
+		igzip/x86_64/igzip_update_histogram_04.asm igzip/x86_64/igzip_decode_block_stateless_01.asm 										\
+		igzip/x86_64/igzip_decode_block_stateless_04.asm igzip/x86_64/igzip_inflate_multibinary.asm 										\
+		igzip/x86_64/encode_df_04.asm igzip/x86_64/encode_df_06.asm igzip/x86_64/proc_heap.asm igzip/x86_64/igzip_deflate_hash.asm 		\
+		igzip/x86_64/igzip_gen_icf_map_lh1_06.asm igzip/x86_64/igzip_gen_icf_map_lh1_04.asm igzip/x86_64/igzip_set_long_icf_fg_04.asm 	\
+		igzip/x86_64/igzip_set_long_icf_fg_06.asm igzip/x86_64/crc_multibinary.asm igzip/x86_64/crc32_gzip_refl_by8.asm 					\
+		igzip/x86_64/crc32_gzip_refl_by8_02.asm igzip/x86_64/crc32_gzip_refl_by16_10.asm
+
+	ifndef conda # asmc is not available on conda
+		MASM_SRCS := lzma/LzmaDecOpt.masm 
+		
+		CFLAGS += -DZ7_LZMA_DEC_OPT
+	endif
+
+	CFLAGS     += -march=haswell 
+
+	CXXFLAGS   += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
+
+	NASM_FLAGS += -Iigzip/x86_64
+
+else ifdef osx_arm64
+	C_SRCS += 			\
+		mac_compat.c	\
+		\
+		igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
+
+	S_SRCS := \
+		igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
+		igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
+		igzip/aarch64/isal_deflate_icf_body_hash_hist.S igzip/aarch64/isal_deflate_icf_finish_hash_hist.S									\
+		igzip/aarch64/igzip_set_long_icf_fg.S igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
+		igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 								\
+		igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
+		igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
+		igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S \
+		\
+		lzma/LzmaDecOpt.S 
+
+	CFLAGS   += -DZ7_LZMA_DEC_OPT
+
+	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
+	
+	S_FLAGS  := -Iigzip/aarch64
+
+else # another CPU
+	C_SRCS += \
+		igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
+
+	CFLAGS += -Iigzip/noarch
 endif
 
-ifeq ($(CC),cl) # Microsoft Visual C
-	$(error Only the gcc and clang compilers are currently supported)
-endif
-
-# ---------------------------------------------------------------------
-# Update MY_SRCS platform-specific sources and objects
-# ---------------------------------------------------------------------
-ifneq ($(wildcard secure/.*),) # "secure" directory exists
-	MY_SRCS += secure/license.c
-	CONDA_LIC_OBJS := $(OBJDIR_LINUX)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o
-else
+#-------------------------------------------------------------
+# secure sources
+#-------------------------------------------------------------
+ifneq ($(wildcard secure/.*),) # case: "secure" directory exists
+	C_SRCS += secure/license.c
+else # case: "secure" directory doesn't exists: conda, or user is compiling from github
 	LDFLAGS += $(OBJDIR)/secure/license.o
 endif
 
-ifdef osx 
-	MY_SRCS += mac_compat.c
-endif
+#-------------------------------------------------------------
+# list of all source object, dependencies and executable files
+#-------------------------------------------------------------
+# object files that are shared between optimized/debug/opt builds
+SHA_OBJS          := $(addprefix $(OBJDIR)/,$(MASM_SRCS:.masm=.o)) $(addprefix $(OBJDIR)/,$(NASM_SRCS:.asm=.o))  $(addprefix $(OBJDIR)/,$(S_SRCS:.S=.o))
+DEPS              := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.d))  $(addprefix $(OBJDIR)/,$(NASM_SRCS:.asm=.d)) $(addprefix $(OBJDIR)/,$(S_SRCS:.S=.d)) 
+# object files for installers, distribution.c will be added later
+INSTALLER_OBJS    := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.o))       $(SHA_OBJS)
+OBJS              := $(INSTALLER_OBJS) $(OBJDIR)/$(DISTOBJ)
+DEBUG_OBJS        := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.debug-o)) $(SHA_OBJS) $(OBJDIR)/$(DISTOBJ)
+# optimized but with debug info, for debugging issues that only manifest with compiler optimization
+OPT_OBJS          := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(SHA_OBJS) $(OBJDIR)/$(DISTOBJ)
 
-C_SRCS = $(MY_SRCS) $(ZLIB_SRCS) $(BZLIB_SRCS) $(LZMA_SRCS) $(LIBDEFLATE_1_7_SRCS) $(LIBDEFLATE_1_19_SRCS) $(BSC_C_SRCS) \
-		 $(HTSCODECS_SRC) $(IGZIP_SRCS)	$(XXHASH_SRCS)
+EXECUTABLES       := genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)       
+DEBUG_EXECUTABLES := genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE) 
+OPT_EXECUTABLES   := genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)   
 
-CXX_SRCS = $(BSC_CXX_SRCS) 
-
-X86_SRCS     = xxhash/xxh_x86dispatch.c
-X86_ASM_SRCS = $(IGZIP_X86_ASM_SRCS)  # note: these are the sources which pass to the compiler - they may include other .asm files. These other files are only included in INCLUDES.
-
-ARM_ASM_SRCS = $(IGZIP_ARM_ASM_SRCS)
-
-ASFLAGS += -I$(IGZIP_ARCH_DIR)
-
-ifdef x86_64
-PLATFORM_DEPS = $(addprefix $(OBJDIR)/,$(X86_ASM_SRCS:.asm=.d)) $(addprefix $(OBJDIR)/,$(X86_SRCS:.c=.d))
-PLATFORM_OBJS = $(addprefix $(OBJDIR)/,$(X86_ASM_SRCS:.asm=.o)) $(addprefix $(OBJDIR)/,$(X86_SRCS:.c=.o))
-endif
-
-ifdef arm64
-PLATFORM_DEPS = $(addprefix $(OBJDIR)/,$(ARM_ASM_SRCS:.S=.d)) $(addprefix $(OBJDIR)/,$(ARM_SRCS:.c=.d))
-PLATFORM_OBJS = $(addprefix $(OBJDIR)/,$(ARM_ASM_SRCS:.S=.o)) $(addprefix $(OBJDIR)/,$(ARM_SRCS:.c=.o))
-# 				$(addprefix $(OBJDIR)/,bsc/qlfc_A64.o bsc/adler32_A64.o) 
-endif
-
-OBJS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.o))       $(PLATFORM_OBJS) $(BSC_OPT_OBJS)
-DEBUG_OBJS := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.debug-o)) $(PLATFORM_OBJS) 
-OPT_OBJS   := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(PLATFORM_OBJS) $(BSC_OPT_OBJS)  # optimized but with debug info, for debugging issues that only manifest with compiler optimization
-DEPS       := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.d))       $(PLATFORM_DEPS)
-
-EXECUTABLES       = genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)        # autocomplete.sh
-DEBUG_EXECUTABLES = genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE)  # autocomplete-debug.sh
-OPT_EXECUTABLES   = genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)    # autocomplete-debug.sh
-
-all   : CFLAGS += $(OPTFLAGS) 
+all   : CFLAGS += $(OPTFLAGS)
 all   : CXXFLAGS += $(OPTFLAGS) 
 all   : $(OBJDIR) $(EXECUTABLES) 
-ifndef Windows
+ifndef win_x86
 	@chmod +x test.sh
 endif
 
-# ifdef Windows
+# ifdef win_x86
 # debug opt : LDFLAGS += -lbacktrace
 # endif
 
@@ -364,426 +411,381 @@ debug : CFLAGS += $(DEBUGFLAGS)
 debug : CXXFLAGS += $(DEBUGFLAGS) 
 debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 
-opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG 
+opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG
 opt   : CXXFLAGS += $(OPTFLAGS) 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
-autocomplete.sh : autocomplete_gen.sh flags.c
-	@echo "Generating $@"
-	@./autocomplete_gen.sh
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
-
-autocomplete-debug.sh : autocomplete_gen.sh flags.c
-	@echo "Generating $@"
-	@./autocomplete_gen.sh debug
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
-
-# no calculating dependencies for these targets
+# no calculating dependencies when make command includes one of these as a target
 NO_DEPS_TARGETS := clean clean-debug clean-opt clean-installers clean-dev clean-test \
-                   increment-version dict_id_gen.h
-
+                   increment-version dict_id_gen.h $(OSX).tar
+	
 ifeq ($(filter $(NO_DEPS_TARGETS),$(MAKECMDGOALS)),)
 -include $(DEPS)
 endif
 
+# --------------------------------------------------------------------
+# Generated sources: dict_id_gen.h, flags_assign.h, context_validate.c
+# --------------------------------------------------------------------
+ifndef conda # conda doesn't need to generate - files available on github (+ bash issues generating)
+#  generation:
+# Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
+# Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
+# Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
+GENERATED_SRCS := dict_id_gen.h flags_assign.h context_validate.c
+
+dict_id_gen.h : bed.h fasta.h fastq.h generic.h genozip.h gff.h locs.h me23.h reference.h sam.h vcf.h dict_id_gen.sh
+	@echo Generating $@								;\
+	bash --noprofile --norc ./dict_id_gen.sh $(CC)
+
+flags_assign.h : flags.h flags_assign.sh
+	@echo Generating $@								;\
+	bash --noprofile --norc ./flags_assign.sh
+
+context_validate.c: context_validate.sh context_struct.h
+	@echo Generating $@								;\
+	bash --noprofile --norc ./context_validate.sh > $@
+endif 
+
+# -----------------------------------------------------------------------
+# Compilation rules: { dependecies, C, C++ } x { optimized, debug, opt }
+# -----------------------------------------------------------------------
 $(OBJDIR):
 	@echo Making directory $@ and its subdirs
 	@mkdir -p $@ $(addprefix $@/,$(SRC_DIRS)) 
 
-$(OBJDIR)/%.d: %.c | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
-	@echo Calculating dependencies $<
-	@$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
-
-$(OBJDIR)/%.d: %.cpp | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
-	@echo Calculating dependencies $<
-	@$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
-
-$(OBJDIR)/distribution.%.o : distribution.c 
-	@echo "Compiling ($(architecture)) $< to $@"
-	@$(CC) -c -o $@ $< $(CFLAGS) -DDISTRIBUTION=\"$*\"
-
 $(OBJDIR)/%.o: %.c $(OBJDIR)/%.d
-	@echo "Compiling ($(architecture)) $<"
-	@$(CC) -c -o $@ $< $(CFLAGS) 
+	@echo "Compiling ($(architecture)) $<" 			;\
+	$(CC) -c -o $@ $< $(CFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.c $(OBJDIR)/%.d
-	@echo "Compiling ($(architecture)) $< (debug)"
-	@$(CC) -c -o $@ $< $(CFLAGS)
+	@echo "Compiling ($(architecture)) $< (debug)" 	;\
+	$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
-	@echo "Compiling ($(architecture)) $< (opt)"
-	@$(CC) -c -o $@ $< $(CFLAGS)
+	@echo "Compiling ($(architecture)) $< (opt)"	;\
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+$(OBJDIR)/%.d: %.c $(GENERATED_SRCS) | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
+	@echo Calculating dependencies $<				;\
+	$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
+
+$(OBJDIR)/%.d: %.cpp $(GENERATED_SRCS) | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
+	@echo Calculating dependencies $<				;\
+	$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
+
+$(OBJDIR)/distribution.%.o : distribution.c 
+	@echo "Compiling ($(architecture)) $< to $@"	;\
+	$(CC) -c -o $@ $< $(CFLAGS) -DDISTRIBUTION=\"$*\"
 
 $(OBJDIR)/%.o: %.cpp $(OBJDIR)/%.d
-	@echo "Compiling ($(architecture)) $<"
-	@$(CXX) -c -o $@ $< $(CXXFLAGS) 
+	@echo "Compiling ($(architecture)) $<"			;\
+	$(CXX) -c -o $@ $< $(CXXFLAGS) 
 
 $(OBJDIR)/%.debug-o: %.cpp $(OBJDIR)/%.d
-	@echo "Compiling ($(architecture)) $< (debug)"
-	@$(CXX) -c -o $@ $< $(CXXFLAGS)
+	@echo "Compiling ($(architecture)) $< (debug)"	;\
+	$(CXX) -c -o $@ $< $(CXXFLAGS)
 
 $(OBJDIR)/%.opt-o: %.cpp $(OBJDIR)/%.d
-	@echo "Compiling ($(architecture)) $< (opt)"
-	@$(CXX) -c -o $@ $< $(CXXFLAGS)
+	@echo "Compiling ($(architecture)) $< (opt)"	;\
+	$(CXX) -c -o $@ $< $(CXXFLAGS)
 
-$(OBJDIR)/%.d: %.asm
-	@echo Calculating dependencies $<
-	@$(AS) $(ASFLAGS) -M $< > $@
+# ---------------------------------------------------------------
+# Assember rules: three differnet formats: Intel, Microsoft, GNU
+# ---------------------------------------------------------------
+ifdef x86_64
+$(OBJDIR)/%.d: %.asm  # Dependencies: nasm (Intel) format
+	@echo Calculating dependencies $< 				;\
+	$(NASM) $(NASM_FLAGS) -M $< > $@
 
-$(OBJDIR)/%.d: %.S
-	@echo Calculating dependencies $<
-	@$(AS) $(ASFLAGS) -M $< > $@
+$(OBJDIR)/%.o: %.asm  # Assembling: nasm (Intel) format
+	@echo "Assembling ($(architecture)) $<" 		;\
+	$(NASM) $(NASM_FLAGS) -o $@ $< 
 
-$(OBJDIR)/%.o: %.asm # nasm or yasm
-	@echo "Compiling ($(architecture)) $<"
-	@$(AS) $(ASFLAGS) -o $@ $< 
+$(OBJDIR)/%.o: %.masm # Assembling: masm (Microsoft) format (note: asmc doesn't calculate dependencies)
+	@echo "Assembling ($(architecture)) $<" 		;\
+	$(MASM) -Fo $@ $< > /dev/null 2>&1 				;\
+	status=$$?										;\
+	src=$<; err=$$(basename $${src%.masm}.err)		;\
+	if [ -f $$err ]; then cat $$err > /dev/stderr ; rm -f $$err; fi ;\
+	exit $$status
 
-$(OBJDIR)/%.o: %.S   # GNU Assembler 
-	@echo "Compiling ($(architecture)) $<"
-	@$(AS) $(ASFLAGS) -o $@ $< 
+else ifdef arm64
+$(OBJDIR)/%.d: %.S    # Dependencies: GNU format
+	@echo Calculating dependencies $< 				;\
+	$(CC) -D__ASSEMBLY__ -M $(S_FLAGS) $< > $@
+
+$(OBJDIR)/%.o: %.S    # Assembling: GNU format
+	@echo "Assembling ($(architecture)) $<" 		;\
+	$(CC) -D__ASSEMBLY__ -c $(S_FLAGS) -o $@ $< 
 
 %.S: %.c $(OBJDIR)/%.d
-	@echo "Generating $@"
-	@$(CC) -S -o $@ $< $(CFLAGS)
+	@echo "Generating $@" 							;\
+	$(CC) -S -o $@ $< $(CFLAGS)
 
+else 
+	fail := $(error Assembler flavor not recognized) 
+endif
+
+# ---------------------------------------------------------------
+# Preprocssing-only (for debugging). Usage, e.g.: make buffer.E
+# ---------------------------------------------------------------
 %.E: %.c $(OBJDIR)/%.d
-	@echo "Generating $@"
-	@$(CC) -E -o $@ $< $(CFLAGS)
+	@echo "Generating $@"							;\
+	$(CC) -E -o $@ $< $(CFLAGS)
 
-GENDICT_OBJS := $(addprefix $(OBJDIR)/,$(GENDICT_SRCS:.c=.o))
-
-# dict_id_gen.h generation:
-# Step 1: dict_id_gen.sh generates dict_id_gen.c, including all the GENDICT definitions from the data type include files (eg vcf.h)
-# Step 2: dict_id_gen.sh compiles dict_id_gen.c and generate dict_id_gen[.exe]
-# Step 3. dict_id_gen.sh generates dict_id_gen.h: it uses dict_id_gen[.exe]to generate the field constant, and then adds the fields enum and mapping
-ifndef BUILD_PREFIX # avoid conda failure due to bash issues in dict_id_gen.sh - pre-generate and check in to github
-dict_id_gen.h : bed.h fasta.h fastq.h generic.h genozip.h gff.h locs.h me23.h reference.h sam.h vcf.h dict_id_gen.sh
-	@echo Generating $@
-	@bash --noprofile --norc ./dict_id_gen.sh $(CC)
-
-flags_assign.c : flags.h flags_assign.sh
-	@echo Generating $@
-	@bash --noprofile --norc ./flags_assign.sh
-endif 
-
-genozip$(EXE): dict_id_gen.h $(OBJS) $(DISTOBJ)
-	@echo Linking $@
-	@$(CC) -o $@ $(OBJS) $(DISTOBJ) $(CFLAGS) $(LDFLAGS) 
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi  # hard linking not possible on some filesystems
+# --------------------------------------------------------------------
+# Executables
+# --------------------------------------------------------------------
+genozip$(EXE): $(GENERATED_SRCS) $(OBJS)
+	@echo Linking $@ 								;\
+	$(CC) -o $@ $(OBJS) $(CFLAGS) $(LDFLAGS) 		;\
+	if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi  # hard linking not possible on some filesystems
  
-genozip-debug$(EXE): dict_id_gen.h $(DEBUG_OBJS) $(DISTOBJ)
-	@echo Linking $@
-	@$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS) $(DISTOBJ)
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+genozip-debug$(EXE): $(GENERATED_SRCS) $(DEBUG_OBJS)
+	@echo Linking $@ 								;\
+	$(CC) -o $@ $(DEBUG_OBJS) $(CFLAGS) $(LDFLAGS)	;\
+	if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
-genozip-opt$(EXE): dict_id_gen.h $(OPT_OBJS) $(DISTOBJ)
-	@echo Linking $@
-	@$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS) $(DISTOBJ)
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+genozip-opt$(EXE): $(GENERATED_SRCS) $(OPT_OBJS) 
+	@echo Linking $@ 								;\
+	$(CC) -o $@ $(OPT_OBJS) $(CFLAGS) $(LDFLAGS) 	;\
+	if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip$(EXE) genocat$(EXE) genols$(EXE): genozip$(EXE)
-	@echo Hard linking $@
-	@rm -f $@ 
-	@ln -f $^ $@
-	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+	@echo Hard linking $@ 							;\
+	rm -f $@ 										;\
+	ln -f $^ $@ 									;\
+	if ! ln -f $^ $@; then ln -fs $^ $@; fi 		;\
+	if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE): genozip-debug$(EXE)
-	@echo Hard linking $@
-	@rm -f $@ 
-	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
+	@echo Hard linking $@ 							;\
+	rm -f $@ 										;\
+	if ! ln -f $^ $@; then ln -fs $^ $@; fi 		;\
+	if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 genounzip-opt$(EXE) genocat-opt$(EXE) genols-opt$(EXE): genozip-opt$(EXE)
-	@echo Hard linking $@
-	@rm -f $@ 
-	@if ! ln -f $^ $@; then ln -fs $^ $@; fi
-	@if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
-
-../LICENSE.txt: text_license.h version.h # not dependent on genozip.exe, so we don't generate it every compilation
-	@echo "Making Windows just to make LICENSE.txt. Invoking a seperate make process with -j"
-	@$(MAKE) -j genozip$(EXE) # recursive call to make genozip.exe with the latest version
-	@echo Generating $@
-	@./genozip$(EXE) --license=txt,100 > $@
-	
-# this is used by build.sh to install on conda for Linux and Mac. Installation for Windows in in bld.bat
-install: genozip$(EXE)
-	@echo Installing in $(PREFIX)/bin
-	@if ( test ! -d $(PREFIX)/bin ) ; then mkdir -p $(PREFIX)/bin ; fi
-	@cp -f genozip$(EXE) $(PREFIX)/bin/genozip$(EXE)
-ifndef Windows
-	@chmod a+x $(PREFIX)/bin/genozip$(EXE)
-endif
-	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genounzip$(EXE)
-	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genocat$(EXE)
-	@cp -f $(PREFIX)/bin/genozip$(EXE) $(PREFIX)/bin/genols$(EXE)
-
-version = $(shell head -n1 version.h |cut -d\" -f2)
-
-SH_VERIFY_ALL_COMMITTED = 																																				\
-	if (( `           git status -s | wc -l` != 0 )); then echo "ERROR: there are some UNCOMMITTED changes:" ; echo ; git status -s ; exit 1; fi;  						\
-	if (( `cd secure; git status -s | wc -l` != 0 )); then echo "ERROR: there are some UNCOMMITTED changes:" ; echo ; git status -s ; exit 1; fi
-
-SH_VERIFY_ALL_STAGED = 																																					\
-	if (( `           git diff | wc -l` != 0 )); then echo "ERROR: there are some UNSTAGED changes:" ; echo ; git status -s ; exit 1; fi;  \
-	if (( `cd secure; git diff | wc -l` != 0 )); then echo "ERROR: there are some UNSTAGED changes in 'secure':" ; echo ; ( cd secure ; git status -s ) ; exit 1; fi
+	@echo Hard linking $@ 							;\
+	rm -f $@ 										;\
+	if ! ln -f $^ $@; then ln -fs $^ $@; fi 		;\
+	if ! ln -f $@ ../$@; then ln -fs $@ ../$@; fi
 
 test:
 	@cat test.sh | tr -d "\r" | bash -
 
-clean-installers:
-	@rm -fR $(INSTALLERS)/*
+# -----------------------------------------------------------------------------------------------
+# Rules for building a new Genozip release: Dependencies are here, recipes are in distribution.mk
+# -----------------------------------------------------------------------------------------------
+ifdef vendor
 
-clean-debug:
-	@echo Cleaning up debug
-	@rm -f $(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o $(DISTOBJ) 
+# distribution platform names
+LINUX := genozip-linux-x86_64
+OSX   := genozip-osx-arm
+WIN   := windows
+CONDA := conda
 
-clean-opt:
-	@echo Cleaning up opt
-	@rm -f $(OPT_OBJS) $(OPT_EXECUTABLES) $(DISTOBJ) $(OBJDIR)/*.opt-o 
+# macro that is evaluated each time when called
+DIST_MAKE = @\
+	case "$$(pwd)" in \
+        */genozip/src) ;; \
+        *) echo "❌ make distribution must run from $(GENOZIP_HOME)/src, but pwd=$$(pwd)"; exit 1 ;; \
+    esac; \
+	$(MAKE) -f secure/distribution.mk --no-print-directory $@
 
-clean:  # careful not to delete license.o
-	@echo Cleaning up optimized
-	@rm -f $(EXECUTABLES) $(OBJS) $(DISTOBJ) $(DEPS) $(OBJDIR)/*.o $(OBJDIR)/*.d 
+# pass to distribution.mk :
+export CC CXX CFLAGS CXXFLAGS LDFLAGS OPTFLAGS EXE SRC_DIRS C_SRCS CXX_SRCS NASM_SRCS S_SRCS OTHER_SRCS
+export OBJDIR OBJDIR_LINUX OBJDIR_WINDOWS OBJDIR_OSX_ARM OBJS DEPS DISTOBJ SCRIPTS LATEST_SRC 
+export LINUX OSX WIN CONDA RELEASES
+export EXECUTABLES OPT_EXECUTABLES DEBUG_EXECUTABLES INSTALLERS CONDA_LIC_OBJS TEST_DIR
+export architecture win_x86 linux_x86 osx_arm64 x86_64 arm64 vendor
 
-initialize-build-distribution: # clean Linux, Windows
-	@$(SH_VERIFY_ALL_STAGED)
-	@echo Cleaning up Linux, Windows for distribution
-	@rm -f $(OBJDIR_LINUX)/*.o $(OBJDIR_LINUX)/*.d $(OBJDIR_WINDOWS)/*.o $(OBJDIR_WINDOWS)/*.d \
-	       $(OBJDIR_LINUX)/*/*.o $(OBJDIR_LINUX)/*/*.d $(OBJDIR_WINDOWS)/*/*.o $(OBJDIR_WINDOWS)/*/*.d \
-	       $(INSTALLERS)/*
-	
-clean-test:
-	rm -f $(TEST_DIR)/*.genozip $(TEST_DIR)/*.bad $(TEST_DIR)/*.local $(TEST_DIR)/*.b250 $(TEST_DIR)/tmp/* $(TEST_DIR)/*.DEPN $(TEST_DIR)/back-compat/*/*.bad
+# ------------------------------------
+# Build rules that run only on Windows
+# ------------------------------------
+ifdef win_x86
 
-clean-dev: clean-installers clean-test # use only in dev - deletes license.o
-	@echo Cleaning up
-	@rm -f $(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) *.d .archive.tar.gz *.stackdump $(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) 
-	@rm -f *.S *.bad $(PUBLIC)/*.bad *.local genozip.threads-log.* *.b250 vgcore.*
-	@rm -R $(OBJDIR)
-	@mkdir $(OBJDIR) $(addprefix $(OBJDIR)/,$(SRC_DIRS))
-	@touch $(OBJDIR)/.gitkeep
+# Windows distribution.mk targets with no dependencies
+initialize-build-distribution push-build finalize-distribution genozip-latest.exe genozip-latest: 
+	+$(DIST_MAKE) 
 
-.PHONY: clean clean-debug clean-opt clean-installers initialize-build-distribution clean-dev clean-test \
-		distribution finalize-distribution dict_id_gen$(EXE) \
-		objdir.linux objdir.windows objdir.mac  \
-		push-build increment-version $(INSTALLERS)/LICENSE.html \
-		genozip-latest genozip-latest.exe
+#CONDA_RECIPE_DIR := ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
+CONDA_FEEDSTOCK  := ../../genozip-feedstock
+CONDA_RECIPE_DIR := $(CONDA_FEEDSTOCK)/recipe
 
-# -----------------------------
-# builds latest for local OS
-# -----------------------------
+OTHER_FILES_FOR_CONDA := \
+	Makefile ../.gitignore ../LICENSE.txt ../AUTHORS ../README.md \
+	$(OBJDIR_LINUX)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o
 
-ifdef Windows
+../LICENSE.txt: text_license.h version.h $(WIN)/genozip.exe
+	@echo Generating $@ ;\
+	$(WIN)/genozip.exe --license=txt,100 > $@ 
 
-genozip-latest.exe: 
-	@echo "Building latest for Windows"
-	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) >& /dev/null || exit 0) ; cd $(OBJDIR) ; (mkdir $(SRC_DIRS) >& /dev/null || exit 0) )
-	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard ; git pull ; cd secure; git pull; cd -; $(MAKE) -j clean ; touch dict_id_gen.h ; $(MAKE) -j; cp $(LATEST_SRC)/genozip.exe ../../genozip/private/releases/genozip-$(version).exe ; ln -sf $(LATEST_SRC)/genozip.exe $@ ; fi )
-
-genozip-latest:
-	@$(SCRIPTS)/run-on-wsl.sh CC=$(CC) make -j genozip-latest
-
-# increments minor version, eg. 1.0.1 -> 1.0.2. 
-# To increment a major version, manually edit version.h and set minor version to -1 e.g. 1.1.-1 (careful! no newlines or spaces)
-# and re-compile so that genozip --version gets updated
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
-	@echo "Incrementing version.h"
-	@bash $(SCRIPTS)/increment-version.sh
+	+$(DIST_MAKE) 
 
-.archive.tar.gz : $(C_SRCS) $(X86_ASM_SRCS) $(ARM_ASM_SRCS) $(CONDA_LIC_OBJS) $(CONDA_DEVS) $(CONDA_DOCS) $(INCLUDES) ../LICENSE.txt
-	@$(SH_VERIFY_ALL_COMMITTED)
-	@echo Creating github tag genozip-$(version) and archive
-	@git push > /dev/null
-	@(git tag genozip-$(version) > /dev/null ; exit 0) # ignore errors if already exists (due to re-run of make)
-	@(cd secure; git tag genozip-$(version) > /dev/null ; exit 0)
-	@git push origin genozip-$(version) > /dev/null
-	@(cd secure; git push origin genozip-$(version) > /dev/null)
-	@curl https://github.com/divonlan/genozip/archive/refs/tags/genozip-$(version).tar.gz --ssl-no-revoke --silent --location -o $@ > /dev/null
+.archive.tar.gz : $(C_SRCS) $(NASM_SRCS) $(S_SRCS) $(OTHER_SRCS) $(OTHER_FILES_FOR_CONDA)
+	+$(DIST_MAKE) 
 
-conda/meta.yaml: conda/meta.template.yaml .archive.tar.gz ../README.md
-	@echo "Generating conda/meta.yaml"
-	@bash conda/generate_meta.sh > $@
+$(CONDA)/meta.yaml: $(CONDA)/meta.template.yaml .archive.tar.gz ../README.md
+	+$(DIST_MAKE) 
 
-conda/README.md: conda/README.template.md html-to-md.sed ../README.md
-	@echo "Generating conda/README.md"
-	@bash conda/generate_README.sh > $@
+$(CONDA)/README.md: $(CONDA)/README.template.md html-to-md.sed ../README.md
+	+$(DIST_MAKE) 
 
-#CONDA_RECIPE_DIR = ../staged-recipes/recipes/genozip # initial stage-recipes step, keeping here for future reference
-CONDA_FEEDSTOCK  = ../../genozip-feedstock
-CONDA_RECIPE_DIR = $(CONDA_FEEDSTOCK)/recipe
+$(CONDA)/.conda-timestamp: $(CONDA)/meta.yaml $(CONDA)/README.md $(CONDA)/build.sh $(CONDA)/bld.bat 
+	+$(DIST_MAKE) 
 
-# publish to conda-forge 
-conda/.conda-timestamp: conda/meta.yaml conda/README.md conda/build.sh conda/bld.bat 
-	@echo "Publishing to conda-forge"
-	@$(SH_VERIFY_ALL_STAGED)
-	@echo " "
-	@echo "Copying $^ to conda feedstock"
-	@(cd $(CONDA_FEEDSTOCK); git reset --hard; git pull)
-	@cp conda/README.md $(CONDA_FEEDSTOCK)
-	@cp conda/meta.yaml conda/build.sh conda/bld.bat $(CONDA_RECIPE_DIR)
-	@echo "Committing my files to branch genozip on my fork"
-	@(cd $(CONDA_FEEDSTOCK); git pull; git commit -m "update" recipe/meta.yaml README.md recipe/build.sh recipe/bld.bat; git push) > /dev/null
-	@echo " "
-#	@echo "Submitting pull request to conda-forge"
-#	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com://conda-forge/genozip-feedstock master)
-#	@(cd $(CONDA_RECIPE_DIR); git request-pull master https://github.com/divonlan/genozip-feedstock master)
-	@touch $@
-	@echo "CONDA: Using a browser:"
-# 'into conda-forge:master from divonlan:genozip'"
-	@echo "  (1) Go to https://github.com/divonlan/genozip-feedstock/tree/genozip "
-	@echo "  (2) Log in to Github"
-	@echo "  (3) Click 'Contribute' -> 'Open pull request' OR 'Create pull request'"
-	@echo "  (4) Click 'Resolve conflicts' -> select the top option in each of the 2 conflicts, then commit"
+WINDOWS_INSTALLER_OBJS := \
+	$(WIN)/genozip.exe $(WIN)/genounzip.exe $(WIN)/genocat.exe $(WIN)/genols.exe \
+	$(WIN)/LICENSE.for-installer.txt ../LICENSE.txt $(WIN)/genozip.ico $(WIN)/genozip-installer.ifp
 
-windows/genozip.exe: CFLAGS += $(OPTFLAGS)
-#windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.MicrosoftStore.o 
-windows/genozip.exe: $(OBJS) $(OBJDIR)/distribution.InstallForge.o 
+$(WIN)/genozip.exe: CFLAGS += $(OPTFLAGS)
+#$(WIN)/genozip.exe: $(INSTALLER_OBJS) $(OBJDIR)/distribution.MicrosoftStore.o 
+$(WIN)/genozip.exe: $(INSTALLER_OBJS) $(OBJDIR)/distribution.InstallForge.o 
 	@echo Linking $@
 	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-windows/genounzip.exe windows/genocat.exe windows/genols.exe: windows/genozip.exe 
-	@echo Generating $@
-	@cp $< $@
+$(WIN)/genounzip.exe $(WIN)/genocat.exe $(WIN)/genols.exe: $(WIN)/genozip.exe 
+	+$(DIST_MAKE) 
 
-windows/LICENSE.for-installer.txt: genozip$(EXE) version.h
-	@echo Generating $@
-	@./genozip$(EXE) --license=txt,60 > $@
+$(WIN)/LICENSE.for-installer.txt: $(WIN)/genozip.exe version.h
+	+$(DIST_MAKE) 
 
-windows/genozip-installer.ifp: windows/genozip-installer.template.ifp windows/generate-ifp.sh windows/genozip.exe ../LICENSE.txt
-	@echo "Generating $@"
-	@(cd windows ; bash generate-ifp.sh)
+$(WIN)/genozip-installer.ifp: $(WIN)/genozip-installer.template.ifp $(WIN)/generate-ifp.sh $(WIN)/genozip.exe ../LICENSE.txt
+	+$(DIST_MAKE) 
 
-WINDOWS_INSTALLER_OBJS = windows/genozip.exe windows/genounzip.exe windows/genocat.exe windows/genols.exe windows/LICENSE.for-installer.txt ../LICENSE.txt windows/genozip.ico windows/genozip-installer.ifp
-
-# this must be run ONLY has part of "make distribution" or else versions will be out of sync
-$(INSTALLERS)/genozip-installer.exe.build:
-	@echo "Making Windows installer by invoking a seperate make process with -j"
-	make -j $(INSTALLERS)/genozip-installer.exe
+$(info WIN='$(WIN)')
+$(info INSTALLERS='$(INSTALLERS)')
 
 $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) 
-	@echo 'Creating Windows installer'
-	@echo 'WINDOWS: Using the UI:'
-	@echo '  (1) Open windows/genozip-installer.ifp'
-	@echo '  (2) Click Build'
-	@echo '  (3) Exit the UI (close the window)'
-	@rm -f ../installers/genozip-installer.exe
-	@("/c/Program Files (x86)/solicus/InstallForge/bin/ifbuilderenvx86.exe" ; exit 0)
+	+$(DIST_MAKE) 
 
-# Windows rule for making Linux build by running WSL
-$(INSTALLERS)/genozip-linux-x86_64.tar.build: genozip-linux-x86_64/LICENSE.txt 
-	@echo "Calling WSL to Make for genozip-linux-x86_64.tar"
-	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@$(SCRIPTS)/run-on-wsl.sh CC=$(CC) make -j $(INSTALLERS)/genozip-linux-x86_64.tar # in the past, make -j didn't work well on WSL - filesystem clock issues
+# Windows making LICENSE.txt for Linux
+$(LINUX)/LICENSE.txt: ../LICENSE.txt
+	+$(DIST_MAKE) 
 
-# get Mac files: ../installers/genozip-osx-arm.tar and objdir.mac/secure/license.o
-$(INSTALLERS)/genozip-osx-arm.tar : $(C_SRCS) $(ARM_ASM_SRCS) $(INCLUDES) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
-	@echo "getting $>"
-	@wsl mac-build-and-fetch.sh
+# Windows rule for making Linux build 
+$(INSTALLERS)/$(LINUX).tar.build: $(LINUX)/LICENSE.txt 
+	+$(DIST_MAKE) 
 
-$(INSTALLERS)/LICENSE.html: genozip$(EXE)
-	@./genozip$(EXE) --license=html,5000 > $@
+$(INSTALLERS)/$(OSX).tar : $(C_SRCS) $(S_SRCS) $(OTHER_SRCS) $(wildcard secure/*.c) $(wildcard secure/*.h) ../LICENSE.txt Makefile
+	+$(DIST_MAKE) 
 
-BUILD_FILES = version.h Makefile \
-	objdir.linux/secure/license.o objdir.windows/secure/license.o \
-	objdir.osx-arm/secure/license.o ../RELEASE_NOTES.txt ../LICENSE.txt \
-	$(INSTALLERS)/genozip-installer.exe $(INSTALLERS)/genozip-linux-x86_64.tar \
-	$(INSTALLERS)/genozip-osx-arm.tar $(INSTALLERS)/LICENSE.html
+$(INSTALLERS)/LICENSE.html: $(WIN)/genozip.exe
+	+$(DIST_MAKE) 
 
-push-build: # push files modified during the build process
-	@git stage $(BUILD_FILES) -f
-	@git commit -m $(version) 
-	@git push
-	@(cd secure; git commit -m $(version); git push)
+.NOTPARALLEL: distribution 
+distribution: 							\
+	initialize-build-distribution 		\
+	increment-version 					\
+	../LICENSE.txt 						\
+	$(INSTALLERS)/LICENSE.html 			\
+	$(INSTALLERS)/$(OSX).tar 			\
+	$(INSTALLERS)/$(LINUX).tar.build	\
+	$(INSTALLERS)/genozip-installer.exe	\
+	push-build							\
+	$(CONDA)/.conda-timestamp 			\
+	genozip-latest.exe 					\
+	genozip-latest 						\
+	finalize-distribution				\
 
-finalize-distribution:
-	@(printf "\nClick Enter after committing the feedstock conflict resolution: <Click>")
-	@(read x)
-	@(cd $(CONDA_FEEDSTOCK) ; git pull)
-	@echo "  Next:"
-	@echo "  (1) Wait for all 4 tests to pass (~8 minutes)"
-	@echo "  (2) Click 'Merge pull request' and the 'Confirm merge' (DONT CLICK 'Delete branch')"
-	@echo "  (3) A. Open: https://github.com/divonlan/genozip/releases/new"
-	@echo "      B. Set 'Tag version' and 'Release title' are both: genozip-$(version)"
-	@echo "      C. Copy the notes for the version from RELEASE NOTES -> Publish release"
-	@echo "  (4) For each: create version and move ALIAS"
-	@echo "  (5) Commit private"
+# ------------------------------------
+# Build rules that run only on Linux
+# ------------------------------------
+else ifdef linux_x86
 
-distribution: initialize-build-distribution increment-version ../LICENSE.txt $(INSTALLERS)/LICENSE.html \
-              $(INSTALLERS)/genozip-osx-arm.tar 			\
-			  $(INSTALLERS)/genozip-linux-x86_64.tar.build	\
-			  $(INSTALLERS)/genozip-installer.exe.build		\
-              push-build conda/.conda-timestamp genozip-latest.exe genozip-latest finalize-distribution
+distribution initialize-build-distribution finalize-distribution push-build increment-version $(CONDA)/.conda-timestamp .archive.tar.gz $(CONDA)/meta.yaml:
+	@echo "❌ \"make $@\" must be run from Windows"
 
-# license copied on Windows, not Linux due to file mode issues on NTFS causing git to think LICENSE.txt has changed
-genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
-	@echo Generating $@
-	@(mkdir genozip-linux-x86_64 >& /dev/null ; exit 0)
-	@cp -f $< $@
-
-endif # Windows
-
-ifdef linux_x86
-
+# Linux distribution.mk targets with no dependencies
 genozip-latest: 
-	@echo "Building latest for Linux"
-	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) 2> /dev/null || exit 0); cd $(OBJDIR) ; (mkdir $(SRC_DIRS) 2> /dev/null || exit 0))
-	@(cd $(LATEST_SRC); $(MAKE) -j clean ; $(MAKE) -j; cp $(LATEST_SRC)/genozip ../../genozip/private/releases/genozip-$(version) )
-	@ln -sf $(LATEST_SRC)/genozip $@
+	+$(DIST_MAKE) 
 
 # note: getpwuid and getgrgid will cause dymanically loading of the locally installed glibc in the --tar option, or segfault. that's normally fine.
-genozip-linux-x86_64/genozip: CFLAGS += $(OPTFLAGS)
-genozip-linux-x86_64/genozip: $(OBJS) $(OBJDIR)/distribution.linux-x86_64.o
-	@echo Linking $@
-	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+$(LINUX)/genozip: CFLAGS += $(OPTFLAGS)
+$(LINUX)/genozip: $(INSTALLER_OBJS) $(OBJDIR)/distribution.linux-x86_64.o
+	@echo Linking $@ ;\
+	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols: genozip-linux-x86_64/genozip 
-	@echo Generating $@
-	@ln -f $< $@
-
-genozip-linux-x86_64/LICENSE.txt: ../LICENSE.txt
-	@cp -f $< $@
-
-LINUX_TARGZ_OBJS = genozip-linux-x86_64/genozip genozip-linux-x86_64/genounzip genozip-linux-x86_64/genocat genozip-linux-x86_64/genols genozip-linux-x86_64/LICENSE.txt
+$(LINUX)/genounzip $(LINUX)/genocat $(LINUX)/genols: $(LINUX)/genozip 
+	+$(DIST_MAKE) 
 
 # this must be run ONLY as part of "make distribution" or else versions will be out of sync
 # this is run on Linux by run-on-wsl.sh
-$(INSTALLERS)/genozip-linux-x86_64.tar: $(LINUX_TARGZ_OBJS) 
-	@echo "Creating $@"
-	@tar cf $@ --lzma genozip-linux-x86_64
+$(INSTALLERS)/$(LINUX).tar: $(LINUX)/genozip $(LINUX)/genounzip $(LINUX)/genocat $(LINUX)/genols $(LINUX)/LICENSE.txt
+	+$(DIST_MAKE) 
 
-endif # linux_x86
+# ------------------------------------
+# Build rules that run only on Mac
+# ------------------------------------
+else ifdef osx_arm64
 
-ifdef osx
+distribution initialize-build-distribution finalize-distribution push-build increment-version $(CONDA)/.conda-timestamp .archive.tar.gz $(CONDA)/meta.yaml:
+	@echo "❌ \"make $@\" must be run from Windows"
 
-initialize-build-mac: # clean Mac - called from mac-build-and-fetch.sh
-	@echo Cleaning up $(OBJDIR) for distribution
-	@rm -f $(OBJDIR)/*.o $(OBJDIR)/*.d $(OBJDIR)/*/*.o $(OBJDIR)/*/*.d $(INSTALLERS)/*
-
-genozip-osx-%/genozip: CFLAGS += $(OPTFLAGS)
-genozip-osx-%/genozip: $(OBJS) $(OBJDIR)/distribution.osx-%.o
-	@echo Linking $@
+$(OSX)/genozip: CFLAGS += $(OPTFLAGS)
+$(OSX)/genozip: $(INSTALLER_OBJS) $(OBJDIR)/distribution.osx-%.o
+	@echo Linking $@ ;\
 	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
-genozip-osx-arm/genounzip genozip-osx-arm/genocat genozip-osx-arm/genols: genozip-osx-arm/genozip 
-	@echo Generating $@
-	@ln -f $< $@ 
+$(OSX)/genounzip $(OSX)/genocat $(OSX)/genols: $(OSX)/genozip 
+	+$(DIST_MAKE) 
 
-genozip-osx-%/LICENSE.txt: ../LICENSE.txt
-	@(mkdir genozip-osx-$(osx) >& /dev/null ; exit 0)
-	@echo Generating $@
-	@cp -f $< $@
+$(OSX)/LICENSE.txt: ../LICENSE.txt
+	+$(DIST_MAKE) 
 
-OSX_ARM_TARGZ_OBJS = genozip-osx-arm/genozip genozip-osx-arm/genounzip genozip-osx-arm/genocat genozip-osx-arm/genols genozip-osx-arm/LICENSE.txt
-
-$(INSTALLERS)/genozip-osx-arm.tar: $(OSX_ARM_TARGZ_OBJS) 
-	@echo "Creating $@"
-	@tar -cf $@ --lzma genozip-osx-arm
-
+# Mac distribution.mk targets with no dependencies
 genozip-latest: 
-	@echo "Building latest for osx-$(osx)"
-	@(cd $(LATEST_SRC); (mkdir $(OBJDIR) 2> /dev/null || exit 0); cd $(OBJDIR) ; (mkdir $(SRC_DIRS) 2> /dev/null || exit 0))
-	@(cd $(LATEST_SRC); if [[ `pwd` = *genozip-latest* ]]; then git reset --hard; git pull ; $(MAKE) -j clean ; $(MAKE) -j 20; fi)
-	@ln -sf $(LATEST_SRC)/genozip $@
+	+$(DIST_MAKE) 
 
-endif # Darwin
+$(INSTALLERS)/$(OSX).tar: $(OSX)/genozip $(OSX)/genounzip $(OSX)/genocat $(OSX)/genols $(OSX)/LICENSE.txt
+	+$(DIST_MAKE) 
+
+endif # osx-arm64
+
+else # not vendor
+
+distribution: 
+	@echo "Target $@ intended for vendor use only. USER=$(USER) USERNAME=$(USERNAME)"
+
+endif # vendor
+
+#-----------------------
+# cleaners
+#-----------------------
+
+# macro rm of files and showing removed files in one line
+define rm
+	@/bin/echo -n "$(1) : " ; rm -fv $(2) | cut -d\' -f2 | xargs -r -n1 basename | tr "\n" " "; echo
+endef
+
+clean-debug:
+	$(call rm,Cleaning up debug,	\
+		$(DEBUG_OBJS) $(DEBUG_EXECUTABLES) $(OBJDIR)/*.debug-o)
+
+clean-opt:
+	$(call rm,Cleaning up opt,		\
+		$(OPT_OBJS) $(OPT_EXECUTABLES) $(OBJDIR)/*.opt-o)
+
+clean:  # careful not to delete license.o
+	$(call rm,Cleaning up optimized，dependencies and generated sources, \
+		$(OBJS) $(EXECUTABLES) $(DEPS) $(GENERATED_SRCS) $(OBJDIR)/*.o $(OBJDIR)/*.d)
+	
+clean-test:
+	$(call rm,Cleaning up Test, 	\
+		$(TEST_DIR)/*.genozip $(TEST_DIR)/*.bad $(TEST_DIR)/*.local $(TEST_DIR)/*.b250 $(TEST_DIR)/outdir.*/* \
+	    $(TEST_DIR)/*.DEPN $(TEST_DIR)/back-compat/*/*.bad $(TEST_DIR)/*.bad-offset-* $(TEST_DIR)/*/*.bad-offset-*
+			 
+clean-dev: clean-installers clean-test # use only in dev - deletes license.o
+	$(call rm,Cleaning dev stuff,													\
+		$(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) .archive.tar.gz \
+		$(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) $(OBJDIR)/* $(OBJDIR)/*/* $(OBJDIR)/*/*/*			
+	mkdir $(OBJDIR) $(addprefix $(OBJDIR)/,$(SRC_DIRS))	;\
+	touch $(OBJDIR)/.gitkeep
+
+clean-installers:
+	$(call rm,Cleaning installers, \
+		$(INSTALLERS)/*)
+
+.PHONY: clean clean-debug clean-opt dict_id_gen$(EXE) $(OBJDIR_LINUX) $(OBJDIR_WINDOWS) $(OBJDIR_OSX_ARM) distribution
+

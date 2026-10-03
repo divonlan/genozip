@@ -8,10 +8,11 @@
 
 #pragma once
 
+#include <time.h>
 #include "genozip.h"
 #include "digest.h"
 
-extern void progress_new_component (rom component_name, rom message, TimeSpecType *start_time);
+extern void progress_new_component (rom component_name, rom message, struct timespec *start_time);
 extern void progress_update (Task task, double portion, double portion_of_task, bool done);
 extern void progress_finalize_component (rom status);
 extern void progress_finalize_component_time (rom status, Digest md5);

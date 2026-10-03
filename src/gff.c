@@ -375,7 +375,7 @@ static void gff_seg_ATTR_Length (VBlockGFFP vb, ContextP ctx, STRp(length_str))
 {
     int64_t Start = CTX(ATTR_Start)->last_value.i, Stop, Length;
     
-    if (ctx_has_value_in_line_(VB, CTX(ATTR_Start)) &&
+    if (ctx_has_value_in_line (VB, ATTR_Start) &&
         ctx_encountered_in_line (VB, ATTR_Stop) && str_get_int (STRlst(ATTR_Stop), &Stop) &&
         str_get_int (STRa(length_str), &Length) &&
         Length == Stop - Start)

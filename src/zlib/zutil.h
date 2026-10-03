@@ -190,13 +190,13 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 
 #ifndef Z_SOLO
    voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size, FUNCLINE));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr, FUNCLINE));
+                                    unsigned size, Caller caller));
+   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr, Caller caller));
 #endif
 
 #define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size), __FUNCLINE)
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr), __FUNCLINE)
+           (*((strm)->zalloc))((strm)->opaque, (items), (size), THIS_CODE_LINE)
+#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr), THIS_CODE_LINE)
 #define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
 
 /* Reverse the bytes in a 32-bit value */

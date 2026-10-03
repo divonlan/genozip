@@ -99,7 +99,7 @@ void arch_set_locale (void)
     ASSERTWD (setlocale (LC_CTYPE, "C.UTF-8"), _WRN "failed to setlocale of LC_CTYPE", NULL);   
 #endif
     // force printf's %f to use '.' as the decimal separator (not ',') (required by the Genozip file format)
-    ASSERTWD (setlocale (LC_NUMERIC, flag.is_windows ? "english" : "C.UTF-8"), _WRN "failed to setlocale of LC_NUMERIC", NULL); 
+    ASSERTWD (setlocale (LC_NUMERIC, 𝓌𝒾𝓃("english") X𝓌𝒾𝓃("C.UTF-8")), _WRN "failed to setlocale of LC_NUMERIC", NULL); 
 }
 
 static bool arch_is_wsl (void)
@@ -130,24 +130,53 @@ void arch_initialize (rom my_argv0)
     χ64 (ASSINP0 (__builtin_cpu_supports("bmi2"), "Genozip, running on Intel/AMD CPUs, requires BMI2 support");)
 
     rom slash = strrchr (argv0, '/');
-    if (!slash && flag.is_windows) slash = strrchr (argv0, '\\');
+    𝓌𝒾𝓃 (if (!slash) slash = strrchr (argv0, '\\');)
 
     base_argv0 = slash ? slash + 1 : argv0;
 
-    // verify CPU architecture and compiler is supported
-    _Static_assert (sizeof (char)          == 1,  "expecting sizeof (char)==1");
-    _Static_assert (sizeof (short)         == 2,  "expecting sizeof (short)==2");
-    _Static_assert (sizeof (unsigned)      == 4,  "expecting sizeof (unsigned)==4");
-    _Static_assert (sizeof (long long)     == 8,  "expecting sizeof (long long)==8");
-    _Static_assert (sizeof (uint128_t)     == 16, "expecting sizeof (uint128_t)==16");
-    _Static_assert (sizeof (size_t)        == 8,  "expecting sizeof (size_t)==8");
-    _Static_assert (sizeof (time_t)        == 8,  "expecting sizeof (time_t)==8");
-    _Static_assert (sizeof (SectionType)   == 1,  "expecting sizeof (SectionType)==1");
-    _Static_assert (sizeof (Codec)         == 1,  "expecting sizeof (Codec)==1");
-    _Static_assert (sizeof (LocalType)     == 1,  "expecting sizeof (LocalType)==1");
-    _Static_assert (sizeof (ReconPlanItem) == 12, "expecting sizeof (ReconPlanItem)==12");
-    _Static_assert (sizeof (void *)        <= 8,  "expecting sizeof (void *)<=8"); // important bc void* is a member of ValueType, and also counting on it in huffman_uncompress, str_pack_bases
-    _Static_assert (sizeof (ValueType)     == 8,  "expecting sizeof (ValueType)==8");
+    // verify CPU architecture and compiler is supported: compile-time tests
+    ASSERT_SIZEOF (char,          1);
+    ASSERT_SIZEOF (short,         2);
+    ASSERT_SIZEOF (unsigned,      4);
+    ASSERT_SIZEOF (long long,     8);
+    ASSERT_SIZEOF (uint128_t,     16);
+    ASSERT_SIZEOF (size_t,        8);
+    ASSERT_SIZEOF (time_t,        8);
+    ASSERT_SIZEOF (SectionType,   1);
+    ASSERT_SIZEOF (Codec,         1);
+    ASSERT_SIZEOF (LocalType,     1);
+    ASSERT_SIZEOF (StoreType,     1);
+    ASSERT_SIZEOF (void *,        8);
+    ASSERT_SIZEOF (ValueType,     8);        
+    ASSERT_SIZEOF (Buffer,        64);
+    ASSERT_SIZEOF (SnipIterator,  8);
+
+    // file-format structs
+    ASSERT_SIZEOF (struct FlagsCtx,           1);
+    ASSERT_SIZEOF (struct FlagsDict,          1);
+    ASSERT_SIZEOF(SectionFlags,               1);
+    ASSERT_SIZEOF(SectionHeader,              28);
+    ASSERT_SIZEOF(SectionHeaderGenozipHeader, 720);
+    ASSERT_SIZEOF(SectionFooterGenozipHeader, 12);
+    ASSERT_SIZEOF(QnameFlavorProp,            2);
+    ASSERT_SIZEOF(SectionHeaderTxtHeader,     400);
+    ASSERT_SIZEOF(SectionHeaderVbHeader,      84);
+    ASSERT_SIZEOF(VbPlanItem,                 2);
+    ASSERT_SIZEOF(SectionHeaderDictionary,    40);
+    ASSERT_SIZEOF(SectionHeaderCounts,        44);
+    ASSERT_SIZEOF(SectionHeaderSubDicts,      44);
+    ASSERT_SIZEOF(SectionHeaderHuffman,       36);
+    ASSERT_SIZEOF(SectionHeaderGzDigests,     37);
+    ASSERT_SIZEOF(SectionHeaderCtx,           40);
+    ASSERT_SIZEOF(SectionHeaderReference,     52);
+    ASSERT_SIZEOF(SectionHeaderRefHash,       36);
+    ASSERT_SIZEOF(SectionHeaderReconPlan,     36);
+    ASSERT_SIZEOF(ReconPlanItem,              12);
+    ASSERT_SIZEOF(GencompSecItem,             12);
+    ASSERT_SIZEOF(SectionEntFileFormat,       19);
+    ASSERT_SIZEOF(SectionEntFileFormatV14,    24);
+    ASSERT_SIZEOF(RAEntry,                    24);
+    ASSERT_SIZEOF(Iupac,                      9);    
     
     // verify endianity is as expected
     ASSINP0 (!strcmp (arch_get_endianity(), "little"), "Genozip is currently not supported on big endian architectures");
@@ -173,6 +202,20 @@ void arch_initialize (rom my_argv0)
     ASSINP0 (bittest.byte == 1, "unsupported bit order in a struct, please use gcc to compile (1)");
     ASSINP0 (bittest.bit_3.a == 1, "unsupported bit order in a struct, please use gcc to compile (2)");
 
+    // verify gcc / SYS-V bit packing, not Microsoft
+    // gcc packs to the smallest possible size (32bit in this case) but Windows ABI (inc. MingW) will start a new packing upon type change.
+    // in gcc sizeof() is 4, whereas in Windows it is 8 ("a" is padded). gcc option -mno-ms-bitfields fixes this for MingW.
+    struct { uint8_t a : 2; uint32_t b : 4; } ms_bitfields_test; 
+    ASSINP0 (sizeof (ms_bitfields_test) == 4, "expecting gcc-style bit packing");
+
+    // verify that malloced memory is always on 16B-boundary (assumed for 64B padding in buf_alloc_do)
+    void *ptrs[32];
+    for (int i=0; i < ARRAY_LEN(ptrs); i++) {
+        ptrs[i] = malloc (1999/*prime*/ / (i+1)); // don't free after allocation, to prevent reuse of same block
+        ASSERT ((uintptr_t)ptrs[i] % 16 == 0, "expecting malloced memory to be 16B-aligned, but ptr=%p", ptrs[i]);
+    }
+    for (int i=0; i < ARRAY_LEN(ptrs); i++) free (ptrs[i]);
+
     arch_set_locale();
 
 #ifdef _WIN32
@@ -191,7 +234,7 @@ void arch_initialize (rom my_argv0)
 
     // test for valgrind
     rom p = getenv ("LD_PRELOAD");
-    flag.is_valgrind = flag.debug_valgrind || (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
+    flag.is_valgrind |= (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
 
     // test for docker: note: this doesn't always work. need to improve. 
     flag.is_docker = file_exists ("/.dockerenv")/*new*/ || file_exists ("/.dockerinit")/*old*/;
@@ -214,36 +257,37 @@ rom arch_get_endianity (void)
 
 unsigned arch_get_num_cores (void)
 {
+    int num_cores = 0;
+    if (num_cores) return num_cores;
+
 #ifdef _WIN32
     char *env = getenv ("NUMBER_OF_PROCESSORS");
     if (!env) return DEFAULT_MAX_THREADS;
 
-    unsigned num_cores;
-    int ret = sscanf (env, "%u", &num_cores);
-    return ret==1 ? num_cores : DEFAULT_MAX_THREADS; 
+    int ret = sscanf (env, "%d", &num_cores);
+    if (ret != 1) num_cores = DEFAULT_MAX_THREADS;
 
 #elif defined __APPLE__
-    int num_cores;
     size_t len = sizeof(num_cores);
     if (sysctlbyname("hw.activecpu", &num_cores, &len, NULL, 0) &&  
         sysctlbyname("hw.ncpu", &num_cores, &len, NULL, 0))
-            return DEFAULT_MAX_THREADS; // if both failed
-
-    return (unsigned)num_cores;
+            num_cores = DEFAULT_MAX_THREADS; // if both failed
  
 #else // Linux etc
     // this works correctly with slurm too (get_nprocs doesn't account for slurm core allocation)
     cpu_set_t cpu_set_mask;
     extern int sched_getaffinity (__pid_t __pid, size_t __cpusetsize, cpu_set_t *__cpuset);
     sched_getaffinity(0, sizeof(cpu_set_t), &cpu_set_mask);
-    unsigned cpu_count = __sched_cpucount (sizeof (cpu_set_t), &cpu_set_mask);
+    num_cores = __sched_cpucount (sizeof (cpu_set_t), &cpu_set_mask);
     // TODO - sort out include files so we don't need this extern
 
     // if failed to get a number - fall back on good ol' get_nprocs
-    if (!cpu_count) cpu_count = get_nprocs();
-
-    return cpu_count;
+    if (!num_cores) num_cores = get_nprocs();
 #endif
+
+    if (num_cores <= 0) num_cores = DEFAULT_MAX_THREADS; // safety
+    
+    return (unsigned)num_cores; 
 }
 
 // physical RAM size in GB
@@ -454,11 +498,8 @@ rom arch_get_scheduler (void)
 
 rom arch_get_glibc (void)
 {
-#ifdef __linux__
-    return gnu_get_libc_version();
-#else
-    return "not_glibc";
-#endif
+    return ℓ𝒾𝓃𝓊𝓍(gnu_get_libc_version()) 
+           Xℓ𝒾𝓃𝓊𝓍("not_glibc");
 }
 
 // good summary here: https://stackoverflow.com/questions/1023306/finding-current-executables-path-without-proc-self-exe/1024937#1024937
@@ -588,10 +629,10 @@ static bool arch_is_exec_in_path (rom exec)
 bool wget_available (void)
 {   
     static thool installed = unknown;
-    if (installed == unknown)
-        // note: wget not used on Windows, bc I can't get it to output to stdout, and also earlier wget versions may be adding \r ... : https://stackoverflow.com/questions/8522983/wget-of-binary-file-piped-into-other-commands-on-windows-breaks-the-binary
-        installed = !flag.is_windows && arch_is_exec_in_path ("wget");
-
+    
+    // note: wget not used on Windows, bc I can't get it to output to stdout, and also earlier wget versions may be adding \r ... : https://stackoverflow.com/questions/8522983/wget-of-binary-file-piped-into-other-commands-on-windows-breaks-the-binary
+    X𝓌𝒾𝓃 (if (installed == unknown) installed = arch_is_exec_in_path ("wget");)
+        
     return installed;
 }
 
@@ -610,5 +651,68 @@ void *__gxx_personality_v0; // overcome "undefined reference to '__gxx_personali
 
 rom arch_str_error (void)
 {
-    return flag.is_windows ? str_win_error() : strerror (errno);    
+    return 𝓌𝒾𝓃(str_win_error()) 
+           X𝓌𝒾𝓃(strerror (errno));    
+}
+
+static size_t arch_get_l3_cache_size (void)
+{
+#ifdef __linux__
+    return sysconf (_SC_LEVEL3_CACHE_SIZE);
+
+#elif defined __APPLE__
+    uint64_t cache_size = 0; 
+    size_t size = sizeof(cache_size); 
+    
+    ASSERT (!sysctlbyname("hw.l3cachesize", &cache_size, &size, NULL, 0),
+            "sysctlbyname failed: %s", strerror(errno));
+    return cache_size; 
+
+#elif defined _WIN32
+    DWORD len = 0;
+
+    GetLogicalProcessorInformationEx (RelationCache, NULL, &len);
+
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *info = MALLOC (len);
+
+    ASSERT (GetLogicalProcessorInformationEx (RelationCache, info, &len),
+            "GetLogicalProcessorInformationEx failed: %s", str_win_error());
+
+    size_t largest_l3 = 0;
+
+    for (DWORD offset=0; offset < len; ) {
+        SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *p = (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)((uint8_t *)info + offset);
+
+        if (p->Relationship == RelationCache &&
+            p->Cache.Level == 3 &&
+            p->Cache.CacheSize > largest_l3)
+            largest_l3 = p->Cache.CacheSize;
+
+        offset += p->Size;
+    }
+
+    FREE (info);
+
+    return largest_l3;
+#endif
+}
+
+// flush CPU cache (most importantly, L3 cache) - ahead of timing algorithms for consistent timing
+void arch_flush_cpu_cache (void)
+{
+    flag.flush_cpu_cache = true;
+    
+    size_t l3_bytes = arch_get_l3_cache_size();
+    
+    // volatile prevents the compiler from eliminating the loop.
+    volatile uint8_t *flush_buffer = (volatile uint8_t *)MALLOC(l3_bytes);
+
+    // touch every cache line   
+    for (size_t i=0; i < l3_bytes; i += 64)
+        flush_buffer[i]++;
+
+    __sync_synchronize();
+    FREE (flush_buffer);
+
+    iprint0 ("CPU cache flush complete.\n");
 }

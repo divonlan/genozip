@@ -1153,7 +1153,7 @@ libdeflate_deflate_decompress(struct libdeflate_decompressor *d,
 }
 
 LIBDEFLATEAPI struct libdeflate_decompressor *
-libdeflate_alloc_decompressor_ex(VBlockP vb, const struct libdeflate_options *options, FUNCLINE)
+libdeflate_alloc_decompressor_ex(VBlockP vb, const struct libdeflate_options *options, Caller caller)
 {
 	struct libdeflate_decompressor *d;
 
@@ -1167,7 +1167,7 @@ libdeflate_alloc_decompressor_ex(VBlockP vb, const struct libdeflate_options *op
 	if (options->sizeof_options != sizeof(*options))
 		return NULL;
 
-	d = codec_alloc_do (vb, sizeof(*d), 1, NULL, func, code_line);
+	d = codec_alloc_do (vb, sizeof(*d), 1, NULL, caller);
 	if (d == NULL)
 		return NULL;
 	/*
@@ -1195,17 +1195,17 @@ libdeflate_alloc_decompressor_ex(VBlockP vb, const struct libdeflate_options *op
 }
 
 LIBDEFLATEAPI struct libdeflate_decompressor *
-libdeflate_alloc_decompressor(VBlockP vb, const char *func, unsigned code_line)
+libdeflate_alloc_decompressor(VBlockP vb, Caller caller)
 {
 	struct libdeflate_options defaults = {
 		.sizeof_options = sizeof(defaults)
 	};
-	return libdeflate_alloc_decompressor_ex(vb, &defaults, func, code_line);
+	return libdeflate_alloc_decompressor_ex(vb, &defaults, caller);
 }
 
 LIBDEFLATEAPI void
-libdeflate_free_decompressor(struct libdeflate_decompressor **d, FUNCLINE)
+libdeflate_free_decompressor(struct libdeflate_decompressor **d, Caller caller)
 {
-	codec_free_do ((*d)->vb, *d, func, code_line);
+	codec_free_do ((*d)->vb, *d, caller);
 	*d = NULL;
 }

@@ -29,7 +29,7 @@ extern rom ref_type_name(void);
 #define IS_REF_EXTERNAL   (flag.reference == REF_EXTERNAL)
 #define IS_REF_EXT_STORE  (flag.reference == REF_EXT_STORE)
 
-#define IS_REF_LOADED_ZIP (flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE)
+#define IS_REF_LOADED_ZIP ((flag.reference == REF_EXTERNAL || flag.reference == REF_EXT_STORE) && !flag.dont_load_ref_file)
 #define IS_REF_CHROM2REF  (flag.reference & REF_ZIP_CHROM2REF)
 
 #define IS_REF_STORED_PIZ (flag.reference == REF_STORED) // 2 bits set
@@ -120,11 +120,12 @@ typedef struct __attribute__((gcc_struct)) {
     // Other bits
 
     // OTHER BIT FLAGS: not accessed in every line in NORMAL seg/recon
+    uint64_t biopsy             : 1; // close to biopsy_line has frequently tested together
+    uint64_t biopsy_R1          : 1; // internal flag: when using --biopsy --pair: we are currently biopsying R1 (flag.biopsy is turned off)
     uint64_t is_windows         : 1; 
     uint64_t is_mac             : 1; 
     uint64_t is_linux           : 1; 
     uint64_t is_wsl             : 1; 
-    uint64_t is_lten            : 1; // set according to endianness  
     uint64_t is_sanitize_thread : 1; // build includes -fsanitize=thread 
     uint64_t is_valgrind        : 1; // running under valgrind
     uint64_t is_docker          : 1; // running in a docker container
@@ -154,11 +155,13 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t secure_DP          : 1; 
     uint64_t not_paired         : 1;
     uint64_t default_make_ref   : 1;
-
+    uint64_t flush_cpu_cache    : 1;
+    
     // File modifying options
     enum { NO_OPTIMIZE, FULL_OPTIMIZE, OPTIMIZE_POS_LIST, OPTIMIZE_NEG_LIST } optimize : 2;
     uint64_t add_line_numbers   : 1; 
-    uint64_t add_seq            : 1;        
+    uint64_t add_seq            : 1;    
+    uint64_t anonymize          : 1;
     uint64_t truncate           : 1; // allow truncated file - compress only available full lines. note: we don't consider this option data modifying as its used for debugging - digest is calculated only after truncation
     uint64_t unlock             : 1; // unlock genozip file locked with --sendto
     
@@ -240,7 +243,6 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t show_gz_uncomp     : 1;
     uint64_t show_threads       : 1;
     uint64_t show_uncompress    : 1;
-    uint64_t biopsy             : 1;
     uint64_t skip_segconf       : 1;
     uint64_t show_data_type     : 1;
     uint64_t show_tasks         : 1;
@@ -259,7 +261,6 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t debug_upgrade      : 1;
     uint64_t debug_expiration   : 1;
     uint64_t debug_debug        : 1; // a flag with no functionality - used for ad-hoc debugging  
-    uint64_t debug_valgrind     : 1;
     uint64_t debug_tar          : 1;
     uint64_t debug_bai          : 1;
     uint64_t show_compress      : 1;
@@ -427,7 +428,7 @@ extern Flags flag;
 
 #define flag_has_head   (flag.lines_last != NO_LINE)  // ZIP: --head PIZ: --head or --lines is used
 #define flag_has_tail   (flag.lines_last != NO_LINE || flag.tail)  // PIZ: --tail or --lines is used    
-#define zip_is_biopsy   __builtin_expect (flag.biopsy || flag_has_biopsy_line, false) // ZIP: either --biopsy or --biopsy-line is used
+#define zip_is_biopsy   __builtin_expect (flag.biopsy || flag_has_biopsy_line, false) // ZIP: either --biopsy or --biopsy-line is used (but NOT flag.biopsy_R1)
 
 #define deep_or_bamass (flag.deep ? "deep" : "bamass")
 

@@ -186,7 +186,7 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
         }
 
         dyn_int_append (vb, ctx_num1, num1, 0);
-        if (ctx->flags.store == STORE_INT) ctx_set_last_value (vb, ctx, num1);
+        if (ctx->flags.store == STORE_INT) ctx_set_last_value_maybe_in_sample (vb, ctx, num1); // note: might be in FORMAT, e.g.: vcf_gwas_seg_FORMAT_ID
 
         // case: not expecting leading zeros - if there are any, they will be part of alpha
         if (IDT(ALPHA_INT) || IDT(ALPHA_INT_DOT_INT)) {

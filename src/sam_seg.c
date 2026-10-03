@@ -247,9 +247,9 @@ void sam_zip_after_compute (VBlockP vb_)
         gencomp_sam_prim_vb_has_been_ingested (VB);
 
     // increment stats accumulators
-    z_file->sam_num_aligned_perfect += vb->num_aligned_perfect;
-    z_file->sam_num_aligned         += vb->num_aligned;
-    z_file->sam_num_seq_by_aln      += vb->num_seq_by_aln;
+    z_file->sam_num_genozip_aln_perfect += vb->num_aligned_perfect;
+    z_file->sam_num_genozip_aln         += vb->num_aligned;
+    z_file->sam_num_by_sam_aln      += vb->num_seq_by_aln;
     z_file->sam_num_verbatim        += vb->num_verbatim;
     z_file->sam_num_by_prim         += vb->num_by_prim;
     z_file->sam_num_by_saggy        += vb->num_by_saggy;
@@ -767,6 +767,9 @@ void sam_segconf_finalize (VBlockP vb_)
         sam_segconf_set_by_MP();
     }
 
+    WARN_IF (segconf.sam_bisulfite && IS_REF_INTERNAL, // due to bug 648: see sam_seg_init_bisulfite
+             _TIP "This file was generated with %s. Using --reference can improve compression.", segconf_sam_mapper_name());
+
     // SA:Zs analyzed sam_segconf_SA_cigar_cb found no evidence of no-abbrivation: since 
     if (segconf_has(OPTION_SA_Z) &&              // we analyzed some SA_CIGARs in sam_segconf_SA_cigar_cb
         segconf.SA_CIGAR_abbreviated == unknown) // unknown means that sam_segconf_set_by_MP determined that SA_CIGARs might be abbreivated and sam_segconf_SA_cigar_cb found no evidence that they are not
@@ -906,7 +909,7 @@ void sam_segconf_finalize (VBlockP vb_)
         flag.aligner_available = false;
 
     // with REF_EXTERNAL and unaligned data, we don't know which chroms are seen (bc unlike REF_EXT_STORE, we don't use is_set), so
-    // we just copy all reference contigs. this are not needed for decompression, just for --coverage/--idxstats
+    // we just copy all reference contigs.
     if (z_file->num_txts_so_far == 1 && (flag.aligner_available || !sam_hdr_contigs) && IS_REF_LOADED_ZIP)
         ctx_populate_zf_ctx_from_contigs (ref_get_ctgs());
 
@@ -990,7 +993,7 @@ void sam_seg_finalize (VBlockP vb_)
 
     if (vb->lines.len) {
         CTX(SAM_SQBITMAP)->local_always = true; // We always include the SQBITMAP local section, except if no lines
-        bits_truncate (&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to MAPPING_PERFECT
+        bits_resize (&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to MAPPING_PERFECT
     }
 
     bool codec_requires_seq = false; // does any qual-like field use a codec that requires SEQ
@@ -1201,10 +1204,10 @@ void sam_seg_idx_aux (VBlockSAMP vb)
         #define AUXval(c1,c2,c3) (((uint32_t)(c1)) << 16 | ((uint32_t)(c2)) << 8 | ((uint32_t)(c3)))
 
         #define TEST_AUX(name, c1, c2, c3) \
-                case AUXval(c1,c2,c3): vb->idx_##name = f; break;
+                case AUXval(c1,c2,c3): vb->idx.name = f; break;
 
         #define TEST_AUX_B(name, c1, c2, c3, array_subtype) \
-                case AUXval(c1,c2,c3): if (vb->auxs[f][is_bam ? 3 : 5] == (array_subtype)) vb->idx_##name = f; break;
+                case AUXval(c1,c2,c3): if (vb->auxs[f][is_bam ? 3 : 5] == (array_subtype)) vb->idx.name = f; break;
 
         switch (AUXval(c1, c2, c3)) {
             TEST_AUX(NM_i, 'N', 'M', 'i');
@@ -1246,7 +1249,7 @@ void sam_seg_idx_aux (VBlockSAMP vb)
             TEST_AUX(xq_i, 'X', 'Q', 'i');
             TEST_AUX(cm_i, 'c', 'm', 'i');
 
-            // indices of either GX:Z or gx:Z go into idx_GX_Z and same with gn:Z or GN:Z
+            // indices of either GX:Z or gx:Z go into idx.GX_Z and same with gn:Z or GN:Z
             TEST_AUX(GX_Z, 'G', 'X', 'Z');
             TEST_AUX(GX_Z, 'g', 'x', 'Z');
             TEST_AUX(GN_Z, 'G', 'N', 'Z');
@@ -1388,7 +1391,7 @@ void sam_seg_aux_all (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
             sam_get_one_aux (vb, idx, &tag, &sam_type, &array_subtype, pSTRa (value));
 
         if (sam_type == 'i') { // SAM only
-            if (idx == vb->idx_NM_i) // we already converted NM to integer, no need to do it again
+            if (idx == vb->idx.NM_i) // we already converted NM to integer, no need to do it again
                 numeric.i = dl->NM;
             else
                 ASSSEG (str_get_int (STRa (value), &numeric.i), "%s: Expecting integer value for auxiliary field %c%c but found \"%.*s\"",
@@ -1765,13 +1768,13 @@ void sam_seg_init_bisulfite (VBlockSAMP vb, ZipDataLineSAM𐤐 dl)
 
     // the converted reference to which this read was mapped (C->T conversion or G->A conversion)
     // note: we calculate it always to avoid needless adding entropy in the snip
-    vb->bisulfite_strand =  !segconf.sam_bisulfite    ? 0 
+    vb->bisulfite_strand =    !segconf.sam_bisulfite  ? 0 
                             : IS_REF_INTERNAL         ? 0  // bug 648
-                            : MP(BISMARK)   && has(XG_Z) ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
-                            : MP(DRAGEN)    && has(XG_Z) ? sam_seg_get_aux_A (vb, vb->idx_XG_Z, IS_BAM_ZIP)
-                            : MP(BSSEEKER2) && has(XO_Z) ? "CG"[sam_seg_get_aux_A (vb, vb->idx_XO_Z, IS_BAM_ZIP) == '-']
-                            : MP(BSBOLT)    && has(YS_Z) ? "CG"[sam_seg_get_aux_A (vb, vb->idx_YS_Z, IS_BAM_ZIP) == 'C']
-                            : MP(GEM3)      && has(XB_A) ? sam_seg_get_aux_A (vb, vb->idx_XB_A, IS_BAM_ZIP)
+                            : MP(BISMARK)   && has(XG_Z) ? sam_seg_get_aux_A (vb, vb->idx.XG_Z, IS_BAM_ZIP)
+                            : MP(DRAGEN)    && has(XG_Z) ? sam_seg_get_aux_A (vb, vb->idx.XG_Z, IS_BAM_ZIP)
+                            : MP(BSSEEKER2) && has(XO_Z) ? "CG"[sam_seg_get_aux_A (vb, vb->idx.XO_Z, IS_BAM_ZIP) == '-']
+                            : MP(BSBOLT)    && has(YS_Z) ? "CG"[sam_seg_get_aux_A (vb, vb->idx.YS_Z, IS_BAM_ZIP) == 'C']
+                            : MP(GEM3)      && has(XB_A) ? sam_seg_get_aux_A (vb, vb->idx.XB_A, IS_BAM_ZIP)
                             :                           0; // including MM/ML tags
 
     // enter the converted bases into the reference, in case of REF_INTERNAL 
@@ -1867,11 +1870,11 @@ rom sam_seg_txt_line (VBlockP vb_, rom next_line, uint32_t remaining_txt_len, bo
     SAFE_NUL(&vb->last_cigar[fld_lens[CIGAR]]); // nul-terminate CIGAR string
 
     if (has(NM_i))
-        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx_NM_i, &dl->NM, false, MIN_NM_i, MAX_NM_i, HARD_FAIL) + 1; // +1 for \t or \n
+        dl->NM_len = sam_seg_get_aux_int (vb, vb->idx.NM_i, &dl->NM, false, MIN_NM_i, MAX_NM_i, HARD_FAIL) + 1; // +1 for \t or \n
 
     // set dl->AS needed by sam_seg_prim_add_sag (in PRIM) and several fields that delta against it
     if (has(AS_i))
-        sam_seg_get_aux_int (vb, vb->idx_AS_i, &dl->AS, false, MIN_AS_i, MAX_AS_i, HARD_FAIL);
+        sam_seg_get_aux_int (vb, vb->idx.AS_i, &dl->AS, false, MIN_AS_i, MAX_AS_i, HARD_FAIL);
 
     if (!IS_MAIN(vb)) {
         sam_seg_sag_stuff (vb, dl, STRfld (CIGAR), flds[SEQ], false);

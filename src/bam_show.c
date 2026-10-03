@@ -104,9 +104,10 @@ rom bam_show_line (VBlockSAMP vb, rom alignment, uint32_t remaining_txt_len)
 // similar as bam_show_line, but for ASSSEG
 rom bam_assseg_line (VBlockP vb)
 {
-    static Buffer show_buf = { .name = "bam_show_buf" };
+    DO_ONCE_OR_STALL { // if multiple concurrent threads - one prints and the other threads stall
+        static Buffer show_buf;
+        show_buf.nameר = ר("bam_show_buf");
 
-    DO_ONCE { // if multiple concurrent threads - one prints and the other threads stall
         if (vb->line_start >= Ltxt) return "Invalid line_start";
 
         rom alignment = Btxt (vb->line_start);
@@ -165,9 +166,5 @@ rom bam_assseg_line (VBlockP vb)
             bam_show_one_aux (auxs[i], aux_lens[i]);
 
         return B1STc(show_buf);
-    }
-    else {
-        stall(); 
-        return "";
     }
 }

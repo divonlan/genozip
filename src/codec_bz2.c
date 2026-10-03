@@ -6,13 +6,13 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited
 //   and subject to penalties specified in the license.
 
-#include "bzlib/bzlib.h"
 #include "compressor.h"
 #include "vblock.h"
+#include "bzlib/bzlib.h"
 
-static void *codec_bz2_alloc (void *vb_, int items, int size, FUNCLINE)
+static void *codec_bz2_alloc (void *vb_, int items, int size, Caller caller)
 {
-    return codec_alloc_do ((VBlockP )vb_, (uint64_t)items * (uint64_t)size, 1, NULL, func, code_line); // all bzlib buffers are constant in size between subsequent compressions
+    return codec_alloc_do ((VBlockP )vb_, (uint64_t)items * (uint64_t)size, 1, NULL, caller); // all bzlib buffers are constant in size between subsequent compressions
 }
 
 static rom BZ2_errstr (int err)

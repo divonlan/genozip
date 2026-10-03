@@ -83,7 +83,7 @@ static StrText comp_name_ex (CompIType comp_i, SectionType st)
 StrText vb_name (VBlockP vb)
 {
     StrText s;
-    if (vb && vb->pool == POOL_BGZF)
+    if (vb && vb->id.pool == POOL_BGZF)
         snprintf (s.s, sizeof (s.s), "BGZF/%u", vb->vblock_i);
     else if (vb && (IS_TASK(COMP_DICTS) || IS_TASK(READ_DICTS) || IS_TASK(ASSIGN_DICT_CODECS)))
         snprintf (s.s, sizeof (s.s), "DICT/%u", vb->vblock_i);
@@ -107,7 +107,7 @@ StrText line_name (VBlockP vb)
 rom lt_name (LocalType lt)
 {
     if (lt >= 0 && lt < NUM_LOCAL_TYPES) 
-        return lt_desc[lt].name;
+        return unר(lt_desc[lt].nameר);
     else
         return "INVALID_LT";
 }
@@ -384,7 +384,7 @@ void sections_show_header (SectionHeaderUnionP header,
                                      "%screated=\"%.*s\"\n",
                   SEC_TAB, STRver_(h->genozip_version, h->genozip_minor_ver).s, 
                   cond_str(VER2(15,81), " ref_ver=", STRver_(h->ref_genozip_ver, BGEN16(h->ref_genozip_minor_ver)).s),
-                  h->is_modified/*15.0.60*/, lic_type_name (h->lic_type)/*15.0.59*/, 
+                  h->is_modified/*15.0.60*/, lic_name (h->lic_type)/*15.0.59*/, 
                   h->private_file, encryption_name (h->encryption_type), dt_name (dt), 
                   BGEN64 (h->recon_size), BGEN64 (h->num_lines_bound), BGEN32 (h->num_sections), h->num_txt_files,
                   cond_int(!VER2(15,65), "vb_size=", BGEN16(h->old_vb_size)),
@@ -615,7 +615,7 @@ noreturn void genocat_show_headers (rom z_filename)
 
         for (int sec_i=0; zfile_advance_to_next_header (&sec.offset, &gap); sec_i++) {
             if (gap || accumulated_gap) 
-                iprintf ("ERROR: unexpected of %"PRIu64" bytes before next section\n", gap + accumulated_gap);
+                iprintf ("❌ unexpected of %"PRIu64" bytes before next section\n", gap + accumulated_gap);
             
             header = zfile_read_section_header (evb, &sec, SEC_NONE).genozip_header; 
             if (header.section_type < 0 || header.section_type >= NUM_SEC_TYPES) { // not true section - magic matches by chance
@@ -645,13 +645,13 @@ noreturn void genocat_show_headers (rom z_filename)
         }
 
         if (flag.show_headers) {
-            if (gap) iprintf ("ERROR: unexpected gap of %"PRIu64" bytes before Footer\n", gap);
+            if (gap) iprintf ("❌ unexpected gap of %"PRIu64" bytes before Footer\n", gap);
 
             if ((sec.offset = zfile_read_genozip_header_get_offset (true)))
                 iprintf ("R %9"PRIu64" FOOTER              genozip_header_offset=%"PRIu64"\n", 
                         z_file->disk_size - sizeof (SectionFooterGenozipHeader), sec.offset);
             else
-                iprint0 ("ERROR: no valid Footer\n");
+                iprint0 ("❌ no valid Footer\n");
         }
     }
 

@@ -53,7 +53,7 @@ void sam_segconf_finalize_optimizations (void)
     segconf_set_optimize (OPTION_ZM_B_s, segconf_has(OPTION_ZM_B_s) && ((MP(TMAP/*mapped file*/) || MP(TORRENT_BC/*unmapped file*/))));
 
     // set float optimizations (note: all new contexts discovered by segconf were already added to z_file->contexts)
-    for (Did did_i=SAM_FIRST_OPTIONAL_DID; did_i < z_file->ca.num_contexts; did_i++) {
+    for (Did did_i=SAM_FIRST_OPTIONAL_DID; did_i < z_file->ca._num_contexts; did_i++) {
         #define ID(i,c) (ZCTX(did_i)->dict_id.id[i] == (c))
         if (segconf_has(did_i) && ((ID(2,':') && ID(3,'f') && ID(4,'\0')) || 
                                    (ID(2,':') && ID(3,'B') && ID(4,':') && ID(5,'f') && ID(6,'\0'))))
@@ -143,7 +143,7 @@ static char *sam_optimize_TMAP_ZM (VBlockSAMP vb, STRp(in), char *out)
     char *save_out = out;
     out = mempcpy (out, in, 6);  // "ZM:B:s"
 
-    str_split_ints (in+7, in_len-7, 0, ',', elem, false);
+    str_split_ints (in+7, in_len-7, 0, ',', elem, false); // values can be negative
 
     for (uint32_t i=0; i < n_elems; i++) {
         *out++ = ',';
@@ -184,7 +184,15 @@ rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     uint32_t *aux_lens = &fld_lens[AUX];
 
     buf_alloc (vb, &vb->optimized_line, 0, (next_line - line_start) * 2 + 1000, char, 0, "optimized_line"); // x2+1000 is plenty for types of modifications we have so far.
-    char *next = mempcpy (B1STc(vb->optimized_line), line_start, flds[QUAL] - line_start); // initialize to exact copy of fields 1-10
+    char *next = mempcpy (B1STc(vb->optimized_line), line_start, flds[SEQ] - line_start); // initialize to exact copy of fields 1-9
+
+    // SEQ
+    if (flag.anonymize)  
+        next = memset (next, 'A', fld_lens[SEQ]) + fld_lens[SEQ];
+    else
+        next = mempcpy (next, flds[SEQ], fld_lens[SEQ]); // unmodified
+    
+    *next++ = '\t';
 
     next = segconf_optimize (SAM_QUAL) && !(TXT_DT(SAM) && str_issame_(STRfld(QUAL), "*", 1))
            ? optimize_phred_quality_string (STRfld(QUAL), next, false, false) 
@@ -258,7 +266,16 @@ rom bam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)
     memcpy (B1STc(vb->optimized_line), line_start, after - line_start); // initialize to exact copy
     
     uint32_t l_seq = LTEN32 (aln->l_seq);
-    rom qual = aln->read_name + aln->l_read_name + LTEN16 (aln->n_cigar_op) * sizeof(uint32_t) + (l_seq+1)/2;
+
+    rom cigar = aln->read_name + aln->l_read_name; 
+    rom seq   = cigar + (LTEN16 (aln->n_cigar_op) * sizeof(BamCigarOp));
+    rom qual  = seq + (l_seq+1)/2;
+
+    if (flag.anonymize) {
+        memset (Bc(vb->optimized_line, seq - line_start), 0x11, qual - seq); // AA (two nibbles)
+        if (l_seq % 2) // zero final nibble if needed
+            *Bc(vb->optimized_line, qual - line_start - 1) = 0x10; // final SEQ nibble A, followed by an unused 0 nibble
+    }
 
     if (segconf_optimize (SAM_QUAL) && l_seq && (uint8_t)qual[0] != 0xff) // in case SEQ is present but QUAL is omitted, all qual is 0xff
         optimize_phred_quality_string (qual, l_seq, Bc(vb->optimized_line, qual - line_start), true, false); 

@@ -86,7 +86,7 @@ static inline void seg_add_to_local_blob (VBlockP vb, ContextP ctx, STRp(blob), 
 static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, const void *data, uint32_t data_len, Lookup lookup_type, unsigned add_bytes)
     { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, lookup_type, false, add_bytes); }
 
-extern void seg_integer_fixed (VBlockP vb, ContextP ctx, void *number, bool with_lookup, unsigned add_bytes);
+extern void seg_integer_fixed (VBlockP vb, ContextP ctx, void *restrict number, bool with_lookup, unsigned add_bytes);
 
 extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, unsigned fixed_len, uint32_t add_bytes);
 
@@ -201,7 +201,7 @@ static inline void seg_set_last_txt (VBlockP vb, ContextP ctx, STRp(value))
     ctx->last_txt = (TxtWord){ .index = IN_RANGE(value, B1STtxt, BAFTtxt) ? BNUMtxt (value) : INVALID_LAST_TXT_INDEX,
                                .len   = value_len };
 
-    ctx_set_encountered (vb, ctx);
+    ctx_set_encountered_maybe_in_sample (vb, ctx);
 }
 
 bool seg_set_last_txt_store_value (VBlockP vb, ContextP ctx, STRp(value), StoreType store_type);

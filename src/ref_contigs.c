@@ -13,9 +13,7 @@
 #include "chrom.h"
 #include "sorter.h"
 
-#ifdef __linux__ 
-extern int strncasecmp (rom s1, rom s2, size_t n); // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
-#endif
+ℓ𝒾𝓃𝓊𝓍 (extern int strncasecmp (rom s1, rom s2, size_t n);) // defined in <strings.h>, but file name conflicts with "strings.h" (to do: sort this out in the Makefile)
 
 static void BGEN_ref_contigs_not_compacted (BufferP contigs_buf)
 {
@@ -220,7 +218,10 @@ void ref_contigs_compress_stored (void)
         // don't store min_pos/max_pos/gpos (better compression) is this contig was not used explicitly (note: aligner doesn't use contigs, but GPOS)
         if (chrom == WORD_INDEX_NONE || !chrom_counts[chrom] || 
             ((IS_REF_INTERNAL || IS_REF_EXT_STORE) && !r->is_set.nbits)) continue; 
-
+        
+        ASSERT (r->first_pos >= delta, 
+                "expecting r->first_pos=%"PRIu64" >= delta=%"PRIu64, r->first_pos, delta);
+        
         cn[chrom].gpos      = r->gpos - delta;
         cn[chrom].min_pos   = r->first_pos - delta;
         cn[chrom].max_pos   = r->last_pos;
@@ -471,7 +472,7 @@ void ref_contigs_verify_same_contig_as_ref (rom cram_filename, STRp(chrom_name),
         PosType64 ref_LN = B(Range, gref.ranges, ref_contig_index)->last_pos; // get from ranges because Contig.LN=0 - we don't populate it at reference creation
     
         // case: file header specifies length - it must be the same as the reference
-        ASSINP (hdr_LN == ref_LN, "Error: wrong reference file - different contig length: in %s \"%.*s\" has LN=%"PRIu64", but in %s it has LN=%"PRId64, 
+        ASSINP (hdr_LN == ref_LN, _ERR"wrong reference file - different contig length: in %s \"%.*s\" has LN=%"PRIu64", but in %s it has LN=%"PRId64, 
                 cram_filename, STRf(chrom_name), hdr_LN, gref.filename, ref_LN);
     }
 }

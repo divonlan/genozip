@@ -128,7 +128,7 @@ Software\Classes\genozip\DefaultIcon
 [Commands]
 Execute Application
 explorer
-http://genozip.com
+https://www.genozip.com/compression
 
 Execute Application
 explorer

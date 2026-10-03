@@ -128,7 +128,7 @@ static void foreach_textual_SQ_line (rom txt_header, // nul-terminated string if
 
                 PosType64 last_pos = (PosType64)strtoull (&pos_str[3], NULL, 10);
 
-                ASSINP (last_pos <= MAX_POS_SAM, "Error: @SQ record in header contains LN:%"PRId64" which is beyond the maximum permitted by the SAM spec of %"PRId64,
+                ASSINP (last_pos <= MAX_POS_SAM, _ERR"@SQ record in header contains LN:%"PRId64" which is beyond the maximum permitted by the SAM spec of %"PRId64,
                         last_pos, MAX_POS_SAM);
 
                 callback (&chrom_name[3], chrom_name_len, last_pos, callback_param);
@@ -287,7 +287,7 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
     SAFE_NUL (after);
 
     STR0(fq);
-    sam_deep_tip.name = "sam_deep_tip";
+    sam_deep_tip.nameר = ר("sam_deep_tip");
 
     while (hdr < after && (((fq = strstr (hdr, ".fq.gz")) && (fq_len=6)) || ((fq = strstr (hdr, ".fastq.gz")) && (fq_len=9)))) {
         // find start of word
@@ -733,7 +733,7 @@ static void sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType64 last_
     *(uint32_t *)BAFTc (*txtheader_buf) = LTEN32 (ref_contig_name_len); 
     txtheader_buf->len += sizeof (uint32_t);
 
-    ASSINP (ref_contig_name_len <= INT32_MAX, "Error: cannot convert to BAM because l_name=%u exceeds BAM format maximum of %u", ref_contig_name_len, INT32_MAX);
+    ASSINP (ref_contig_name_len <= INT32_MAX, _ERR"cannot convert to BAM because l_name=%u exceeds BAM format maximum of %u", ref_contig_name_len, INT32_MAX);
 
     // name
     buf_add (txtheader_buf, ref_contig_name, ref_contig_name_len-1);                  
@@ -744,7 +744,7 @@ static void sam_header_sam2bam_ref_info (STRp (ref_contig_name), PosType64 last_
     *(uint32_t *)BAFTc (*txtheader_buf) = LTEN32 (last_pos32); 
     txtheader_buf->len += sizeof (uint32_t);
 
-    ASSINP (last_pos <= INT32_MAX, "Error: cannot convert to BAM because contig %.*s has length=%"PRId64" that exceeds BAM format maximum of %u", 
+    ASSINP (last_pos <= INT32_MAX, _ERR"cannot convert to BAM because contig %.*s has length=%"PRId64" that exceeds BAM format maximum of %u", 
             ref_contig_name_len-1, ref_contig_name, last_pos, INT32_MAX);
 }
 

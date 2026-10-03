@@ -76,7 +76,7 @@ void sam_reset_line (VBlockP vb_)
     }
 
     else { // ZIP
-        memset (&vb->first_sam_zip_vb_ff_per_line, 0xff, (rom)&vb->after_sam_vb_ff_per_line - (rom)&vb->first_sam_zip_vb_ff_per_line);
+        memset (&vb->idx, 0xff, sizeof (vb->idx)); // set idx's to -1
         
         vb->md_M_is_ref.nbits = vb->md_M_is_ref.nwords = 0;
         vb->unconverted_bitmap.nbits = vb->unconverted_bitmap.nwords = 0;

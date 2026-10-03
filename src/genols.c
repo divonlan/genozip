@@ -28,7 +28,7 @@ void genols (rom z_filename, bool finalize, rom subdir, bool recursive)
         }
 
         char *last_c = (char *)&z_filename[strlen(z_filename)-1];
-        if (*last_c == '/' ωιη(|| *last_c == '\\')) {
+        if (*last_c == '/' 𝓌𝒾𝓃(|| *last_c == '\\')) {
             *last_c = 0; // remove trailing '/' or '\'
             genols_list_dir (z_filename);
             return;

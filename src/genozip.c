@@ -56,7 +56,7 @@ CommandType primary_command = NO_COMMAND;
 
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 
-static Buffer input_files_buf = { .name = "input_files" };
+static Buffer input_files_buf = {};
 bool input_files_has_FASTQ; // at least one of the input files is a FASTQ
 
 #define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
@@ -256,7 +256,7 @@ static void main_genounzip (rom z_filename, rom txt_filename, int z_file_i, bool
     // note: must be before file_close, bc is_dropped_buf are Buffers embedded in is in z_file->vb_info, 
     // but in the wvb buffer list, so they must be destroyed first
     if (wvb && wvb->in_use) {
-        profiler_add (wvb);
+        𝓅𝓇ℴ𝒻𝒾𝓁ℯ (profiler_add (wvb);)
         vb_destroy_vb (&wvb);
     } 
 
@@ -331,7 +331,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
                                       flag.debug_aligner ? "--debug-aligner"  : SKIP_ARG,
                                       flag.show_threads  ? "--show-threads"   : SKIP_ARG,
                                       flag.debug_threads ? "--debug-threads"  : SKIP_ARG,
-                                      flag.debug_valgrind? "--debug-valgrind" : SKIP_ARG,
+                                      flag.is_valgrind   ? "--debug-valgrind" : SKIP_ARG,
                                       flag.debug_upgrade ? "--debug-upgrade"  : SKIP_ARG,
                                       flag.echo          ? "--echo"           : SKIP_ARG,
                                       flag.verify_codec  ? "--verify-codec"   : SKIP_ARG,
@@ -383,7 +383,7 @@ static void main_test_after_genozip (rom z_filename, DataType z_dt, bool is_last
         if (flag.show_aligner)  argv[argc++] = "--show-aligner";
         if (flag.show_threads)  argv[argc++] = "--show-threads";
         if (flag.debug_threads) argv[argc++] = "--debug-threads";
-        if (flag.debug_valgrind)argv[argc++] = "--debug-valgrind";
+        if (flag.is_valgrind)   argv[argc++] = "--debug-valgrind";
         if (flag.debug_upgrade) argv[argc++] = "--debug-upgrade";
         if (flag.echo)          argv[argc++] = "--echo";
         if (flag.verify_codec)  argv[argc++] = "--verify-codec";
@@ -451,13 +451,14 @@ static void main_genozip (rom txt_filename,
     // get output FILE
     if (!z_file) { // skip if we're the second file onwards in bind mode, or pair_2 in unbound list of pairs - nothing to do        
         
-        rom z_filename = flag.out_filename                 ? filename_z_by_flag() // given with --output
+        rom z_filename = flag.biopsy_R1                    ? BIOPSY_Z_FILE_NAME
+                       : flag.out_filename                 ? filename_z_by_flag() // given with --output
                        : (flag.deep && !flag.out_filename) ? filename_z_deep (txt_file->name) // SAM/BAM file in --deep
                        : (flag.pair && !flag.out_filename) ? filename_z_pair (txt_filename, next_txt_filename, false) // first file in a FASTQ pair
                        :                                     filename_z_normal (txt_file->name, txt_file->data_type, txt_file->type);
 
         z_file = file_open_z_write (z_filename, flag.pair ? WRITEREAD : WRITE, txt_file->data_type, txt_file->src_codec);
-        FREE(z_filename); // file_open_z copies the name
+        if (!flag.biopsy_R1) FREE(z_filename); // file_open_z copies the name
 
         license_eval_notice();
     }
@@ -514,7 +515,8 @@ static void main_genozip (rom txt_filename,
     if (remove_txt_file) {
         
         // add file to remove_list, don't actually remove it yet
-        static Buffer remove_list = { .name = "remove_list" };
+        static Buffer remove_list;
+        remove_list.nameר = ר("remove_list");
         buf_append_string (evb, &remove_list, txt_filename);
         remove_list.len++;   // include the \0 separator added by buf_append_string
         remove_list.count++; // count files
@@ -579,6 +581,8 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
         return; // no files
     }
 
+    input_files_buf.nameר = ר("input_files");
+
     // add names from command line
     buf_append (evb, input_files_buf, char *, filenames, num_files, NULL);
 
@@ -592,7 +596,7 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
             for (int i=0; i < n_lines; i++)
                 lines[i] += 2;
 
-        buf_append (evb, input_files_buf, char *, lines, n_lines, NULL);
+        buf_append (evb, input_files_buf, char *, lines, n_lines, NULL); // pointers into "data" buffer defined in file_split_lines
     }
 
     // expand directories if --subdirs 
@@ -760,7 +764,7 @@ static void main_no_files (int argc)
 }
 
 int main (int argc, char *argv[])
-{     
+{
     flag.test_i = getenv (GENOZIP_TEST);
 
     if (flag.test_i && !flag.test_i[0]) flag.test_i = NULL; // empty GENOZIP_TEST is the same as no GENOZIP_TEST
@@ -768,6 +772,8 @@ int main (int argc, char *argv[])
     flag.debug_or_test = flag.debug || flag.test_i;
     error_initialize (argc, argv);
     buf_initialize(); 
+    sections_initialize();
+    
     set_exe_type (argc, argv);
 
     // When debugging with Visual Studio Code, its debugger wrapper adds 3 args: "2>CON", "1>CON", "<CON". We remove them.
@@ -782,7 +788,7 @@ int main (int argc, char *argv[])
     random_access_initialize();
     codec_initialize();
     dt_initialize();
-
+    
     flags_init_from_command_line (argc, argv); // also sets command and hence IS_ZIP, IS_PIZ etc
 
     // --make-reference might be called by genocat or genounzip from ref_fasta_to_ref - we treat it as genozip
@@ -802,7 +808,7 @@ int main (int argc, char *argv[])
         case GENERATE_IL1M : generate_il1m();         return 0;
         default            : break;
     }
-
+    
     // genozip with no input filename, no output filename, and no input redirection 
     // note: in docker stdin is a pipe even if going to a terminal. so we show the help even if
     // coming from a pipe. the user must use "-" to redirect from stdin

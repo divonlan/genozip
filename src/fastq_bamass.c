@@ -254,7 +254,7 @@ static void bamass_generate_bamass_ents (VBlockP vb_)
 
         vb->scratch.len = 0;
         vb_bamass_cigar.len32 = 0;
-        vb_bamass_cigar.name = "bamass_cigar";
+        vb_bamass_cigar.nameר = ר("bamass_cigar");
         
         BAMASS_INC_STATS(BA_TOTAL);
 
@@ -516,7 +516,7 @@ static void bamass_link_entries (VBIType vb_i)
         uint32_t hash     = ent->vb_qname_hash & mask; 
         uint32_t new_head = ent - first_ent;
         uint32_t old_head = heads[hash]; // modified by each failed called to __atomic_compare_exchange_n until we successfully assign the new head
-        while (!__atomic_compare_exchange_n (&heads[hash], &old_head, new_head, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {};
+        while (!cas_strong_relaxed (heads[hash], old_head, new_head)) {};
 
         // we overwrite the 10 LSb of qname_hash: 2 bits for flags, and 8 for z_aln_hi ; the 54 MSb of qname_hash remain intact 
         ent->z_is_forward   = ent->vb_is_forward;
@@ -681,7 +681,7 @@ void fastq_bamass_seg_initialize (VBlockFASTQP vb)
 
 void fastq_bamass_seg_finalize (VBlockFASTQP vb)
 {
-    bits_truncate (&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to perfect mathcing of reference
+    bits_resize (&CTX(SAM_SQBITMAP)->local, CTX(SAM_SQBITMAP)->next_local); // remove unused bits due to perfect matching of reference
 }
 
 void fastq_bamass_zip_comp_cb (VBlockFASTQP vb, ContextP ctx, SectionType st, uint32_t comp_len)
@@ -1014,7 +1014,7 @@ MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐 dl, STRp
 
     buf_alloc (vb, &nonref_ctx->local, seq_len + 3, 0, uint8_t, CTX_GROWTH, C_LOCAL); 
 
-    bitmap_ctx->local_num_words++;
+    bitmap_ctx->v_local_n_words++;
 
     // get reference sequence
     ASSERTNOTINUSE (vb->scratch);
@@ -1109,7 +1109,8 @@ MappingType fastq_bamass_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐 dl, STRp
 
 void fastq_bamass_seg_CIGAR (VBlockFASTQP vb)
 {
-    START_TIMER
+    START_TIMER;
+    
     decl_ctx (FASTQ_CIGAR);
 
     cigar_remove_flanking_0_ops (&vb_bamass_cigar);
@@ -1220,11 +1221,9 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_SEQ_by_bamass)
     // set vb_bamass_cigar, vb->seq_len, vb->ref_consumed
     fastq_bamass_recon_cigar (vb);
 
-    if (vb->R1_vb_i) // R2 
-        fastq_piz_R1_test_aligned (vb); // set r1_is_aligned
-
-    // get gpos and is_forward
-    aligner_recon_get_gpos_and_fwd (VB, vb->R1_vb_i > 0, false, &vb->gpos, &vb->is_forward);
+    // retrieve gpos and is_forward prefetched in aligner_piz_prefetch_genome_region
+    vb->gpos = gpos_ctx->last_value.i, 
+    vb->is_forward = strand_ctx->last_value.i;
 
     // get reference - the needed ref_consumed bases - revcomped if needed
     ASSERTNOTINUSE (vb->scratch);
