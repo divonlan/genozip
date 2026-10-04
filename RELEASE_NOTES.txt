@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.94 4/10/2026
+15.0.95 4/10/2026
 - Low-level optimizations: 10-20% speed improvement in testing-after-compression of FASTQ.
 - New diagnostic options: --anonymize --flush-cpu-cache --mismatch-diagnose ; --biopsy  can now also be used with --pair 
 - bug fixes

@@ -368,26 +368,25 @@ ifdef x86_64
 	NASM_FLAGS += -Iigzip/x86_64
 
 else ifdef osx_arm64
-	C_SRCS += 			\
-		mac_compat.c	\
-		\
-		igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
+	C_SRCS += mac_compat.c
 
 	ifdef conda # we can't yet compile igzip .S on conda - appears to be some Assembler syntax difference between the versions of clang
-	C_SRCS += \
-		igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
+		C_SRCS += \
+			igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
 
-	CFLAGS += -Iigzip/noarch
+		CFLAGS += -Iigzip/noarch
 	else
-	S_SRCS := \
-		igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
-		igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
-		igzip/aarch64/isal_deflate_icf_body_hash_hist.S igzip/aarch64/isal_deflate_icf_finish_hash_hist.S									\
-		igzip/aarch64/igzip_set_long_icf_fg.S igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
-		igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 								\
-		igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
-		igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
-		igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
+		C_SRCS += igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
+
+		S_SRCS := \
+			igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
+			igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
+			igzip/aarch64/isal_deflate_icf_body_hash_hist.S igzip/aarch64/isal_deflate_icf_finish_hash_hist.S									\
+			igzip/aarch64/igzip_set_long_icf_fg.S igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
+			igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 								\
+			igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
+			igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
+			igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
 	endif
 
 	# Luckicly, we can always compile LZMA .S

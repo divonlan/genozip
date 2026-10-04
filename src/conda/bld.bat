@@ -1,4 +1,4 @@
-make -j8 OS=Windows_NT all
+make OS=Windows_NT all
 
 if not exist "%LIBRARY_BIN%" mkdir "%LIBRARY_BIN%"
 
