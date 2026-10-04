@@ -18,8 +18,6 @@ autocomplete.sh
 *.debug-o
 *.opt-o
 *.d
-*.S
-!src/igzip/aarch64/*.S
 *.genozip
 *.gz
 *.bgz

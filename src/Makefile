@@ -263,7 +263,8 @@ CXX_SRCS := \
 	bsc/bwt.cpp bsc/coder.cpp bsc/detectors.cpp bsc/libbsc.cpp bsc/lzp.cpp bsc/platform.cpp 			\
     bsc/preprocessing.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/adler32.cpp 
 
-# others sources that are not listed in OBJS need for remote builds (conda and mac)
+# "make distribution" runs on Windows, so C_SRCS etc is set by the Windows build. Here we list 
+# sources files needed for remote builds (i.e. conda and mac) beyond those needed *built* for Windows
 OTHER_SRCS := \
 	dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h 	\
 	website.h endianness.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h 	\
@@ -275,7 +276,7 @@ OTHER_SRCS := \
 	mgzip.h threads.h error.h arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h 	\
 	writer_private.h zriter.h bases_filter.h genols.h contigs.h chrom.h vcf.h vcf_private.h sam.h 		\
 	sam_private.h sam_friend.h me23.h fasta.h fasta_friend.h gff.h bed.h locs.h generic.h fastq.h 		\
-	fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h pointer_rel.h			\
+	fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h pointer_rel.h		\
 	flags_assign.h aligner_layered.h 																	\
 	\
 	zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h						\
@@ -330,6 +331,8 @@ OTHER_SRCS := \
 	igzip/aarch64/stdmac_aarch64.h igzip/aarch64/crc32_common_crc_ext_cortex_a72.S 						\
 	igzip/aarch64/crc32_common_mix_neoverse_n1.S														\
 	\
+	lzma/LzmaDecOpt.S																					\
+	\
 	xxhash/xxhash.h xxhash/xxh_x86dispatch.h
 
 #--------------------------------------------
@@ -370,12 +373,12 @@ else ifdef osx_arm64
 		\
 		igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
 
-ifdef conda # we can't yet compile igzip .S on conda - appears to be some Assembler syntax difference between the versions of clang
+	ifdef conda # we can't yet compile igzip .S on conda - appears to be some Assembler syntax difference between the versions of clang
 	C_SRCS += \
 		igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
 
 	CFLAGS += -Iigzip/noarch
-else
+	else
 	S_SRCS := \
 		igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
 		igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
@@ -385,12 +388,11 @@ else
 		igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
 		igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
 		igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
-endif
+	endif
 
 	# Luckicly, we can always compile LZMA .S
 	S_SRCS   += lzma/LzmaDecOpt.S 
 	CFLAGS   += -DZ7_LZMA_DEC_OPT
-
 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
 	
 	S_FLAGS  := -Iigzip/aarch64
@@ -543,7 +545,7 @@ $(OBJDIR)/%.o: %.masm # Assembling: masm (Microsoft) format (note: asmc doesn't 
 	exit $$status
 endif
 
-else ifdef osx_arm64
+else ifdef arm64
 $(OBJDIR)/%.d: %.S    # Dependencies: GNU format
 	@echo "Calculating dependencies ($(architecture)) $< ";\
 	$(CC) -D__ASSEMBLY__ -M $(S_FLAGS) $< > $@
@@ -644,7 +646,7 @@ CONDA_RECIPE_DIR := $(CONDA_FEEDSTOCK)/recipe
 
 OTHER_FILES_FOR_CONDA := \
 	Makefile ../.gitignore ../LICENSE.txt ../AUTHORS ../README.md \
-	$(OBJDIR_LINUX)/secure/license.o  $(OBJDIR_WINDOWS)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o \
+	$(OBJDIR_LINUX)/secure/license.o  $(OBJDIR_WINDOWS)/secure/license.o  $(OBJDIR_OSX_ARM)/secure/license.o \
 	$(OBJDIR_LINUX)/lzma/LzmaDecOpt.o $(OBJDIR_WINDOWS)/lzma/LzmaDecOpt.o
 
 ../LICENSE.txt: text_license.h version.h $(WIN)/genozip.exe
@@ -654,7 +656,12 @@ OTHER_FILES_FOR_CONDA := \
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	+$(DIST_MAKE) 
 
-.archive.tar.gz : $(C_SRCS) $(NASM_SRCS) $(S_SRCS) $(OTHER_SRCS) $(OTHER_FILES_FOR_CONDA)
+# Note: this runs during Make distribution on Windows: OTHER_SRCS contains files beyond those built for Windows.
+$(info ℹ️ .archive.tar.gz: C_SRCS=$(C_SRCS))
+$(info ℹ️ .archive.tar.gz: NASM_SRCS=$(NASM_SRCS))
+$(info ℹ️ .archive.tar.gz: OTHER_SRCS=$(OTHER_SRCS))
+$(info ℹ️ .archive.tar.gz: OTHER_FILES_FOR_CONDA=$(OTHER_FILES_FOR_CONDA))
+.archive.tar.gz : $(C_SRCS) $(NASM_SRCS) $(OTHER_SRCS) $(OTHER_FILES_FOR_CONDA)
 	+$(DIST_MAKE) 
 
 $(CONDA)/meta.yaml: $(CONDA)/meta.template.yaml .archive.tar.gz ../README.md
