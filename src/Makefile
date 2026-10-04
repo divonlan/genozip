@@ -249,10 +249,8 @@ C_SRCS := \
 	\
 	libdeflate_1.7/deflate_compress.c libdeflate_1.7/utils.c  											\
 	\
-	libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c 							\
-	libdeflate_1.19/gzip_decompress.c libdeflate_1.19/utils.c libdeflate_1.19/x86/cpu_features.c 		\
-	libdeflate_1.19/arm/cpu_features.c libdeflate_1.19/crc32.c libdeflate_1.19/adler32.c 				\
-	\
+	libdeflate_1.19/deflate_compress.c libdeflate_1.19/deflate_decompress.c libdeflate_1.19/adler32.c	\
+	libdeflate_1.19/gzip_decompress.c libdeflate_1.19/utils.c libdeflate_1.19/crc32.c 					\
  	xxhash/xxhash.c 																					\
 	\
 	igzip/igzip.c igzip/hufftables_c.c igzip/igzip_base.c igzip/igzip_icf_base.c igzip/adler32_base.c 	\
@@ -264,7 +262,8 @@ CXX_SRCS := \
     bsc/preprocessing.cpp bsc/qlfc.cpp bsc/qlfc_model.cpp bsc/adler32.cpp 
 
 # "make distribution" runs on Windows, so C_SRCS etc is set by the Windows build. Here we list 
-# sources files needed for remote builds (i.e. conda and mac) beyond those needed *built* for Windows
+# sources files needed for remote builds (i.e. conda and mac) beyond those *built* for Windows:
+# all include files + c/cpp/assembler files not used by Windows
 OTHER_SRCS := \
 	dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h 	\
 	website.h endianness.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h 	\
@@ -302,7 +301,7 @@ OTHER_SRCS := \
 	libdeflate_1.19/adler32_vec_template.h libdeflate_1.19/crc32_tables.h 								\
 	libdeflate_1.19/crc32_multipliers.h libdeflate_1.19/deflate_constants.h 							\
 	libdeflate_1.19/lib_common.h libdeflate_1.19/bt_matchfinder.h libdeflate_1.19/hc_matchfinder.h 		\
-	libdeflate_1.19/common_defs.h	libdeflate_1.19/libdeflate.h libdeflate_1.19/gzip_constants.h 		\
+	libdeflate_1.19/common_defs.h libdeflate_1.19/libdeflate.h libdeflate_1.19/gzip_constants.h 		\
 	libdeflate_1.19/decompress_template.h libdeflate_1.19/cpu_features_common.h 						\
 	libdeflate_1.19/matchfinder_common.h libdeflate_1.19/deflate_compress.h 							\
 	libdeflate_1.19/ht_matchfinder.h libdeflate_1.19/x86/adler32_impl.h 								\
@@ -311,7 +310,7 @@ OTHER_SRCS := \
 	libdeflate_1.19/x86/decompress_impl.h libdeflate_1.19/arm/adler32_impl.h 							\
 	libdeflate_1.19/arm/cpu_features.h libdeflate_1.19/arm/crc32_impl.h 								\
 	libdeflate_1.19/arm/matchfinder_impl.h libdeflate_1.19/arm/crc32_pmull_helpers.h 					\
-	libdeflate_1.19/arm/crc32_pmull_wide.h																\
+	libdeflate_1.19/arm/crc32_pmull_wide.h libdeflate_1.19/arm/cpu_features.c							\
 	\
 	igzip/bitbuf2.h igzip/crc.h igzip/encode_df.h igzip/flatten_ll.h igzip/huff_codes.h igzip/huffman.h \
 	igzip/igzip_checksums.h igzip/igzip_level_buf_structs.h igzip/igzip_lib.h igzip/igzip_wrapper.h 	\
@@ -333,15 +332,17 @@ OTHER_SRCS := \
 	\
 	lzma/LzmaDecOpt.S																					\
 	\
-	xxhash/xxhash.h xxhash/xxh_x86dispatch.h
+	xxhash/xxhash.h xxhash/xxh_x86dispatch.h	
 
 #--------------------------------------------
 # CPU-specific source files compilation flags
 #--------------------------------------------
 ifdef x86_64
 	C_SRCS += \
-		xxhash/xxh_x86dispatch.c
-	
+		xxhash/xxh_x86dispatch.c \
+		\
+		libdeflate_1.19/x86/cpu_features.c
+
 	NASM_SRCS := \
 		igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm igzip/x86_64/igzip_icf_body_h1_gr_bt.asm 					\
 		igzip/x86_64/igzip_icf_finish.asm igzip/x86_64/rfc1951_lookup.asm igzip/x86_64/adler32_sse.asm 									\
@@ -368,7 +369,10 @@ ifdef x86_64
 	NASM_FLAGS += -Iigzip/x86_64
 
 else ifdef osx_arm64
-	C_SRCS += mac_compat.c
+	C_SRCS += \
+		mac_compat.c \
+		\
+		libdeflate_1.19/arm/cpu_features.c
 
 	ifdef conda # we can't yet compile igzip .S on conda - appears to be some Assembler syntax difference between the versions of clang
 		C_SRCS += \
