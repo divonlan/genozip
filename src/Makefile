@@ -502,7 +502,7 @@ $(OBJDIR)/%.d: %.c $(GENERATED_SRCS) | $(OBJDIR) # directory is an "order only p
 	$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 $(OBJDIR)/%.d: %.cpp $(GENERATED_SRCS) | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
-	@echo "Calculating dependencies ($(architecture))$< ";\
+	@echo "Calculating dependencies ($(architecture)) $< ";\
 	$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 $(OBJDIR)/distribution.%.o : distribution.c 
