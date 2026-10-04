@@ -1,6 +1,6 @@
 #!/bin/bash 
 
-make -j -C src
+make -j8 -C src
 
 echo Installing in $PREFIX/bin
 mkdir -p $PREFIX/bin 

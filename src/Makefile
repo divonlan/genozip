@@ -417,7 +417,7 @@ opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 # no calculating dependencies when make command includes one of these as a target
 NO_DEPS_TARGETS := clean clean-debug clean-opt clean-installers clean-dev clean-test \
-                   increment-version dict_id_gen.h $(OSX).tar
+                   increment-version dict_id_gen.h $(OSX).tar genozip-latest
 	
 ifeq ($(filter $(NO_DEPS_TARGETS),$(MAKECMDGOALS)),)
 -include $(DEPS)
@@ -466,11 +466,11 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.d: %.c $(GENERATED_SRCS) | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
-	@echo Calculating dependencies $<				;\
+	@echo Calculating dependencies ($(architecture)) $<	;\
 	$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 $(OBJDIR)/%.d: %.cpp $(GENERATED_SRCS) | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
-	@echo Calculating dependencies $<				;\
+	@echo Calculating dependencies ($(architecture))$<	;\
 	$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 $(OBJDIR)/distribution.%.o : distribution.c 
@@ -494,7 +494,7 @@ $(OBJDIR)/%.opt-o: %.cpp $(OBJDIR)/%.d
 # ---------------------------------------------------------------
 ifdef x86_64
 $(OBJDIR)/%.d: %.asm  # Dependencies: nasm (Intel) format
-	@echo Calculating dependencies $< 				;\
+	@echo Calculating dependencies ($(architecture)) $<	;\
 	$(NASM) $(NASM_FLAGS) -M $< > $@
 
 $(OBJDIR)/%.o: %.asm  # Assembling: nasm (Intel) format
@@ -511,7 +511,7 @@ $(OBJDIR)/%.o: %.masm # Assembling: masm (Microsoft) format (note: asmc doesn't 
 
 else ifdef arm64
 $(OBJDIR)/%.d: %.S    # Dependencies: GNU format
-	@echo Calculating dependencies $< 				;\
+	@echo Calculating dependencies ($(architecture)) $<	;\
 	$(CC) -D__ASSEMBLY__ -M $(S_FLAGS) $< > $@
 
 $(OBJDIR)/%.o: %.S    # Assembling: GNU format
@@ -787,5 +787,6 @@ clean-installers:
 	$(call rm,Cleaning installers, \
 		$(INSTALLERS)/*)
 
-.PHONY: clean clean-debug clean-opt dict_id_gen$(EXE) $(OBJDIR_LINUX) $(OBJDIR_WINDOWS) $(OBJDIR_OSX_ARM) distribution
+.PHONY: clean clean-debug clean-opt dict_id_gen$(EXE) $(OBJDIR_LINUX) $(OBJDIR_WINDOWS) $(OBJDIR_OSX_ARM) \
+        distribution genozip-latest genozip-latest.exe
 
