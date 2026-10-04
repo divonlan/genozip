@@ -451,7 +451,7 @@ opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 
 # no calculating dependencies when make command includes one of these as a target
 NO_DEPS_TARGETS := clean clean-debug clean-opt clean-installers clean-dev clean-test \
-                   increment-version dict_id_gen.h $(OSX).tar genozip-latest
+                   increment-version dict_id_gen.h $(OSX).tar genozip-latest push-build
 	
 ifeq ($(filter $(NO_DEPS_TARGETS),$(MAKECMDGOALS)),)
 -include $(DEPS)
