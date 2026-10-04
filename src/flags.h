@@ -128,7 +128,6 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t is_wsl             : 1; 
     uint64_t is_sanitize_thread : 1; // build includes -fsanitize=thread 
     uint64_t is_valgrind        : 1; // running under valgrind
-    uint64_t is_docker          : 1; // running in a docker container
     uint64_t explicit_out_dt    : 1; // genocat - out txt file data type set explicitly from command line
     packed_enum { NO_PREPROC, PREPROC_RUNNING, PREPROC_FINALIZING } preprocessing : 2; // we're currently dispatching compute threads for preprocessing (PIZ: loading SA Groups, ZIP: loading bamass ents)
     uint64_t dont_load_ref_file : 1; // PIZ (genocat): we don't need to load the reference data

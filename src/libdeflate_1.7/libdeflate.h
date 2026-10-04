@@ -14,7 +14,7 @@ extern "C" {
 
 #include <stddef.h>
 #include <stdint.h>
-#include "../pointeר.h" // divon
+#include "../pointer_rel.h" // divon
 
 /*
  * On Windows, if you want to link to the DLL version of libdeflate, then

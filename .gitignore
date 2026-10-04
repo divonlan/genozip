@@ -14,7 +14,7 @@ telemetry.json
 autocomplete.sh
 *.o
 !src/objdir.*/secure/license.o
-!src/objdir.mac/secure/license.old_mac.o
+!src/objdir.*/lzma/LzmaDecOpt.o
 *.debug-o
 *.opt-o
 *.d

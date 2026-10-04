@@ -22,7 +22,11 @@ extern rom arch_str_error (void);
 #define NET_ID_SIZE 32
 extern rom arch_get_os (void);
 extern rom arch_get_scheduler (void);
+extern rom arch_get_PaaS (void);
+extern rom arch_get_linux_container (void);
+extern rom arch_get_cloud (void);
 extern rom arch_get_glibc (void);
+extern bool arch_is_docker (void);
 extern void arch_flush_cpu_cache (void);
 extern StrText4K arch_get_executable (void);
 extern StrText4K arch_get_genozip_executable (void);

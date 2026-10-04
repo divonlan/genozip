@@ -21,7 +21,7 @@ endef
 define set_path
 	$(eval $(1) := $(subst \,/,$(strip $(2))))
 	$(call verify_dir,$(1))
-	$(info $(1)='$($(1))')
+	$(info ℹ️ $(1)='$($(1))')
 endef
 
 #------------------------------------------------------------------------------------------
@@ -130,6 +130,13 @@ CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc
 OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
+$(info ℹ️ Compiler version=$(shell $(CC) --version | head -1))
+ifdef linux_x86
+    $(info ℹ️ Target sysroot/glibc=$(shell $(CC) -dM -E -include features.h - < /dev/null | egrep -w "__GLIBC__|__GLIBC_MINOR__" | grep -v __GLIBC_PREREQ | awk '{printf "%s%s", sep, $$3; sep="."}' ))
+endif
+$(info ℹ️ make version=$(shell $(MAKE) --version | head -1))
+$(info ℹ️ tar version=$(shell tar --version | head -1))
+
 #--------------------------------
 # OS-specific stuff
 #--------------------------------
@@ -141,7 +148,8 @@ ifdef win_x86
 
 	WSL     := wsl
 	NASM    := nasm
-	MASM    := run-on-wsl.sh asmc -c -10 -win64
+	ASMC    := run-on-wsl.sh asmc
+	MASM    := $(ASMC) -c -10 -win64
 
 	NASM_FLAGS := -f win64 -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512 # note: modern nasm/yasm have AS_FEATURE_LEVEL=10. HAVE_AS_KNOWS_AVX512 is true if level 10.
 
@@ -154,10 +162,13 @@ ifdef win_x86
 		fail := $(error Only the gcc and clang compilers are currently supported)
 	endif
 
+    $(info ℹ️ NASM version=$(shell $(NASM) --version | head -1))
+
 else ifdef linux_x86
 	OBJDIR  := $(OBJDIR_LINUX)
 	NASM    := nasm
-	MASM    := asmc -c -10 -elf64 -DABI_LINUX 
+	ASMC    := asmc
+	MASM    := $(ASMC) -c -10 -elf64 -DABI_LINUX 
 	
 	NASM_FLAGS := -f elf64 -DINTEL_CET_ENABLED -DAS_FEATURE_LEVEL=10 -DHAVE_AS_KNOWS_AVX512
 	
@@ -171,11 +182,23 @@ else ifdef linux_x86
 	# 2. Run with: setarch x86_64 -R genozip-debug ... (see internal-docs/address-sanitizer)
 	# DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 
 
+    $(info ℹ️ NASM version=$(shell $(NASM) --version | head -1))
+
 else ifdef osx_arm64
 	OBJDIR  := $(OBJDIR_OSX_ARM)
 
 	CFLAGS     += -march=armv8-a+crc
 	DEBUGFLAGS += -fsanitize=address -Dsanitize_address -fsanitize=undefined
+endif
+
+# check if asmc is available (eg it's not available on conda-forge): we'll use pre-compiled objects it not
+ifdef MASM
+ifneq ($(shell $(ASMC) -h >/dev/null 2>&1 && echo yes),yes)
+    undefine MASM
+    $(info ℹ️ MASM version=N/A)
+else
+    $(info ℹ️ MASM version=$(shell $(MASM) -h | head -1))
+endif
 endif
 
 SRC_DIRS := \
@@ -252,7 +275,7 @@ OTHER_SRCS := \
 	mgzip.h threads.h error.h arch.h license.h file_types.h data_types.h base64.h txtheader.h writer.h 	\
 	writer_private.h zriter.h bases_filter.h genols.h contigs.h chrom.h vcf.h vcf_private.h sam.h 		\
 	sam_private.h sam_friend.h me23.h fasta.h fasta_friend.h gff.h bed.h locs.h generic.h fastq.h 		\
-	fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h pointeר.h			\
+	fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h pointer_rel.h			\
 	flags_assign.h aligner_layered.h 																	\
 	\
 	zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h						\
@@ -327,10 +350,12 @@ ifdef x86_64
 		igzip/x86_64/igzip_set_long_icf_fg_06.asm igzip/x86_64/crc_multibinary.asm igzip/x86_64/crc32_gzip_refl_by8.asm 					\
 		igzip/x86_64/crc32_gzip_refl_by8_02.asm igzip/x86_64/crc32_gzip_refl_by16_10.asm
 
-	ifndef conda # asmc is not available on conda
+	ifdef MASM # asmc available
 		MASM_SRCS := lzma/LzmaDecOpt.masm 
-		
 		CFLAGS += -DZ7_LZMA_DEC_OPT
+
+	else # asmc not available (e.g. on conda-forge): use pre-assembled objects
+		LDFLAGS += $(OBJDIR)/lzma/LzmaDecOpt.o
 	endif
 
 	CFLAGS     += -march=haswell 
@@ -345,6 +370,12 @@ else ifdef osx_arm64
 		\
 		igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
 
+ifdef conda # we can't yet compile igzip .S on conda - appears to be some Assembler syntax difference between the versions of clang
+	C_SRCS += \
+		igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
+
+	CFLAGS += -Iigzip/noarch
+else
 	S_SRCS := \
 		igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
 		igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
@@ -353,10 +384,11 @@ else ifdef osx_arm64
 		igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 								\
 		igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
 		igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
-		igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S \
-		\
-		lzma/LzmaDecOpt.S 
+		igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
+endif
 
+	# Luckicly, we can always compile LZMA .S
+	S_SRCS   += lzma/LzmaDecOpt.S 
 	CFLAGS   += -DZ7_LZMA_DEC_OPT
 
 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
@@ -466,11 +498,11 @@ $(OBJDIR)/%.opt-o: %.c $(OBJDIR)/%.d
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 $(OBJDIR)/%.d: %.c $(GENERATED_SRCS) | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
-	@echo Calculating dependencies ($(architecture)) $<	;\
+	@echo "Calculating dependencies ($(architecture)) $< ";\
 	$(CC) $(CFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 $(OBJDIR)/%.d: %.cpp $(GENERATED_SRCS) | $(OBJDIR) # directory is an "order only prerequesite": https://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Prerequisite-Types.html#Prerequisite-Types
-	@echo Calculating dependencies ($(architecture))$<	;\
+	@echo "Calculating dependencies ($(architecture))$< ";\
 	$(CXX) $(CXXFLAGS) -MM -MT $@ $< -MF $(@:%.o=%.d)
 
 $(OBJDIR)/distribution.%.o : distribution.c 
@@ -494,33 +526,31 @@ $(OBJDIR)/%.opt-o: %.cpp $(OBJDIR)/%.d
 # ---------------------------------------------------------------
 ifdef x86_64
 $(OBJDIR)/%.d: %.asm  # Dependencies: nasm (Intel) format
-	@echo Calculating dependencies ($(architecture)) $<	;\
+	@echo "Calculating dependencies ($(architecture)) $< " ;\
 	$(NASM) $(NASM_FLAGS) -M $< > $@
 
-$(OBJDIR)/%.o: %.asm  # Assembling: nasm (Intel) format
-	@echo "Assembling ($(architecture)) $<" 		;\
+$(OBJDIR)/%.o: %.asm $(OBJDIR)/%.d # Assembling: nasm (Intel) format
+	@echo "Assembling ($(architecture)) $< " 	;\
 	$(NASM) $(NASM_FLAGS) -o $@ $< 
 
+ifdef MASM # asmc available
 $(OBJDIR)/%.o: %.masm # Assembling: masm (Microsoft) format (note: asmc doesn't calculate dependencies)
-	@echo "Assembling ($(architecture)) $<" 		;\
-	$(MASM) -Fo $@ $< > /dev/null 2>&1 				;\
-	status=$$?										;\
-	src=$<; err=$$(basename $${src%.masm}.err)		;\
+	@echo "Assembling ($(architecture)) $< " 	;\
+	$(MASM) -Fo $@ $< > /dev/null 2>&1 			;\
+	status=$$?									;\
+	src=$<; err=$$(basename $${src%.masm}.err)	;\
 	if [ -f $$err ]; then cat $$err > /dev/stderr ; rm -f $$err; fi ;\
 	exit $$status
+endif
 
-else ifdef arm64
+else ifdef osx_arm64
 $(OBJDIR)/%.d: %.S    # Dependencies: GNU format
-	@echo Calculating dependencies ($(architecture)) $<	;\
+	@echo "Calculating dependencies ($(architecture)) $< ";\
 	$(CC) -D__ASSEMBLY__ -M $(S_FLAGS) $< > $@
 
-$(OBJDIR)/%.o: %.S    # Assembling: GNU format
+$(OBJDIR)/%.o: %.S $(OBJDIR)/%.d  # Assembling: GNU format
 	@echo "Assembling ($(architecture)) $<" 		;\
 	$(CC) -D__ASSEMBLY__ -c $(S_FLAGS) -o $@ $< 
-
-%.S: %.c $(OBJDIR)/%.d
-	@echo "Generating $@" 							;\
-	$(CC) -S -o $@ $< $(CFLAGS)
 
 else 
 	fail := $(error Assembler flavor not recognized) 
@@ -614,7 +644,8 @@ CONDA_RECIPE_DIR := $(CONDA_FEEDSTOCK)/recipe
 
 OTHER_FILES_FOR_CONDA := \
 	Makefile ../.gitignore ../LICENSE.txt ../AUTHORS ../README.md \
-	$(OBJDIR_LINUX)/secure/license.o $(OBJDIR_WINDOWS)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o
+	$(OBJDIR_LINUX)/secure/license.o  $(OBJDIR_WINDOWS)/secure/license.o $(OBJDIR_OSX_ARM)/secure/license.o \
+	$(OBJDIR_LINUX)/lzma/LzmaDecOpt.o $(OBJDIR_WINDOWS)/lzma/LzmaDecOpt.o
 
 ../LICENSE.txt: text_license.h version.h $(WIN)/genozip.exe
 	@echo Generating $@ ;\
@@ -654,8 +685,8 @@ $(WIN)/LICENSE.for-installer.txt: $(WIN)/genozip.exe version.h
 $(WIN)/genozip-installer.ifp: $(WIN)/genozip-installer.template.ifp $(WIN)/generate-ifp.sh $(WIN)/genozip.exe ../LICENSE.txt
 	+$(DIST_MAKE) 
 
-$(info WIN='$(WIN)')
-$(info INSTALLERS='$(INSTALLERS)')
+$(info ℹ️ WIN='$(WIN)')
+$(info ℹ️ INSTALLERS='$(INSTALLERS)')
 
 $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) 
 	+$(DIST_MAKE) 
@@ -767,7 +798,7 @@ clean-opt:
 	$(call rm,Cleaning up opt,		\
 		$(OPT_OBJS) $(OPT_EXECUTABLES) $(OBJDIR)/*.opt-o)
 
-clean:  # careful not to delete license.o
+clean:  # careful not to delete license.o and LzmaDecOpt.o (these are not in $(OBJS) if not used)
 	$(call rm,Cleaning up optimized，dependencies and generated sources, \
 		$(OBJS) $(EXECUTABLES) $(DEPS) $(GENERATED_SRCS) $(OBJDIR)/*.o $(OBJDIR)/*.d)
 	
@@ -776,7 +807,7 @@ clean-test:
 		$(TEST_DIR)/*.genozip $(TEST_DIR)/*.bad $(TEST_DIR)/*.local $(TEST_DIR)/*.b250 $(TEST_DIR)/outdir.*/* \
 	    $(TEST_DIR)/*.DEPN $(TEST_DIR)/back-compat/*/*.bad $(TEST_DIR)/*.bad-offset-* $(TEST_DIR)/*/*.bad-offset-*
 			 
-clean-dev: clean-installers clean-test # use only in dev - deletes license.o
+clean-dev: clean-installers clean-test # use only in dev - deletes license.o and LzmaDecOpt.o
 	$(call rm,Cleaning dev stuff,													\
 		$(DEPS) $(filter-out LICENSE.txt,$(WINDOWS_INSTALLER_OBJS)) .archive.tar.gz \
 		$(EXECUTABLES) $(OPT_EXECUTABLES) $(DEBUG_EXECUTABLES) $(OBJDIR)/* $(OBJDIR)/*/* $(OBJDIR)/*/*/*			

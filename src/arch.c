@@ -235,9 +235,6 @@ void arch_initialize (rom my_argv0)
     // test for valgrind
     rom p = getenv ("LD_PRELOAD");
     flag.is_valgrind |= (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
-
-    // test for docker: note: this doesn't always work. need to improve. 
-    flag.is_docker = file_exists ("/.dockerenv")/*new*/ || file_exists ("/.dockerinit")/*old*/;
 }
 
 rom arch_get_endianity (void)
@@ -486,14 +483,91 @@ rom arch_get_os (void)
     return os;
 }
 
+// true if an environment variable exists with a name that starts with prefix
+#ifdef __linux__
+static bool has_env_prefix (rom prefix)
+{
+    extern char **environ;
+    if (!environ) return false;
+
+    size_t prefix_len = strlen (prefix);
+    for (char **env=environ; *env; env++) 
+        if (!strncmp (*env, prefix, prefix_len)) 
+            return true;
+    return false;
+}
+#endif    
+
+#define HAS(e) ({ rom val=getenv(e); val && val[0]; })
+
 rom arch_get_scheduler (void)
 {
-    if (getenv ("SLURM_JOB_ID"))            return "slurm";
-    if (getenv ("KUBERNETES_SERVICE_HOST")) return "kubernetes";
-    if (getenv ("LSB_JOBID"))               return "LSF";
-    if (flag.is_docker)                     return "docker";
+    static rom sched = NULL;
 
-    return NULL; // not scheduler identified
+#ifdef __linux__
+    DO_ONCE sched = 
+           // Traditional HPC Schedulers
+          (HAS("CONDOR_JOB_ID") || HAS("_CONDOR_JOB_PIDS"))    ? "htcondor"
+         : HAS("SLURM_JOB_ID")            ? "slurm"
+         : HAS("PBS_JOBID")               ? "pbs"
+         : HAS("LSB_JOBID")               ? "lsf"
+         : HAS("FLUX_JOB_ID")             ? "flux"
+         : HAS("COBALT_JOBID")            ? "cobalt"
+         : HAS("PJM_JOBID")               ? "pjm"
+         : has_env_prefix ("SGE_")        ? "sge"
+
+           // Orchestrators & Cloud Batch
+         :(HAS("BATCH_TASK_INDEX") || HAS("BATCH_TASK_COUNT")) ? "gcp-batch"
+         : HAS("KUBERNETES_SERVICE_HOST") ? "kubernetes"
+         : HAS("NOMAD_ALLOC_ID")          ? "nomad"
+         : HAS("AWS_BATCH_JOB_ID")        ? "aws-batch"
+         : HAS("AZ_BATCH_JOB_ID")         ? "azure-batch"
+         : HAS("RAY_JOB_ID")              ? "ray"
+
+           // Workflow Engines
+         : HAS("NXF_TASK_WORKDIR")        ? "nextflow"
+         : has_env_prefix ("SNAKEMAKE_")  ? "snakemake"  
+         : NULL;
+#endif
+        return sched;
+}
+
+// IaaS - Infrastructure as a Service
+rom arch_get_cloud (void)
+{
+    static rom cloud = NULL;
+
+#ifdef __linux__
+    DO_ONCE cloud = 
+          (HAS("GCE_METADATA_HOST") || (HAS("GOOGLE_CLOUD_PROJECT") && HAS("K_SERVICE"))) ? "gcp"
+         :(HAS("AWS_EXECUTION_ENV") || HAS("AWS_REGION")) ? "aws"
+         : HAS("OCI_RESOURCE_PRINCIPAL_VERSION")          ? "oci"
+         : HAS("ALIBABA_CLOUD_ACCOUNT_ID")                ? "alibaba"
+         : HAS("IBM_CLOUD_REGION")                        ? "ibm"
+         : HAS("AZURE_HTTP_USER_AGENT ")                  ? "azure"
+         : NULL;
+#endif
+        return cloud;
+}
+
+// Platform as a Service
+rom arch_get_PaaS (void)
+{
+    static rom paas = NULL;
+
+#ifdef __linux__
+    DO_ONCE paas = 
+         // Platform / Serverless / Edge Providers (PaaS) - run on some IaaS platform (AWS etc)
+          (HAS("RAILWAY_STATIC_URL") || HAS("RAILWAY_ENVIRONMENT ")) ? "railway"
+         : HAS("VERCEL")              ? "vercel"
+         : HAS("NETLIFY")             ? "netlify"
+         : HAS("RENDER")              ? "render"
+         : HAS("FLY_APP_NAME")        ? "fly.io"
+         : has_env_prefix ("HEROKU_") ? "heroku"
+         : HAS("DIGITALOCEAN")        ? "digitalocean"
+         : NULL;
+#endif
+        return paas;
 }
 
 rom arch_get_glibc (void)
