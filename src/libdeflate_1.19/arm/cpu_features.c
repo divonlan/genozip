@@ -30,8 +30,6 @@
  * features.  But an OS-specific way can be used when available.
  */
 
-#if defined(ARCH_ARM32) || defined(ARCH_ARM64) // divon
-
 #ifdef __APPLE__
 #  undef _ANSI_SOURCE
 #  undef _DARWIN_C_SOURCE
@@ -40,6 +38,8 @@
 
 #include "../cpu_features_common.h" /* must be included first */
 #include "cpu_features.h"
+
+#if defined(ARCH_ARM32) || defined(ARCH_ARM64) // divon
 
 #if HAVE_DYNAMIC_ARM_CPU_FEATURES
 

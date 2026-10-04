@@ -429,6 +429,15 @@ DEBUG_OBJS        := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $
 # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 OPT_OBJS          := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(SHA_OBJS) $(OBJDIR)/$(DISTOBJ)
 
+ifdef vendor
+    $(info ℹ️ C_SRCS=$(C_SRCS))
+    $(info ℹ️ NASM_SRCS=$(NASM_SRCS))
+    $(info ℹ️ S_SRCS=$(S_SRCS))
+    $(info ℹ️ OTHER_SRCS=$(OTHER_SRCS)) # note: this includes .S sources and other files not used in Windows, when running make in Windows
+    $(info ℹ️ OTHER_FILES_FOR_CONDA=$(OTHER_FILES_FOR_CONDA))
+    $(info ℹ️ OBJS=$(OBJS))
+endif
+
 EXECUTABLES       := genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)       
 DEBUG_EXECUTABLES := genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE) 
 OPT_EXECUTABLES   := genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)   
@@ -659,11 +668,6 @@ OTHER_FILES_FOR_CONDA := \
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	+$(DIST_MAKE) 
 
-# Note: this runs during Make distribution on Windows: OTHER_SRCS contains files beyond those built for Windows.
-$(info ℹ️ .archive.tar.gz: C_SRCS=$(C_SRCS))
-$(info ℹ️ .archive.tar.gz: NASM_SRCS=$(NASM_SRCS))
-$(info ℹ️ .archive.tar.gz: OTHER_SRCS=$(OTHER_SRCS))
-$(info ℹ️ .archive.tar.gz: OTHER_FILES_FOR_CONDA=$(OTHER_FILES_FOR_CONDA))
 .archive.tar.gz : $(C_SRCS) $(NASM_SRCS) $(OTHER_SRCS) $(OTHER_FILES_FOR_CONDA)
 	+$(DIST_MAKE) 
 
