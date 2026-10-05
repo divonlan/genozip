@@ -417,21 +417,11 @@ else # case: "secure" directory doesn't exists: conda, or user is compiling from
 	LDFLAGS += $(OBJDIR)/secure/license.o
 endif
 
-#-------------------------------------------------------------
-# make dependencies
-#-------------------------------------------------------------
-
 # targets that don't involve compiling our sources
 NONCOMPILE_TARGETS := \
 	clean clean-debug clean-opt clean-installers clean-dev clean-test increment-version dict_id_gen.h \
 	$(OSX).tar genozip-latest genozip-latest.exe push-build
 	
-ifeq ($(filter $(NONCOMPILE_TARGETS),$(MAKECMDGOALS)),) # if the intersection between the two lists is empty
-# after parsing the entire file but before anything else: generates missing .d files and includes them as part of the makefile
--include $(DEPS) 
-endif
-.SECONDARY: $(DEPS) # don't delete .d files after making
-
 #-------------------------------------------------------------
 # list of all source object, dependencies and executable files
 #-------------------------------------------------------------
@@ -458,6 +448,10 @@ EXECUTABLES       := genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)    
 DEBUG_EXECUTABLES := genozip-debug$(EXE) genounzip-debug$(EXE) genocat-debug$(EXE) genols-debug$(EXE) 
 OPT_EXECUTABLES   := genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)   genols-opt$(EXE)   
 
+#--------------------------------------------------------------------------------------------
+# compilation targets. note: "all" is the first target in the makefile, therefore the default
+#--------------------------------------------------------------------------------------------
+
 all   : CFLAGS += $(OPTFLAGS)
 all   : CXXFLAGS += $(OPTFLAGS) 
 all   : $(OBJDIR) $(EXECUTABLES) 
@@ -470,6 +464,16 @@ debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG
 opt   : CXXFLAGS += $(OPTFLAGS) 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
+
+#-------------------------------------------------------------
+# make dependencies
+#-------------------------------------------------------------
+
+ifeq ($(filter $(NONCOMPILE_TARGETS),$(MAKECMDGOALS)),) # if the intersection between the two lists is empty
+# after parsing the entire file but before anything else: generates missing .d files and includes them as part of the makefile
+-include $(DEPS) 
+endif
+.SECONDARY: $(DEPS) # don't delete .d files after making
 
 # --------------------------------------------------------------------
 # Generated sources: dict_id_gen.h, flags_assign.h, context_validate.c
