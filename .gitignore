@@ -128,7 +128,5 @@ failed-line.*
 *.dict
 out
 *.backup
-vgcore.*
-P226339*
 invocations*
 wget-log

@@ -358,7 +358,7 @@ ifdef x86_64
 		MASM_SRCS := lzma/LzmaDecOpt.masm 
 		CFLAGS += -DZ7_LZMA_DEC_OPT
 
-	else # asmc not available (e.g. on conda-forge): use pre-assembled objects
+	else # asmc not available (e.g. on conda-forge): use pre-assembled object
 		LDFLAGS += $(OBJDIR)/lzma/LzmaDecOpt.o
 	endif
 
@@ -368,7 +368,7 @@ ifdef x86_64
 
 	NASM_FLAGS += -Iigzip/x86_64
 
-else ifdef osx_arm64
+else ifdef arm64
 	C_SRCS += \
 		mac_compat.c \
 		\
@@ -391,15 +391,16 @@ else ifdef osx_arm64
 			igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
 			igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
 			igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
+
+		SFLAGS += -Iigzip/aarch64
 	endif
 
-	# Luckicly, we can always compile LZMA .S
-	S_SRCS   += lzma/LzmaDecOpt.S 
+	# Luckicly, we can always compile LZMA's .S
+	S_SRCS   += lzma/LzmaDecOpt.S
+
 	CFLAGS   += -DZ7_LZMA_DEC_OPT
 	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
 	
-	S_FLAGS  := -Iigzip/aarch64
-
 else # another CPU
 	C_SRCS += \
 		igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
@@ -417,6 +418,21 @@ else # case: "secure" directory doesn't exists: conda, or user is compiling from
 endif
 
 #-------------------------------------------------------------
+# make dependencies
+#-------------------------------------------------------------
+
+# targets that don't involve compiling our sources
+NONCOMPILE_TARGETS := \
+	clean clean-debug clean-opt clean-installers clean-dev clean-test increment-version dict_id_gen.h \
+	$(OSX).tar genozip-latest genozip-latest.exe push-build
+	
+ifeq ($(filter $(NONCOMPILE_TARGETS),$(MAKECMDGOALS)),) # if the intersection between the two lists is empty
+# after parsing the entire file but before anything else: generates missing .d files and includes them as part of the makefile
+-include $(DEPS) 
+endif
+.SECONDARY: $(DEPS) # don't delete .d files after making
+
+#-------------------------------------------------------------
 # list of all source object, dependencies and executable files
 #-------------------------------------------------------------
 # object files that are shared between optimized/debug/opt builds
@@ -429,11 +445,11 @@ DEBUG_OBJS        := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $
 # optimized but with debug info, for debugging issues that only manifest with compiler optimization
 OPT_OBJS          := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(SHA_OBJS) $(OBJDIR)/$(DISTOBJ)
 
-ifdef vendor
+ifdef conda # print to conda-forge log
     $(info ℹ️ C_SRCS=$(C_SRCS))
     $(info ℹ️ NASM_SRCS=$(NASM_SRCS))
     $(info ℹ️ S_SRCS=$(S_SRCS))
-    $(info ℹ️ OTHER_SRCS=$(OTHER_SRCS)) # note: this includes .S sources and other files not used in Windows, when running make in Windows
+    $(info ℹ️ OTHER_SRCS=$(OTHER_SRCS)) 
     $(info ℹ️ OTHER_FILES_FOR_CONDA=$(OTHER_FILES_FOR_CONDA))
     $(info ℹ️ OBJS=$(OBJS))
 endif
@@ -445,13 +461,7 @@ OPT_EXECUTABLES   := genozip-opt$(EXE)   genounzip-opt$(EXE)   genocat-opt$(EXE)
 all   : CFLAGS += $(OPTFLAGS)
 all   : CXXFLAGS += $(OPTFLAGS) 
 all   : $(OBJDIR) $(EXECUTABLES) 
-ifndef win_x86
 	@chmod +x test.sh
-endif
-
-# ifdef win_x86
-# debug opt : LDFLAGS += -lbacktrace
-# endif
 
 debug : CFLAGS += $(DEBUGFLAGS) 
 debug : CXXFLAGS += $(DEBUGFLAGS) 
@@ -460,14 +470,6 @@ debug : $(OBJDIR) $(DEBUG_EXECUTABLES)
 opt   : CFLAGS += -ggdb3 $(OPTFLAGS) -DDEBUG
 opt   : CXXFLAGS += $(OPTFLAGS) 
 opt   : $(OBJDIR) $(OPT_EXECUTABLES)
-
-# no calculating dependencies when make command includes one of these as a target
-NO_DEPS_TARGETS := clean clean-debug clean-opt clean-installers clean-dev clean-test \
-                   increment-version dict_id_gen.h $(OSX).tar genozip-latest push-build
-	
-ifeq ($(filter $(NO_DEPS_TARGETS),$(MAKECMDGOALS)),)
--include $(DEPS)
-endif
 
 # --------------------------------------------------------------------
 # Generated sources: dict_id_gen.h, flags_assign.h, context_validate.c
@@ -560,11 +562,11 @@ endif
 else ifdef arm64
 $(OBJDIR)/%.d: %.S    # Dependencies: GNU format
 	@echo "Calculating dependencies ($(architecture)) $< ";\
-	$(CC) -D__ASSEMBLY__ -M $(S_FLAGS) $< > $@
+	$(CC) -D__ASSEMBLY__ -M $(SFLAGS) $< > $@
 
 $(OBJDIR)/%.o: %.S $(OBJDIR)/%.d  # Assembling: GNU format
 	@echo "Assembling ($(architecture)) $<" 		;\
-	$(CC) -D__ASSEMBLY__ -c $(S_FLAGS) -o $@ $< 
+	$(CC) -D__ASSEMBLY__ -c $(SFLAGS) -o $@ $< 
 
 else 
 	fail := $(error Assembler flavor not recognized) 
