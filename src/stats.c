@@ -367,7 +367,8 @@ static void stats_output_file_metadata (void)
                 FEATURE0 (segconf.is_sorted && segconf.sam_is_unmapped, "Sorting: Unmapped", "sorted_by=Unmapped");        
                 FEATURE0 (segconf.is_collated, "Sorting: Collated by QNAME", "sorted_by=QNAME");
                 FEATURE0 (!segconf.is_sorted && !segconf.is_collated, "Sorting: Not sorted or collated", "sorted_by=NONE");
-                FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
+                
+                if (segconf.multiseq) bufprintf (evb, &features, "multiseq_bsc_ratio=%1.1f;", segconf.multiseq);
 
                 if (segconf.is_minimap2 || segconf.CIGAR_has_eqx)    bufprintf (evb, &features, "CIGAR_has_eqx=%s;",    TF(segconf.CIGAR_has_eqx));
                 if (segconf.is_minimap2 || segconf.SA_NM_by_CIGAR_X) bufprintf (evb, &features, "SA_NM_by_CIGAR_X=%s;", TF(segconf.SA_NM_by_CIGAR_X));
@@ -437,7 +438,7 @@ static void stats_output_file_metadata (void)
                 FEATURE (segconf.tech, "Sequencer: %s", "sequencer=%s", tech_name(segconf.tech));
                 
                 bufprintf (evb, &features, "tlen_pred=%.1f%%;", percent (z_file->sam_num_tlen_pred, num_alignments));
-
+                
                 if (z_file->sam_num_by_sam_aln) // seg SEQ vs internal or external reference according to SAM alignment 
                     bufprintf (evb, &features, "seq_by_sam_aln=%.1f%%;", percent (z_file->sam_num_by_sam_aln, num_alignments));
 
@@ -487,10 +488,11 @@ static void stats_output_file_metadata (void)
             REPORT_QNAME;
             FEATURE (segconf.tech, "Sequencer: %s", "sequencer=%s", tech_name(segconf.tech));
             FEATURE0 (FAF, "FASTA-as-FASTQ", "FASTA-as-FASTQ=True");
-            FEATURE0 (segconf.multiseq, "Multiseq", "multiseq=True");
             FEATURE0 (segconf.is_interleaved, "Interleaved", "interleaved=True");
             FEATURE (segconf.nonbio_type, "Nonbio: %s", "nonbio_type=%s", fastq_nonbio_type_name());
-            
+
+            if (segconf.multiseq) bufprintf (evb, &features, "multiseq_bsc_ratio=%1.1f;", segconf.multiseq);
+
             double bamass_pc = percent (z_file->deep_stats[NDP_DEEPABLE] + z_file->deep_stats[NDP_DEEPABLE_TRIM], z_file->deep_stats[NDP_FQ_READS]);
 
             if (flag.bam_assist) {
@@ -602,7 +604,7 @@ static void stats_output_file_metadata (void)
             FEATURE0 (segconf.fasta_seq_type==SQT_AMINO, "Sequence type: Amino acids",      "Amino_acids");
             FEATURE0 (segconf.fasta_seq_type==SQT_NUKE, "Sequence type: Nucleotide bases", "Nucleotide_bases");
             bufprint0 (evb, &features, "FASTA-as-FASTQ=False;");
-            FEATURE0 (segconf.multiseq, "Multiseq", "multiseq");
+            if (segconf.multiseq) bufprintf (evb, &features, "multiseq_bsc_ratio=%1.1f;", segconf.multiseq);
             FEATURE (true, "Sequences: %"PRIu64, "num_sequences=%"PRIu64, z_file->num_sequences);
             REPORT_VBs;
             break;

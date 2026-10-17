@@ -83,7 +83,7 @@ typedef uint8_t word_offset_t; // Offset within a 64 bit word
 #define bitmask8_(nbits)  ((uint8_t) ~(uint8_t) 0 >> (sizeof(uint8_t) *8-(nbits))) 
 #define bitmask64_(nbits) ((uint64_t)~(uint64_t)0 >> (sizeof(uint64_t)*8-(nbits))) 
 
-// Caller guarantees nbits ∈ [0, bits_in_type]  <--- nbits is allowed to be 0
+// Caller guarantees nbits ∈ [0, bits_in_type]  ⇐ nbits is allowed to be 0
 #define bitmask8(nbits)   (((nbits) > 0) ? bitmask8_(nbits)  : (uint8_t) 0)
 #define bitmask64(nbits)  (((nbits) > 0) ? bitmask64_(nbits) : (uint64_t)0)
 

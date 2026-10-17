@@ -390,8 +390,8 @@ void fasta_segconf_finalize (VBlockP vb)
     ASSINP0 (!flag.make_reference || segconf.fasta_has_contigs, "Can't use --make-reference on this file, because Genozip can't find the contig names in the FASTA description lines");
 
     // if we have multiple shortish contigs in segconf data, this might be multiseq - test
-    if (num_contigs_this_vb >= 5 && !flag.make_reference && !flag.fast) 
-        segconf_test_multiseq (VB, FASTA_NONREF);
+    if (num_contigs_this_vb >= 5 && !flag.make_reference) 
+        segconf_test_multiseq (VB);
 
     if (!flag.seg_only && !flag.make_reference && !segconf.multiseq && segconf.fasta_seq_type == SQT_NUKE && !Z_DT(GFF))
         ctx_segconf_set_hard_coded_lcodec (FASTA_NONREF, CODEC_ACGT);

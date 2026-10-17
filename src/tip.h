@@ -16,8 +16,16 @@ extern void tip_print_genounzip (void);
 
 // protect from spamming the user with more than one tip
 // Note: use this for learning-curve tips, not for failure cases which should always display
-#define TIP(format, ...)  ( { if (!flag.no_tip) iprintf ("\n\n" _TIP format "\n\n", __VA_ARGS__); flag.no_tip = true; } ) 
-#define TIP0(str)  ( { if (!flag.no_tip) iprint0 ("\n\n" _TIP str "\n\n"); flag.no_tip = true; } ) 
+#define TIP(format, ...)  ( { if (!flag.no_tip) { iprintf ("\n\n" _TIP format "\n\n", __VA_ARGS__); flag.no_tip = true; } } ) 
+#define TIP0(str) TIP(str"%s", "")
+
+#define TIP_SEGCONF(format, ...) ({                                                             \
+        if (!flag.no_tip) {                                                                     \
+            TEMP_FLAG(quiet, flag.explicit_quiet); /* note: quiet is set to true in segconf */  \
+            iprintf ("\n\n" _TIP format "\n\n", __VA_ARGS__); flag.no_tip = true;               \
+            RESTORE_FLAG(quiet);                                                                \
+        } })
+#define TIP0_SEGCONF(str) TIP_SEGCONF (str"%s", "");
 
 // strings for tips to ensure consistency (italics from https://en.wikipedia.org/wiki/Mathematical_Alphanumeric_Symbols)
 #define _REFFILE "𝑟𝑒𝑓-𝑓𝑖𝑙𝑒" // better than sans-serif: "𝘳𝘦𝘧-𝘧𝘪𝘭𝘦"

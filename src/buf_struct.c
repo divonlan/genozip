@@ -52,9 +52,9 @@ uint16_t buf_decrement_user_count (BufferP buf)
 
 #define buf_unlock_and_decrement_lock_links                                             \
     if (spinlock) {                                                                     \
-        ASSERT ((buf)->spinlock[0]->link_count, "spinlock->link_count is 0 for %s", unר(buf->nameר)); \
+        ASSERT ((buf)->spinlock->link_count, "spinlock->link_count is 0 for %s", unר(buf->nameר)); \
         if (decrement_relaxed (spinlock->link_count) == 0) {                            \
-            FREE ((buf)->spinlock[0]);                                                     \
+            FREE ((buf)->spinlock);                                                     \
             (buf)->shared = false;                                                      \
         }                                                                               \
         else                                                                            \
@@ -108,8 +108,8 @@ const StrText1K buf_desc (ConstBufferP buf)
              unר(buf->nameר), cond_str (tag_name, " ctx=", tag_name), 
              buf->memory, buf->data, buf->param, buf->param, buf->len, (uint64_t)buf->size, buf_type_name (buf), 
              TF(buf->shared), cond_int (buf->memory && vb, " users=", BOLCOUNTER(buf)), TF(buf->promiscuous),
-             buf->spinlock[0], // note: access spinlock fields only if vb is set. If vb=NULL, buf was destroyed, and spinlock should be NULL - if its not, its likely a memory corruption
-             cond_int (buf->spinlock[0] && vb, " locked=", buf->spinlock[0]->lock), cond_int (buf->spinlock[0] && vb, " link_count=", buf->spinlock[0]->link_count),
+             buf->spinlock, // note: access spinlock fields only if vb is set. If vb=NULL, buf was destroyed, and spinlock should be NULL - if its not, its likely a memory corruption
+             cond_int (buf->spinlock && vb, " locked=", buf->spinlock->lock), cond_int (buf->spinlock && vb, " link_count=", buf->spinlock->link_count),
              unר(buf->funcר), buf->code_line, cond_int (vb, " by vb=", vb->vblock_i));
     return desc;
 }
@@ -293,7 +293,7 @@ void buf_alloc_do (VBlockP vb, BufferP buf, uint64_t requested_size,
 
     // CASE 3: realloc of a non-shared - use realloc that will extend instead of malloc & copy if possible 
     if (!buf->shared) {    
-        buf_lock_if (buf, buf->spinlock[0]); // promiscous or buf_list or caller lock...
+        buf_lock_if (buf, buf->spinlock); // promiscous or buf_list or caller lock...
 
         buf_verify_integrity (buf, caller, "buf_alloc_do");
 
@@ -360,7 +360,7 @@ void buf_trim_do (BufferP buf, uint64_t size, Caller caller)
 
     ASSERT (!buf->shared, "%s:%u trimming is not currently supported on shared buffers: buf=%s", CALLERf, buf_desc(buf).s);
 
-    buf_lock_if (buf, buf->spinlock[0]); // promiscous or buf_list or caller lock...
+    buf_lock_if (buf, buf->spinlock); // promiscous or buf_list or caller lock...
 
     buf_verify_integrity (buf, caller, "buf_alloc_do");
 
@@ -384,12 +384,12 @@ void buf_set_shared (BufferP buf)
 
 void buf_remove_spinlock (BufferP buf)
 {
-    if (!buf->spinlock[0]) return;
+    if (!buf->spinlock) return;
 
     ASSERT (!buf->memory, "cannot remove spinlock: buf has memory: %s", buf_desc(buf).s);
 
-    if (!decrement_relaxed (buf->spinlock[0]->link_count))
-        FREE (buf->spinlock[0]); // we were the only uses of the spinlock
+    if (!decrement_relaxed (buf->spinlock->link_count))
+        FREE (buf->spinlock); // we were the only uses of the spinlock
 
     buf->shared = buf->promiscuous = false;
 }
@@ -404,7 +404,7 @@ void buf_overlay_do (VBlockP vb,
 
     // if this buffer was used by a previous VB as a bottom buffer - we need to "destroy" it first
     if (top_buf->type == BUF_REGULAR && top_buf->data == NULL && 
-        (top_buf->memory || (top_buf->spinlock[0] && top_buf->spinlock[0] != bottom_buf->spinlock[0]))) 
+        (top_buf->memory || (top_buf->spinlock && top_buf->spinlock != bottom_buf->spinlock))) 
         buf_destroy (*top_buf);
 
     ASSERT (top_buf->type == BUF_UNALLOCATED, "%s: Call from %s:%u: cannot buf_overlay to a buffer %s already in use", VB_NAME, CALLERf, buf_desc (top_buf).s);
@@ -419,7 +419,7 @@ void buf_overlay_do (VBlockP vb,
         return;
     }
 
-    ASSERT (bottom_buf->shared && bottom_buf->spinlock[0], 
+    ASSERT (bottom_buf->shared && bottom_buf->spinlock, 
             "%s: Call from %s:%u: expecting bottom_buf %s to have a spinlock and shared=true", VB_NAME, CALLERf, buf_desc (bottom_buf).s);
 
     ASSERT (bottom_buf->type == BUF_REGULAR,
@@ -431,7 +431,7 @@ void buf_overlay_do (VBlockP vb,
     top_buf->funcר     = caller.funcר;
     top_buf->code_line = caller.code_line;
     top_buf->shared    = true;
-    top_buf->spinlock[0]  = bottom_buf->spinlock[0];
+    top_buf->spinlock  = bottom_buf->spinlock;
 
     // note: while we're waiting for the lock, bottom_buf may be reallocing - but this doesn't change spin_lock
     buf_lock (bottom_buf); // locking spinlock shared between top, bottom buffers and all other overlayers
@@ -443,7 +443,7 @@ void buf_overlay_do (VBlockP vb,
     top_buf->data = bottom_buf->data;
 
     // increment spinlock users and memory users (note: spinlock link cou t >= memory_users bc a spinlock can be used by multiple memories in case of a realloc-induced split)
-    increment_relaxed (bottom_buf->spinlock[0]->link_count);    
+    increment_relaxed (bottom_buf->spinlock->link_count);    
 
     buf_increment_user_count (bottom_buf);
     
@@ -511,9 +511,9 @@ void buf_free_do (BufferP buf, Caller caller)
         case BUF_REGULAR: {
             START_TIMER;
         
-            buf_lock_if (buf, buf->spinlock[0]);
+            buf_lock_if (buf, buf->spinlock);
 
-            ASSERT (!buf->spinlock[0] || buf->spinlock[0]->link_count == 1, "Cannot buf_free an overlaid buffer: use buf_destroy: %s", buf_desc (buf).s);
+            ASSERT (!buf->spinlock || buf->spinlock->link_count == 1, "Cannot buf_free an overlaid buffer: use buf_destroy: %s", buf_desc (buf).s);
 
             buf_verify_integrity (buf, caller, "buf_free_do");
 
@@ -582,7 +582,7 @@ void buf_destroy_do_do (BufListEnt *ent, Caller caller)
 
     switch (buf->type) {
         case BUF_REGULAR : { 
-            buf_lock_if (buf, buf->spinlock[0]);
+            buf_lock_if (buf, buf->spinlock);
 
             if (buf->memory) { // NULL if buffer was disowned
                 buf_verify_integrity (buf, caller, "buf_destroy_do");
@@ -605,7 +605,7 @@ void buf_destroy_do_do (BufListEnt *ent, Caller caller)
             break;
         
         case BUF_UNALLOCATED : {
-            buf_lock_if (buf, buf->spinlock[0]); // possibly set as promiscuous but never allocated
+            buf_lock_if (buf, buf->spinlock); // possibly set as promiscuous but never allocated
             buf_unlock_and_decrement_lock_links;
             break;
         }
@@ -656,7 +656,7 @@ void buf_grab_do (VBlockP dst_vb, BufferP dst_buf, rom dst_name/*optional*/, Buf
     dst_buf->type     = BUF_REGULAR;
     dst_buf->len      = src_buf->len;
     dst_buf->param    = src_buf->param;
-    dst_buf->spinlock[0] = src_buf->spinlock[0];
+    dst_buf->spinlock = src_buf->spinlock;
     buf_init (dst_buf, old_memory, src_buf->size, false, caller, dst_name ? dst_name : unר(src_buf->nameר));
 
     buflist_add_buf (dst_vb, dst_buf, caller);

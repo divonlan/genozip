@@ -32,7 +32,6 @@
 #endif
 
 #include "genozip.h"
-#include "endianness.h"
 #include "url.h"
 #include "arch.h"
 #include "sections.h"
@@ -91,9 +90,15 @@ static void arch_add_to_windows_path (void)
 void arch_set_locale (void)
 {
 #ifdef _WIN32 
-    // set Windows Console to UTF-8 input/output
+    // set Windows Console (doesn't work for normal terminal!!) to UTF-8 input/output
     SetConsoleCP(65001);       
     SetConsoleOutputCP(65001);
+
+    // sets printf etc to use UTF-8
+    ASSERTWD (setlocale(LC_ALL, ".UTF-8"), _WRN "failed to setlocale of LC_ALL", NULL);    
+
+    // note: genozip_win.manifest is needed to set argv[] and filenames in functions (fopen, access...) to be UTF-8
+
 #else 
     // accept and print UTF-8 text (doesn't work for Windows - although printing UTF-8 works fine anyway, and we don't allow non-ASCII in --activate)
     ASSERTWD (setlocale (LC_CTYPE, "C.UTF-8"), _WRN "failed to setlocale of LC_CTYPE", NULL);   
@@ -112,7 +117,7 @@ static bool arch_is_wsl (void)
 
 #elif defined _WIN32
     // case: Windows executable is called from WSL
-    rom env = getenv("WSLENV");
+    rom env = getenv ("WSLENV");
     return env && env[0]; // existing and not ""
 
 #else
@@ -125,9 +130,11 @@ void arch_initialize (rom my_argv0)
 {
     argv0 = my_argv0;
 
-    // We require AVX2 support in x86
-    χ64 (ASSINP0 (__builtin_cpu_supports("avx2"), "Genozip, running on Intel/AMD CPUs, requires AVX2 support");)
-    χ64 (ASSINP0 (__builtin_cpu_supports("bmi2"), "Genozip, running on Intel/AMD CPUs, requires BMI2 support");)
+    // if we built for AVX2/BMI2, runtime must support it
+    𝓐𝓥𝓧𝟤 (ASSINP0 (__builtin_cpu_supports("avx2"), "Genozip, running on Intel/AMD CPUs, requires AVX2 support");)
+#ifdef __BMI2__ 
+    ASSINP0 (__builtin_cpu_supports("bmi2"), "Genozip, running on Intel/AMD CPUs, requires BMI2 support");
+#endif
 
     rom slash = strrchr (argv0, '/');
     𝓌𝒾𝓃 (if (!slash) slash = strrchr (argv0, '\\');)
@@ -178,8 +185,9 @@ void arch_initialize (rom my_argv0)
     ASSERT_SIZEOF(RAEntry,                    24);
     ASSERT_SIZEOF(Iupac,                      9);    
     
-    // verify endianity is as expected
-    ASSINP0 (!strcmp (arch_get_endianity(), "little"), "Genozip is currently not supported on big endian architectures");
+    // verify endianity is as Little (not relying on macros)
+    uint16_t test_endianity = 0x0102;
+    ASSINP0 (*(uint8_t*)&test_endianity==0x02, "Genozip is currently not supported on big endian architectures");
 
 // Verify that this Windows is 64 bit
 #ifdef _WIN32
@@ -218,6 +226,11 @@ void arch_initialize (rom my_argv0)
 
     arch_set_locale();
 
+    // verify that floating point is printed as 1.1 and not 1,1 : required by the Genozip file format
+    char str[8];
+    snprintf (str, sizeof(str), "%1.1f", 1.1);
+    ASSERT (!strcmp (str, "1.1"), "expecting floating point to be 1.1"); 
+
 #ifdef _WIN32
     _setmode(_fileno(stdin),  O_BINARY);
     _setmode(_fileno(stdout), O_BINARY);
@@ -235,21 +248,6 @@ void arch_initialize (rom my_argv0)
     // test for valgrind
     rom p = getenv ("LD_PRELOAD");
     flag.is_valgrind |= (p && (strstr (p, "/valgrind/") || strstr (p, "/vgpreload")));
-}
-
-rom arch_get_endianity (void)
-{
-    // verify endianity is as expected
-    uint16_t test_endianity = 0x0102;
-#if defined __LITTLE_ENDIAN__
-    ASSERT0 (*(uint8_t*)&test_endianity==0x02, "expected CPU to be Little Endian but it is not");
-    return "little";
-#elif defined __BIG_ENDIAN__
-    ASSERT0 (*(uint8_t*)&test_endianity==0x01, "expected CPU to be Big Endian but it is not");
-    return "big";
-#else
-#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined - is endianness.h included?"
-#endif    
 }
 
 unsigned arch_get_num_cores (void)

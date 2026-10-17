@@ -15,6 +15,7 @@
 
 #define WEBSITE_QUICK_GUIDE     GENOZIP_URL "/compression" // also in genozip-installer.template.ifp
 #define WEBSITE_GENOZIP         GENOZIP_URL "/genozip"
+#define WEBSITE_NO_LZMA         GENOZIP_URL "/genozip#no-lzma"
 #define WEBSITE_GENOUNZIP       GENOZIP_URL "/genounzip"
 #define WEBSITE_GENOUNZIP_BGZF  GENOZIP_URL "/genounzip#bgzf"
 #define WEBSITE_GENOCAT         GENOZIP_URL "/genocat"
@@ -25,7 +26,7 @@
 #define WEBSITE_GET_GENOZIP     GENOZIP_URL "/get-genozip"
 #define WEBSITE_PUBLICATIONS    GENOZIP_URL "/publications"
 #define WEBSITE_INSTALLING      GENOZIP_URL "/installing"
-#define WEBSITE_USING_ON_HPC    GENOZIP_URL "/using-on-hpc"
+#define WEBSITE_OFFLINE         GENOZIP_URL "/offline"
 #define WEBSITE_ATTRIBUTIONS    GENOZIP_URL "/attributions"
 #define WEBSITE_TELEMETRY       GENOZIP_URL "/telemetry"
 #define WEBSITE_COMPRESS_URL    GENOZIP_URL "/compression#url"

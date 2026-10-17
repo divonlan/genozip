@@ -12,7 +12,6 @@
 #include <pthread.h>
 #include "strings.h"
 #include "buf_list.h"
-#include "endianness.h"
 
 // Notes: 1 byte. BUF_UNALLOCATED must be 0. 
 typedef enum          { BUF_UNALLOCATED=0, BUF_REGULAR,   BITS_OVERLAY,   BITS_SELF_ALLOC, BUF_SHM, BUF_DISOWNED, BUF_SUPERIMPOSED, BUF_NUM_TYPES } BufferType; 
@@ -88,7 +87,7 @@ typedef struct Buffer {        // 64 bytes: the first 32B are frequently accesse
     Pointeר nameר;             // buffer name - used for memory debugging & statistics.
     Pointeר funcר;             // the allocating function 
 
-    BufferSpinlockP spinlock[1];// Used for overlay top/bottom buffers, promiscuous buffers and buffer_list. see internal-docs/overlay-logic.txt
+    BufferSpinlockP spinlock;  // Used for overlay top/bottom buffers, promiscuous buffers and buffer_list. see internal-docs/overlay-logic.txt
 } Buffer; 
 
 #define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
@@ -317,7 +316,7 @@ extern BitsP buf_zfile_buf_to_bits (BufferP buf, uint64_t nbits);
 extern void buf_init_lock (BufferP buf);
 
 #define buf_lock_if(buf, cond) \
-    BufferSpinlockP spinlock = (cond) ? (buf)->spinlock[0] : NULL; \
+    BufferSpinlockP spinlock = (cond) ? (buf)->spinlock : NULL; \
     ASSERT (!(cond) || spinlock, "spinlock not initialized for %s", buf_desc(buf).s); \
     if (spinlock) while (({ bool expected = (bool)false; !cas_strong_rel_acq (spinlock->lock, expected, (bool)true); })); /* spinlock */ 
 

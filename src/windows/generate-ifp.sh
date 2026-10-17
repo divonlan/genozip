@@ -16,7 +16,7 @@ if [[ `pwd` != *windows* ]]; then
 fi
 
 if (( $# != 3 )); then
-    echo "Usage: $0 home_dir installers_dir windows_dir <--- directories in Windows foramt C:\..."
+    echo "Usage: $0 home_dir installers_dir windows_dir ⇐ directories in Windows foramt C:\..."
     exit 0
 fi
 

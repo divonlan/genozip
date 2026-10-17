@@ -78,7 +78,7 @@ static rom license_text[] = {
     
     "   a. At activation time: activation information provided by you and details about your hardware, operating system and IP address.",
     
-    "   b. Telemetry: For paid licenses, telemetry collection is opt‑in. For Student and Evaluation licenses, telemetry is always enabled. When a file is compressed, a log record is transmitted containing aggregate statistical information about the compression algorithms' performance and associated metadata. For illustrative examples of the types of data collected, please visit: "WEBSITE_TELEMETRY". The content of that webpage is provided for informational purposes only and does not form part of this License.",
+    "   b. Telemetry Service: For paid and Evaluation licenses, telemetry is opt‑in. For Student licenses, telemetry is always enabled. When a file is compressed, a log record is transmitted containing aggregate statistical information about the compression algorithms' performance and associated metadata. For illustrative examples of the types of data collected, please visit: "WEBSITE_TELEMETRY". The content of that webpage is provided for informational purposes only and does not form part of this License.",
     
     "6. Product Communications. Licensor may send You low-frequency product updates and announcement emails related to Genozip. You may opt out of marketing-specific communications at any time via the provided unsubscribe links, and Your licensing rights are not conditional upon receiving marketing communications.",
     

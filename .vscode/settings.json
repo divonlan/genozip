@@ -37,7 +37,6 @@
         "functional": "c",
         "tuple": "c",
         "utility": "c",
-        "endianness.h": "c",
         "version.h": "c",
         "libgen.h": "c",
         "compare": "c",

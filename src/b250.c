@@ -154,7 +154,7 @@ void b250_seg_append (VBlockP vb, ContextP ctx, WordIndex node_index)
 
         // new nodes always get 4B b250 - it might be shortened later, after conversion
         if (node_index >= (WordIndex)ctx->ol_nodes.len32) {
-            PUT_UINT32 (BAFT8(ctx->b250), (0b111UL << 29) | node_index); // MSb 111 = 32bit. Note that this is last byte of the Little Endian representation
+            SET_UINT32 (BAFT8(ctx->b250), (0b111UL << 29) | node_index); // MSb 111 = 32bit. Note that this is last byte of the Little Endian representation
             ctx->b250.len32 += 4;
         }
 

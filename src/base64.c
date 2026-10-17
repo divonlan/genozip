@@ -54,7 +54,7 @@ unsigned base64_encode (STR8𐤐(data), char *restrict b64)
         uint8_t out3 = encode[(bits >> 0 ) & 0x3F];
         
         // Write all 4 bytes to memory at once
-        PUT_UINT32 (next, out0 | (out1 << 8) | (out2 << 16) | (out3 << 24));
+        SET_UINT32 (next, out0 | (out1 << 8) | (out2 << 16) | (out3 << 24));
         next += 4;
         data += 3;		
 	}
@@ -65,7 +65,7 @@ unsigned base64_encode (STR8𐤐(data), char *restrict b64)
 		uint8_t out2 = '=';
 		uint8_t out3 = '=';
 
-        PUT_UINT32 (next, out0 | (out1 << 8) | (out2 << 16) | (out3 << 24));
+        SET_UINT32 (next, out0 | (out1 << 8) | (out2 << 16) | (out3 << 24));
         next += 4;
 	}
 
@@ -75,7 +75,7 @@ unsigned base64_encode (STR8𐤐(data), char *restrict b64)
 		uint8_t out2 = encode[ (data[1] & 0x0f) << 2];
 		uint8_t out3 = '=';
 
-        PUT_UINT32 (next, out0 | (out1 << 8) | (out2 << 16) | (out3 << 24));
+        SET_UINT32 (next, out0 | (out1 << 8) | (out2 << 16) | (out3 << 24));
         next += 4;
 	}	
 
@@ -99,10 +99,10 @@ uint32_t base64_decode (STR𐤐(b64), STR8c𐤐(out)) // out_len==1 if asking to
         uint8_t out1 = (decode[(int)b64[1]] << 4) | (decode[(int)b64[2]] >> 2);
 		uint8_t out2 = (decode[(int)b64[2]] << 6) |  decode[(int)b64[3]];
 
-        PUT_UINT32 (out, out0 | (out1 << 8) | (out2 << 16)); // overwrites one byte because of writing 4-byte (instead of 3), and up to 2 additional bytes because we might need only 1 or 2 out of the 3 bytes
+        SET_UINT32 (out, out0 | (out1 << 8) | (out2 << 16)); // overwrites one byte because of writing 4-byte (instead of 3), and up to 2 additional bytes because we might need only 1 or 2 out of the 3 bytes
 	}
 
-	PUT_UINT32 (after_out, save_overflow); // restore
+	SET_UINT32 (after_out, save_overflow); // restore
 
 	return out_len;
 }

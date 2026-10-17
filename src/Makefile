@@ -18,10 +18,14 @@ define verify_dir
 	$(if $(wildcard $($(1))/.),,$(error directory $(1)='$($(1))' does not exist))
 endef
 
+ifndef MAKE_RESTARTS  # doesn't print again if makefile is restarted
+info_once = $(info $(1))
+endif
+
 define set_path
 	$(eval $(1) := $(subst \,/,$(strip $(2))))
 	$(call verify_dir,$(1))
-	$(info ℹ️ $(1)='$($(1))')
+	$(call info_once,ℹ️ $(1)='$($(1))')
 endef
 
 #------------------------------------------------------------------------------------------
@@ -73,7 +77,10 @@ ifdef conda
 #--------------------------------------------------
 else 	
 	ifdef DISTRIBUTION # custom destribution, run eg: DISTRIBUTION=special make genozip
-		DISTOBJ := distribution.$(DISTRIBUTION).o 
+		DISTOBJ := distribution.$(DISTRIBUTION).o
+	else ifdef NEHALEM
+		DISTOBJ := distribution.nehalem.o
+		DISTRIBUTION := nehalem
 	else ifeq ($(USER),divon)
 		DISTOBJ := distribution.devel.o
 		vendor  := 1 
@@ -130,12 +137,12 @@ CXXFLAGS   += -Wall -D_LARGEFILE64_SOURCE=1 -D_GNU_SOURCE -std=gnu++11 -Ibsc
 OPTFLAGS   += -O3 
 DEBUGFLAGS += -DDEBUG -ggdb3 -O0 -fstack-check -fstack-protector-strong
 
-$(info ℹ️ Compiler version=$(shell $(CC) --version | head -1))
+$(call info_once,ℹ️ Compiler version=$(shell $(CC) --version | head -1))
 ifdef linux_x86
-    $(info ℹ️ Target sysroot/glibc=$(shell $(CC) -dM -E -include features.h - < /dev/null | egrep -w "__GLIBC__|__GLIBC_MINOR__" | grep -v __GLIBC_PREREQ | awk '{printf "%s%s", sep, $$3; sep="."}' ))
+    $(call info_once,ℹ️ Target sysroot/glibc=$(shell $(CC) -dM -E -include features.h - < /dev/null | egrep -w "__GLIBC__|__GLIBC_MINOR__" | grep -v __GLIBC_PREREQ | awk '{printf "%s%s", sep, $$3; sep="."}' ))
 endif
-$(info ℹ️ make version=$(shell $(MAKE) --version | head -1))
-$(info ℹ️ tar version=$(shell tar --version | head -1))
+$(call info_once,ℹ️ make version=$(shell $(MAKE) --version | head -1))
+$(call info_once,ℹ️ tar version=$(shell tar --version | head -1))
 
 #--------------------------------
 # OS-specific stuff
@@ -147,6 +154,7 @@ ifdef win_x86
 	CFLAGS += -D_FILE_OFFSET_BITS=64
 
 	WSL     := wsl
+	WINDRES := windres
 	NASM    := nasm
 	ASMC    := run-on-wsl.sh asmc
 	MASM    := $(ASMC) -c -10 -win64
@@ -162,7 +170,9 @@ ifdef win_x86
 		fail := $(error Only the gcc and clang compilers are currently supported)
 	endif
 
-    $(info ℹ️ NASM version=$(shell $(NASM) --version | head -1))
+    $(call info_once,ℹ️ windres version=$(shell $(WINDRES) --version | head -1))
+    $(call info_once,ℹ️ NASM version=$(shell $(NASM) --version | head -1))
+
 
 else ifdef linux_x86
 	OBJDIR  := $(OBJDIR_LINUX)
@@ -182,7 +192,7 @@ else ifdef linux_x86
 	# 2. Run with: setarch x86_64 -R genozip-debug ... (see internal-docs/address-sanitizer)
 	# DEBUGFLAGS += -fsanitize=address -Dsanitize_address=1 
 
-    $(info ℹ️ NASM version=$(shell $(NASM) --version | head -1))
+    $(call info_once,ℹ️ NASM version=$(shell $(NASM) --version | head -1))
 
 else ifdef osx_arm64
 	OBJDIR  := $(OBJDIR_OSX_ARM)
@@ -195,9 +205,9 @@ endif
 ifdef MASM
 ifneq ($(shell $(ASMC) -h >/dev/null 2>&1 && echo yes),yes)
     undefine MASM
-    $(info ℹ️ MASM version=N/A)
+    $(call info_once,ℹ️ MASM version=N/A)
 else
-    $(info ℹ️ MASM version=$(shell $(MASM) -h | head -1))
+    $(call info_once,ℹ️ MASM version=$(shell $(MASM) -h | head -1))
 endif
 endif
 
@@ -234,7 +244,7 @@ C_SRCS := \
 	codec_smux.c codec_oq.c mgzip.c mgzip_sections.c													\
 	txtfile.c profiler.c file.c filename.c dispatcher.c crypt.c aes.c md5.c segconf.c biopsy.c 			\
 	vblock.c regions.c dict_id.c aliases.c hash.c stream.c url.c bases_filter.c dict_io.c				\
-	version.c huffman.c user_message.c b250.c qname_filter.c txtheader.c 								\
+	version.c huffman.c user_message.c b250.c qname_filter.c txtheader.c mac_compat.c					\
 	\
 	zlib/zutil.c zlib/deflate.c zlib/trees.c 															\
 	\
@@ -263,10 +273,10 @@ CXX_SRCS := \
 
 # "make distribution" runs on Windows, so C_SRCS etc is set by the Windows build. Here we list 
 # sources files needed for remote builds (i.e. conda and mac) beyond those *built* for Windows:
-# all include files + c/cpp/assembler files not used by Windows
+# all include files + c/cpp/assembler files not used for Windows build
 OTHER_SRCS := \
 	dict_id_gen.h aes.h dispatcher.h profiler.h dict_id.h aliases.h txtfile.h zip.h bits.h progress.h 	\
-	website.h endianness.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h 	\
+	website.h md5.h sections.h strings.h hash.h stream.h url.h flags.h segconf.h biopsy.h 				\
 	huffman.h sorter.h buffer.h buf_struct.h buf_list.h file.h context.h context_struct.h container.h 	\
 	seg.h text_license.h version.h compressor.h crypt.h genozip.h piz.h vblock.h zfile.h 				\
 	random_access.h regions.h reconstruct.h tar.h qname.h qname_flavors.h codec.h lookback.h 			\
@@ -277,6 +287,8 @@ OTHER_SRCS := \
 	sam_private.h sam_friend.h me23.h fasta.h fasta_friend.h gff.h bed.h locs.h generic.h fastq.h 		\
 	fastq_private.h user_message.h mac_compat.h b250.h dyn_int.h qname_filter.h bai.h pointer_rel.h		\
 	flags_assign.h aligner_layered.h 																	\
+	\
+	genozip_win.manifest windows/genozip.ico															\
 	\
 	zlib/gzguts.h zlib/zconf.h zlib/deflate.h zlib/trees.h zlib/zlib.h zlib/zutil.h						\
 	\
@@ -334,9 +346,9 @@ OTHER_SRCS := \
 	\
 	xxhash/xxhash.h xxhash/xxh_x86dispatch.h	
 
-#--------------------------------------------
-# CPU-specific source files compilation flags
-#--------------------------------------------
+#------------------------------------------------
+# CPU-specific source files and compilation flags
+#------------------------------------------------
 ifdef x86_64
 	C_SRCS += \
 		xxhash/xxh_x86dispatch.c \
@@ -344,14 +356,16 @@ ifdef x86_64
 		libdeflate_1.19/x86/cpu_features.c
 
 	NASM_SRCS := \
-		igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm igzip/x86_64/igzip_icf_body_h1_gr_bt.asm 					\
-		igzip/x86_64/igzip_icf_finish.asm igzip/x86_64/rfc1951_lookup.asm igzip/x86_64/adler32_sse.asm 									\
-		igzip/x86_64/adler32_avx2_4.asm igzip/x86_64/igzip_multibinary.asm igzip/x86_64/igzip_update_histogram_01.asm 					\
-		igzip/x86_64/igzip_update_histogram_04.asm igzip/x86_64/igzip_decode_block_stateless_01.asm 										\
-		igzip/x86_64/igzip_decode_block_stateless_04.asm igzip/x86_64/igzip_inflate_multibinary.asm 										\
-		igzip/x86_64/encode_df_04.asm igzip/x86_64/encode_df_06.asm igzip/x86_64/proc_heap.asm igzip/x86_64/igzip_deflate_hash.asm 		\
-		igzip/x86_64/igzip_gen_icf_map_lh1_06.asm igzip/x86_64/igzip_gen_icf_map_lh1_04.asm igzip/x86_64/igzip_set_long_icf_fg_04.asm 	\
-		igzip/x86_64/igzip_set_long_icf_fg_06.asm igzip/x86_64/crc_multibinary.asm igzip/x86_64/crc32_gzip_refl_by8.asm 					\
+		igzip/x86_64/igzip_body.asm igzip/x86_64/igzip_finish.asm igzip/x86_64/igzip_icf_finish.asm		\
+		igzip/x86_64/igzip_icf_body_h1_gr_bt.asm igzip/x86_64/rfc1951_lookup.asm 						\
+		igzip/x86_64/adler32_sse.asm igzip/x86_64/adler32_avx2_4.asm igzip/x86_64/igzip_multibinary.asm \
+		igzip/x86_64/igzip_update_histogram_01.asm igzip/x86_64/igzip_update_histogram_04.asm 			\
+		igzip/x86_64/igzip_decode_block_stateless_01.asm igzip/x86_64/igzip_inflate_multibinary.asm		\
+		igzip/x86_64/igzip_decode_block_stateless_04.asm igzip/x86_64/encode_df_04.asm 					\
+		igzip/x86_64/encode_df_06.asm igzip/x86_64/proc_heap.asm igzip/x86_64/igzip_deflate_hash.asm	\
+		igzip/x86_64/igzip_gen_icf_map_lh1_06.asm igzip/x86_64/igzip_gen_icf_map_lh1_04.asm 			\
+		igzip/x86_64/igzip_set_long_icf_fg_04.asm igzip/x86_64/igzip_set_long_icf_fg_06.asm 			\
+		igzip/x86_64/crc_multibinary.asm igzip/x86_64/crc32_gzip_refl_by8.asm 							\
 		igzip/x86_64/crc32_gzip_refl_by8_02.asm igzip/x86_64/crc32_gzip_refl_by16_10.asm
 
 	ifdef MASM # asmc available
@@ -362,17 +376,26 @@ ifdef x86_64
 		LDFLAGS += $(OBJDIR)/lzma/LzmaDecOpt.o
 	endif
 
-	CFLAGS     += -march=haswell 
-
-	CXXFLAGS   += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
+# 	To built for nehalem (no AVX2/BMI2), run: make NEHALEM=1 all
+	ifdef NEHALEM 
+        $(call info_once,ℹ️ Target x86_64 architecture=nehalem)
+		CFLAGS     += -march=nehalem 
+		CXXFLAGS   += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=nehalem -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_SSE42 
+	else
+        $(call info_once,ℹ️ Target x86_64 architecture=haswell)
+		CFLAGS     += -march=haswell 
+		CXXFLAGS   += -DLIBBSC_ALLOW_UNALIGNED_ACCESS -march=haswell -DLIBBSC_CPU_FEATURE=LIBBSC_CPU_FEATURE_AVX2 
+	endif
 
 	NASM_FLAGS += -Iigzip/x86_64
 
 else ifdef arm64
-	C_SRCS += \
-		mac_compat.c \
-		\
-		libdeflate_1.19/arm/cpu_features.c
+	C_SRCS += libdeflate_1.19/arm/cpu_features.c
+
+	S_SRCS += lzma/LzmaDecOpt.S
+
+	CFLAGS   += -DZ7_LZMA_DEC_OPT
+	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
 
 	ifdef conda # we can't yet compile igzip .S on conda - appears to be some Assembler syntax difference between the versions of clang
 		C_SRCS += \
@@ -380,32 +403,35 @@ else ifdef arm64
 
 		CFLAGS += -Iigzip/noarch
 	else
-		C_SRCS += igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c igzip/proc_heap_base.c
+		C_SRCS += \
+			igzip/aarch64/crc_aarch64_dispatcher.c igzip/aarch64/igzip_multibinary_aarch64_dispatcher.c \
+			igzip/proc_heap_base.c
 
-		S_SRCS := \
-			igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 								\
-			igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S igzip/aarch64/igzip_deflate_finish_aarch64.S	\
-			igzip/aarch64/isal_deflate_icf_body_hash_hist.S igzip/aarch64/isal_deflate_icf_finish_hash_hist.S									\
-			igzip/aarch64/igzip_set_long_icf_fg.S igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
-			igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S 								\
-			igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_crc_ext.S igzip/aarch64/crc32_gzip_refl_pmull.S			\
-			igzip/aarch64/crc32_mix_default.S igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 					\
-			igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S igzip/aarch64/crc_multibinary_arm.S 
+		S_SRCS += \
+			igzip/aarch64/igzip_inflate_multibinary_arm64.S igzip/aarch64/igzip_multibinary_arm64.S 	\
+			igzip/aarch64/igzip_isal_adler32_neon.S igzip/aarch64/igzip_deflate_body_aarch64.S 			\
+			igzip/aarch64/igzip_deflate_finish_aarch64.S igzip/aarch64/isal_deflate_icf_body_hash_hist.S\
+			igzip/aarch64/isal_deflate_icf_finish_hash_hist.S igzip/aarch64/igzip_set_long_icf_fg.S 	\
+			igzip/aarch64/encode_df.S igzip/aarch64/isal_update_histogram.S igzip/aarch64/gen_icf_map.S \
+			igzip/aarch64/igzip_deflate_hash_aarch64.S igzip/aarch64/crc32_gzip_refl_crc_ext.S			\
+			igzip/aarch64/igzip_decode_huffman_code_block_aarch64.S igzip/aarch64/crc32_mix_default.S	\
+			igzip/aarch64/crc32_gzip_refl_3crc_fold.S igzip/aarch64/crc32_gzip_refl_pmull.S				\
+			igzip/aarch64/crc32_mix_default_common.S igzip/aarch64/crc32_mix_neoverse_n1.S 				\
+			igzip/aarch64/crc32c_mix_default.S igzip/aarch64/crc32c_mix_neoverse_n1.S 					\
+			igzip/aarch64/crc_multibinary_arm.S 
 
 		SFLAGS += -Iigzip/aarch64
 	endif
-
-	# Luckicly, we can always compile LZMA's .S
-	S_SRCS   += lzma/LzmaDecOpt.S
-
-	CFLAGS   += -DZ7_LZMA_DEC_OPT
-	CXXFLAGS += -DLIBBSC_ALLOW_UNALIGNED_ACCESS  
 	
 else # another CPU
 	C_SRCS += \
 		igzip/noarch/igzip_base_aliases.c igzip/proc_heap_base.c igzip/noarch/crc_base_aliases.c
 
 	CFLAGS += -Iigzip/noarch
+endif
+
+ifdef win_x86
+	RC_SRCS := genozip_win.rc
 endif
 
 #-------------------------------------------------------------
@@ -426,7 +452,7 @@ NONCOMPILE_TARGETS := \
 # list of all source object, dependencies and executable files
 #-------------------------------------------------------------
 # object files that are shared between optimized/debug/opt builds
-SHA_OBJS          := $(addprefix $(OBJDIR)/,$(MASM_SRCS:.masm=.o)) $(addprefix $(OBJDIR)/,$(NASM_SRCS:.asm=.o))  $(addprefix $(OBJDIR)/,$(S_SRCS:.S=.o))
+SHA_OBJS          := $(addprefix $(OBJDIR)/,$(MASM_SRCS:.masm=.o)) $(addprefix $(OBJDIR)/,$(NASM_SRCS:.asm=.o))  $(addprefix $(OBJDIR)/,$(S_SRCS:.S=.o)) $(addprefix $(OBJDIR)/,$(RC_SRCS:.rc=.o))
 DEPS              := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.d))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.d))  $(addprefix $(OBJDIR)/,$(NASM_SRCS:.asm=.d)) $(addprefix $(OBJDIR)/,$(S_SRCS:.S=.d)) 
 # object files for installers, distribution.c will be added later
 INSTALLER_OBJS    := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.o))       $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.o))       $(SHA_OBJS)
@@ -436,12 +462,13 @@ DEBUG_OBJS        := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.debug-o)) $(addprefix $
 OPT_OBJS          := $(addprefix $(OBJDIR)/,$(C_SRCS:.c=.opt-o))   $(addprefix $(OBJDIR)/,$(CXX_SRCS:.cpp=.opt-o))   $(SHA_OBJS) $(OBJDIR)/$(DISTOBJ)
 
 ifdef conda # print to conda-forge log
-    $(info ℹ️ C_SRCS=$(C_SRCS))
-    $(info ℹ️ NASM_SRCS=$(NASM_SRCS))
-    $(info ℹ️ S_SRCS=$(S_SRCS))
-    $(info ℹ️ OTHER_SRCS=$(OTHER_SRCS)) 
-    $(info ℹ️ OTHER_FILES_FOR_CONDA=$(OTHER_FILES_FOR_CONDA))
-    $(info ℹ️ OBJS=$(OBJS))
+    $(call info_once,ℹ️ C_SRCS=$(C_SRCS))
+    $(call info_once,ℹ️ NASM_SRCS=$(NASM_SRCS))
+    $(call info_once,ℹ️ S_SRCS=$(S_SRCS))
+    $(call info_once,ℹ️ RC_SRCS=$(RC_SRCS))
+    $(call info_once,ℹ️ OTHER_SRCS=$(OTHER_SRCS)) 
+    $(call info_once,ℹ️ OTHER_FILES_FOR_CONDA=$(OTHER_FILES_FOR_CONDA))
+    $(call info_once,ℹ️ OBJS=$(OBJS))
 endif
 
 EXECUTABLES       := genozip$(EXE)       genounzip$(EXE)       genocat$(EXE)       genols$(EXE)       
@@ -470,7 +497,7 @@ opt   : $(OBJDIR) $(OPT_EXECUTABLES)
 #-------------------------------------------------------------
 
 ifeq ($(filter $(NONCOMPILE_TARGETS),$(MAKECMDGOALS)),) # if the intersection between the two lists is empty
-# after parsing the entire file but before anything else: generates missing .d files and includes them as part of the makefile
+# after parsing the entire file but before anything else: generates missing .d files and includes them as part of the makefile here, then restarts the make file setting MAKE_RESTARTS
 -include $(DEPS) 
 endif
 .SECONDARY: $(DEPS) # don't delete .d files after making
@@ -540,6 +567,12 @@ $(OBJDIR)/%.debug-o: %.cpp $(OBJDIR)/%.d
 $(OBJDIR)/%.opt-o: %.cpp $(OBJDIR)/%.d
 	@echo "Compiling ($(architecture)) $< (opt)"	;\
 	$(CXX) -c -o $@ $< $(CXXFLAGS)
+
+ifdef win_x86
+$(OBJDIR)/%.o : %.rc %.manifest 
+	@echo "Windres ($(architecture)) $<" 			;\
+	$(WINDRES) -i $< -o $@
+endif
 
 # ---------------------------------------------------------------
 # Assember rules: three differnet formats: Intel, Microsoft, GNU
@@ -643,7 +676,7 @@ DIST_MAKE = @\
 	$(MAKE) -f secure/distribution.mk --no-print-directory $@
 
 # pass to distribution.mk :
-export CC CXX CFLAGS CXXFLAGS LDFLAGS OPTFLAGS EXE SRC_DIRS C_SRCS CXX_SRCS NASM_SRCS S_SRCS OTHER_SRCS
+export CC CXX CFLAGS CXXFLAGS LDFLAGS OPTFLAGS EXE SRC_DIRS C_SRCS CXX_SRCS NASM_SRCS S_SRCS RC_SRCS OTHER_SRCS
 export OBJDIR OBJDIR_LINUX OBJDIR_WINDOWS OBJDIR_OSX_ARM OBJS DEPS DISTOBJ SCRIPTS LATEST_SRC 
 export LINUX OSX WIN CONDA RELEASES
 export EXECUTABLES OPT_EXECUTABLES DEBUG_EXECUTABLES INSTALLERS CONDA_LIC_OBJS TEST_DIR
@@ -674,7 +707,7 @@ OTHER_FILES_FOR_CONDA := \
 increment-version: # note: target name is not "version.h" so this is not invoked during "make all" or "make debug"
 	+$(DIST_MAKE) 
 
-.archive.tar.gz : $(C_SRCS) $(NASM_SRCS) $(OTHER_SRCS) $(OTHER_FILES_FOR_CONDA)
+.archive.tar.gz : $(C_SRCS) $(NASM_SRCS) $(RC_SRCS) $(OTHER_SRCS) $(OTHER_FILES_FOR_CONDA)
 	+$(DIST_MAKE) 
 
 $(CONDA)/meta.yaml: $(CONDA)/meta.template.yaml .archive.tar.gz ../README.md
@@ -705,8 +738,8 @@ $(WIN)/LICENSE.for-installer.txt: $(WIN)/genozip.exe version.h
 $(WIN)/genozip-installer.ifp: $(WIN)/genozip-installer.template.ifp $(WIN)/generate-ifp.sh $(WIN)/genozip.exe ../LICENSE.txt
 	+$(DIST_MAKE) 
 
-$(info ℹ️ WIN='$(WIN)')
-$(info ℹ️ INSTALLERS='$(INSTALLERS)')
+$(call info_once,ℹ️ WIN='$(WIN)')
+$(call info_once,ℹ️ INSTALLERS='$(INSTALLERS)')
 
 $(INSTALLERS)/genozip-installer.exe: $(WINDOWS_INSTALLER_OBJS) 
 	+$(DIST_MAKE) 
@@ -775,7 +808,7 @@ distribution initialize-build-distribution finalize-distribution push-build incr
 	@echo "❌ \"make $@\" must be run from Windows"
 
 $(OSX)/genozip: CFLAGS += $(OPTFLAGS)
-$(OSX)/genozip: $(INSTALLER_OBJS) $(OBJDIR)/distribution.osx-%.o
+$(OSX)/genozip: $(INSTALLER_OBJS) $(OBJDIR)/distribution.osx-arm64.o
 	@echo Linking $@ ;\
 	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 

@@ -106,7 +106,7 @@ static inline void huffman_compress_finalize_bits (ContextP zctx, BitsP bits, ui
     // clear unused bits in last byte
     int bits_in_last_byte = next_bit % 8;
     if (bits_in_last_byte) 
-        comp[*comp_len-1] &= bitmask8(bits_in_last_byte);
+        comp[*comp_len-1] &= bitmask8_(bits_in_last_byte);
 }
 
 #define huffman_compress_add_int(word,n_bits,avail_comp_len) \

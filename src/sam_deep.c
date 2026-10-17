@@ -17,7 +17,7 @@
         *next++ = (n);                              \
     else {                                          \
         *next++ = 255;                              \
-        PUT_UINT32 (next, (n));                     \
+        SET_UINT32 (next, (n));                     \
         next += 4;                                  \
     } })
 
@@ -484,7 +484,7 @@ static uint32_t sam_piz_deep_compress (VBlockSAMP vb, uint8_t *next, STRp(data),
 static uint8_t *sam_piz_deep_add_seq_by_ref (VBlockSAMP vb, uint8_t *next, PizDeepSeqFlags *deep_flags)
 {
     // set GPOS and .is_long_gpos (4 or 5 bytes little endian)
-    PUT_UINT32 (next, (uint32_t)vb->deep_gpos);
+    SET_UINT32 (next, (uint32_t)vb->deep_gpos);
     next += sizeof (PosType32);
 
     if (vb->deep_gpos > 0xffffffffULL) {

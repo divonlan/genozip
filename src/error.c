@@ -374,7 +374,7 @@ noreturn void error_exit (bool show_stack, bool is_error)
         if (is_error) {
             // cancel all other threads before closing z_file, so other threads don't attempt to access it 
             // (eg. z_file->data_type) and get a segmentation fault.
-            threads_cancel_other_threads(); // <--- BREAKPOINT BRK
+            threads_cancel_other_threads(); // ⇐ BREAKPOINT BRK
 
             close (1);   // prevent other threads from outputting to terminal (including buffered output), obscuring our error message
             close (2);
@@ -500,7 +500,7 @@ noreturn void error_asspiz (VBlockP vb, Caller caller, rom format, ...)
 noreturn void error_restart (rom add_cmd_option, rom format, ...)
 {
     progress_newline();                  
-    fprintf (stderr, "%s: ", global_cmd);
+    fprintf (stderr, _WRN "%s: ", global_cmd);
 
     va_list args;                        
     va_start (args, format);              
@@ -523,7 +523,7 @@ noreturn void error_restart (rom add_cmd_option, rom format, ...)
             exit_on_error(false);
         }
         
-        fprintf (stderr, "\nRecovering by restarting with %s\n\n", add_cmd_option); 
+        fprintf (stderr, "\n"_FYI"Recovering by restarting with %s\n\n", add_cmd_option); 
 
         // case: skip freeing buffers since we're exiting any, UNLESS run under valgrind - in which case we free, so we can detect true memory leaks
         if (!flag.is_valgrind)

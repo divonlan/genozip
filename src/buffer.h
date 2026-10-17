@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "endianness.h"
 #include "buf_struct.h"
 #include "local_type.h"
 

@@ -111,7 +111,7 @@ static void buflist_foreach_buffer_in_each_vbs (bool (*callback)(ConstBufferP, V
 {
     int num_pools = safe_num_pools();
 
-    for (VBlockPoolType pool_type=0; pool_type < num_pools; pool_type++) {
+    for (VBlockPoolType pool_type=1; pool_type < num_pools; pool_type++) {
 
         VBlockPool *pool = vb_get_pool (pool_type, SOFT_FAIL);
         if (!pool) continue;
@@ -133,7 +133,7 @@ void buflist_who_is_locked (void)
 {
     int num_pools = safe_num_pools();
 
-    for (VBlockPoolType pool_type=0; pool_type < num_pools; pool_type++) {
+    for (VBlockPoolType pool_type=1; pool_type < num_pools; pool_type++) {
         VBlockPoolP pool = vb_get_pool (pool_type, SOFT_FAIL);
         if (!pool) continue;
 
@@ -141,7 +141,7 @@ void buflist_who_is_locked (void)
             VBlockP vb = vb_get_from_pool (pool, index);
             if (!vb) continue;
 
-            if (vb->buffer_list.spinlock[0] && vb->buffer_list.spinlock[0]->lock)
+            if (vb->buffer_list.spinlock && vb->buffer_list.spinlock->lock)
                 fprintf (stderr, "vb=%d vb_id=%s buffer_list is locked\n", vb->vblock_i, dis_vb_id(vb->id).s);
         }
     }
@@ -297,7 +297,7 @@ void buflist_compact (VBlockP vb)
 
 bool buflist_locate (ConstBufferP buf, rom prefix /*NULL if silent*/)
 {
-    for (VBlockPoolType pool_type=0; pool_type < NUM_POOLS; pool_type++) {
+    for (VBlockPoolType pool_type=1; pool_type < NUM_POOLS; pool_type++) {
 
         VBlockPoolP pool = vb_get_pool (pool_type, SOFT_FAIL);
         if (!pool) continue;
@@ -653,7 +653,7 @@ static bool buflist_test_overflows_do (VBlockP vb, bool primary, rom msg)
         }
 #endif
 
-        BufferSpinlockP spinlock = buf->promiscuous && !buf->spinlock[0]->lock/*crude checking of lock*/ ? buf_lock_promiscuous (buf, THIS_CODE_LINE) : NULL; // prevent frees or reallocs while we're testing
+        BufferSpinlockP spinlock = buf->promiscuous && !buf->spinlock->lock/*crude checking of lock*/ ? buf_lock_promiscuous (buf, THIS_CODE_LINE) : NULL; // prevent frees or reallocs while we're testing
         if (buf->promiscuous && !spinlock) return false; // either buffer is locked (so this might hang if we attempted to lock) or by the time we acquired the lock, buf was already freed
 
         // memory=0 could be a buffer that has been buf_moved, or a promiscous evb buffer current being 

@@ -16,7 +16,6 @@
 #include <immintrin.h>
 #endif
 #include "genozip.h"
-#include "endianness.h"
 #include "bits.h"
 #include "buffer.h"
 #include "reference.h"
@@ -41,7 +40,7 @@ void _set_word (BitsP bits, uint64_t start, uint64_t word)
     
     else {
         words[word_index] = (word << word_offset) |
-                            (words[word_index] & bitmask64(word_offset));
+                            (words[word_index] & bitmask64_(word_offset));
 
         if (word_index+1 < bits->nwords) { // if last part of the word goes beyond nwords, we drop it
             words[word_index+1] = (word >> (BITS_IN_WORD - word_offset)) |
@@ -67,15 +66,15 @@ void bits_set_region (BitsP bits, uint64_t start, uint64_t len)
     word_offset_t foffset = bits_idx(start);
     word_offset_t loffset = bits_idx(start + len - 1);
 
-    if (__builtin_expect (first_word == last_word, false)) {
-        uint64_t mask = bitmask64(len) << foffset;
+    if (first_word == last_word) {
+        uint64_t mask = bitmask64_(len) << foffset;
         bits->words[first_word] |= mask; 
     }
     
     else {
-        bits->words[first_word] |= ~bitmask64(foffset);     // set first word
+        bits->words[first_word] |= ~bitmask64(foffset);  // set first word
         memset (&bits->words[first_word + 1], 0xff, (last_word - first_word - 1) * sizeof(uint64_t));
-        bits->words[last_word] |= bitmask64(loffset+1);     // set last word
+        bits->words[last_word] |= bitmask64_(loffset+1); // set last word
     }
 
     DEBUG_VALIDATE_BITS (bits);
@@ -94,15 +93,15 @@ void bits_clear_region (BitsP bits, uint64_t start, uint64_t len)
     word_offset_t foffset = bits_idx(start);
     word_offset_t loffset = bits_idx(start + len - 1);
 
-    if (__builtin_expect (first_word == last_word, false)) {
-        uint64_t mask = bitmask64(len) << foffset;
+    if (first_word == last_word) {
+        uint64_t mask = bitmask64_(len) << foffset;
         bits->words[first_word] &= ~mask;
     }
     
     else {
-        bits->words[first_word] &= bitmask64(foffset);      // clear first word
+        bits->words[first_word] &= bitmask64(foffset);    // clear first word
         memset (&bits->words[first_word + 1], 0, (last_word - first_word - 1) * sizeof(uint64_t));
-        bits->words[last_word] &= ~bitmask64(loffset+1);    // clear last word
+        bits->words[last_word] &= ~bitmask64_(loffset+1); // clear last word
     }
 
     DEBUG_VALIDATE_BITS (bits);
@@ -123,7 +122,7 @@ bool bits_is_fully_set (ConstBitsP bits)
     uint64_t full_words = bits->nbits / BITS_IN_WORD;
     word_offset_t partial_top_word_nbits = bits->nbits % BITS_IN_WORD;
 
-#ifdef __x86_64__
+#ifdef __AVX2__ 
     const __m256i all_set = _mm256_set1_epi64x (-1);
     
     for (; i+4 <= full_words; i+=4) {
@@ -206,7 +205,7 @@ uint64_t bits_num_set_bits_region (ConstBitsP bits, uint64_t start, uint64_t len
         num_of_bits_set += __builtin_popcountll (bits->words[first_word] & mask);
     }
     else {
-        word_offset_t loffset  = bits_idx(start+length-1);
+        word_offset_t loffset = bits_idx(start+length-1);
     
         // first word
         num_of_bits_set += __builtin_popcountll (bits->words[first_word] & ~bitmask64(foffset));
@@ -216,7 +215,7 @@ uint64_t bits_num_set_bits_region (ConstBitsP bits, uint64_t start, uint64_t len
             num_of_bits_set += __builtin_popcountll (bits->words[i]);
 
         // last word
-        num_of_bits_set += __builtin_popcountll (bits->words[last_word] & bitmask64(loffset+1));
+        num_of_bits_set += __builtin_popcountll (bits->words[last_word] & bitmask64_(loffset+1));
     }
 
     return num_of_bits_set;
@@ -267,7 +266,7 @@ bool FUNC(ConstBitsP bits, uint64_t offset, uint64_t *result) \
     \
     /* Find prev word that is greater than zero */ \
     uint64_t i = bits_wrd(offset-1); \
-    uint64_t w = GET(bits->words[i]) & bitmask64(bits_idx(offset-1)+1); \
+    uint64_t w = GET(bits->words[i]) & bitmask64_(bits_idx(offset-1)+1); \
     \
     if (w > 0) { *result = (i+1) * BITS_IN_WORD - leading_zeros(w) - 1; return true; } \
     \
@@ -431,10 +430,10 @@ void bits_copy (BitsP dst, uint64_t dstindx, ConstBitsP src, uint64_t srcindx, u
 
     // STAGE 3: Handle Remaining Bits (Tail)
     if (length > 0) {
-        uint64_t src_w = _get_word_(src_words, src_nwords, srcindx) & bitmask64(length); // note: cannot use bits_get_wordn because it would violate restrict
+        uint64_t src_w = _get_word_(src_words, src_nwords, srcindx) & bitmask64_(length); // note: cannot use bits_get_wordn because it would violate restrict
         uint64_t dst_w = dst_words[bits_wrd(dstindx)];
 
-        uint64_t mask = bitmask64(length);
+        uint64_t mask = bitmask64_(length);
         dst_words[bits_wrd(dstindx)] = (dst_w & ~mask) | src_w;
 
         dstindx += length;
@@ -472,7 +471,7 @@ void bits_bit_to_byte (uint8_t *restrict dst, ConstBitsP src_bits, uint64_t src_
         const uint32_t consumed = n;
 
         while (n >= 8) {
-#ifdef __x86_64__
+#ifdef __BMI2__
             // deposit the 8(=popcount(2nd arg)) LSb of word into the bit locations indicated by the 2nd arg, which happen to be the LSb of each byte of the output word - effectively creating an uint8_t[8] array of 0/1
             *(unaligned_uint64_t *)dst = _pdep_u64 (word, 0x0101010101010101ULL); 
 #else

@@ -129,7 +129,7 @@ static bool sam_seg_BWA_XA_pos_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint
 
             // case: we found a lookback - same rname and close enough pos
             if (ABS (pos-lookback_pos) < MAX_POS_DISTANCE) {
-                //    if (ABS (pos-lookback_pos) <= ABS(CTX(SAM_TLEN)->last_value.i)) { <-- better POS deltas but bigger index - its a wash
+                //    if (ABS (pos-lookback_pos) <= ABS(CTX(SAM_TLEN)->last_value.i)) { ⇐ better POS deltas but bigger index - its a wash
                 // replace rname with lookback
                 b250_seg_remove_last (vb, rname_ctx, rname_index);
                 seg_by_ctx (vb, STRa(XA_lookback_snip), rname_ctx, 0); // add_bytes=0 bc we already added them when we segged rname the first time

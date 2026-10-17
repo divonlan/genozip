@@ -68,7 +68,7 @@ static bool get_itf8 (int32_t *value)
     
     int n_bytes = MIN_(4, __builtin_clz ((uint32_t)~b[0] << 24)); // 0 to 4: number of leading 1s followed by a 0 (except if 4 1s - no following 0)
     
-    uint32_t v = b[0] & bitmask8(7 - MIN_(n_bytes,3)); // note: a bitmask is a value with 1s in the N lower bits and 0 in the higher bits
+    uint32_t v = b[0] & bitmask8_(7 - MIN_(n_bytes,3)); // note: a bitmask is a value with 1s in the N lower bits and 0 in the higher bits
 
     for (int i=1; i <= n_bytes; i++)
         v = (v << 8) | b[i];
@@ -87,7 +87,7 @@ static bool get_ltf8 (int64_t *value)
     
     int n_bytes = __builtin_clz ((uint32_t)~b[0] << 24); // 0 to 8: number of leading 1s followed by a 0 (except if 8 1s - no following 0)
     
-    uint64_t v = (n_bytes < 7) ? (b[0] & bitmask8(7 - n_bytes)) : 0;
+    uint64_t v = (n_bytes < 7) ? (b[0] & bitmask8_(7 - n_bytes)) : 0;
 
     for (int i=1; i <= n_bytes; i++)
         v = (v << 8) | b[i];

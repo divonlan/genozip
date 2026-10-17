@@ -102,9 +102,9 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
     for_cigar (vb->binary_cigar) {
         case BC_N:
             if (is_bam) {
-                PUT_UINT32 (next, pos);
+                SET_UINT32 (next, pos);
                 next += sizeof (uint32_t);
-                PUT_UINT32 (next, pos + op->n - 1);
+                SET_UINT32 (next, pos + op->n - 1);
                 next += sizeof (uint32_t);
             }
 
@@ -126,7 +126,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
 
     if (!count_N) { // no intron
         if (is_bam) {
-            PUT_UINT32 (next, (uint32_t)-1);
+            SET_UINT32 (next, (uint32_t)-1);
             next += sizeof (uint32_t);
         }
 
@@ -135,7 +135,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_jI)
     }
 
     if (is_bam) {
-        PUT_UINT32 (bam_array_len_p, count_N ? count_N * 2 : 1);
+        SET_UINT32 (bam_array_len_p, count_N ? count_N * 2 : 1);
 
         vb->txt_data.len32 = BNUM (vb->txt_data, next);
     }

@@ -766,7 +766,9 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_REF_CONSUMED)
     if (snip_len && *snip == 'x')
         new_value->i = 2 * (int32_t)VB_SAM->ref_consumed - atoi (snip+1); // snip="" is 0
     else
-        new_value->i =     (int32_t)VB_SAM->ref_consumed - atoi (snip); 
+        // note: some files (eg test/back-compat/12.0.42/special.buddy.sam.genozip) erroneously encode a negative value as a uint32_t eg 4294967161. 
+        // Linux/Mac atoi returns the correct negative int32_t, but Windows atoi returns an incorrect number - hence using (int32_t)atoll
+        new_value->i =     (int32_t)VB_SAM->ref_consumed - X𝓌𝒾𝓃(atoi(snip)) 𝓌𝒾𝓃((int32_t)atoll(snip)); 
 
     if (reconstruct) RECONSTRUCT_INT (new_value->i);
     

@@ -24,6 +24,9 @@
 #pragma GCC diagnostic ignored "-Wmicrosoft-anon-tag" // a clang warning
 #endif
 
+#define UNUSED __attribute__((unused))
+
+// OS and CPU macros
 #ifdef _WIN32 // Windows-only code (greek letters than visually resemble "win")
 #define 𝓌𝒾𝓃(x) x /* note: to cancel highlighting: Ctrl-, Unicode Highlight */
 #define X𝓌𝒾𝓃(x) // NOT Windows
@@ -48,13 +51,46 @@
 
 #ifdef __x86_64__
 #define χ64(x) x
-#define Xχ64(x)
 #else
 #define χ64(x)
-#define Xχ64(x) x
 #endif
 
-#define UNUSED __attribute__((unused))
+#ifdef __AVX2__
+#define 𝓐𝓥𝓧𝟤(x) x
+#else
+#define 𝓐𝓥𝓧𝟤(x)
+#endif
+
+// endianness
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ // defined by gcc / clang
+#ifndef __LITTLE_ENDIAN__
+#define __LITTLE_ENDIAN__
+#endif
+#define ℬ𝒾ℊℰ(x)
+#define ℒ𝒾𝓉ℰ(x) x
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#ifndef __BIG_ENDIAN__
+#define __BIG_ENDIAN__
+#endif
+#define ℬ𝒾ℊℰ(x) x
+#define ℒ𝒾𝓉ℰ(x) 
+#else
+#error  "Neither __BIG_ENDIAN__ nor __LITTLE_ENDIAN__ is defined "
+#endif    
+
+// switch Big_Endian ⇔ Native
+#define BGEN16(x)  ℬ𝒾ℊℰ(x)  ℒ𝒾𝓉ℰ(__builtin_bswap16(x))       
+#define BGEN24(x)  ℬ𝒾ℊℰ(x)  ℒ𝒾𝓉ℰ(__builtin_bswap32(x) >> 8)  
+#define BGEN32(x)  ℬ𝒾ℊℰ(x)  ℒ𝒾𝓉ℰ(__builtin_bswap32(x))        
+#define BGEN64(x)  ℬ𝒾ℊℰ(x)  ℒ𝒾𝓉ℰ(__builtin_bswap64(x))       
+#define BGEN32F(x) ℬ𝒾ℊℰ(x)  ℒ𝒾𝓉ℰ(({ union { float f;  uint32_t i; } u = {.f = (x)}; u.i = __builtin_bswap32(u.i); u.f; }))
+
+// switch Little_Endian ⇔ Native
+#define LTEN16(x)  ℒ𝒾𝓉ℰ(x)  ℬ𝒾ℊℰ(__builtin_bswap16(x))
+#define LTEN32(x)  ℒ𝒾𝓉ℰ(x)  ℬ𝒾ℊℰ(__builtin_bswap32(x))         
+#define LTEN64(x)  ℒ𝒾𝓉ℰ(x)  ℬ𝒾ℊℰ(__builtin_bswap64(x))
+#define LTEN32F(x) ℒ𝒾𝓉ℰ(x)  ℬ𝒾ℊℰ(({ union { float f;  uint32_t i; } u = {.f = (x)}; u.i = __builtin_bswap32(u.i); u.f; }))
+#define LTEN64F(x) ℒ𝒾𝓉ℰ(x)  ℬ𝒾ℊℰ(({ union { double f; uint64_t i; } u = {.f = (x)}; u.i = __builtin_bswap64(u.i); u.f; }))
 
 // we defined these ourselves (normally defined in stdbool.h), as not always available on all platforms (namely issues with Docker Hub)
 #ifndef __bool_true_false_are_defined
@@ -76,46 +112,41 @@ typedef packed_enum {
 
 typedef packed_enum { RECON_OFF, RECON_ON, RECON_PREFIX_ONLY } ReconType;
 
-// unaligned access using __attribute__((aligned(1))) with this attribute is slower than
-// unaligned access without it: while violating C spec, unaligned access supported on modern x86 and ARM (but not on older ones)
-// the Makefile may shut it off with -DUNALIGNED=
-#ifndef UNALIGNED
-#define UNALIGNED __attribute__((aligned(1)))
-#endif
+// note: modern (but not older) x86 and ARM support unaligned acccess natively, however there is no performance penalty to __attribute__((aligned(1))).
+typedef uint16_t __attribute__((aligned(1))) unaligned_uint16_t;
+typedef uint32_t __attribute__((aligned(1))) unaligned_uint32_t;
+typedef uint64_t __attribute__((aligned(1))) unaligned_uint64_t;
+typedef float    __attribute__((aligned(1))) unaligned_float;
 
-typedef uint16_t UNALIGNED unaligned_uint16_t;
-typedef uint32_t UNALIGNED unaligned_uint32_t;
-typedef uint64_t UNALIGNED unaligned_uint64_t;
-typedef float    UNALIGNED unaligned_float;
-
-// uint40_t stuff
-#define MAX_UINT40 0xffffffffffULL
-typedef struct __attribute__((packed)) { uint32_t lo; uint8_t hi; } uint40_t;
-// macros are good if lo is 32 bit and hi is 1 to 32 bits
-#define U40to64(x40)      (((uint64_t)(x40).hi << 32) | (uint64_t)(x40).lo)         
-#define U40to64_LTEN(x40) (((uint64_t)(x40).hi << 32) | (uint64_t)LTEN32((x40).lo))         
-#define U64to40(x64)      ((uint40_t){ .lo = (uint32_t)(x64), .hi = (x64) >> 32 })
-#define LTEN40(x64)       ((uint40_t){ .lo = LTEN32((uint32_t)(x64)), .hi = (x64) >> 32 })
+// uint40_t : a 5-byte unsigned integer
+#define UINT40_MAX 0xffffffffffULL
+typedef struct __attribute__((packed)) { // note: lo then hi even on Big Endian machines (simpler)
+    uint32_t lo; 
+    uint8_t hi; 
+} uint40_t;
+#define U40to64(b40)      (((uint64_t)(b40).hi << 32) | (uint64_t)(b40).lo)         
+#define U40to64_LTEN(b40) (((uint64_t)(b40).hi << 32) | (uint64_t)LTEN32((b40).lo))         
+#define U64to40(b64)      ((uint40_t){ .lo = (uint32_t)(b64), .hi = (b64) >> 32 })
+#define U64to40_LTEN(b64) ((uint40_t){ .lo = LTEN32((uint32_t)(b64)), .hi = (b64) >> 32 })
 
 typedef unsigned __int128 uint128_t;
 typedef          __int128 int128_t;
 
-typedef uint128_t Timestamp;
+𝓂𝒶𝒸(typedef int64_t off64_t;)
 
-typedef int32_t TaxonomyId;
+typedef uint128_t Timestamp;
 
 // -----------------
 // system parameters
 // -----------------
 #define GENOZIP_EXT ".genozip"
 
-// envrionment variables
-#define GENOZIP_HOME      "GENOZIP_HOME"
-#define GENOZIP_REFERENCE "GENOZIP_REFERENCE" // reference file name (directory permitted for PIZ)
-#define GENOZIP_LICENSE   "GENOZIP_LICENSE"   // similar to --licfile
-#define GENOZIP_TEST      "GENOZIP_TEST"      // code testing mode, set in test.sh
-
-#define MAX_POS ((PosType64)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
+// envrionment variables (https://www.genozip.com/env-vars)
+#define GENOZIP_REFERENCE  "GENOZIP_REFERENCE"  // reference file name (directory permitted for PIZ)
+#define GENOZIP_NO_UPGRADE "GENOZIP_NO_UPGRADE" // equivalent to --no-upgrade
+#define GENOZIP_LICENSE    "GENOZIP_LICENSE"    // equivalent to --licfile
+#define GENOZIP_HOME       "GENOZIP_HOME"       // developer only
+#define GENOZIP_TEST       "GENOZIP_TEST"       // developer only: code testing mode, set in test.sh
 
 #define MAX_DICTS 2048
 
@@ -265,8 +296,8 @@ typedef int32_t WordIndex;      // used for word and node indices
 typedef int64_t PosType64;      // used for position coordinate within a genome
 typedef PosType64 *restrict PosType64𐤐;
 typedef int32_t PosType32;    
-#define MAX_POS32 ((PosType64)0x7fffffff)   // max value of a POS field in VCF and SAM per their specifications
-#define MAX_POS40 ((PosType64)0xffffffffff) // max gpos for deep and bamass
+#define MAX_POS   ((PosType64)UINT32_MAX) // maximum allowed value for POS (constraint: fit into uint32 ctx.local). Note: in SAM the limit is 2^31-1
+#define MAX_POS32 ((PosType64)0x7fffffff) // max value of a POS field in VCF and SAM per their specifications
 #define NO_GPOS -1LL
 
 typedef int32_t LineIType;
@@ -626,6 +657,7 @@ static inline uint64_t fibonacci (uint64_t n, int n_bits) { return ((n * 1140071
 #define STRcpyi(dst,i,src) ({ if (src##_len) { memcpy(dst##s[i],src,src##_len) ; dst##_lens[i] = src##_len; } })
 #define STRset(dst,src)    ({ dst=src; dst##_len=src##_len; })
 #define STRinc(x,n)        ({ typeof(n) my_n = (n)/*eval once*/; x += my_n; x##_len -= my_n; })
+#define STRinci(x,i,n)     ({ typeof(n) my_n = (n)/*eval once*/; x##s[i] += my_n; x##_lens[i] -= my_n; })
 #define STRdec(x,n)        ({ typeof(n) my_n = (n)/*eval once*/; x -= my_n; x##_len += my_n; })
 #define STRLEN(x) (sizeof(x)-1) // length of constant strings excluding final \0. Allows \0 midstring which strlen doesn't 
 #define _S(x) x, STRLEN(x)
@@ -633,6 +665,20 @@ static inline uint64_t fibonacci (uint64_t n, int n_bits) { return ((n * 1140071
 #define STRBw(buf,txtword) Bc ((buf), (txtword).index), (txtword).len // used with TxtWord
 #define ARRAYp(name) uint32_t n_##name##s, rom name##s[], uint32_t name##_lens[] // function parameters
 #define ARRAYa(name) n_##name##s, name##s, name##_lens // function arguments
+
+// Getting and setting unaligned Little Endian words
+#define GET_UINT16(p)  LTEN16 (*((unaligned_uint16_t *)(p)))
+#define GET_UINT32(p)  LTEN32 (*((unaligned_uint32_t *)(p)))
+#define GET_UINT64(p)  LTEN64 (*((unaligned_uint64_t *)(p)))
+#define GET_FLOAT32(p) LTEN32F(*((unaligned_float    *)(p)))
+#define GET_UINT8(p)   ((uint8_t)(((uint8_t*)(p))[0]))
+#define GET_UINT24(p)  ({ uint8_t *_p=(uint8_t *)p; (uint32_t)GET_UINT16(_p) | ((uint32_t)(_p[2] << 16)); })
+
+#define SET_UINT16(p,n) *((unaligned_uint16_t *)(p)) = LTEN16((uint16_t)n)
+#define SET_UINT32(p,n) *((unaligned_uint32_t *)(p)) = LTEN32((uint32_t)n)
+#define SET_UINT64(p,n) *((unaligned_uint64_t *)(p)) = LTEN64((uint64_t)n)
+#define SET_UINT8(p,n)  ({ ((uint8_t*)(p))[0] = (n); })
+#define SET_UINT24(p,n) ({ uint8_t *_p=(uint8_t *)(p); uint32_t _n=(n); SET_UINT16(_p,_n); _p[2]=_n>>16; })
 
 // Temporary saving
 #define SAVE_VALUE(var) typeof(var) save_##var = var 
@@ -683,10 +729,10 @@ typedef enum { QSAM2  = -5, // SAM QNAME2, while segging deep (for example, cons
 // the filter can either set *reconstruct=false and return true, or use a callback instead which is called after reconstruction,
 // and erase the reconstructed txt_data.
 // NOTE: for a callback to be called on items of a container, the Container.callback flag needs to be set
-#define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ContainerP con, unsigned rep, int item, ReconType *reconstruct)
+#define CONTAINER_FILTER_FUNC(func) bool func(VBlockP vb, DictId dict_id, ContainerP con, uint32_t rep, int item, ReconType *reconstruct)
 
 // called after reconstruction of each repeat, IF Container.callback or Container.is_top_level is set
-#define CONTAINER_CALLBACK(func) void func(VBlockP vb_, DictId dict_id, bool is_top_level, unsigned rep, ContainerP con, \
+#define CONTAINER_CALLBACK(func) void func(VBlockP vb_, DictId dict_id, bool is_top_level, uint32_t rep, ContainerP con, \
                                            char *recon, int32_t recon_len, rom prefixes, uint32_t prefixes_len)
 
 // called after reconstruction of an item, if CI1_ITEM_CB is specified
@@ -741,9 +787,9 @@ void func (VBlockP vb_,                                             \
 
 typedef COMPRESSOR_CALLBACK (LocalGetLineCB);
 
-#define SAFE_ASSIGNx(addr,char_val,x) /* we are carefupl to evaluate addr, char_val only once, lest they contain eg ++ */ \
-    char *__addr##x = (char*)(addr); \
-    char __save##x  = *__addr##x; \
+#define SAFE_ASSIGNx(addr,char_val,x)   \
+    char *__addr##x = (char*)(addr);    \
+    char __save##x  = *__addr##x;       \
     *__addr##x = (char_val)
 #define SAFE_RESTOREx(x) *__addr##x = __save##x
 
@@ -777,10 +823,6 @@ static inline void iprint_newline (void) { fprintf (info_stream, "\n"); fflush (
 extern noreturn void stall (void);
 
 extern rom main_input_filename (int file_i);
-
-#if !defined(__GNUC__) // && !__has_builtin(__builtin_expect)
-#define __builtin_expect(exp,c) (exp)
-#endif
 
 // _____________________
 //      assertions
@@ -823,7 +865,6 @@ extern void warn (rom format, ...);
 #define ASSRET(condition, ret, format, ...)  ({ if (__builtin_expect (!(condition), 0)) { warn ((format), ##__VA_ARGS__); return ret; } })
 #define ASSGOTO(condition, format, ...)      ({ if (__builtin_expect (!(condition), 0)) { warn ((format), ##__VA_ARGS__); goto error; } })
 
-
 // A warning: report, but not if flag.quiet
 #define WARN(format, ...)                    ({ if (!flag.quiet) warn ((format), ##__VA_ARGS__); })
 #define WARN_IF(condition, format, ...)      ({ if (__builtin_expect ((condition), 0) && !flag.explicit_quiet) warn ((format), ##__VA_ARGS__); })
@@ -836,4 +877,3 @@ extern void warn (rom format, ...);
 
 // Critical error - restart with a flag that will solve the issue
 #define RESTART(add_cmd_option, format, ...) ({ error_restart (add_cmd_option, (format), ##__VA_ARGS__); })
-

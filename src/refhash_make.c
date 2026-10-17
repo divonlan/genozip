@@ -215,7 +215,7 @@ void refhash_calc_one_range (VBlockP vb_, RefhashCalcType calc_type) // VB of re
                     // and it is the kmer the is lucky one to reduce count to 0, that gets to occupy hash with its GPOS.
                     if (decrement_relaxed_floor_0 (&counts[prev_hash])) {
                         if (gpos_bytes == 4) refhash32[prev_hash] = LTEN32 (r->gpos + prev_base_i);
-                        else /* 5 */         refhash40[prev_hash] = LTEN40 (r->gpos + prev_base_i);
+                        else /* 5 */         refhash40[prev_hash] = U64to40_LTEN (r->gpos + prev_base_i);
                     }
                 }
             }

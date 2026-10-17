@@ -6,9 +6,6 @@
 //   WARNING: Genozip is proprietary, not open source software. Modifying the source code is strictly prohibited,
 //   under penalties specified in the license.
  
-#ifdef __APPLE__
-#define off64_t __int64_t // needed for for conda mac - otherwise zlib.h throws compilation errors
-#endif
 #define Z_LARGE64
 #include <errno.h>
 #include "txtfile.h"
@@ -352,7 +349,7 @@ static bool txtfile_segconf_discover_constant_isize (STR8p(header))
 
     // we search for the isize of the first gz block (which is its last field) followed by the constant header of a new block
     uint8_t signature[4 + header_len];
-    PUT_UINT32 (signature, txt_file->gz_data.uncomp_len); //  this is the fixed-isize validated in mgzip_read_block_no_bsize 
+    SET_UINT32 (signature, txt_file->gz_data.uncomp_len); //  this is the fixed-isize validated in mgzip_read_block_no_bsize 
     memcpy (signature + 4, header, header_len);
 
     // find 3 more instances of isize⁀header in the data with same isize
@@ -612,7 +609,7 @@ static uint32_t txtfile_read_block_igzip (VBlockP vb, uint32_t max_bytes, bool *
 
         if (flag_show_bgzf) {
             uint64_t bsize = decompressed_so_far - txt_file->start_gz_block;
-            iprintf ("UNCOMPRESS GZ   thread=MAIN    vb=%-7s block_i=%-16"PRIu64" comp_index=%-9"PRIu64" comp_len=%-8"PRIu64" txt_index=%-9"PRIu64" txt_len=%-8u%s gz_header=%s\n", 
+            iprintf ("UNCOMPRESS GZ   thread=MAIN    vb=%-7s block_i=%-16"PRIu64" gz_index=%-9"PRIu64" gz_len=%-8"PRIu64" txt_index=%-9"PRIu64" txt_len=%-8u%s gz_header=%s\n", 
                      VB_NAME, txt_file->gz_blocks_so_far, txt_file->start_gz_block, bsize, 
                      txt_index, isize, (bsize > 500 MB && (double) isize / (double) bsize < 0.98) ? "(overflow)" : "", // note: this doesn't catch all overflows, for example it won't catch: bsize=1GB and isize=3GB where the true isize is 7GB
                      display_gz_header ((bytes)STRa(last_gz_header), false).s);
@@ -790,11 +787,9 @@ static inline uint32_t txtfile_read_block_mgzip (VBlockP vb,
 
             if (flag_show_bgzf) {
                 GzBlockZip *bb = BLST (GzBlockZip, vb->gz_blocks);
-                iprintf ("READ       %-4s thread=MAIN   %-11s block_i=%-7"PRIu64" bb_i=%-3u comp_index=%-9u comp_len=%-8u txt_index=%-9u txt_len=%-8u eof=%-5s%s disk_so_far=%"PRIu64"\n",
+                iprintf ("READ       %-4s thread=MAIN   %-11s block_i=%-7"PRIu64" %s%s disk_so_far=%"PRIu64"\n",
                          codec_name (txt_file->effective_codec), 
-                         cond_str (vb->vblock_i, " vb=", VB_NAME),
-                         txt_file->gz_blocks_so_far, 
-                         BNUM (vb->gz_blocks, bb), bb->gz_index, bb->gz_size, bb->txt_index, bb->txt_size, TF(bb->is_eof),
+                         cond_str (vb->vblock_i, " vb=", VB_NAME), txt_file->gz_blocks_so_far, dis_GzBlockZip(vb, bb).s,
                          str_issame_(Bc(vb->comp_txt_data, this_block_start), txt_file->gz_data.comp_len, _S(BGZF_EOF)) ? " BGZF_EOF  " : "",
                          txt_file->disk_so_far);
             }
@@ -1095,7 +1090,7 @@ static bool seggable_size_is_modifiable (void)
     return !is_read_via_ext_decompressor (txt_file) && !TXT_IS(NONE);
 }
 
-// estimate the size of the txt_data of the file - i.e. the uncompressed data excluding the header - 
+// MAIN thread: estimate the size of the txt_data of the file - i.e. the uncompressed data excluding the header - 
 // based on the observed or assumed compression ratio of the source compression so far
 static void txtfile_set_seggable_size (void)
 {
@@ -1142,12 +1137,11 @@ static void txtfile_set_seggable_size (void)
         
     txt_file->est_seggable_size = MAX_(0.0, (double)disk_size * source_comp_ratio - (double)txt_file->header_size);
         
-    if (segconf_running) {
+    if (segconf_running)
         txt_file->txt_data_so_far_single = txt_file->header_size; // roll back as we will re-account for this data in VB=1
 
-        if (IS_GZIP(txt_file->src_codec)) 
-            segconf.gz_comp_ratio = source_comp_ratio;
-    }
+    if (IS_GZIP(txt_file->src_codec)) 
+        txt_file->gz_comp_ratio_so_far = source_comp_ratio;
 }
 
 uint32_t txt_data_alloc_size (uint32_t vb_size) 
@@ -1170,7 +1164,7 @@ static uint32_t txtfile_read_block (VBlockP vb, uint32_t bytes_requested,
     uint32_t uncomp_len = 0;
 
     if (TXT_IS_MGZIP)     
-        uncomp_len = txtfile_read_block_mgzip (vb, bytes_requested, uncompress, is_data_read);  // note: will possibly read more bytes than requested if last mgzip block goes over
+            uncomp_len = txtfile_read_block_mgzip (vb, bytes_requested, uncompress, is_data_read);  // note: will possibly read more bytes than requested if last mgzip block goes over
     
     else if (TXT_IS(GZ))   
         uncomp_len = txtfile_read_block_igzip (vb, bytes_requested, is_data_read);
@@ -1364,7 +1358,7 @@ void txtfile_read_vblock (VBlockP vb)
 
     zip_init_vb (vb);
 
-    if (!txt_file->est_seggable_size || seggable_size_is_modifiable())
+    if (seggable_size_is_modifiable() || !txt_file->est_seggable_size)
         txtfile_set_seggable_size();
 
     if (!segconf_running) {

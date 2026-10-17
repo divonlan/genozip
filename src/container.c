@@ -11,13 +11,11 @@
 #include "base64.h"
 #include "seg.h"
 #include "reconstruct.h"
-#include "endianness.h"
 #include "regions.h"
 #include "piz.h"
 #include "writer.h"
 #include "lookback.h"
 #include "tip.h"
-#include "endianness.h"
 #include "libdeflate_1.19/libdeflate.h"
 
 void con_initialize (ContainerP con, uint32_t n_items)

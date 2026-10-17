@@ -20,6 +20,7 @@
 #include "zfile.h"
 #include "dyn_int.h"
 #include "sorter.h"
+#include "tip.h"
 
 alignas(64) SegConf segconf = {}; // system-wide global
 static VBlockP segconf_vb = NULL;
@@ -41,17 +42,29 @@ void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, 
         segconf.evidence_of_sorted = true;
 }
 
-// figure of the file is multiseq (run from segconf_finalize)
-void segconf_test_multiseq (VBlockP vb, Did nonref)
+// FASTQ/FASTA/SAM: figure of the file is multiseq (run from segconf_finalize)
+void segconf_test_multiseq (VBlockP vb)
 {
-    ContextP ctx = CTX(nonref);
-    ctx->lcodec = CODEC_LZMA;
+    ContextP ctx = CTX(FASTQ_NONREF); // == FASTA_NONREF == SAM_NONREF
+    if (!ctx->local.len) return;
+
+    ctx->lcodec = CODEC_BSC; // note: 10X faster than LZMA and good enough for the purpose of detecting multiseq  
     zfile_compress_local_data (vb, ctx, 0);
 
-    segconf.multiseq = (ctx->local.len32 / ctx->local_in_z_len >= 6); // expecting ~4 for unrelated sequences and >10 for multiseq
+    segconf.multiseq = (float)ctx->local.len32 / ctx->local_in_z_len;
+    if (segconf.multiseq < 6) segconf.multiseq = 0; // expecting ~4 for unrelated sequences and >10 for multiseq
 
-    if (segconf.multiseq && !flag.no_lzma) 
-        ctx_segconf_set_hard_coded_lcodec (nonref, CODEC_LZMA); 
+    // choose between LZMA and BSC based on --no-lzma. 
+    // note: LZMA is 10x slower than BSC on multiseq data, but usually a bit better. Both are WAY better than the other codecs. 
+    // note: Wny not leave it to codec_assign_best_codec? Because to get to a reliable result we need to test
+    // at least 4MB (empirically), but multiseq files tend to be relatively short, so the testing itself would cancel
+    // much of speed improvement of selecting BSC.
+    if (segconf.multiseq && !flag.seg_only) {
+        ctx_segconf_set_hard_coded_lcodec (FASTQ_NONREF, flag.no_lzma ? CODEC_BSC : CODEC_LZMA); 
+        
+        if (!flag.no_lzma)     
+            TIP_SEGCONF ("This file contains many similar sequences. Using --no-lzma will speed up its compression significantly, but caveats apply. See: %s", WEBSITE_NO_LZMA);
+    }
 }
 
 // finalize optimize - filter the optimizable fields detected in segconf by optimize_dict_ids

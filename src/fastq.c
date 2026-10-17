@@ -762,8 +762,8 @@ void fastq_segconf_finalize (VBlockP vb)
         fastq_segconf_assess_reference (vb); // doesn't return
 
     // if no reference, test if fastq is multiseq
-    if (!flag.reference && !flag.fast && !segconf.nonbio_type) 
-        segconf_test_multiseq (VB, FASTQ_NONREF);
+    if (!flag.reference && !segconf.nonbio_type) 
+        segconf_test_multiseq (VB);
 
     if (!segconf.multiseq)
         ctx_segconf_set_hard_coded_lcodec (FASTQ_NONREF, CODEC_ACGT);

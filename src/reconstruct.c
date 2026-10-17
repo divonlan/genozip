@@ -97,19 +97,22 @@ static int64_t reconstruct_from_delta (VBlockP vb,
             "unexpected end of ctx->local data in %s[%u] (len=%u next_local=%u last_wi=%d ltype=%s lcodec=%s did_i=%u, preprocessing=%u)", \
             ctx->tag_name, ctx->did_i, ctx->local.len32, ctx->next_local, ctx->last_wi, lt_name (ctx->ltype), codec_name (ctx->lcodec), ctx->did_i, vb->preprocessing)
 
+// used to reconstruct LT_STRING and LT_SINGLETON            
 static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, ReconType reconstruct)
 {
-    uint32_t start = ctx->next_local; 
-    ARRAY (char, data, ctx->local);
-
-    while (ctx->next_local < ctx->local.len && data[ctx->next_local] != 0) ctx->next_local++;
     ASSERT_IN_BOUNDS;
 
-    rom snip = &data[start];
-    uint32_t snip_len = ctx->next_local - start; 
-    ctx->next_local++; // skip the separator 
+    rom snip = Bc(ctx->local, ctx->next_local), next=snip;
+
+    // find end of NUL-terminated string. 
+    // Note: ctx->local (LT_STRING/LT_SINGLETON) always ends with a NUL (verified by piz_uncompress_all_ctxs), so no need to check bounds
+    while (*next++); // move "next" to one after the NUL terminating this snip
+
+    uint32_t snip_len = next - snip - 1/*NUL*/; 
 
     reconstruct_one_snip (vb, ctx, WORD_INDEX_NONE, STRa(snip), reconstruct, THIS_CODE_LINE);
+
+    ctx->next_local = BNUM(ctx->local, next); // skip string and the NUL separator 
 
     return snip_len;
 }

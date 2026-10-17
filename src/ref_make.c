@@ -248,8 +248,8 @@ rom ref_fasta_to_ref (FileP file)
 
         StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
                                           arch_get_genozip_executable().s, "--make-reference", file->name, 
-                                          flag.telemetry==TELEMETRY_SEND ? "--telemetry"      : SKIP_ARG,
-                                          flag.telemetry==TELEMETRY_FILE ? "--telemetry=file" : SKIP_ARG,
+                                          flag.telemetry==TELEMETRY_DST_SEND ? "--telemetry"      : SKIP_ARG,
+                                          flag.telemetry==TELEMETRY_DST_FILE ? "--telemetry=file" : SKIP_ARG,
                                           "--no-tip", NULL);
         
         // wait for child process to finish
@@ -287,8 +287,8 @@ void ref_download_eval_ref (rom dt_name)
 
     StreamP make_ref = stream_create (NULL, 0, 0, 0, 0, 0, 0, "Make reference",
                                       arch_get_genozip_executable().s, "--make-reference", ref_url, 
-                                      flag.telemetry==TELEMETRY_SEND ? "--telemetry"      : SKIP_ARG,
-                                      flag.telemetry==TELEMETRY_FILE ? "--telemetry=file" : SKIP_ARG,
+                                      flag.telemetry==TELEMETRY_DST_SEND ? "--telemetry"      : SKIP_ARG,
+                                      flag.telemetry==TELEMETRY_DST_FILE ? "--telemetry=file" : SKIP_ARG,
                                      "--no-tip", "--force", NULL);
     
     // wait for child process to finish

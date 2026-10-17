@@ -15,9 +15,6 @@
 #include <direct.h>
 #endif
 #define Z_LARGE64
-#ifdef __APPLE__
-    #define off64_t __int64_t
-#endif
 #include "bzlib/bzlib.h"
 #include "zlib/zlib.h"
 #include "file.h"

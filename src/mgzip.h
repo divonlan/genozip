@@ -135,6 +135,7 @@ extern StrText bgzf_lib_name_level (FlagsMgzip mgzip_flags);
 extern rom gzstatus_name (GzStatus st);
 extern void generate_il1m (void);
 extern void bgzf_libdeflate_1_7_initialize (void);
+extern StrText1K dis_GzBlockZip (VBlockP vb, GzBlockZip *bb);
 
 extern void show_gz (rom filename);
 extern void dump_gz_block (rom filename);

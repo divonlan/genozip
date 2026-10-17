@@ -164,7 +164,7 @@ in enforcing Licensor’s rights under this Section.
    a. At activation time: activation information provided by you and details about your hardware,
 operating system and IP address.
 
-   b. Telemetry: For paid licenses, telemetry collection is opt‑in. For Student and Evaluation
+   b. Telemetry Service: For paid and Evaluation licenses, telemetry is opt‑in. For Student
 licenses, telemetry is always enabled. When a file is compressed, a log record is transmitted
 containing aggregate statistical information about the compression algorithms' performance and
 associated metadata. For illustrative examples of the types of data collected, please visit: 🌐
@@ -244,5 +244,5 @@ STATED REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
 
 END OF TERMS AND CONDITIONS
 
-Genozip license version: 15.0.97
+Genozip license version: 15.0.98
 

@@ -102,9 +102,11 @@ void tip_print_genozip (void)
     if (license_is_eval() || license_is_standard() || license_is_enterprise())
         valid_tips[n++] = _TIP "\"genozip --sendto\" lets your clients compress files using 𝑦𝑜𝑢𝑟 Genozip license ahead of sending them to you. " WEBSITE_PREMIUM "\n";
 
-    if ((arch_get_max_resident_set() > arch_get_physical_mem_size() GB || flag.is_windows || flag.is_wsl || flag.is_mac) &&
-        !flag.make_reference)
-        valid_tips[n++] = _TIP "Use --low-memory to reduce RAM consumption at the expense of compression size and time\n";
+    if (!flag.make_reference) {
+        uint64_t mem_tip_threashold = arch_get_physical_mem_size() GB / ((flag.is_windows || flag.is_wsl || flag.is_mac) ? 2 : 1); 
+        if (arch_get_max_resident_set() > mem_tip_threashold)
+            valid_tips[n++] = _TIP "Use --low-memory to reduce RAM consumption at the expense of compression ratio and time\n";
+    }
 
     iprintf ("\n%s\n", valid_tips[clock() % n]); // "randomly" select one of the valid tips
 

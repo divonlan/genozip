@@ -10,7 +10,6 @@
 
 #include "genozip.h"
 #include "file_types.h"
-#include "endianness.h"
 #include "dict_id.h"
 
 typedef packed_enum { 
@@ -99,10 +98,9 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t debug_split        : 1;
     uint64_t debug_peek         : 1;
     uint64_t show_wrong_md      : 1;
-    uint64_t show_wrong_xg      : 1; // (end of byte 6)
+    uint64_t unused_bit         : 1; // (end of byte 6)
 
-    uint64_t show_wrong_xm      : 1;
-    uint64_t show_wrong_xb      : 1;
+    uint64_t unused_2bit        : 2;
     uint64_t show_tlen_pred     : 1;
     uint64_t debug_dyn_int      : 1;
     uint64_t debug_aligner      : 1;
@@ -118,6 +116,11 @@ typedef struct __attribute__((gcc_struct)) {
     // _____________________________________________________________________________________________________________________
     
     // Other bits
+
+    // OTHER BIT FLAGS: possible accessed every line, but rare types of files
+    uint64_t show_wrong_xg      : 1; // bsseeker2
+    uint64_t show_wrong_xm      : 1; // bsseeker2 and bismark
+    uint64_t show_wrong_xb      : 1; // bsbolt
 
     // OTHER BIT FLAGS: not accessed in every line in NORMAL seg/recon
     uint64_t biopsy             : 1; // close to biopsy_line has frequently tested together
@@ -205,7 +208,7 @@ typedef struct __attribute__((gcc_struct)) {
     // analysis
     uint64_t show_contigs       : 1;
     enum { CNT_NONE, CNT_TOTAL, CNT_VBs } count : 2; 
-    enum { TELEMETRY_OFF, TELEMETRY_SEND, TELEMETRY_FILE } telemetry : 2;
+    enum { TELEMETRY_DST_NONE, TELEMETRY_DST_SEND, TELEMETRY_DST_FILE } telemetry: 2;
 
     // diagnostics
     enum { VLD_NONE, VLD_REPORT_INVALID, VLD_REPORT_VALID, VLD_INVALID_FOUND, VLD_NO_REPORT } validate : 3; // genocat: tests if this is a valid genozip file (z_file opens correctly)

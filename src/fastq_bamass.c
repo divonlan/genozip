@@ -576,7 +576,7 @@ void fastq_bamass_populate (void)
         return;
     }
 
-    ASSINP0 (*p_genome_nbases <= MAX_POS40, "Reference file too big: --bamass can handle reference files up to 1 trillion basepairs");
+    ASSINP0 (*p_genome_nbases <= UINT40_MAX, "Reference file too big: --bamass can handle reference files up to 1 trillion basepairs");
 
     FileP save_txt_file = txt_file;
     txt_file = file_open_txt_read (flag.bam_assist);

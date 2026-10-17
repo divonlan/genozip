@@ -74,6 +74,7 @@ typedef struct File {
     int64_t disk_so_far;               // ZIP: Z/TXT_FILE & PIZ TXT_FILE: data actually read/write to/from "disk" (using fread/fwrite), (TXT_FILE: possibley bgzf/gz/bz2 compressed ; 0 if external compressor is used for reading).
     int64_t disk_gz_uncomp_or_trunc;   // ZIP: TXT_FILE: gz-compressed data actually either uncompressed or discarded due to truncate
     int64_t gz_blocks_so_far;          // ZIP: TXT_FILE: number of gz blocks read from disk
+    double  gz_comp_ratio_so_far;      // TXT_FILE ZIP: GZ compression ratio so far (updates after every VB is read: accessed only in main thread)
     int64_t est_seggable_size;         // TXT_FILE ZIP, Estimated size of txt_data in file, i.e. excluding the header. It is exact for plain files, or based on test_vb if the file has source compression
     int64_t est_num_lines;             // TXT_FILE ZIP, an alternative for progress bar - by lines instead of bytes (used for CRAM)
     

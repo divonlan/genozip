@@ -19,7 +19,6 @@
 #include "genozip.h"
 #include "flags.h"
 #include "file.h"
-#include "endianness.h"
 #include "buffer.h"
 #include "arch.h"
 #include "tar.h"

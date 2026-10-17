@@ -22,7 +22,6 @@
 #include "mgzip.h"
 #include "mutex.h"
 #include "codec.h" 
-#include "endianness.h"
 #include "bits.h"
 #include "version.h"
 #include "gencomp.h"

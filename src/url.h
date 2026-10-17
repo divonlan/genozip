@@ -20,8 +20,9 @@ extern void url_close_remote_file_stream (FILE **copy_of_input_pipe);
 extern void url_disconnect_from_remote_file_stream (FILE **copy_of_input_pipe);
 
 // access URLs
-extern rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size);
+typedef enum { URL_CODE_FAILURE=-1, URL_BAD_REQUEST=-2, URL_EXECUTABLE_NOT_FOUND=-3, URL_SERVER_ERROR=-4, } UrlReadStatus;
 extern int32_t url_read_string (rom url, rom user, rom password, rom post, STRc(STRc), bool blocking, bool follow_redirects, rom show_errors, StreamP *url_stream);
+extern rom url_get_status (rom url, thool *is_file_exists, int64_t *file_size);
 extern bool url_post_async (rom url, rom user, rom password, rom post);
 
 // string operations

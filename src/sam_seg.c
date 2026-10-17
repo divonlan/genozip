@@ -177,7 +177,7 @@ void sam_zip_initialize (void)
         strncpy (segconf.sam_deep_filename, txt_file->name, sizeof(segconf.sam_deep_filename)-1);
 
     if (flag.deep) 
-        ASSINP0 (*p_genome_nbases <= MAX_POS40, "Reference file too big: --deep can handle reference files up to 1 trillion basepairs");
+        ASSINP0 (*p_genome_nbases <= UINT40_MAX, "Reference file too big: --deep can handle reference files up to 1 trillion basepairs");
 }
 
 // called after each txt file (including after the SAM component in Deep)
@@ -747,8 +747,8 @@ void sam_segconf_finalize (VBlockP vb_)
         segconf.s1_to_cm_32 = ratio;
 
     // if unmapped test if this might is multiseq
-    if (segconf.sam_is_unmapped && !flag.fast) 
-        segconf_test_multiseq (VB, SAM_NONREF);
+    if (segconf.sam_is_unmapped) 
+        segconf_test_multiseq (VB);
 
     if (segconf.sam_is_unmapped && IS_REF_LOADED_ZIP && !refhash_exists())
         ABORTINP ("%s is a \"minimal\" reference file, unsuitable for compressing *unmapped* %s files. %s", 
@@ -918,19 +918,16 @@ void sam_segconf_finalize (VBlockP vb_)
         segconf.use_pacbio_iqsqdq = true;
 
     // Aplogize to user for not doing a good job with PacBio subreads files
-    if (segconf.pacbio_subreads) {
-        TEMP_FLAG(quiet, flag.explicit_quiet); // note: quiet is set to true in segconf
-        TIP0 ("Genozip currently doesn't do a very good job at compressing PacBio subreads files. This is because we haven't figured out yet a good method to compress PacBio kinetic data - the ip:B and pw:B fields. Sorry!");
-        RESTORE_FLAG(quiet);
-    }
+    if (segconf.pacbio_subreads) 
+        TIP0_SEGCONF ("Genozip currently doesn't do a very good job at compressing PacBio subreads files. This is because we haven't figured out yet a good method to compress PacBio kinetic data - the ip:B and pw:B fields. Sorry!");
 
     if (MP(ULTIMA))
         sam_ultima_finalize_segconf (vb);
 
     if (flag.reference == REF_INTERNAL && !txt_file->redirected && !flag.seg_only && (segconf.sam_is_unmapped && !segconf.is_long_reads))
-        TIP ("Compressing this unmapped %s file using a reference would shrink it by an additional 20%%-50%%.\n"
-             "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
-             dt_name (txt_file->data_type), arch_get_argv0(), txt_file->name);
+        TIP_SEGCONF ("Compressing this unmapped %s file using a reference would shrink it by an additional 20%%-50%%.\n"
+            "Use: \"%s --reference "_REFFILE" %s\". "_REFFILE" may be a FASTA file or a .ref.genozip file.\n",
+            dt_name (txt_file->data_type), arch_get_argv0(), txt_file->name);
     
     ASSERT (!flag.debug_or_test || !segconf_has(OPTION_SA_Z) || segconf.sam_has_SA_Z || MP(LONGRANGER) || MP(UNKNOWN),
             "%s produces SA:Z, expecting segconf.sam_has_SA_Z to be set", segconf_sam_mapper_name()); // should be set in sam_header_zip_inspect_PG_lines

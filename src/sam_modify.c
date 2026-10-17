@@ -163,7 +163,7 @@ static inline void optimize_float (const void *in, void *out) // non-aligned add
     // TO DO: it would be better to round-up if the first dropped bit is 1, but it is not easy to do
     // as the exponent might change too. If we do so, we can make-out on more bit and achieve equivalent accuracy
     f32 &= 0b11111111111111111110000000000000;
-    PUT_UINT32 (out, f32); // back to BAM's Little Endian
+    SET_UINT32 (out, f32); // back to BAM's Little Endian
 }
 
 rom sam_zip_modify (VBlockP vb_, rom line_start, uint32_t remaining)

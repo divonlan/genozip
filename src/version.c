@@ -271,7 +271,7 @@ void version_print_notice_if_has_newer (void)
         if (flag.debug_upgrade)
             iprint0 ("debug-upgrade: upgrade thread completed\n");
 
-        iprintf ("\nA newer & better version of Genozip is available - version %s. You are currently running version %s\n", 
+        iprintf ("\nA newer & better version of Genozip is available - version %s. You are currently running version %s. "_TIP"Silence with --no-upgrade.\n", 
                  STRver (latest_version).s, STRver(code_version()).s);
 
         if (is_info_stream_terminal) {

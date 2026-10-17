@@ -76,7 +76,7 @@ static inline uint64_t aligner_get_kmer (Bits𐤐 seq, uint64_t bit_i, bool is_f
     
     // case: too many bits 
     if (bits_still_needed < 0) 
-        kmer &= bitmask64_(bits_per_hash_in); // note: even though bits_per_hash_in is immuteable, calculating the bitmask by this macro is faster than looking up a global variable
+        kmer &= bitmask64_(bits_per_hash_in); // note: even though bits_per_hash_in is immuteable, it is in a register now, so calculating the bitmask by this macro is faster than looking up another global variable
 
     // case: not enough bits: get more from next word (caller must ensure sufficient data is available)    
     else if (bits_still_needed > 0) 

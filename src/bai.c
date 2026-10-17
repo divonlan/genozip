@@ -12,7 +12,6 @@
 #include "sam_friend.h"
 #include "seg.h"
 #include "mgzip.h"
-#include "endianness.h"
 #include "codec.h"
 #include "profiler.h"
 #include "reconstruct.h"
@@ -785,7 +784,7 @@ static char *bai_write_next_bin (WordIndex rname, uint32_t bin, char *out, const
 
     ASSERT0 (out + 2 * sizeof(uint32_t) <= after_txt, "txt_data overflow");
 
-    PUT_UINT32 (out, chunk->bin); 
+    SET_UINT32 (out, chunk->bin); 
     char *n_chunks_p = out + sizeof(uint32_t); 
     out += 2 * sizeof(uint32_t);
 
@@ -802,7 +801,7 @@ static char *bai_write_next_bin (WordIndex rname, uint32_t bin, char *out, const
         chunk++;
     }
     
-    PUT_UINT32 (n_chunks_p, n_chunks);
+    SET_UINT32 (n_chunks_p, n_chunks);
     
     return out;
 }
@@ -814,12 +813,12 @@ static char *bai_write_pseudo_bin (WordIndex rname, char *out, char *after)
 
     const BaiStats *stats = B(BaiStats, txt_file->bai_stats, rname);
 
-    PUT_UINT32 (out, BIN_STATS);            out += sizeof (uint32_t);
-    PUT_UINT32 (out, 2);                    out += sizeof (uint32_t); // number of "chunks" in this pseudo bin
-    PUT_UINT64 (out, stats->ref_beg.value); out += sizeof (uint64_t);
-    PUT_UINT64 (out, stats->ref_end.value); out += sizeof (uint64_t);
-    PUT_UINT64 (out, stats->n_mapped);      out += sizeof (uint64_t);
-    PUT_UINT64 (out, stats->n_unmapped);    out += sizeof (uint64_t);
+    SET_UINT32 (out, BIN_STATS);            out += sizeof (uint32_t);
+    SET_UINT32 (out, 2);                    out += sizeof (uint32_t); // number of "chunks" in this pseudo bin
+    SET_UINT64 (out, stats->ref_beg.value); out += sizeof (uint64_t);
+    SET_UINT64 (out, stats->ref_end.value); out += sizeof (uint64_t);
+    SET_UINT64 (out, stats->n_mapped);      out += sizeof (uint64_t);
+    SET_UINT64 (out, stats->n_unmapped);    out += sizeof (uint64_t);
         
     return out;
 }
@@ -1122,7 +1121,7 @@ typedef struct {
             uint64_t n_mapped, n_unmapped;
         };
     };
-} BinStruct, *BinStructP, UNALIGNED *UnalignedBinStructP;
+} BinStruct, *BinStructP, __attribute__((aligned(1))) *UnalignedBinStructP;
 
 static void bai_show_one_bin (BinStructP bin, rom rname_s)
 {

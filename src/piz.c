@@ -20,7 +20,6 @@
 #include "reconstruct.h"
 #include "writer.h"
 #include "threads.h"
-#include "endianness.h"
 #include "chrom.h"
 #include "txtheader.h"
 #include "base64.h"
@@ -345,6 +344,11 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
             ((VER(14) && ctx->ltype != LT_BITMAP) ||                // starting v14: assign to all except LT_BITMAP (in which param is used to determine nbits)
              (!VER(14) && h->flags.ctx.v13_copy_local_param))) // up to v13: copy if v13_copy_local_param is set
             target_buf->prm8[0] = h->param;
+
+        // verify that buffer ends with a NUL, so reconstruct_from_local_text doesn't need to test for end of buffer
+        if (is_local && !uncompress_to_pair && (ctx->ltype == LT_SINGLETON || ctx->ltype == LT_STRING))
+            ASSERT (*BLSTc(*target_buf) == 0, "%s: Expecting %s.local ltype=%s to end with a NUL", 
+                    VB_NAME, ctx->tag_name, lt_name(ctx->ltype));
 
         if (flag.debug_read_ctxs) 
             iprintf ("%c Uncompressed %s: %s[%u].len=%u into %s\n", sections_read_prefix (is_pair_section || vb->preprocessing), 

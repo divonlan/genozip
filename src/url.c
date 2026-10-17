@@ -19,9 +19,6 @@
 #endif
 
 #define Z_LARGE64
-#ifdef __APPLE__
-    #define off64_t __int64_t
-#endif
 #include "genozip.h"
 #include "url.h"
 #include "stream.h"
@@ -329,7 +326,7 @@ static void url_read_string_do (rom url, rom user, rom password,
 
 #ifndef _WIN32
     // set non-blocking (unfortunately _pipes in Windows are always blocking)
-    if (!blocking)
+    if (!blocking && !flag.is_windows)
         ASSERT (!fcntl(fileno(data_stream), F_SETFL, fcntl (fileno(data_stream), F_GETFL) | O_NONBLOCK), "fcntl failed: %s", strerror (errno));
 #endif
 
@@ -411,7 +408,7 @@ int32_t url_read_string (rom url, rom user, rom password,
         if (show_errors) 
             fprintf (stderr, "\n"_ERR"%s: neither curl nor wget are available\n", action);
         
-        return -3; // failure
+        return URL_EXECUTABLE_NOT_FOUND; // failure
     }
 
     char *response, local_response[CURL_RESPONSE_LEN], error[CURL_RESPONSE_LEN];
@@ -433,21 +430,21 @@ int32_t url_read_string (rom url, rom user, rom password,
         if (show_errors) 
             fprintf (stderr, "\n"_ERR"Internal server error\n");
 
-        return -3;
+        return URL_SERVER_ERROR;
     }
 
     if (error_len && !response_len) {
         if (show_errors) 
             fprintf (stderr, "\n"_ERR"%s: %.*s\n", action, STRf(error));
 
-        return -1; // failure
+        return URL_CODE_FAILURE; // failure
     }
 
     if (response_len && strstr (response, "Bad Request")) {
         if (show_errors) 
             fprintf (stderr, "\n"_ERR"%s: Bad Request\n", action);
 
-        return -2;
+        return URL_BAD_REQUEST;
     }
 
     return data ? response_len : 0;

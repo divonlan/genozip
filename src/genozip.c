@@ -8,15 +8,14 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <locale.h>
 #endif
 #include <getopt.h>
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
 #include <sys/types.h>
-#ifdef __APPLE__ 
 #include "mac_compat.h"
-#endif
 #include "genozip.h"
 #include "zfile.h"
 #include "zip.h"
@@ -57,7 +56,7 @@ CommandType primary_command = NO_COMMAND;
 uint32_t global_max_threads = DEFAULT_MAX_THREADS; 
 
 static Buffer input_files_buf = {};
-bool input_files_has_FASTQ; // at least one of the input files is a FASTQ
+bool input_files_has_FASTQ = false; // at least one of the input files is a FASTQ
 
 #define MAIN(format, ...) ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: ",     command_name(), getpid()); fprintf (stderr, (format), __VA_ARGS__); fprintf (stderr, "\n"); } })
 #define MAIN0(string)     ({ if (!flag.explicit_quiet && (flag.echo || flag.test_i)) { progress_newline(); fprintf (stderr, "%s[%u]: %s\n", command_name(), getpid(), string); } })
@@ -652,12 +651,13 @@ static void main_get_filename_list (unsigned num_files, char **filenames,  // in
         RESTORE_FLAG (quiet);
     }
 
-    // check if any of the files are a FASTQ
-    for_buf (rom, fn, input_files_buf) 
-        if (main_get_file_dt (*fn) == DT_FASTQ) {
-            input_files_has_FASTQ = true;
-            break;
-        }
+    for_buf (rom, fn, input_files_buf) {
+        // check if any of the files are a FASTQ
+        input_files_has_FASTQ |= (main_get_file_dt (*fn) == DT_FASTQ);
+
+        𝓌𝒾𝓃 (ASSINP (!IsDebuggerPresent() || str_is_ascii (*fn, strlen(*fn)), 
+                      _ERR"Known issue: UTF-8 filenames in Windows are messed up when running in a debugger: %s", *fn);)
+    }
 }
 
 void main_destroy_filename_list (void)
@@ -782,7 +782,7 @@ int main (int argc, char *argv[])
     filename_base (argv[0], true, "(executable)", global_cmd, sizeof(global_cmd)); // global var
 
     profiler_initialize();
-    arch_initialize (argv[0]);
+    arch_initialize (argv[0]); 
     evb = vb_initialize_nonpool_vb (VB_ID_EVB, DT_NONE, TASK_EVB);
     threads_initialize(); // requires evb
     random_access_initialize();

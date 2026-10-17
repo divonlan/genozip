@@ -15,7 +15,6 @@ extern StrText arch_get_filesystem_type (FileP file);
 extern StrText arch_get_txt_filesystem (void);
 extern StrText arch_get_z_filesystem (void);
 
-extern rom arch_get_endianity (void);
 extern void arch_set_locale (void);
 extern rom arch_str_error (void);
 

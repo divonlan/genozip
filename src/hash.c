@@ -244,7 +244,7 @@ void hash_alloc_global (ContextP zctx, uint32_t estimated_entries)
 uint32_t hash_crc32 (STRp(snip))
 {
     // Note: this is CRC-32C (Castagnoli, 0x1EDC6F41), not the same as zlib's CRC-32 (0x04C11DB7) - either is fine for us
-#ifdef __x86_64__ 
+#ifdef __SSE4_2__ 
     uint64_t crc = 0; // 32 MSb are unused, but intrinsics require a 64b argument
     #define C64 ({ crc = _mm_crc32_u64(crc, *(unaligned_uint64_t *)&snip[i]); i += 8; })
     #define C32 ({ crc = _mm_crc32_u32(crc, *(unaligned_uint32_t *)&snip[i]); i += 4; })
@@ -258,7 +258,7 @@ uint32_t hash_crc32 (STRp(snip))
     #define C8  ({ crc = __crc32cb(crc,                         snip[i]);         })
 #endif
 
-#if defined __x86_64__ || defined __aarch64__
+#if defined __SSE4_2__ || defined __aarch64__
     uint32_t i = 0; 
     
     // full words

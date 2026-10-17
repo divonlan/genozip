@@ -302,6 +302,7 @@ static void sam_header_create_deep_tip (rom hdr, rom after)
                            arch_get_argv0(), ref_get_filename() ? ref_get_filename() : "reference-genome.fa.gz", txt_name);
 
             buf_append_string (evb, &sam_deep_tip, fq);
+            buf_add_moreC (evb, &sam_deep_tip, " ", NULL);
         }
         SAFE_RESTORE;
         
@@ -684,9 +685,9 @@ incomplete_header:
     #undef HDR32
 }   
 
-//------------------------------------------------------------------
-// Translator functions for reconstructing SAM<-->BAM header formats
-//------------------------------------------------------------------
+//-----------------------------------------------------------------
+// Translator functions for reconstructing SAM⟺BAM header formats
+//-----------------------------------------------------------------
 
 // add @PG line
 static inline void sam_header_add_PG (BufferP txtheader_buf)

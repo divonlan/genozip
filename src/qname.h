@@ -18,7 +18,7 @@ typedef packed_enum {
     // Illumina flavors
     QF_ILLUM_7, QF_ILLUM_7i, QF_ILLUM_7umi, QF_ILLUM_7_bc, QF_ILLUM_7_2bc, 
     QF_ILLUM_7gs, QF_ILLUM_7gsFQ, QF_ILLUM_7_rbc, QF_ILLUM_7embS, QF_ILLUM_7emb_,
-    QF_ILLUM_5i, QF_ILLUM_5, QF_ILLUM_5rng, QF_ILLUM_6,
+    QF_ILLUM_5_2bc, QF_ILLUM_5_bc, QF_ILLUM_5_0, QF_ILLUM_5, QF_ILLUM_5rng, QF_ILLUM_6,
     // Illumina-style FASTQ QNAME2 flavors (also appears in Ultima, Singular...)
     QF2_ILLUM_2bc, QF2_ILLUM_1bc, QF2_ILLUM_0, QF2_ILLUM_00, QF2_ULTIM_0, 
     // MGI flavors
@@ -43,6 +43,7 @@ typedef packed_enum {
     QF_CONSENSUS, QF_XCON, 
     // Other syntheic (i.e. non-sequencer) flavors
     QF_GENOZIP_OPT, QF_INTEGER, QF_HEX_CHR, QF_BAMSURGEON, QF_SEQAN, QF_CLC_GW, QF_STR_INT, QF_Sint, QF_GENERATED,
+    //
     NUM_FLAVORS
 } QnameFlavorId;
 

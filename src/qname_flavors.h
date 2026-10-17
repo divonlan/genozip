@@ -654,12 +654,64 @@ static QnameContainer con_ion_torrent_3 = {
 //--------------------------------------------------------------------------------------------------------------
 static QnameContainer con_illumina_5 = {
     .repeats   = 1,
+    .nitems_lo = 5,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 2 } }, // <instrument serial>:<lane>
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // <tile>
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // <x>
+                   { .dict_id = { _SAM_Q3NAME },                                }, // <y>
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } }
+};
+
+// HWI-ST550_0201:3:1101:1626:2216#ACAGTG
+static QnameContainer con_illumina_5bc = {
+    .repeats   = 1,
     .nitems_lo = 6,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 2 } }, // <instrument serial>:<lane>
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = "#"               },
+                   { .dict_id = { _SAM_Q4NAME },                                },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } }
+};
+
+// 43HN8AAXX090222:1:7:566:1210#0
+static QnameContainer con_illumina_5_0 = {
+    .repeats   = 1,
+    .nitems_lo = 6,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 2 } }, // <instrument serial>:<lane>
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               },
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               },
+                   { .dict_id = { _SAM_Q3NAME }, .separator = "#"               },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = { CI0_FIXED_0_PAD, 1 } },
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } }
+};
+
+#define PX_illumina_5_0 { "", "", "", "", "", PX_MATE_FIXED_0_PAD } 
+
+// Example: TPNB123456AR:1:11101:2162:1546#ATTGCTCG+CAAGATTA
+static QnameContainer con_illumina_5bc2 = {
+    .repeats   = 1,
+    .nitems_lo = 7,
+    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = { CI0_COLONn, 2 } }, // <instrument serial>:<lane>
+                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"               }, // <tile>
+                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"               }, // <x>
+                   { .dict_id = { _SAM_Q3NAME }, .separator = "#"               }, // <y>
+                   { .dict_id = { _SAM_Q4NAME }, .separator = "+"               }, // i7 index (barcode)
+                   { .dict_id = { _SAM_Q5NAME },                                }, // i5 index (barcode)
+                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                      } } 
+};
+
+// NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84
+static QnameContainer con_illumina_5rng = {
+    .repeats   = 1,
+    .nitems_lo = 8,
     .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
                    { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q4NAME },                           },
+                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
+                   { .dict_id = { _SAM_Q5NAME }, .separator = ","          }, // 4,5 appear to be a range [start_base,end_base)
+                   { .dict_id = { _SAM_Q6NAME },                           }, // we speculatively set this as seq_len as normally Q4NAME is 0
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } }
 };
 
@@ -673,33 +725,6 @@ static QnameContainer con_illumina_6 = {
                    { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
                    { .dict_id = { _SAM_Q5NAME },                           },
-                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } }
-};
-
-// HWI-ST550_0201:3:1101:1626:2216#ACAGTG
-static QnameContainer con_illumina_5i = {
-    .repeats   = 1,
-    .nitems_lo = 7,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q4NAME }, .separator = "#"          },
-                   { .dict_id = { _SAM_Q5NAME },                           },
-                   { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } }
-};
-
-// NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84
-static QnameContainer con_illumina_5rng = {
-    .repeats   = 1,
-    .nitems_lo = 8,
-    .items     = { { .dict_id = { _SAM_Q0NAME }, .separator = ":"          },  
-                   { .dict_id = { _SAM_Q1NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q2NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q3NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q4NAME }, .separator = ":"          },
-                   { .dict_id = { _SAM_Q5NAME }, .separator = ","          }, // 5,6 appear to be a range [start_base,end_base)
-                   { .dict_id = { _SAM_Q6NAME },                           }, // we speculatively set this as seq_len as normally Q5NAME is 0
                    { .dict_id = { _SAM_QmNAME }, I_AM_MATE                 } }
 };
 
@@ -1168,10 +1193,13 @@ static QnameFlavorStruct qf[] = {
     {},  { QF_SIKUN,       "Sikun",         { "someid-1-0-183413-321" },                  TECH_SIKUN,    TECH_NCBI,    QANY,   &con_sikun,          no_validate,    0,   4,  {1,2,3,4,-1},       {-1},           {3,4,-1},           {-1},           0,  4,-1,  -1,-1, -1,  -1, -1, -1, -1, 0                     }, // 15.0.83
 
     {},  { QF_ION_TORR_3,  "IonTorrent",    { "ZEWTM:00130:07001" },                      TECH_IONTORR,  TECH_NCBI,    QANY,   &con_ion_torrent_3,  no_validate,    0,   2,  {-1},               {1,2,-1},       {1,2,-1},           {-1},           0,  1,2,   -1,-1, -1,  -1, -1, -1, -1, 17, PX_ion_torrent_3  },
-    {},  { QF_ILLUM_5i,    "Illum-old#bc",  { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_5i,    no_validate,    '#', 5,  {1,2,3,4,-1},       {-1},           {3,4,-1},           {-1},           0,  -1,-1, -1,-1, -1,  5,  -1, -1, -1,                       },
-    {},  { QF_ILLUM_5,     "Illum-old",     { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_5,     no_validate,    0,   4,  {1,2,3,4,-1},       {-1},           {1,2,3,4,-1},       {-1},           0,  -1,-1, -1,-1, -1,  -1, -1, -1, -1,                       },
+    {},  { QF_ILLUM_5_2bc, "Illum-old#2bc", { "TPNB123456AR:1:11101:2162:1546#ATTGCTCG+CAAGATTA", "MN123456:1:11101:15706:1184#TAATGCGT+TAAGAGCC" }, 
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_5bc2,  no_validate,    '#', 5,  {1,2,3,-1},         {-1},           {1,2,-1},           {-1},           0,  3,-1,  -1,-1, -1,  4,  5,  -1, -1,                       }, // 15.0.97
+    {},  { QF_ILLUM_5_bc,  "Illum-old#bc",  { "HWI-ST550_0201:3:1101:1626:2216#ACAGTG" }, TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_5bc,   no_validate,    '#', 4,  {1,2,3,-1},         {-1},           {1,2,-1},           {-1},           0,  3,-1,  -1,-1, -1,  4,  -1, -1, -1,                       },
+    {},  { QF_ILLUM_5_0,   "Illum-old#0",   { "43HN8AAXX090222:1:7:566:1210#0" },         TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_5_0,   no_validate,    '#', 4,  {1,2,3,-1},         {4,-1},         {1,2,-1},           {-1},           0,  3,-1,  -1,-1, -1,  -1, -1, -1, -1, 0,  PX_illumina_5_0   }, // 15.0.98
+    {},  { QF_ILLUM_5,     "Illum-old",     { "SOLEXA-1GA-1_4_FC20ENL:7:258:737:870" },   TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_5,     no_validate,    0,   3,  {1,2,3,-1},         {-1},           {1,2,-1},           {-1},           0,  3,-1,  -1,-1, -1,  -1, -1, -1, -1,                       },
     {},  { QF_ILLUM_5rng,  "Illum-oldR",    { "NOVID_3053_FC625AGAAXX:6:1:1069:11483:0,84" },   
-                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_5rng,  no_validate,    ':', 6,  {1,2,3,4,5,6,-1},   {-1},           {1,2,3,4,5,6,-1},   {-1},           0,  -1,-1, -1,-1, 6,   -1, -1, -1, -1,                       },
+                                                                                          TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_5rng,  no_validate,    ':', 5,  {1,2,3,4,5,-1},     {-1},           {1,2,3,4,5,-1},     {-1},           0,  -1,-1, -1,-1, 5,   -1, -1, -1, -1,                       },
     {},  { QF_ILLUM_6,     "Illum-old6",    { "HWI-ST156_288:4:1:10000:110537:0" },       TECH_ILLUMINA, TECH_NCBI,    QANY,   &con_illumina_6,     no_validate,    0,   5,  {1,2,3,4,5,-1},     {-1},           {1,2,3,4,-1},       {-1},           0,  -1,-1, -1,-1, -1,  -1, -1, -1, -1,                       },
     {},  { QF_ROCHE_454,   "Roche-454",     { "000050_1712_0767" },                       TECH_LS454,    TECH_NCBI,    QANY,   &con_roche_454,      no_validate,    0,   2,  {-1},               {0,1,2,-1},     {-1},               {-1},           0,  -1,-1, -1,-1, -1,  -1, -1, -1, -1, 16, PX_roche_454      },
     {},  { QF_HELICOS,     "Helicos",       { "VHE-242383071011-15-1-0-2" },              TECH_HELICOS,  TECH_NCBI,    QANY,   &con_helicos,        no_validate,    0,   5,  {2,3,4,5,-1},       {-1},           {-1},               {-1},           0,  -1,-1, -1,-1, -1,  -1, -1, -1, -1,                       },

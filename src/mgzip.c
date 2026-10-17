@@ -648,8 +648,9 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
         
     // search for block size by beginning of next block, and an isize that "makes sense" relative to bsize
     // note: we do this even if EOF, because gz_data might contain several gz blocks. note: also NULL if data is too short.
-    uint8_t *next_blk = B8(file->gz_data, params.gz_hdr_len) - 1;
+    bytes next_blk = B8(file->gz_data, params.gz_hdr_len) - 1;
     uint32_t bsize=0, isize=0, n_blks=0;
+
     do {
         next_blk = memmem (next_blk + 1, BAFT8(file->gz_data) - (next_blk + 1), params.gz_hdr, params.gz_hdr_len);
         n_blks++;
@@ -663,7 +664,8 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
                 double ratio = (double)isize / (double)bsize;
                 if (discovering && flag.show_bgzf) 
                     iprintf ("Discovery %s: isize=%u bsize=%u ratio=%1.1f ∈ [%1.1f, %1.1f]\n", 
-                             codec_name (codec), isize, bsize, ratio, segconf.gz_comp_ratio / RATIO_MULT, segconf.gz_comp_ratio * RATIO_MULT);   
+                             codec_name (codec), isize, bsize, ratio, 
+                             txt_file->gz_comp_ratio_so_far / RATIO_MULT, txt_file->gz_comp_ratio_so_far * RATIO_MULT);   
                 
                 // case: while attempting to skip bogus gz headers, we inadvertedly skipped a real one (because didn't match the expected format or ratio)
                 // symptom: ratio just gets worse and worse with every block we read (bsize keeps growing but not isize), 
@@ -674,9 +676,9 @@ GzStatus mgzip_read_block_no_bsize (FileP file, bool discovering, Codec codec)
                             
                 // final while condition: loop back to extend the block, if the ratio doesn't make sense, but not if bsize is too small to judge ratio
                 bsize > 2 KB && 
-                (ratio < segconf.gz_comp_ratio / RATIO_MULT || ratio > segconf.gz_comp_ratio * RATIO_MULT); })));
-    
-    bool is_end_of_vb = false;
+                (ratio < txt_file->gz_comp_ratio_so_far / RATIO_MULT || ratio > txt_file->gz_comp_ratio_so_far * RATIO_MULT); })));
+
+        bool is_end_of_vb = false;
 
     // case: a block was found, and it is not the last block
     if (next_blk && params.is_valid_isize (file, isize, false/* there IS a next block so not EOF*/, discovering, &is_end_of_vb)) {
@@ -962,22 +964,30 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
         bb->gz_digest     = this_block_digest;
     }
 
-    size_t actual_txt_size = 0;
+    size_t txt_produced=0, gz_consumed=0;
+    size_t gz_available = bb->gz_size - header_len - GZIP_FOOTER_LEN;
     enum libdeflate_result ret = bb->txt_size  
-        ? libdeflate_deflate_decompress (vb->libdef_decomp_mem, 
-                                         h + header_len, bb->gz_size - header_len - GZIP_FOOTER_LEN, // compressed
-                                         Btxt (bb->txt_index), bb->txt_size, &actual_txt_size)  // uncompressed
+        ? libdeflate_deflate_decompress_ex (
+            vb->libdef_decomp_mem, h + header_len, gz_available, // compressed
+            Btxt (bb->txt_index), bb->txt_size, &gz_consumed, &txt_produced)  // uncompressed
         : LIBDEFLATE_SUCCESS; // don't uncompress if empty block: 1. not needed 2. header size of EOF block might differ (as in MGZF) so arithmetic will be wrong
 
-    // account for the case of decompression, and also the case bb is discarded due to a certain truncate situation (see below).
+    // account for the case of uncompression, and also the case bb is discarded due to a certain truncate situation (see below).
     inc_disk_gz_uncomp_or_trunc (txt_file, bb->gz_size);
 
-    // case: wrong isize, likely becuase the gz block is actually multiple gz blocks - we missed the header 
-    // of the pervious block(s) (e.g. because gz compression was outside of ratio, or header differed from first header)
-    // note: normally we catch this in mgzip_read_block_no_bsize, but there could be edge cases where bsize/isize ratio appears ok and we arrive here
-    if (ret == LIBDEFLATE_INSUFFICIENT_SPACE && !TXT_GZ_HEADER_HAS_BSIZE)
-        RESTART ("--no-bgzf", "Main thread mis-divided gz blocks. codec=%s bb=%s gz_index=%u vb->comp_txt_data.len=%"PRIu64, 
-                 codec_name (txt_file->effective_codec), display_bb (bb).s, bb->gz_index, vb->comp_txt_data.len);
+    // case no_bsize: mgzip_read_block_no_bsize divided to bb's based on searching for the next header
+    // but could have got it wrong. here we catch cases were the division was wrong.
+    
+    // case: wrong isize (it is too small) - we mis-identified the end the gz block 
+    if (!TXT_GZ_HEADER_HAS_BSIZE && ret == LIBDEFLATE_INSUFFICIENT_SPACE) // case: a second gz block was incorrectly included in the same bb, e.g. because gz compression was outside of ratio, or header differed from first header
+        RESTART ("--no-bgzf", "Main thread mis-divided gz blocks (false-positive end-of-block). codec=%s bb=%s gz_index=%u vb->comp_txt_data.len=%"PRIu64" ret=%d gz_consumed=%u gz_available=%u", 
+                 codec_name (txt_file->effective_codec), display_bb (bb).s, bb->gz_index, vb->comp_txt_data.len, ret, (uint32_t)gz_consumed, (uint32_t)gz_available);
+
+    // case: a second gz block was incorrectly included in the same bb, e.g. because gz compression was outside of ratio, or header differed from first header
+    // note: if txt_size==0 (EOF) then gz_consumed==0 != gz_available==2(==EOF_CDATA.len ?) and its not a error.
+    if (!TXT_GZ_HEADER_HAS_BSIZE && bb->txt_size && (ret == LIBDEFLATE_SUCCESS && gz_consumed != gz_available)) 
+        RESTART ("--no-bgzf", "Main thread mis-divided gz blocks (more than one block in a bb). codec=%s bb=%s gz_index=%u vb->comp_txt_data.len=%"PRIu64" ret=%d gz_consumed=%u gz_available=%u", 
+                 codec_name (txt_file->effective_codec), display_bb (bb).s, bb->gz_index, vb->comp_txt_data.len, ret, (uint32_t)gz_consumed, (uint32_t)gz_available);
 
     // case: final ILxM block, which is truncated, but we have --truncate, and the garbage last word
     // unluckily < xMB so it went undetected as a legimiate block in ILxM_is_valid_isize. we drop this block now.
@@ -992,19 +1002,18 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
             return; // with bb->is_uncompressed=false
         }
 
-        else {
+        else 
             ABORT ("Failed to uncompress the final %s block of the file: %s. " _TIP "If it is expected that the file is truncated, use --truncate to ignore the defective final block.", 
                    codec_name (vb->txt_codec), libdeflate_error(ret));
-        }
     }
 
     // reported to happen in FASTQ generated when two .ora files are concatenated and then converted to .gz with ora - possibly because last gz block (GZBL?) of first file is a lot smaller
-    if (bb->txt_size != actual_txt_size) {
+    if (bb->txt_size != txt_produced) {
         #define BAD_BGZF_BLOCK_FILENAME "bad_gz_block.gz"
         file_put_data (BAD_BGZF_BLOCK_FILENAME, h, bb->gz_size, 0);
 
-        RESTART ("--no-bgzf", "Encountered %s block with unexpected isize: expecting: bb->txt_size=%u but actual_txt_size=%u. Dumped bad BGZF block to %s",
-                 codec_name (vb->txt_codec), bb->txt_size, (uint32_t)actual_txt_size, BAD_BGZF_BLOCK_FILENAME);
+        RESTART ("--no-bgzf", "Encountered %s block with unexpected isize: expecting: bb->txt_size=%u but txt_produced=%u. Dumped bad BGZF block to %s",
+                 codec_name (vb->txt_codec), bb->txt_size, (uint32_t)txt_produced, BAD_BGZF_BLOCK_FILENAME);
     }
 
     ASSERT (ret == LIBDEFLATE_SUCCESS, "libdeflate_deflate_decompress failed: %s", libdeflate_error(ret));
@@ -1012,10 +1021,9 @@ void mgzip_uncompress_one_block (VBlockP vb, GzBlockZip *bb, Codec codec)
     bb->is_uncompressed = true;
 
     if (flag_show_bgzf)
-        iprintf ("UNCOMPRESS %s thread=%-7s%-11s digest=%08x bb_i=%-3u comp_index=%-9u comp_len=%-8u txt_index=%-9u txt_len=%-8u eof=%-5s%s%s\n",
+        iprintf ("UNCOMPRESS %s thread=%-7s%-11s digest=%08x %s%s%s\n",
                  codec_name (codec), threads_am_i_main_thread() ? "MAIN" : "COMPUTE", 
-                 cond_str (vb->vblock_i, " vb=", VB_NAME), this_block_digest, 
-                 BNUM (vb->gz_blocks, bb), bb->gz_index, bb->gz_size, bb->txt_index, bb->txt_size, TF(bb->is_eof),
+                 cond_str (vb->vblock_i, " vb=", VB_NAME), this_block_digest, dis_GzBlockZip(vb, bb).s, 
                  cond_str (bb->txt_size, " uncomp[5]=", str_to_printable_(Btxt(bb->txt_index), MIN_(5, Ltxt - bb->txt_index)).s),
                  bb->gz_size == BGZF_EOF_LEN ? " EOF" : "");
 
@@ -1257,8 +1265,14 @@ void mgzip_zip_init_vb (VBlockP vb)
 
     // sanity check
     int32_t available = -vb->gz_blocks.consumed_by_prev_vb; // possibly start negative
-    for_buf (GzBlockZip, bb, vb->gz_blocks) 
+    for_buf (GzBlockZip, bb, vb->gz_blocks) {
         available += bb->txt_size;
+
+        if (flag_show_bgzf)
+            iprintf ("MOVE_PREV  %-4s thread=MAIN   %-11s                 %s\n",
+                     codec_name (txt_file->effective_codec), cond_str (vb->vblock_i, " vb=", VB_NAME), 
+                     dis_GzBlockZip(vb, bb).s);
+    }
 
     ASSERT (available >= Ltxt, "%s blocks in txt_file->unconsumed_mgzip_blocks cover only %d bytes, less than the needed unconsumed_bytes=%d", 
             codec_name (txt_file->effective_codec), available, Ltxt);
@@ -1823,4 +1837,13 @@ void bgzf_compress_tbi (void)
 
     RESTORE_FLAGS;
     COPY_TIMER_EVB (bgzf_compress_tbi);
+}
+
+StrText1K dis_GzBlockZip (VBlockP vb, GzBlockZip *bb)
+{
+    StrText1K s;
+    snprintf (s.s, sizeof(s), "bb_i=%-3u gz_idx=%-9u gz_len=%-8u txt_idx=%-9d txt_len=%-8u %-3s", 
+              BNUM (vb->gz_blocks, bb), bb->gz_index, bb->gz_size, bb->txt_index, bb->txt_size, bb->is_eof ? "EOF" : "");
+
+    return s;
 }

@@ -12,9 +12,7 @@
 #include <x86intrin.h>
 #endif
 #include "genozip.h"
-#ifdef __APPLE__ 
 #include "mac_compat.h"
-#endif
 #include <time.h>
 
 #define PROFILE // always enabled

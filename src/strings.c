@@ -640,7 +640,7 @@ bool str_is_in_range (rom str, uint32_t str_len, char first_c, char last_c)
 {
     ASSERT (first_c <= last_c, "expecting first_c=%u <= last_c=%u", first_c, last_c);
 
-#ifdef __x86_64__  // note: AVX2 support enforced by arch_initialize (about 40% faster)  
+#ifdef __AVX2__
     if (str_len >= 32) {
         __m256i v_min = _mm256_set1_epi8 (first_c),
                 v_max = _mm256_set1_epi8 (last_c),
@@ -822,13 +822,13 @@ rom str_split_by_tab_do (STR𐤐(str),
     newline -= my_has_13;
     uint32_t fld_i, max_flds=*n_flds;
 
-    χ64 (const __m256i v_tab = _mm256_set1_epi8('\t');)
+    𝓐𝓥𝓧𝟤 (const __m256i v_tab = _mm256_set1_epi8('\t');)
 
     for (fld_i = 0; str <= newline && fld_i < max_flds; fld_i++) {
         flds[fld_i] = str; // Record field start pointer FIRST
         rom end_of_field, s=str;
 
-#ifdef __x86_64__
+#ifdef __AVX2__
         // AVX2: scan 32 bytes at a time
         while (newline - s >= 32) {
             __m256i chunk = _mm256_loadu_si256 ((const __m256i *)s);
@@ -847,7 +847,7 @@ rom str_split_by_tab_do (STR𐤐(str),
         rom tab = memchr (s, '\t', newline - s);
         end_of_field = tab ? tab : newline;
 
-    χ64 (end_of_field_found:)
+    𝓐𝓥𝓧𝟤 (end_of_field_found:)
         fld_lens[fld_i] = end_of_field - str;
         str = end_of_field + 1; 
     }
@@ -1517,7 +1517,7 @@ uint32_t str_pack_bases (uint8_t *restrict packed, STR𐤐(bases), bool revcomp)
     
     // clear garbage bits - due to processing of up to 3 characters after the end (if forward) or before the beginning (if reverse) of bases.
     if (bases_in_partial_final_byte)    
-        packed[num_bytes-1] &= bitmask8 (2 * bases_in_partial_final_byte);
+        packed[num_bytes-1] &= bitmask8_(2 * bases_in_partial_final_byte);
      
     return num_bytes;
 }
@@ -1563,7 +1563,7 @@ uint32_t str_unpack_bases (char *restrict dst, bytes𐤐 packed, uint32_t num_ba
 bool str_is_zero (STR𐤐(str))
 {
     // case: AVX2 and str_len >= 32
-#ifdef __x86_64__   // note: AVX2 support enforced by arch_initialize   
+#ifdef __AVX2__
     if (str_len >= 32) {
         __m256i *data = (__m256i *)str;
         
@@ -1624,7 +1624,7 @@ uint32_t str_count_char (STR𐤐(str), char c)
 {
     uint32_t count=0, i=0;
 
-#ifdef __x86_64__   // AVX2 support enforced by arch_initialize
+#ifdef __AVX2__
     // full words of 32B with AVX2
     if (str_len >= 32) {
         const __m256i vc256 = _mm256_set1_epi8 (c); // 32 bytes of c

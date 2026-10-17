@@ -313,7 +313,7 @@ static void flag_set_interleaved (rom optarg)
     else ABORTINP0 ("Invalid value for --interleaved : accepted values are 'either' or 'both' (default: 'both')");
 }
 
-// parse argument --biopsy_line=1/1000  <-- first number is vb_i, second is line_i within VB
+// parse argument --biopsy_line=1/1000  ⇐ first number is vb_i, second is line_i within VB
 static void flag_set_biopsy_line (rom optarg)
 {
     ASSINP0 (optarg, "--biopsy_line expects an argument, eg: --biopsy_line=1/1000 (meaning: vblock_i=1, line_i=1000 (0-based line within VB))");
@@ -344,13 +344,13 @@ static void flags_set_make_reference (rom optarg)
 static void flag_set_telemetry (rom optarg)
 {
     if (!optarg) 
-        flag.telemetry = TELEMETRY_SEND;
+        flag.telemetry = TELEMETRY_DST_SEND;
 
     else if (str_case_compare (optarg, "file", NULL))
-        flag.telemetry = TELEMETRY_FILE;
+        flag.telemetry = TELEMETRY_DST_FILE;
 
     else {
-        flag.telemetry = TELEMETRY_FILE; // with field, always emit to file too 
+        flag.telemetry = TELEMETRY_DST_FILE; // with field, always emit to file too 
         flags_set_dict (optarg, &flag.tele_show_δ); // explicitly send 6 examples of a named field
     }
 }
@@ -1329,6 +1329,10 @@ void flags_update (unsigned num_files, rom *filenames)
             "To create a reference from multiple FASTAs use something like this:\n"
             "cat *.fa | %s --make-reference --input fasta --output myref.ref.genozip -", global_cmd);
 
+    flag.no_lzma |= flag.fast; // --fast implies --no-lzma
+    
+    flag.no_upgrade |= (getenv (GENOZIP_NO_UPGRADE) != NULL);
+
     // where progress, metadata etc messages should go. data always goes to stdout and errors/warning always go to stderr.
     if (flag.log_filename) {
         if (!(info_stream = fopen (flag.log_filename, "a"))) // cannot use ASSERT here bc no info_stream yet...
@@ -1399,7 +1403,7 @@ void flags_update_zip_one_file (void)
         flag.xthreads = flag.quiet = true; 
 
     flag.skip_segconf |= flag.add_seq; // --add-seq implies --skip-segconf
-
+    
     if (!Z_DT(FASTQ)) 
         flag.no_splicing = true; // splicing not implemented yet for SAM/BAM (bug 1273)
     

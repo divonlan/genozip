@@ -63,7 +63,7 @@ void bam_seq_to_sam (VBlockP vb, bytes𐤐 bam_seq,
     uint32_t num_bytes = (seq_len + 1) / 2;
     uint32_t i=0;
 
-#ifdef __x86_64__  // note: AVX2 support enforced by arch_initialize   
+#ifdef __AVX2__
     const __m256i bam_base_codes_m256i = _mm256_setr_epi8 (
         '=', 'A', 'C', 'M', 'G', 'R', 'S', 'V', 'T', 'W', 'Y', 'H', 'K', 'D', 'B', 'N',
         '=', 'A', 'C', 'M', 'G', 'R', 'S', 'V', 'T', 'W', 'Y', 'H', 'K', 'D', 'B', 'N'
@@ -1680,7 +1680,7 @@ TRANSLATOR_FUNC (sam_piz_sam2bam_SEQ)
     uint8_t *in=(uint8_t *)recon, *out=in; 
 
     // NOTE: SAM string is assumed to contain only valid SAM characters. Invalid characters mapping to BAM is undefined.
-#ifdef __x86_64__  // note: AVX2 support enforced by arch_initialize. cuts time by 20-50%  
+#ifdef __AVX2__ 
 
     // lookup table indexed by lower nibble (ASCII & 0x0F)
     const __m256i lut_lo = _mm256_setr_epi8 (

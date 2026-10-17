@@ -245,7 +245,12 @@ test_md5()
     $genozip $file -Xf --md5 -o $output || exit 1
     
     local genozip_md5 real_md5
-    genozip_md5=`$genols $output | grep $output | cut -c 51-82` || exit $? 
+
+    genozip_md5=$(
+        $genols "$output" | grep "$output_fn" | cut -c 51-82
+        exit "${PIPESTATUS[0]}" # inner shell returns exit code of genols
+    ) || exit $? 
+
     real_md5=`$zmd5 $file` || exit $?
 
     if [[ "$genozip_md5" != "$real_md5" ]]; then echo "❌ expected $file to have MD5=\"$real_md5\" but genozip calculated MD5=\"$genozip_md5\""; exit 1; fi
@@ -336,12 +341,6 @@ batch_basic()
 
     local file replace
     file=$1
-
-    # if [ $file == basic.chain ]; then
-    #     export GENOZIP_REFERENCE=${hs37d5}:${GRCh38}
-    # else
-    #     unset GENOZIP_REFERENCE
-    # fi
 
     test_standard "" "" $file
 
@@ -1694,6 +1693,11 @@ batch_test_tbi()
 {
     batch_print_header
 
+    if ! `command -v $bcftools >& /dev/null`; then 
+        echo "Skipping. Reason: bcftools=$bcftools not found"
+        return 
+    fi
+
     cleanup
     rm -f $TESTDIR/*.test-tbi/*genounzip* # not in cleanup so we can inspect after the test
 
@@ -1889,12 +1893,14 @@ batch_multiseq()
 
 batch_sam_bam_cram_output()
 {
+    batch_print_header
+
     # reconstructing CRAM doesn't work well on Windows: bug 1250
-    if [ -n "$is_windows" ]; then # these don't work with samtools on Windows
+    if [ -n "$is_windows" ]; then 
+        echo "Skipping. batch_sam_bam_cram_output doesn't work with samtools on Windows"
         return
     fi
 
-    batch_print_header
     if ! `command -v samtools >& /dev/null`; then return; fi
 
     # verify data types when pizzing a cram file
@@ -2024,7 +2030,11 @@ get_vcf_type() # $1 = filename
 batch_vcf_bcf_output()
 {
     batch_print_header
-    if ! `command -v $bcftools >& /dev/null`; then return; fi
+
+    if ! `command -v $bcftools >& /dev/null`; then 
+        echo "Skipping. Reason: bcftools=$bcftools not found"
+        return 
+    fi
 
     # verify data types when pizzing a cram file
     local txt=$OUTDIR/txt # no file extension, so that it doesn't modify the data type
@@ -2357,7 +2367,7 @@ batch_make_reference()
 
     cleanup
 
-    local fa_file=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
+    local fa_file=$GENOZIP_HOME/$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
 
     # test making from a URL
@@ -2435,7 +2445,7 @@ update_latest()
     rm pull.out
 
     make -j clean
-    make -j 
+    make -j8 
     popd
 
     # remove old "latest" test files if needed
@@ -2739,7 +2749,7 @@ batch_gencomp_depn_methods() # note: use --debug-gencomp for detailed tracking
     verify_depn_far_to_num_depn 24
 
     test_header "invoke OFFLOAD method"
-    $genozip -fB1 -@3 -t --force-gencomp file://${path}${TESTDIR}/test.pacbio.clr.bam -fo $output || exit 1
+    $genozip -fB1 -@3 -t --force-gencomp file://${TESTDIR}/test.pacbio.clr.bam -fo $output || exit 1
     cat $TESTDIR/test.pacbio.clr.bam.gz | $genozip -i bam -fB1 -@3 -t - -fo $output || exit 1
     verify_depn_far_to_num_depn 24
 
@@ -3102,7 +3112,11 @@ if [[ ! -v GENOZIP_HOME ]]; then # Windows note: definition in /home/divon/.bash
 fi
 
 if [ -n "$is_windows" ] || [ -n "$is_exe" ]; then
+GENOZIP_HOME=C:/users/divon/genozip
 BASEDIR=../genozip
+# support UTF-8 characters in Windows bash (otherwise non-ASCII characters are messed up before being passed to the executables)
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
 else
 BASEDIR=.
 fi
@@ -3113,7 +3127,8 @@ SCRIPTSDIR=$GENOZIP_HOME/private/scripts
 LICENSESDIR=$GENOZIP_HOME/private/licenses
 OUTDIRNAME="outdir.`uname|cut -d_ -f1`"
 OUTDIR=$TESTDIR/$OUTDIRNAME # so we can test on Windows and WSL2 in parallel
-REFDIR=$GENOZIP_HOME/public
+#REFDIR=$GENOZIP_HOME/public
+REFDIR=public # relative path do some Windows test issue (to be debugged)
 
 if [ -n "$is_windows" ]; then
     if [[ ! -v HOME ]]; then 
@@ -3130,7 +3145,8 @@ else
     LICFILE=$HOME/.genozip_license.v71
 fi
 
-output=${OUTDIR}/output.genozip
+output_fn=output.genozip
+output=${OUTDIR}/$output_fn
 output2=${OUTDIR}/output2.genozip
 recon=${OUTDIR}/recon.txt
 
@@ -3197,11 +3213,11 @@ fi
 if [ -n "$is_windows" ]; then
     exe=.exe
     path=`pwd| cut -c3-|tr / '\\\\'`\\
+    bcftools=/ucrt64/bin/bcftools
 
 elif [ -n "$is_exe" ]; then
     exe=.exe
     path=$PWD/
-
 #    zip_threads="-@3"
 #    piz_threads="-@5"
 elif [ -n "$is_mac" ]; then
@@ -3268,7 +3284,7 @@ inc() {
 }
 
 for GENOZIP_TEST in `seq $GENOZIP_TEST 200`; do 
-export GENOZIP_TEST=$GENOZIP_TEST # needed in case GENOZIP_TEST in not already in the environment
+export GENOZIP_TEST="$GENOZIP_TEST" # needed in case GENOZIP_TEST in not already in the environment
 case $GENOZIP_TEST in
 0 )  sparkling_clean                   ;;
 1 )  batch_minimal                     ;;

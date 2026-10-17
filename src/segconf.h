@@ -334,7 +334,6 @@ typedef struct __attribute__((gcc_struct)) {
     // General (every VB)
     QnameStr qname_line0[NUM_QTYPES];    // qname of line_i=0 (by which flavor is determined) (nul-terminated). used for qname re-discovery.
     uint64_t vb_size;                    // ZIP/PIZ: compression VBlock size in bytes (PIZ: passed in SectionHeaderGenozipHeader.vb_size)
-    double gz_comp_ratio;                // GZ compression ratio of segconf data
     uint32_t gz_comp_size;               // size of segconf data in source gz compression, used if discover_during_segconf 
     uint32_t line_len;                   // approx line len
     uint32_t R1_line_len;                // line_len of R1, in case we are co-compressing more than one FASTQ
@@ -345,7 +344,7 @@ typedef struct __attribute__((gcc_struct)) {
     QualHisto qual_histo[NUM_QHT][NUM_QUAL_SCORES]; // histogram of qual values in segconf data for each QHT. Also accessed when in initiazing HOMP and reported in Stats
 
     #define segconf_optimize(did_i) bitset_get (segconf.needs_optimize, (did_i))
-    const uint64_t needs_optimize[(MAX_DICTS+63)/64]; // true if --optimize indicates that this field should be optimized 
+    const uint64_t needs_optimize[(MAX_DICTS+63)/64]; // bitmap: 1 if --optimize indicates that this field should be optimized 
     double smux_max_stdv;                // for a particular quality score q - stdv across the 5 values (corresponding to b=A,C,T,G,other) which are the % of qual data which has score q, looking only at the quality values of associated with b. smux_max_stdv is maximal of the 94 stdv's asscoiated with all q's.
     #define SAM_FACTOR_MULT 32           // multiplication for storing est_sam_factor as an int in SectionHeaderGenozipHeader
     double est_sam_factor;               // BAM only: calculated in Segconf and used in PIZ: est size factor when translating BAM to SAM based on segconf data
@@ -357,8 +356,8 @@ typedef struct __attribute__((gcc_struct)) {
     // FASTQ (every VB)
     uint32_t optimized_qname_len;
     StrText optimized_qname;             // --optimize: prefix of optimized qname
+    float multiseq;                      // FASTQ/FASTA/SAM: non-zero if sequences in file are similar enough to each others. value is BSC compression ratio of sequences in segconf.  
     char interleaved_r1, interleaved_r2; // valid if is_interleaved: character representing R1/R2: usually '0' or '1' for R1 and '1' or '2' for R2
-    bool multiseq;                       // FASTQ/FASTA: sequences in file are variants of each others 
 
     // VCF
     Mutex PL_mux_by_DP_mutex;
@@ -372,7 +371,7 @@ typedef struct __attribute__((gcc_struct)) {
     bool qname_barcode2_is_alias[NUM_QTYPES];   // qname has two barcodes which are aliases
 
     // SAM/BAM (only beginning or end of execution)
-    char sam_deep_filename[1024];        // name of the SAM filename in --deep 
+    char sam_deep_filename[1 KB];        // name of the SAM filename in --deep 
     QnameStr sam_qname_line0;            // copy of qname_line0[QNAME1], but survives to fastq in deep/bammass (nul-terminated)
     uint32_t AS_is_2ref_consumed_evidence; // Segconf: AS value tends to be double ref_consumed (counter during segconf, bool during seg/piz)
     uint32_t AS_is_ref_consumed_evidence;  // Segconf: AS value tends to be double ref_consumed (counter during segconf, bool during seg/piz)
@@ -453,7 +452,7 @@ extern rom INFO_DP_method_name (InfoDPMethod method);
 extern rom FMT_GP_content_name (GPContentType method);
 extern rom RG_method_name (RGMethod method);
 extern void segconf_test_sorted (VBlockP vb, WordIndex prev_line_chrom, PosType32 pos, PosType32 prev_line_pos);
-extern void segconf_test_multiseq (VBlockP vb, Did nonref);
+extern void segconf_test_multiseq (VBlockP vb);
 extern StrText segconf_get_qual_histo (QualHistType qht);
 extern unsigned segconf_get_num_qual_scores (QualHistType qht);
 extern StrText1K segconf_get_optimizations (void);
