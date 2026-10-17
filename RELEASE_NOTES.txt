@@ -3,7 +3,7 @@ Note on versioning:
 - Minor version changes with bug fixes and minor feature updates
 - Some minor versions are skipped due to failed deployment pipelines
 
-15.0.98 17/10/2026
+15.0.99 17/10/2026
 - New environment variable: GENOZIP_NO_UPGRADE
 - Added activation option for exception-only telemetry 
 - Allow building for Nehalem pre-2014 CPUs (no AVX2/BMI2)
