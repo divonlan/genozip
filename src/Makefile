@@ -91,7 +91,10 @@ else
 		DISTOBJ := distribution.github.o # note: matches the name in version.c 
 	endif
 
-
+	ifdef win_x86
+		WINDRES := windres
+	endif
+	
 	ifdef vendor
         ifndef GENOZIP_HOME
             GENOZIP_HOME := $(HOME)/genozip
@@ -154,7 +157,6 @@ ifdef win_x86
 	CFLAGS += -D_FILE_OFFSET_BITS=64
 
 	WSL     := wsl
-	WINDRES := windres
 	NASM    := nasm
 	ASMC    := run-on-wsl.sh asmc
 	MASM    := $(ASMC) -c -10 -win64
@@ -375,7 +377,7 @@ ifdef x86_64
 	else # asmc not available (e.g. on conda-forge): use pre-assembled object
 		LDFLAGS += $(OBJDIR)/lzma/LzmaDecOpt.o
 	endif
-
+	
 # 	To built for nehalem (no AVX2/BMI2), run: make NEHALEM=1 all
 	ifdef NEHALEM 
         $(call info_once,ℹ️ Target x86_64 architecture=nehalem)
@@ -431,7 +433,11 @@ else # another CPU
 endif
 
 ifdef win_x86
-	RC_SRCS := genozip_win.rc
+	ifdef WINDRES # windres available
+		RC_SRCS := genozip_win.rc
+	else
+		LDFLAGS += $(OBJDIR)/genozip_win.o
+	endif	
 endif
 
 #-------------------------------------------------------------
@@ -698,7 +704,8 @@ CONDA_RECIPE_DIR := $(CONDA_FEEDSTOCK)/recipe
 OTHER_FILES_FOR_CONDA := \
 	Makefile ../.gitignore ../LICENSE.txt ../AUTHORS ../README.md \
 	$(OBJDIR_LINUX)/secure/license.o  $(OBJDIR_WINDOWS)/secure/license.o  $(OBJDIR_OSX_ARM)/secure/license.o \
-	$(OBJDIR_LINUX)/lzma/LzmaDecOpt.o $(OBJDIR_WINDOWS)/lzma/LzmaDecOpt.o
+	$(OBJDIR_LINUX)/lzma/LzmaDecOpt.o $(OBJDIR_WINDOWS)/lzma/LzmaDecOpt.o \
+	                                  $(OBJDIR_WINDOWS)/genozip_win.o
 
 ../LICENSE.txt: text_license.h version.h $(WIN)/genozip.exe
 	@echo Generating $@ ;\

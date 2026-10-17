@@ -15,6 +15,7 @@ autocomplete.sh
 *.o
 !src/objdir.*/secure/license.o
 !src/objdir.*/lzma/LzmaDecOpt.o
+!src/objdir.windows/genozip_win.o
 *.debug-o
 *.opt-o
 *.d
