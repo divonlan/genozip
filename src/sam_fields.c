@@ -386,7 +386,7 @@ static void sam_seg_SM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t SM, unsi
         // store value in local (254 means "copy from MAPQ"), except if MAPQ=0 - we know SM=0 so no need to store
         if (dl->MAPQ) {
             uint8_t SM8 = (SM == dl->MAPQ) ? 254 : SM;
-            seg_integer_fixed (VB, ctx, &SM8, false, 0);
+            seg_integer_fixed (VB, ctx, &SM8, NO_LOOKUP, 0);
         }
 
         seg_special0 (VB, SAM_SPECIAL_SM, ctx, add_bytes); // this usually is an all-the-same
@@ -438,7 +438,7 @@ static void sam_seg_AM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t AM, unsi
                         : (AM && AM == dl->MAPQ - SM) ? 254 // note subtelty: substraction in uint8_t arithmetics. we are careful to do the same in sam_piz_special_AM.
                         :                               AM;
 
-            seg_integer_fixed (VB, ctx, &AM8, false, 0);
+            seg_integer_fixed (VB, ctx, &AM8, NO_LOOKUP, 0);
         }
         
         seg_special0 (VB, SAM_SPECIAL_AM, ctx, add_bytes);
@@ -488,7 +488,7 @@ static void sam_seg_UQ_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t UQ, unsi
         seg_special1 (VB, SAM_SPECIAL_UQ, '2', ctx, add_bytes);
 
     else 
-        seg_integer (VB, ctx, UQ, true, add_bytes);
+        seg_integer (VB, ctx, UQ, WITH_LOOKUP, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_UQ)
@@ -554,10 +554,10 @@ static inline void sam_seg_HI_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t h
             seg_by_ctx (VB, (char[]){ SNIP_SPECIAL, SAM_SPECIAL_HI }, 2, ctx, add_bytes);
 
         else  
-            seg_integer (VB, ctx, hi, true, add_bytes);
+            seg_integer (VB, ctx, hi, WITH_LOOKUP, add_bytes);
     }
     else  // not collated
-        seg_integer (VB, ctx, hi, false, add_bytes);
+        seg_integer (VB, ctx, hi, NO_LOOKUP, add_bytes);
 
     ctx_set_last_value (VB, ctx, hi);
 }
@@ -593,7 +593,7 @@ static inline void sam_seg_CP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t c
 
     else {
         uint32_t cp32 = cp;
-        seg_integer (VB, CTX(OPTION_CP_i), cp32, true, add_bytes);
+        seg_integer (VB, CTX(OPTION_CP_i), cp32, WITH_LOOKUP, add_bytes);
     }
 }
 
@@ -699,7 +699,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t a
         else
             // TODO: AS prediction, see bug 520
             //seg_integer_as_snip_do (VB, channel_ctx, as, add_bytes);    
-            seg_integer (VB, channel_ctx, as, true, add_bytes);
+            seg_integer (VB, channel_ctx, as, WITH_LOOKUP, add_bytes);
 
         seg_by_did (VB, STRa(vb->mux_AS.snip), OPTION_AS_i, 0); // de-multiplexer
     }
@@ -719,7 +719,7 @@ static inline void sam_seg_AS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t a
         seg_delta_vs_other_localN (VB, CTX(OPTION_AS_i), CTX(OPTION_ms_i), as, -1, add_bytes);
 
     else
-        seg_integer (VB, CTX (OPTION_AS_i), as, true, add_bytes);
+        seg_integer (VB, CTX (OPTION_AS_i), as, WITH_LOOKUP, add_bytes);
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -810,7 +810,7 @@ static inline void sam_seg_SEQ_END (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Contex
         seg_special4 (VB, SAM_SPECIAL_SEQ_LEN, op[0], op[1], op[2], op[3], ctx, add_bytes); // note: this SPECIAL is also used in sam_seg_MD_Z
 
     else 
-        seg_integer (VB, ctx, value, true, add_bytes);
+        seg_integer (VB, ctx, value, WITH_LOOKUP, add_bytes);
 }
 
 // reconstruct a modified dl->SEQ.len based on a 4-parameter snip
@@ -863,7 +863,7 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes)
         // in PRIM, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
         if (IS_PRIM(vb)) {
             ContextP sa_mapq_ctx = CTX(OPTION_SA_MAPQ);
-            seg_integer_fixed (VB, sa_mapq_ctx, &dl->MAPQ, false, 0);
+            seg_integer_fixed (VB, sa_mapq_ctx, &dl->MAPQ, NO_LOOKUP, 0);
 
             // count MAPQ field contribution to OPTION_SA_MAPQ, so sam_stats_reallocate can allocate the z_data between MAPQ and SA:Z
             sa_mapq_ctx->counts.count += add_bytes; 
@@ -886,7 +886,7 @@ void sam_seg_MAPQ (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, unsigned add_bytes)
 
     else {
         channel_ctx->ltype = LT_UINT8;
-        seg_integer_fixed (VB, channel_ctx, &dl->MAPQ, true, add_bytes);
+        seg_integer_fixed (VB, channel_ctx, &dl->MAPQ, WITH_LOOKUP, add_bytes);
     }
 
     if (do_mux)
@@ -952,7 +952,7 @@ static inline void sam_seg_PQ_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t p
     }
 
     else
-        seg_integer (VB, channel_ctx, pq, true, add_bytes);
+        seg_integer (VB, channel_ctx, pq, WITH_LOOKUP, add_bytes);
 
     seg_by_did (VB, STRa(vb->mux_PQ.snip), OPTION_PQ_i, 0); // de-multiplexer
 }
@@ -1038,12 +1038,12 @@ void sam_seg_buddied_i_fields (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i,
             seg_by_ctx (VB, STRa(copy_snip), channel_ctx, add_bytes); 
 
         else 
-            seg_integer (VB, channel_ctx, my_value, true, add_bytes);    
+            seg_integer (VB, channel_ctx, my_value, WITH_LOOKUP, add_bytes);    
 
         seg_by_ctx (VB, MUX_SNIP(mux), mux.m->snip_len, ctx, 0); // de-multiplexer
     }
     else
-        seg_integer (VB, ctx, my_value, true, add_bytes);        
+        seg_integer (VB, ctx, my_value, WITH_LOOKUP, add_bytes);        
 }
 
 // seg Z field which is expected to be equal to a different field on mate (eg rb:Z <> mb:Z)
@@ -1322,7 +1322,7 @@ void sam_seg_array_one_ctx (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, DictId dict_id
                     sum += value;
             }
             else // float
-                seg_add_to_local_string (VB, elem_ctx, STRa(snip), LOOKUP_NONE, 0);
+                seg_add_to_local_string (VB, elem_ctx, STRa(snip), NO_LOOKUP, 0);
             
             array_len--; // skip comma
             array++;
@@ -1395,7 +1395,7 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
 
     // all types of integer
     if (sam_type == 'i') 
-        seg_integer (vb, ctx, numeric.i, true, add_bytes);
+        seg_integer (vb, ctx, numeric.i, WITH_LOOKUP, add_bytes);
 
     else if (sam_type == 'f') {
         if (!ctx->is_initialized) 
@@ -1404,11 +1404,11 @@ void sam_seg_aux_field_fallback (VBlockP vb, void *dl, DictId dict_id, char sam_
         // note: for some fields, sam_seg_float_as_snip() is better.
         if (IS_BAM_ZIP) {
             uint32_t f = numeric.i; // bam_get_one_aux stores float values as binary-identical 32bit integer
-            seg_integer_fixed (VB, ctx, &f, LOOKUP_NONE, add_bytes);
+            seg_integer_fixed (VB, ctx, &f, NO_LOOKUP, add_bytes);
         }
         
         else // sam
-            seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, add_bytes);
+            seg_add_to_local_string (VB, ctx, STRa(value), NO_LOOKUP, add_bytes);
     }
 
     // Numeric array
@@ -1605,8 +1605,8 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_bam,
 
         case _OPTION_Zs_Z: COND (MP(HISAT2), sam_seg_HISAT2_Zs_Z (vb, STRa(value), add_bytes));
 
-        case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YH_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
-        case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YQ_Z), STRa(value), LOOKUP_NONE, add_bytes)); break;
+        case _OPTION_YH_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YH_Z), STRa(value), NO_LOOKUP, add_bytes)); break;
+        case _OPTION_YQ_Z: COND (MP(NOVOALIGN), seg_add_to_local_string (VB, CTX(OPTION_YQ_Z), STRa(value), NO_LOOKUP, add_bytes)); break;
 
         case _OPTION_QS_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QS_i), numeric.i, "00+0", add_bytes));
         case _OPTION_QE_i: COND (MP(NGMLR), sam_seg_SEQ_END (vb, dl, CTX(OPTION_QE_i), numeric.i, "+00-", add_bytes));
@@ -1619,13 +1619,13 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_bam,
 
         // PacBio fields
         case _OPTION_dq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_dq_Z, STRa(value), add_bytes))
-                           COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_dq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
+                           COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_dq_Z), STRa(value), WITH_LOOKUP, add_bytes)); 
         
         case _OPTION_iq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_iq_Z, STRa(value), add_bytes))
-                           COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_iq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
+                           COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_iq_Z), STRa(value), WITH_LOOKUP, add_bytes)); 
         
         case _OPTION_sq_Z: COND0 (segconf.use_pacbio_iqsqdq, sam_seg_pacbio_xq (vb, dl, OPTION_sq_Z, STRa(value), add_bytes))
-                           COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_sq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes)); 
+                           COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_sq_Z), STRa(value), WITH_LOOKUP, add_bytes)); 
 
         case _OPTION_qs_i: COND (TECH(PACBIO), sam_seg_pacbio_qs (vb, dl, numeric.i, add_bytes));
         case _OPTION_qe_i: COND (TECH(PACBIO), sam_seg_pacbio_qe (vb, dl, numeric.i, add_bytes));
@@ -1636,9 +1636,9 @@ DictId sam_seg_aux_field (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, bool is_bam,
 
         case _OPTION_ec_f: COND (TECH(PACBIO) && segconf_has(OPTION_ec_f), ({ sam_seg_set_last_value_f_from_aux (vb, OPTION_ec_f, is_bam, STRa(value), numeric); goto fallback; })); // consumed by np:i
 
-        case _OPTION_dt_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_dt_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
-        case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_mq_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
-        case _OPTION_st_Z: COND (TECH(PACBIO) || MP(DORADO) || MP(GUPPY), seg_add_to_local_string (VB, CTX(OPTION_st_Z), STRa(value), LOOKUP_SIMPLE, add_bytes));
+        case _OPTION_dt_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_dt_Z), STRa(value), WITH_LOOKUP, add_bytes));
+        case _OPTION_mq_Z: COND (TECH(PACBIO), seg_add_to_local_string (VB, CTX(OPTION_mq_Z), STRa(value), WITH_LOOKUP, add_bytes));
+        case _OPTION_st_Z: COND (TECH(PACBIO) || MP(DORADO) || MP(GUPPY), seg_add_to_local_string (VB, CTX(OPTION_st_Z), STRa(value), WITH_LOOKUP, add_bytes));
                            
         case _OPTION_zm_i: COND(segconf.sam_has_zm_by_Q1NAME, sam_seg_pacbio_zm (vb, numeric.i, add_bytes));
 

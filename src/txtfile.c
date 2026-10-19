@@ -398,13 +398,8 @@ void txtfile_discover_specific_gz (FileP file)
     }
 
     // for regulars files, we already skipped 0 size files. This can happen in STDIN
-    else if (status == GZ_SUCCESS && file->gz_data.uncomp_len == 0) {
-        ASSINP (!flags_pipe_in_process_died(), // only works for Linux
-                "Pipe-in process %s (pid=%u) died without sending any data",
-                flags_pipe_in_process_name(), flags_pipe_in_pid());
-
+    else if (status == GZ_SUCCESS && file->gz_data.uncomp_len == 0)
         ABORTINP ("No data exists in input file %s", file->name ? file->name : FILENAME_STDIN);
-    }
     
     // case: this is non-BGZF GZIP format: test for one of the FASTQ codec. Run after segconf.
     else if (status == GZ_IS_OTHER_FORMAT && file->data_type == DT_FASTQ) {      
@@ -882,15 +877,9 @@ void txtfile_read_header (bool is_first_txt)
     // read data from the file until either 1. EOF is reached 2. end of txt header is reached
     #define HEADER_BLOCK (256 KB) // we have no idea how big the header will be... read this much at a time
     while ((header_len = (DT_FUNC (txt_file, is_header_done)(txt_file->no_more_blocks))) < 0) { // we might have data here from txtfile_test_data
-        
-        if (!is_data_read) {
-            if (flags_pipe_in_process_died()) // only works for Linux
-                ABORTINP ("Pipe-in process %s (pid=%u) died before the %s header was fully read; only %"PRIu64" bytes were read",
-                          flags_pipe_in_process_name(), flags_pipe_in_pid(), dt_name(txt_file->data_type), evb->txt_data.len);
-            else
-                ABORT ("Unexpected end-of-file while reading the %s header of %s (header_len=%"PRIu64")", 
-                       dt_name(txt_file->data_type), txt_name, evb->txt_data.len);
-        }
+        if (!is_data_read) 
+            ABORT ("Unexpected end-of-file while reading the %s header of %s (header_len=%"PRIu64")", 
+                    dt_name(txt_file->data_type), txt_name, evb->txt_data.len);
 
         ASSERT (evb->txt_data.len + HEADER_BLOCK <= MAX_TXT_HEADER_LEN, "%s header is larger than the maximum Genozip supports: %"PRIu64, 
                 dt_name (txt_file->data_type), MAX_TXT_HEADER_LEN);

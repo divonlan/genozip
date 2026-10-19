@@ -134,7 +134,7 @@ void vcf_seg_playpus_INFO_HP (VBlockVCFP vb, ContextP ctx, STRp(hp_str))
     }
 
     else fallback:
-        seg_integer (VB, ctx, hp, true, hp_str_len);
+        seg_integer (VB, ctx, hp, WITH_LOOKUP, hp_str_len);
 
     ref_unlock (&lock); 
 }

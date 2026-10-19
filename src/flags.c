@@ -72,9 +72,6 @@ bool is_info_stream_terminal = true;
 static Buffer command_line    = {},
               debugger_params = {};
 
-static pid_t pipe_in_pid = 0;
-static char pipe_in_process_name[100] = "";
-
 static void flags_set_optimize (rom optarg)
 {
     if (!optarg) fallback: {
@@ -455,6 +452,37 @@ void flags_zip_set_input_type (rom type_str)
     }
 }
 
+static void flag_show_pipe (void)
+{
+#ifdef __linux__    
+    char cmd[200];
+    unsigned pid = getpid();
+    snprintf (cmd, sizeof (cmd), "lsof -nb -P 2> /dev/null | grep $(ls /proc/%u/fd/0 -l | cut -d[ -f2| cut -d] -f1) 2> /dev/null | grep -v %u", pid, pid);
+    StreamP strm = stream_create (0, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0, "to get counter-process details", 
+                                  "bash", "-c", cmd, NULL);
+    char str[500];
+    unsigned len = fread (str, 1, sizeof (str)-1, stream_from_stream_stdout (strm));
+    
+    stream_close (&strm, STREAM_DONT_WAIT_FOR_PROCESS);
+
+    if (!len) {
+        iprintf (_FYI "Process piping data into %s: N/A", global_cmd);
+        return;
+    }
+    
+    str[len] = 0;
+
+    char format[20], pipe_in_process_name[1 KB];
+    pid_t pipe_in_pid;
+    snprintf (format, sizeof (format), "%%%us %%u", (unsigned)sizeof (pipe_in_process_name)-1);
+    sscanf (str, format, pipe_in_process_name, &pipe_in_pid);
+
+    iprintf (_FYI "Process piping data into %s: pid=%u %s", global_cmd, pipe_in_pid, pipe_in_process_name);
+#else
+    ABORTINP0 ("--show-pipe is available only on Linux");
+#endif
+}
+
 void flags_init_from_command_line (int argc, char **argv)
 {
     ASSERT ((rom)&flag.flag_after_bits - (rom)&flag == 8, "size of first 64 bits=%u > 8", (int)((rom)&flag.flag_after_bits - (rom)&flag )); // if a multi-bit field straddles a byte boundary, or if there are too many bits (note: _Static_assert didn't calculate bitfields correctly)
@@ -631,6 +659,7 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _sB {"show-sag",         optional_argument, 0, 136                    }  
         #define _sP {"show-depn",        no_argument,       &fint.show_depn,        1 }  
         #define _sc {"show-codec",       optional_argument, 0, 159                    }  
+        #define _Dc {"debug-codec",      no_argument,       &fint.debug_codec,      1 }  
         #define _Sc {"show-cache",       no_argument,       &fint.show_cache,       1 }  
         #define _AL {"show-aligner",     no_argument,       &fint.show_aligner,     1 }  
         #define _Ad {"debug-aligner",    no_argument,       &fint.debug_aligner,    1 }  
@@ -728,14 +757,15 @@ void flags_init_from_command_line (int argc, char **argv)
         #define _rs {"restarted",        no_argument,       &fint.restarted,        1 }
         #define _fc {"flush-cpu-cache",  no_argument,       0, 130                    }
         #define _md {"mismatch-diagnose",no_argument,       0, 161                    }
+        #define _ps {"show-pipe",        no_argument,       0, 162                    }
         #define _00 {0, 0, 0, 0                                                       }
         
         typedef struct option Option;
         const Option *long_options = 
-            is_genozip   ? (Option[]){ _lg, _i, _I, _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nc,_nu,  _V, _z,                                                                                 _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,           _sd, _sT,      _sN, _sb, _IS, _Sb, _Dz, _Ie, _lc, _lh, _lH,      _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr,      _UM, _su,      _so, _gz, _sv, _sn, _pn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _gn, _dr, _dR, _dP, _dG, _dN, _dF, _RR, _DF, _dQ, _fl, _dH, _Hh, _dC, _fQ, _fC, _fS, _fH, _fN, _dU, _dE, _do, _dz, _dl, _dc, _dg,      _dh,_dS, _dI, _dT, _ND, _SI, _bS, _iS, _tS, _9, _88, _98, _pe, _Np, _fa, _bs, _lm,                        _nh, _rg, _rG,                          _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Sc, _AL, _Ad, _sI, _cn,                          _s6,          _oe, _al, _as, _Lf, _dd, _T, _TT, _TL,      _wM, _wm, _WM, _WB, _WT, _bi, _bB, _bl, _sk, _VV, _DV,      _Dh, _Ds, _sp, _Du, _De, _DD, _DP, _BA, _SH, _Dd, _ba,      _to, _ts, _hc, _dv, _dA, _TR, _NE, _Sd, _St, _um,      _fP, _nF, _nS, _nI, _gg, _rs, _Xz, _Xb, _Xx, _eA, _fc, _md, _00 } 
-          : is_genounzip ? (Option[]){ _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t,      _DL,      _nc,      _V, _z,                                                                                 _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS,      _sG, _sd, _sT, _sS,      _sb, _IS,                _lc, _lh, _lH,      _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _SR,      _su,                _sv, _sn, _pn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,      _dM,           _dR,                                              _Hh,                               _dU,                _dl, _dc,                    _dI, _dT,                _iS, _tS,                              _bs, _lm,                                       _sR, _pR,                _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _Ad, _sI, _cn, _cN,                     _s6,          _oe,           _Lf, _dd, _T, _TT,                                                        _VV, _DV, _Dp,           _sp,           _DD,                _Dd, _ba,      _to, _ts,      _dv, _dA, _TR, _NE,      _St,      _np,                          _rs,                     _fc,      _00 }
-          : is_genocat   ? (Option[]){ _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,                         _nc,      _V, _z, _zr, _zR, _zb, _zB, _zs, _zS, _za, _zA, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _H4, _Gt, _So, _Io, _iu, _GT, _sL, _ss, _SS, _se, _sG, _sd, _sT, _sS,      _sb, _IS,                _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _SR,      _su, _sO,           _sv, _sn, _pn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,      _dM,           _dR,                                              _Hh,                                                        _dc,      _ds,                                                                               _lm, _fs, _g, _gw, _n, _nt, _nH,           _sR, _pR,      _sC, _pC, _hC, _rA, _rI, _pI, _rS, _me, _s5, _S5, _sM, _sA, _sB,           _Sc, _AL, _Ad, _sI, _cn, _cN, _pg, _PG, _ct, _vl, _s6,          _oe, _al,           _dd, _T,           _UL,                                                        _Dp,           _sp,           _DD,                _Dd, _ba, _DT,                _dv,      _TR, _NE,                _np,                          _rs,                     _fc,      _00 }
-          : is_genols    ? (Option[]){ _lg,             _f, _h,        _l, _L1, _L2, _q,                                       _V,                                                                                                      _p,                                                                                                                                                                                                                                                    _st, _sm,                                                                                                        _dm,                          _dt,                                                                                                                                                                                                                                                                                                                                            _sM,                                                                            _b, _LC, _oe,                _dd, _T,                                                                                      _sp,           _DD,                                              _dv,           _NE,                                              _rs,                     _fc,      _00 }
+            is_genozip   ? (Option[]){ _lg, _i, _I, _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t, _Nt, _DL, _nb, _nc,_nu,  _V, _z,                                                                                 _m, _th,     _o, _p, _e, _E,                                                                       _H1,                                         _sL, _ss, _SS,           _sd, _sT,      _sN, _sb, _IS, _Sb, _Dz, _Ie, _lc, _lh, _lH,      _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr,      _UM, _su,      _so, _gz, _sv, _sn, _pn, _ai,                    _B, _xt, _dm, _dp, _dL, _dD, _dq, _dB, _dt, _dw, _dM, _gn, _dr, _dR, _dP, _dG, _dN, _dF, _RR, _DF, _dQ, _fl, _dH, _Hh, _dC, _fQ, _fC, _fS, _fH, _fN, _dU, _dE, _do, _dz, _dl, _dc, _dg,      _dh,_dS, _dI, _dT, _ND, _SI, _bS, _iS, _tS, _9, _88, _98, _pe, _Np, _fa, _bs, _lm,                        _nh, _rg, _rG,                          _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB, _sP, _sc, _Dc, _Sc, _AL, _Ad, _sI, _cn,                          _s6,          _oe, _al, _as, _Lf, _dd, _T, _TT, _TL,      _wM, _wm, _WM, _WB, _WT, _bi, _bB, _bl, _sk, _VV, _DV,      _Dh, _Ds, _sp, _Du, _De, _DD, _DP, _BA, _SH, _Dd, _ba,      _to, _ts, _hc, _dv, _dA, _TR, _NE, _Sd, _St, _um,      _fP, _nF, _nS, _nI, _gg, _rs, _Xz, _Xb, _Xx, _eA, _fc, _md, _ps, _00 } 
+          : is_genounzip ? (Option[]){ _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q, _qq, _t,      _DL,      _nc,      _V, _z,                                                                                 _m, _th, _u, _o, _p, _e,                                                                                                                        _sL, _ss, _SS,      _sG, _sd, _sT, _sS,      _sb, _IS,                _lc, _lh, _lH,      _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _SR,      _su,                _sv, _sn, _pn,      _ov,                   _xt, _dm, _dp,      _dD,      _dB, _dt,      _dM,           _dR,                                              _Hh,                               _dU,                _dl, _dc,                    _dI, _dT,                _iS, _tS,                              _bs, _lm,                                       _sR, _pR,                _hC, _rA,           _rS, _me, _s5, _S5, _sM, _sA, _sB,                _Sc, _AL, _Ad, _sI, _cn, _cN,                     _s6,          _oe,           _Lf, _dd, _T, _TT,                                                        _VV, _DV, _Dp,           _sp,           _DD,                _Dd, _ba,      _to, _ts,      _dv, _dA, _TR, _NE,      _St,      _np,                          _rs,                     _fc,      _ps, _00 }
+          : is_genocat   ? (Option[]){ _lg,         _d, _f, _h, _x, _D,    _L1, _L2, _q, _Q,                         _nc,      _V, _z, _zr, _zR, _zb, _zB, _zs, _zS, _za, _zA, _zq, _zQ, _zf, _zF, _zc, _zC, _zv, _zV, _m, _th,     _o, _p, _e,     _il, _r, _R, _Rg, _qf, _qF, _Qf, _QF, _SF, _s, _sf, _sq, _G, _1, _H0, _H1, _H2, _H3, _H4, _Gt, _So, _Io, _iu, _GT, _sL, _ss, _SS, _se, _sG, _sd, _sT, _sS,      _sb, _IS,                _lc, _lh, _lH, _s2, _s7, _S7, _S0, _S8, _S9, _sa, _st, _sm, _sh, _si, _Si, _Sh, _sr, _SR,      _su, _sO,           _sv, _sn, _pn,      _ov, _R1, _R2, _RX,    _xt, _dm, _dp,      _dD,      _dB, _dt,      _dM,           _dR,                                              _Hh,                                                        _dc,      _ds,                                                                               _lm, _fs, _g, _gw, _n, _nt, _nH,           _sR, _pR,      _sC, _pC, _hC, _rA, _rI, _pI, _rS, _me, _s5, _S5, _sM, _sA, _sB,                _Sc, _AL, _Ad, _sI, _cn, _cN, _pg, _PG, _ct, _vl, _s6,          _oe, _al,           _dd, _T,           _UL,                                                        _Dp,           _sp,           _DD,                _Dd, _ba, _DT,                _dv,      _TR, _NE,                _np,                          _rs,                     _fc,      _ps, _00 }
+          : is_genols    ? (Option[]){ _lg,             _f, _h,        _l, _L1, _L2, _q,                                       _V,                                                                                                      _p,                                                                                                                                                                                                                                                    _st, _sm,                                                                                                        _dm,                          _dt,                                                                                                                                                                                                                                                                                                                                            _sM,                                                                                 _b, _LC, _oe,                _dd, _T,                                                                                      _sp,           _DD,                                              _dv,           _NE,                                              _rs,                     _fc,      _ps, _00 }
           :                NULL;
 
         // include the option letter here for the short version (eg "-t") to work. ':' indicates an argument.
@@ -865,6 +895,7 @@ verify_command:
             case 159 : flags_set_dict (optarg, &flag.show_codec_δ); break;
             case 160 : flags_set_make_reference (optarg); break;
             case 161 : b250_mistmatch_diagnose(); break; // doesn't return
+            case 162 : flag_show_pipe(); break;
             case 0   : break; // a long option that doesn't have short version will land here - already handled so nothing to do
                  
             default  : // unrecognized option 
@@ -1332,6 +1363,8 @@ void flags_update (unsigned num_files, rom *filenames)
     flag.no_lzma |= flag.fast; // --fast implies --no-lzma
     
     flag.no_upgrade |= (getenv (GENOZIP_NO_UPGRADE) != NULL);
+
+    flag.show_codec |= flag.debug_codec; // --debug-codec implies --show-codec
 
     // where progress, metadata etc messages should go. data always goes to stdout and errors/warning always go to stderr.
     if (flag.log_filename) {
@@ -1871,27 +1904,6 @@ void flags_update_piz_one_z_file (int z_file_i /* -1 if unknown - called form fi
     flags_test_conflicts(0); // test again after updating flags
 }
 
-static void flags_store_piped_in_details (void)
-{
-#ifdef __linux__    
-    char cmd[200];
-    unsigned pid = getpid();
-    snprintf (cmd, sizeof (cmd), "lsof -n -P 2> /dev/null | grep $(ls /proc/%u/fd/0 -l | cut -d[ -f2| cut -d] -f1) 2> /dev/null | grep -v %u", pid, pid);
-    StreamP strm = stream_create (0, DEFAULT_PIPE_SIZE, 0, 0, 0, 0, 0, "to get counter-process details", 
-                                  "bash", "-c", cmd, NULL);
-    char str[500];
-    unsigned len = fread (str, 1, sizeof (str)-1, stream_from_stream_stdout (strm));
-    
-    stream_close (&strm, STREAM_DONT_WAIT_FOR_PROCESS);
-
-    str[len] = 0;
-
-    char format[20];
-    snprintf (format, sizeof (format), "%%%us %%u", (unsigned)sizeof (pipe_in_process_name)-1);
-    sscanf (str, format, pipe_in_process_name, &pipe_in_pid);
-#endif
-}
-
 void flags_store_command_line (int argc, char **argv)
 {
     STR0(pw);
@@ -1946,11 +1958,8 @@ void flags_store_command_line (int argc, char **argv)
         }
     }
 
-    if (IS_ZIP && !isatty(0))
-        flags_store_piped_in_details();    
-
     if (flag.echo || flag.debug_or_test) {
-        fprintf (stderr, "\n%s: %s\n", str_time().s, B1STc(command_line));
+        fprintf (stderr, "\n%s 🏃 %s\n", str_time().s, B1STc(command_line));
         flag.echo = 2; // done
     }
 
@@ -1961,28 +1970,6 @@ void flags_store_command_line (int argc, char **argv)
 rom flags_command_line (void)
 {
     return B1STc(command_line);
-}
-
-rom flags_pipe_in_process_name (void)
-{
-    return pipe_in_process_name;
-}
-
-unsigned flags_pipe_in_pid (void)
-{
-    return pipe_in_pid;
-}
-
-// attempt to check if piped-in process died. 
-// note: we won't detect this, if the piped-in process died right away, before completed flags_store_piped_in_details()
-bool flags_pipe_in_process_died (void)
-{
-#ifdef __linux__
-    usleep(100000); // wait for dying process to be dead
-    return pipe_in_pid && kill (pipe_in_pid, 0);
-#else
-    return false;
-#endif
 }
 
 void flags_finalize (void)

@@ -106,14 +106,14 @@ void vcf_seg_INFO_RAW_MQandDP (VBlockVCFP vb, ContextP ctx, STRp(value))
     }
 
     else
-        seg_integer (VB, dp_ctx, dp, true, dp_str_len);
+        seg_integer (VB, dp_ctx, dp, WITH_LOOKUP, dp_str_len);
 
     // 2nd container item: MQ - use special for common case that all alignments had maximal MAPQ
     if (mq == dp * segconf.vcf_max_MAPQ * segconf.vcf_max_MAPQ)
         seg_special1 (VB, VCF_SPECIAL_RAW_MQandDP_MQ, 32 + segconf.vcf_max_MAPQ, mq_ctx, mq_str_len);
 
     else
-        seg_integer (VB, mq_ctx, mq, true, mq_str_len);
+        seg_integer (VB, mq_ctx, mq, WITH_LOOKUP, mq_str_len);
 
     // 3rd container item: copy DP (as delta=0 from first container item) - this item gets reconstructed
     seg_by_ctx (VB, STRa(copy_RAW_DP_int), dp2_ctx, 0);
@@ -259,7 +259,7 @@ void vcf_seg_INFO_RPA (VBlockVCFP vb, ContextP ctx, STRp(rpa_str))
         if (get_n_repeats (STRa(alt->alt), STRa(ru)) + delta != rpas[alt_i + 1])
             goto fallback;
 
-    seg_integer (VB, ctx, delta, false, 0); // add delta to local
+    seg_integer (VB, ctx, delta, NO_LOOKUP, 0); // add delta to local
     seg_special0 (VB, VCF_SPECIAL_RPA, ctx, rpa_str_len);
     return;
 
@@ -769,7 +769,7 @@ void vcf_seg_INFO_QD (VBlockP vb)
     // case: we can't generate a prediction or prediction is wrong - seg normally
     QdPredType pd;
     if (!(pd = vcf_seg_is_QD_predictable (VB_VCF, ctx, STRa(qd)))) 
-        seg_add_to_local_string (vb, ctx, STRa(qd), LOOKUP_SIMPLE, qd_len);
+        seg_add_to_local_string (vb, ctx, STRa(qd), WITH_LOOKUP, qd_len);
 
     else
         seg_special1 (vb, VCF_SPECIAL_QD, '0' + pd, ctx, qd_len);

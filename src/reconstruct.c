@@ -105,7 +105,7 @@ static uint32_t reconstruct_from_local_text (VBlockP vb, ContextP ctx, ReconType
     rom snip = Bc(ctx->local, ctx->next_local), next=snip;
 
     // find end of NUL-terminated string. 
-    // Note: ctx->local (LT_STRING/LT_SINGLETON) always ends with a NUL (verified by piz_uncompress_all_ctxs), so no need to check bounds
+    // Note: in case of a bug, it will terminate when hitting OVERFLOW_TRAP that contains a \0
     while (*next++); // move "next" to one after the NUL terminating this snip
 
     uint32_t snip_len = next - snip - 1/*NUL*/; 
@@ -285,7 +285,7 @@ static double reconstruct_from_local_float (VBlockP vb, ContextP ctx,
 }
 
 // NOTE: this serves nucleotide sequences AND qual. Bad design. Should have been two separate things.
-uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len, ReconType reconstruct)
+uint32_t reconstruct_from_local_blob (VBlockP vb, ContextP ctx, uint32_t len, ReconType reconstruct)
 {
     ASSERTNOTNULL (ctx);
 
@@ -518,7 +518,7 @@ void reconstruct_one_snip (VBlockP vb, ContextP snip_ctx,
             
             // case: the snip is taken to be the length of the sequence (or if missing, the length will be taken from vb->seq_len)
             case LT_BLOB: 
-                reconstruct_from_local_sequence (vb, base_ctx, (snip_len ? atoi(snip) : vb->seq_len), reconstruct);
+                reconstruct_from_local_blob (vb, base_ctx, (snip_len ? atoi(snip) : vb->seq_len), reconstruct);
                 break;
                 
             case LT_BITMAP:

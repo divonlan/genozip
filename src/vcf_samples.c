@@ -243,7 +243,7 @@ static void vcf_seg_FORMAT_mux_by_dosage_int (VBlockVCFP vb, ContextP ctx, int64
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, ctx->did_i, mux, channel_i);
     
-    seg_integer (VB, channel_ctx, value, true, add_bytes);
+    seg_integer (VB, channel_ctx, value, WITH_LOOKUP, add_bytes);
 
     // note: this is not necessarily all-the-same - there could be unmuxed snips due to REF⇆ALT switch, and/or WORD_INDEX_MISSING 
     seg_by_ctx (VB, STRa(mux->snip), ctx, 0);

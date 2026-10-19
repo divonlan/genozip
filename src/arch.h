@@ -8,6 +8,10 @@
 
 #pragma once
 
+// low level
+#define CPU_CACHE_LINE_BYTES 64
+#define CPU_CACHE_LINE(addr) (~bitmask64_(6) & (uintptr_t)(addr)) // integer value of pointer to first byte in cache line
+
 extern void arch_initialize (rom argv0);
 extern unsigned arch_get_num_cores (void);
 extern double arch_get_physical_mem_size (void);

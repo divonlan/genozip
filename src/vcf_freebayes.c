@@ -132,6 +132,6 @@ void vcf_seg_INFO_DPB (VBlockP vb_)
     }
 
     else
-        seg_add_to_local_string (VB, ctx, STRa(dpb_str), LOOKUP_SIMPLE, dpb_str_len); // usually floats, but possibly also other values, eg if DP is invalid
+        seg_add_to_local_string (VB, ctx, STRa(dpb_str), WITH_LOOKUP, dpb_str_len); // usually floats, but possibly also other values, eg if DP is invalid
 }
 

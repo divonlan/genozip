@@ -71,8 +71,8 @@ SPECIAL_RECONSTRUCTOR (agilent_special_AGENT_RX)
 void agilent_seg_QX (VBlockP vb, ContextP ctx, STRp(qx), unsigned add_bytes)
 {
     if (qx_len == 7 && qx[3] == ' ') {
-        seg_add_to_local_fixed (VB, ctx, &qx[0], 3, LOOKUP_NONE, 0);
-        seg_add_to_local_fixed (VB, ctx, &qx[4], 3, LOOKUP_NONE, 0);
+        seg_add_to_local_blob (VB, ctx, &qx[0], 3, NO_LOOKUP, 0);
+        seg_add_to_local_blob (VB, ctx, &qx[4], 3, NO_LOOKUP, 0);
         seg_special0 (VB, VB_DT(FASTQ) ? FASTQ_SPECIAL_AGENT_QX : SAM_SPECIAL_AGENT_QX, ctx, add_bytes);
     }
 

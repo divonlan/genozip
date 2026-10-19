@@ -56,7 +56,7 @@ bool fastq_10xGen_seg_SEQ (VBlockFASTQP vb, STRp(seq))
 
     seg_by_did (VB, seq, BARCODE_LEN, FASTQ_NONBIO_BC0, BARCODE_LEN);
     
-    seg_add_to_local_fixed (VB, CTX(FASTQ_NONBIO_UMI), seq + BARCODE_LEN, UMI_LEN, LOOKUP_WITH_LENGTH, UMI_LEN);
+    seg_add_to_local_blob (VB, CTX(FASTQ_NONBIO_UMI), seq + BARCODE_LEN, UMI_LEN, WITH_LOOKUP, UMI_LEN);
 
     seg_by_did (VB, STRa(segconf.nonbio_con_snip), FASTQ_NONBIO, 0);
 

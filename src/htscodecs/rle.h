@@ -56,7 +56,7 @@ extern "C" {
  * rle_nsyms.
  *
  * The "out" buffer may be passed in as NULL in which case it is
- * allocated and returned (and is up to the caller to FREE).
+ * allocated and returned (and is up to the caller to free).
  * Otherwise if specified as non-NULL it will be written to, but
  * it is up to the caller to ensure the buffer size is large enough.
  * A worst case scenario is 2*data_len.
@@ -66,10 +66,10 @@ extern "C" {
  *         updates rle_syms / rle_nsyms too.
  * Returns NULL of failure
  */
-uint8_t *rle_encode(uint8_t *data, uint64_t data_len,
-		    uint8_t *run,  uint64_t *run_len,
-		    uint8_t *rle_syms, int *rle_nsyms,
-		    uint8_t *out, uint64_t *out_len);
+uint8_t *hts_rle_encode(const uint8_t *data, uint64_t data_len,
+                        uint8_t *run,  uint64_t *run_len,
+                        uint8_t *rle_syms, int *rle_nsyms,
+                        uint8_t *out, uint64_t *out_len);
 
 /*
  * Expands a run lengthed data steam from a pair of literal and
@@ -81,10 +81,10 @@ uint8_t *rle_encode(uint8_t *data, uint64_t data_len,
  * Returns uncompressed data (out) on success,
  *         NULL on failure.
  */
-uint8_t *rle_decode(uint8_t *lit, uint64_t lit_len,
-		    uint8_t *run, uint64_t run_len,
-		    uint8_t *rle_syms, int rle_nsyms,
-		    uint8_t *out, uint64_t *out_len);
+uint8_t *hts_rle_decode(uint8_t *lit, uint64_t lit_len,
+                        const uint8_t *run, uint64_t run_len,
+                        const uint8_t *rle_syms, int rle_nsyms,
+                        uint8_t *out, uint64_t *out_len);
 
 // TODO: Add rle scanning func to compute rle_syms.
 

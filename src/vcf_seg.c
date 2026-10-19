@@ -528,7 +528,7 @@ void vcf_seg_array_of_N_ALTS_numbers (VBlockVCFP vb, ContextP ctx, STRp(value), 
         if (type == STORE_INT)
             seg_integer_or_not (VB, item_ctx, STRi(number,i), 0); // an integer or '.'
         else // float
-            seg_add_to_local_string (VB, item_ctx, STRi(number,i), LOOKUP_SIMPLE, 0);
+            seg_add_to_local_string (VB, item_ctx, STRi(number,i), WITH_LOOKUP, 0);
 
     container_seg (VB, ctx, &con, 0, 0, value_len);
 }

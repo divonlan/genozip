@@ -54,7 +54,7 @@ extern int32_t reconstruct_from_ctx_do (VBlockP vb, Did did_i, char sep, ReconTy
 
 extern void reconstruct_one_snip (VBlockP vb, ContextP ctx, WordIndex word_index, STRp(snip), ReconType reconstruct, Caller caller);
 
-extern uint32_t reconstruct_from_local_sequence (VBlockP vb, ContextP ctx, uint32_t len, ReconType reconstruct);
+extern uint32_t reconstruct_from_local_blob (VBlockP vb, ContextP ctx, uint32_t len, ReconType reconstruct);
 extern int64_t reconstruct_from_local_int (VBlockP vb, ContextP ctx, char separator /* 0 if none */, ReconType reconstruct);
 extern HasNewValue reconstruct_demultiplex (VBlockP vb, ContextP ctx, STRp(snip), int channel_i, ValueType *new_value, ReconType reconstruct);
 

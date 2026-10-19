@@ -459,7 +459,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
         // if this is an amino acid fasta, we're better off not tokenizing the description line as its 
         // components are often correlated
         else
-            seg_add_to_local_string (VB, CTX(FASTA_DESC), STRa(line), LOOKUP_SIMPLE, line_len);
+            seg_add_to_local_string (VB, CTX(FASTA_DESC), STRa(line), WITH_LOOKUP, line_len);
 
         seg_by_did (VB, STRa(desc_redirect_snip), FASTA_LINEMETA, 0);
         SEG_EOL (FASTA_EOL, true);
@@ -508,7 +508,7 @@ static void fasta_seg_desc_line (VBlockFASTAP vb, rom line, uint32_t line_len, b
 static void fast_seg_comment_line (VBlockFASTAP vb, STRp (line), bool *has_13)
 {
     if (!flag.make_reference) {
-        seg_add_to_local_string (VB, CTX(FASTA_COMMENT), STRa(line), LOOKUP_NONE, line_len); 
+        seg_add_to_local_string (VB, CTX(FASTA_COMMENT), STRa(line), NO_LOOKUP, line_len); 
 
         seg_by_did (VB, STRa(comment_redirect_snip), FASTA_LINEMETA, 0);
         SEG_EOL (FASTA_EOL, true);

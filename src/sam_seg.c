@@ -386,10 +386,6 @@ void sam_seg_initialize (VBlockP vb_)
                       DID_EOL);
 
     ctx_set_ltype (VB, LT_STRING, OPTION_MD_Z,
-                   T(MP(BSBOLT), OPTION_XB_Z),
-                   T(MP(BISMARK), OPTION_XM_Z),
-                   T(MP(BSSEEKER2), OPTION_XM_Z), T(MP(BSSEEKER2), OPTION_XG_Z),
-                   T(MP(NOVOALIGN), OPTION_YH_Z), T(MP(NOVOALIGN), OPTION_YQ_Z),
                    OPTION_CY_Z, OPTION_QT_Z, OPTION_CB_Z, // barcode fallback segging - added to local as string
                    SAM_CIGAR, OPTION_MC_Z, OPTION_OC_Z, OPTION_SA_CIGAR, OPTION_OA_CIGAR, OPTION_XA_CIGAR, OPTION_TX_CIGAR, OPTION_AN_CIGAR, OPTION_ga_CIGAR, // cigar might be stored as a string if too complex or squanked (see sam_seg_CIGAR, sam_seg_other_CIGAR, sam_cigar_seg_MC_Z, squank_seg)
                    DID_EOL);
@@ -398,8 +394,9 @@ void sam_seg_initialize (VBlockP vb_)
                    OPTION_RX_Z, OPTION_CR_Z, OPTION_GR_Z, OPTION_GY_Z,                               // local has xor_diff data
                    DID_EOL);
 
-    // initialize these to LT_BLOB, the qual-type ones might be changed later to LT_CODEC (eg domq, longr)
+    // initialize these to LT_BLOB, the qual-type ones might be changed later to LT_CODEC (eg domq)
     ctx_set_ltype (VB, LT_BLOB, SAM_QUAL, SAM_BADQUAL, SAM_QUAL_FLANK, OPTION_BD_BI, OPTION_BQ_Z, OPTION_iq_sq_dq,
+                   T(MP(NOVOALIGN), OPTION_YH_Z), T(MP(NOVOALIGN), OPTION_YQ_Z),
                    OPTION_QX_Z, OPTION_CY_ARR, OPTION_QT_ARR, OPTION_CR_Z_X, OPTION_BX_Z,
                    OPTION_BI_Z, OPTION_BD_Z,
                    OPTION_CR_Z_X, OPTION_RX_Z_X, OPTION_2R_Z, OPTION_TR_Z, DID_EOL);

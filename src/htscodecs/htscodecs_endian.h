@@ -31,7 +31,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef HTSCODECS_ENDIAN_H
+#define HTSCODECS_ENDIAN_H
 
 // Endianness checking.
 
@@ -88,3 +89,5 @@
 #else
 //    Unknown - code will need to check HTSCODES_ENDIAN_KNOWN and do endian agnostic
 #endif
+
+#endif /* HTSCODECS_ENDIAN_H */

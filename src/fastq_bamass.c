@@ -1142,7 +1142,7 @@ void fastq_bamass_seg_CIGAR (VBlockFASTQP vb)
 
     // case: long CIGAR - to local
     if (vb_bamass_cigar.len32 >= 3) 
-        seg_add_to_local_string (VB, ctx, STRb(vb->scratch), LOOKUP_SIMPLE, 0);
+        seg_add_to_local_string (VB, ctx, STRb(vb->scratch), WITH_LOOKUP, 0);
 
     // case: short cigar
     else 

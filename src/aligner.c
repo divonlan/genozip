@@ -31,10 +31,6 @@
 #define NEAR_PERFECT_FAST  20
 #define NEAR_PERFECT_BEST  0
 
-// low level
-#define CPU_CACHE_LINE_BYTES 64
-#define CPU_CACHE_LINE(addr) (~bitmask64_(6) & (uintptr_t)(addr)) // integer value of pointer to first byte in cache line
-
 typedef enum { NOT_FOUND=-1, REVERSE=0, FORWARD=1 } Direction;
 
 typedef struct {
@@ -473,12 +469,12 @@ void aligner_seg_gpos_and_fwd (VBlockP vb,
 
     // store the GPOS in local if its not a 2nd pair, or if it is, but the delta is not small enough
     else 
-        seg_integer (VB, gpos_ctx, *G1, false, 0);
+        seg_integer (VB, gpos_ctx, *G1, NO_LOOKUP, 0);
     
     // if there is a spliced alignment, store its gpos2 as a delta
     if (gpos2 != NO_GPOS)           
         // note: (gpos2 - gpos) is the gap: the number of bases in the "intron" between the two spliced sub-sequences. can be negative.
-        seg_integer (vb, gpos_gap_ctx, gpos2 - gpos, false, 0);
+        seg_integer (vb, gpos_gap_ctx, gpos2 - gpos, NO_LOOKUP, 0);
 
     // note regarding interleaved: we always store last_value in gpos/strand (never in gpos_r2/strand_r2)
     gpos_ctx->last_value.i = gpos; // note: gpos, not G1
@@ -674,7 +670,7 @@ static bool aligner_seg_mismatches (VBlockP vb, STR𐤐(seq),
         bool ref1_then_ref2;
 
         if (aligner_get_junction (vb, STRa(seq), ref, ref2, junction, &ref1_then_ref2)) {
-            seg_integer (vb, junction_ctx, *junction, false, 0);
+            seg_integer (vb, junction_ctx, *junction, NO_LOOKUP, 0);
 
             if (!ref1_then_ref2) {  // ref2 is first - swap
                 SWAP (ref, ref2); 

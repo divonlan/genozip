@@ -203,7 +203,7 @@ static inline void vcf_seg_QUAL_by_RGQ (VBlockVCFP vb, ContextP ctx, STRp(qual))
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, VCF_QUAL, &vb->mux_QUAL, has_rgq);
     
     if (!has_rgq && vcf_num_samples > 1) // too many unique QUAL values when there are many samples
-        seg_add_to_local_string (VB, channel_ctx, STRa(qual), LOOKUP_SIMPLE, qual_len+1);
+        seg_add_to_local_string (VB, channel_ctx, STRa(qual), WITH_LOOKUP, qual_len+1);
     else
         seg_by_ctx (VB, STRa(qual), channel_ctx, qual_len+1);
     
@@ -232,7 +232,7 @@ void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
 
     switch (segconf.vcf_QUAL_method) {
         case VCF_QUAL_local :
-            seg_add_to_local_string (VB, ctx, STRa(qual), LOOKUP_NONE, qual_len+1);
+            seg_add_to_local_string (VB, ctx, STRa(qual), NO_LOOKUP, qual_len+1);
             break;
 
         case VCF_QUAL_by_RGQ: 
@@ -249,7 +249,7 @@ void vcf_seg_QUAL (VBlockVCFP vb, STRp(qual))
 
         case VCF_QUAL_DEFAULT: 
             if (ctx->seg_to_local)
-                seg_add_to_local_string (VB, ctx, STRa(qual), LOOKUP_NONE, qual_len+1);
+                seg_add_to_local_string (VB, ctx, STRa(qual), NO_LOOKUP, qual_len+1);
             else
                 seg_by_ctx (VB, STRa(qual), ctx, qual_len+1);
             break;

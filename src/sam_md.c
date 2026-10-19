@@ -271,7 +271,7 @@ void sam_seg_MD_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(md), unsigned add_
 
     // store in local. note: this is tested to be much better than splitting by length and storing short ones in dict
     else  
-        seg_add_to_local_string (VB, ctx, STRa(md), LOOKUP_SIMPLE, add_bytes);
+        seg_add_to_local_string (VB, ctx, STRa(md), WITH_LOOKUP, add_bytes);
 }
 
 //---------

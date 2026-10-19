@@ -499,7 +499,7 @@ bool seg_pos_field_cb (VBlockP vb, ContextP ctx, STRp(pos_str), uint32_t repeat)
 }
 
 // note: caller must set ctx->ltype=LT_DYN_INT*
-void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes)
+void seg_integer (VBlockP vb, ContextP ctx, int64_t n, Lookup with_lookup, unsigned add_bytes)
 {
     ctx_set_last_value_maybe_in_sample (vb, ctx, n);
 
@@ -530,7 +530,7 @@ bool seg_integer_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 
     // case: its an integer
     if (is_int && (IS_LT_DYN(ctx->ltype) || ctx->ltype == LT_SINGLETON)) {         
-        seg_integer (vb, ctx, n, true, add_bytes);
+        seg_integer (vb, ctx, n, WITH_LOOKUP, add_bytes);
         return true;
     }
 
@@ -556,7 +556,7 @@ void seg_numeric_or_not (VBlockP vb, ContextP ctx, STRp(value), unsigned add_byt
 
     // case: its an integer (possibly with leading 0s)
     if (is_numeric) { 
-        seg_integer (vb, ctx, n, false, add_bytes);
+        seg_integer (vb, ctx, n, NO_LOOKUP, add_bytes);
         seg_by_ctx (vb, (char[]){ SNIP_NUMERIC, '0'+ (ctx->ltype - LT_DYN_INT), '0' + value_len, 'x' }, 3 + has_zero_x, ctx, 0);
     }
 
@@ -639,7 +639,7 @@ void seg_delta_vs_other_do (VBlockP vb, ContextP ctx, ContextP other_ctx,
     
     int64_t delta = value_n - other_value_n; 
     if (max_delta >= 0 && ABS(delta) > max_delta) 
-        seg_integer (vb, ctx, value_n, true, add_bytes);
+        seg_integer (vb, ctx, value_n, WITH_LOOKUP, add_bytes);
 
     else if (delta_in_local) {
         // cache snip upon first entry in this VB
@@ -788,7 +788,7 @@ WordIndex seg_array_(VBlockP vb, ContextP container_ctx, Did stats_conslidation_
             }
 
             else if (store_in_local == STORE_FLOAT || container_ctx->seg_to_local == STORE_FLOAT) 
-                seg_add_to_local_string (VB, arr_ctx, STRa(this_item), LOOKUP_NONE, this_item_add_bytes);
+                seg_add_to_local_string (VB, arr_ctx, STRa(this_item), NO_LOOKUP, this_item_add_bytes);
             
             else {
                 seg_by_ctx (VB, STRa(this_item), arr_ctx, this_item_add_bytes);
@@ -974,34 +974,50 @@ bool seg_do_nothing_cb (VBlockP vb, ContextP ctx, STRp(field), uint32_t rep)
     return true; // "segged successfully" - do nothing
 }
 
-void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes) 
+void seg_add_to_local_blob (VBlockP vb, ContextP ctx, const void *blob, uint32_t blob_len, Lookup with_lookup, unsigned add_bytes) 
 { 
-    LocalType lt = (lookup_type == LOOKUP_WITH_LENGTH) ? LT_BLOB : LT_STRING;
-    
-    if (ctx->ltype == LT_SINGLETON)
-        ctx->ltype = lt; // initialize
+    // initialize    
+    if (ctx->ltype != LT_BLOB) {
+        ASSERT (!ctx->local.len && ctx->ltype == LT_SINGLETON, "%s.local already initialized: len=%"PRIu64" ltype=%s",
+                ctx->tag_name, ctx->local.len, lt_name (ctx->ltype));
 
-    ASSERT (ctx->ltype == lt, "%s: Expecting %s.ltype=%s but found %s", 
-            LN_NAME, ctx->tag_name, lt_name (lt), lt_name (ctx->ltype));
+        ctx->ltype = LT_BLOB;
+    }
 
-    seg_add_to_local_fixed_do (vb, ctx, STRa(snip), lookup_type != LOOKUP_WITH_LENGTH, lookup_type, false, add_bytes); 
+    seg_add_to_local_fixed (vb, ctx, STRa(blob), add_bytes); 
+
+    if (with_lookup) {
+        SNIPi1 (SNIP_LOOKUP, blob_len);
+        seg_by_ctx (VB, STRa(snip), ctx, 0);
+    }
+}
+
+bool seg_add_to_local_blob_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat)
+{
+    seg_add_to_local_blob (vb, ctx, STRa(str), WITH_LOOKUP, str_len);
+    return true;
+}
+
+void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup with_lookup, unsigned add_bytes) 
+{ 
+    // initialize    
+    if (ctx->ltype != LT_STRING) {
+        ASSERT (!ctx->local.len && ctx->ltype == LT_SINGLETON, "%s.local already initialized: len=%"PRIu64" ltype=%s",
+                ctx->tag_name, ctx->local.len, lt_name (ctx->ltype));
+
+        ctx->ltype = LT_STRING;
+    }
+
+    seg_add_to_local_fixed (vb, ctx, STRa(snip), add_bytes); 
+    BNXTc(ctx->local) = 0; // string terminated by NUL. note: allocated +1 in seg_add_to_local_fixed for this
+
+    if (with_lookup)
+        seg_by_ctx (VB, (char[]){ SNIP_LOOKUP }, 1, ctx, 0);
 }
 
 bool seg_add_to_local_string_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat)
 {
-    seg_add_to_local_string (vb, ctx, STRa(str), LOOKUP_SIMPLE, str_len);
-    return true;
-}
-
-bool seg_add_to_local_fixed_len_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat)
-{
-    if (ctx->ltype == LT_SINGLETON)
-        ctx->ltype = LT_BLOB; // initialize
-
-    ASSERT (ctx->ltype == LT_BLOB, "%s: Expecting %s.ltype=LT_BLOB but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
-
-    seg_add_to_local_fixed_do (vb, ctx, STRa(str), false, LOOKUP_WITH_LENGTH, false, str_len); 
-
+    seg_add_to_local_string (vb, ctx, STRa(str), WITH_LOOKUP, str_len);
     return true;
 }
 
@@ -1247,28 +1263,16 @@ bool seg_by_container (VBlockP vb, ContextP ctx, ContainerP con, STRp(value),
 }
 
 
-void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes) 
+void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, unsigned add_bytes) 
 {
-#ifdef DEBUG
-    ASSERT (is_singleton || ctx->ltype != LT_SINGLETON || segconf_running, 
-            "%s: ctx %s requires ltype!=LT_SINGLETON", LN_NAME, ctx->tag_name);
-#endif
-
-    buf_alloc (vb, &ctx->local, data_len + add_nul, 100000, char, CTX_GROWTH, C_LOCAL);
+    buf_alloc (vb, &ctx->local, data_len + 1/*for a possible NUL to follow*/, 100000, char, CTX_GROWTH, C_LOCAL);
     if (data_len) buf_add (&ctx->local, STRa(data)); 
-    if (add_nul) BNXTc (ctx->local) = 0;
 
-    if (add_bytes) ctx->txt_len += add_bytes;
+    ctx->txt_len += add_bytes; // faster this way than an "if (add_bytes)" bc we are segging this field so txt_len is/needs to be in L1 anyway - faster than branch mis-prediction
     ctx->v_local_n_words++;
-
-    if (lookup_type == LOOKUP_SIMPLE) 
-        seg_simple_lookup (vb, ctx, 0);
-
-    else if (lookup_type == LOOKUP_WITH_LENGTH) 
-        seg_lookup_with_length (vb, ctx, data_len, 0);
 }
 
-void seg_integer_fixed (VBlockP vb, ContextP ctx, void *restrict number, bool with_lookup, unsigned add_bytes) 
+void seg_integer_fixed (VBlockP vb, ContextP ctx, void *restrict number, Lookup with_lookup, unsigned add_bytes) 
 {
     buf_alloc (vb, &ctx->local, 0, MAX_(ctx->local.len+1, 32768) * lt_width(ctx), char, CTX_GROWTH, C_LOCAL);
 
@@ -1285,7 +1289,7 @@ void seg_integer_fixed (VBlockP vb, ContextP ctx, void *restrict number, bool wi
         default : ABORT ("Unexpected ltype=%s", lt_name(ctx->ltype));
     }
 
-    if (add_bytes) ctx->txt_len += add_bytes;
+    ctx->txt_len += add_bytes; // faster this way than an "if (add_bytes)" bc we are segging this field so txt_len is/needs to be in L1 anyway - faster than branch mis-prediction
     ctx->v_local_n_words++;
 
     if (with_lookup)     
@@ -1651,7 +1655,7 @@ void seg_all_data_lines (VBlockP vb)
             if (!vb->debug_line_hash_skip) {
                 uint32_t hash = DTP(seg_modifies) ? vb->debug_line_hash // if seg_modifies, Seg calculates hash before modifications (this happens for BAM, bc Seg re-writes QUAL)
                                                   : adler32 (2, line, line_len); // same as in container_verify_line_integrity
-                seg_integer_fixed (vb, debug_lines_ctx, &hash, false, 0);
+                seg_integer_fixed (vb, debug_lines_ctx, &hash, NO_LOOKUP, 0);
             }
             else 
                 vb->debug_line_hash_skip = false; // reset

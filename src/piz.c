@@ -345,8 +345,8 @@ void piz_uncompress_all_ctxs (VBlockP vb, PizUncompressReason reason)
              (!VER(14) && h->flags.ctx.v13_copy_local_param))) // up to v13: copy if v13_copy_local_param is set
             target_buf->prm8[0] = h->param;
 
-        // verify that buffer ends with a NUL, so reconstruct_from_local_text doesn't need to test for end of buffer
-        if (is_local && !uncompress_to_pair && (ctx->ltype == LT_SINGLETON || ctx->ltype == LT_STRING))
+        // 15.0.100: verify that STRING/SINGLETON buffers ends with a NUL (note: in older versions, BLOB buffers sometimes incorrectly had ltype=SINGLETON or STRING)
+        if (is_local && !uncompress_to_pair && (ctx->ltype == LT_SINGLETON || ctx->ltype == LT_STRING) && VER2(15,100))
             ASSERT (*BLSTc(*target_buf) == 0, "%s: Expecting %s.local ltype=%s to end with a NUL", 
                     VB_NAME, ctx->tag_name, lt_name(ctx->ltype));
 

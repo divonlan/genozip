@@ -150,7 +150,7 @@ void seg_id_field (VBlockP vb, ContextP ctx, STRp(id),
         seg_id_field_init (vb, ctx, STRa(id), hint_zero_padded_fixed_len);
         
     if (IDT(OTHER)) {
-        seg_add_to_local_string (vb, ctx, STRa(id), LOOKUP_SIMPLE, add_bytes); // LOOKUP_SIMPLE bc eg in gff_seg_dbxref we mix seg_id_field with other methods
+        seg_add_to_local_string (vb, ctx, STRa(id), WITH_LOOKUP, add_bytes); // WITH_LOOKUP bc eg in gff_seg_dbxref we mix seg_id_field with other methods
 
         if (segconf_running && id_len > 1)
             seg_id_add_to_unknown (ctx, STRa(id));

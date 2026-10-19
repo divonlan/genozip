@@ -120,7 +120,7 @@ void sam_seg_TLEN (VBlockSAMP vb, ZipDataLineSAM𐤐 dl,
     }
 
     else if (segconf.has_TLEN_non_zero && !segconf_running) // note: only in these cases ltype=LT_DYN_INT is set in sam_seg_initialize
-        seg_integer (VB, ctx, tlen_value, true, add_bytes);
+        seg_integer (VB, ctx, tlen_value, WITH_LOOKUP, add_bytes);
 
     else
         seg_integer_as_snip_do (VB, ctx, tlen_value, add_bytes); // likely all 0, so all-the-same

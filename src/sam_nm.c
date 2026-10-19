@@ -88,7 +88,7 @@ void sam_seg_NM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsigned 
         seg_special1 (VB, SAM_SPECIAL_NM, 'b', ctx, add_bytes); 
 
     else no_special: 
-        seg_integer (VB, ctx, nm, true, add_bytes);
+        seg_integer (VB, ctx, nm, WITH_LOOKUP, add_bytes);
 
     // in PRIM with SA, we also seg it as the first SA alignment (used for PIZ to load alignments to memory, not used for reconstructing SA)
     if (IS_PRIM(vb) && !segconf.SA_NM_by_CIGAR_X && sam_seg_has_sag_by_SA (vb)) {
@@ -125,7 +125,7 @@ void sam_seg_XM_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xm, int16_t idx
         seg_special1 (VB, SAM_SPECIAL_NM, 'I', ctx, add_bytes); 
 
     else 
-        seg_integer (VB, ctx, xm, true, add_bytes);
+        seg_integer (VB, ctx, xm, WITH_LOOKUP, add_bytes);
 }
 
 // --------------------------------------------------------------------------------------------------------------
@@ -169,7 +169,7 @@ void sam_seg_STAR_nM (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, SamNMType nm, unsign
             seg_special1 (VB, SAM_SPECIAL_NM, 'i', ctx, add_bytes); 
 
         else fallback: 
-            seg_integer (VB, ctx, nm, true, add_bytes);
+            seg_integer (VB, ctx, nm, WITH_LOOKUP, add_bytes);
     }
 }
 

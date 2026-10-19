@@ -294,9 +294,13 @@ static WordIndex ctx_commit_node (VBlockP vb, ContextP zctx, ContextP vctx, STRp
     // case: vb singleton turns out to be a global singleton - we add it to local and return the SNIP_LOOKUP node
     // instead of the singleton node (which is guaranteed to be non-singleton, and hence >= 0)
     // note: local is dedicated to singletons and contains nothing else, since we tested ctx_can_have_singletons
-    if (is_singleton) {
-        seg_add_to_local_fixed_do (vb, vctx, STRa(snip), true, LOOKUP_NONE, true, 0); 
-
+    if (is_singleton) {        
+        ASSERTNOTNULL (vctx); // suppress compiler warning
+        ASSERT (vctx->ltype == LT_SINGLETON, "expecting %s.ltype==SINGLTON but it is %s", vctx->tag_name, lt_name (vctx->ltype));
+        
+        seg_add_to_local_fixed (vb, vctx, STRa(snip), 0); 
+        BNXTc(vctx->local) = 0; // singleton terminated by NUL. note: allocated +1 in seg_add_to_local_fixed for this
+        
         if (HAS_DEBUG_SEG(vctx)) {
             iprintf ("commit_node: %s: SINGLETON replaced by SNIP_LOCAL: snip=%s snip_len=%u\n", 
                      vctx ? vctx->tag_name : "", str_snip, snip_len);

@@ -113,7 +113,7 @@ void vcf_seg_PROBE_A (VBlockVCFP vb, ContextP ctx, STRp(probe))
     }
 
     else fallback: 
-        seg_add_to_local_blob (VB, ctx, STRa(probe), probe_len);
+        seg_add_to_local_blob (VB, ctx, STRa(probe), WITH_LOOKUP, probe_len);
 
     ref_unlock (&lock); // does nothing if REFLOCK_NONE
 
@@ -168,7 +168,7 @@ void vcf_seg_PROBE_B (VBlockVCFP vb, ContextP ctx, STRp(seq))
 
     // another real sequence - store verbatim
     else if (seq_len > 1)
-        seg_add_to_local_blob (VB, ctx, STRa(seq), seq_len);
+        seg_add_to_local_blob (VB, ctx, STRa(seq), WITH_LOOKUP, seq_len);
 
     // likely a '.'
     else

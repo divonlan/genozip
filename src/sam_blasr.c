@@ -20,7 +20,7 @@ void sam_seg_blasr_FI_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t fi, unsig
         seg_special0 (VB, SAM_SPECIAL_FI, ctx, add_bytes);
 
     else 
-        seg_integer (VB, ctx, fi, true, add_bytes);
+        seg_integer (VB, ctx, fi, WITH_LOOKUP, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_FI)

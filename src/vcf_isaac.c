@@ -159,7 +159,7 @@ static bool vcf_seg_GMAF_AF_cb (VBlockP vb_, ContextP ctx, STRp(value), uint32_t
     }
 
 fallback:
-    seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_SIMPLE, value_len);
+    seg_add_to_local_string (VB, ctx, STRa(value), WITH_LOOKUP, value_len);
     
     return true; // segged successfully
 }

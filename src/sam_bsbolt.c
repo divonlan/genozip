@@ -177,7 +177,7 @@ fallback:
 
     buf_free (vb->scratch);
 
-    seg_add_to_local_string (VB, CTX(OPTION_XB_Z), STRa(XB), LOOKUP_SIMPLE, add_bytes);
+    seg_add_to_local_string (VB, CTX(OPTION_XB_Z), STRa(XB), WITH_LOOKUP, add_bytes);
 
 done:
     COPY_TIMER (sam_seg_bsbolt_XB);

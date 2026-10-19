@@ -344,7 +344,7 @@ bool sam_seg_0A_mapq_cb (VBlockP vb, ContextP ctx, STRp (mapq_str), uint32_t rep
     uint8_t mapq; // 8 bit by BAM specification of main field MAPQ
     if (!str_get_int_range8 (STRa(mapq_str), 0, 255, &mapq)) return false;
     
-    seg_integer_fixed (VB, ctx, &mapq, false, mapq_str_len);
+    seg_integer_fixed (VB, ctx, &mapq, NO_LOOKUP, mapq_str_len);
     return true;
 }
 

@@ -10,6 +10,7 @@
 #include "threads.h"
 #include "huffman.h"
 #include "refhash.h"
+#include "codec.h"
 #include "htscodecs/arith_dynamic.h"
 
 #define PUT_NUMBER_1B_or_5B(n) ({                   \
@@ -451,7 +452,7 @@ static uint32_t sam_piz_deep_compress (VBlockSAMP vb, uint8_t *next, STRp(data),
         data = B1STc(vb->scratch);
     }
 
-    uint32_t comp_len = is_seq ? arith_compress_bound (data_len, X_NOSZ) :
+    uint32_t comp_len = is_seq ? arith_compress_bound (data_len, HTS_NOSZ) :
                                  huffman_get_theoretical_max_comp_len (SAM_QUAL, data_len);
     
     bool len_is_1_byte = (data_len < (is_seq ? 1024 : 512)); // just a guess for now
@@ -460,7 +461,7 @@ static uint32_t sam_piz_deep_compress (VBlockSAMP vb, uint8_t *next, STRp(data),
     if (!is_seq)
         huffman_compress (VB, SAM_QUAL, STRa(data), guess_addr, &comp_len);
     else
-        ASSPIZ (arith_compress_to (evb, (uint8_t *)STRa(data), guess_addr, &comp_len, X_NOSZ) && comp_len,
+        ASSPIZ (arith_compress_to ((uint8_t *)STRa(data), guess_addr, &comp_len, HTS_NOSZ) && comp_len,
                 "%s: Failed to arith-compress data: is_seq=%s comp_len=%u data_len=%u data=\"%.*s\"", 
                 LN_NAME, TF(is_seq), comp_len, data_len, STRf(data));
 

@@ -16,6 +16,8 @@
 
 typedef enum { ERR_SEG_NO_ERROR=0, ERR_SEG_OUT_OF_RANGE, ERR_SEG_NOT_INTEGER } SegError;
 
+typedef enum { NO_LOOKUP, WITH_LOOKUP } Lookup;
+
 extern void zip_modify (VBlockP vb);
 extern void seg_all_data_lines (VBlockP vb); 
 
@@ -40,7 +42,7 @@ static inline void seg_all_the_same (VBlockP vb, ContextP ctx, uint32_t add_byte
 extern WordIndex seg_known_node_index (VBlockP vb, ContextP ctx, WordIndex node_index, unsigned add_bytes);
 extern WordIndex seg_duplicate_last (VBlockP vb, ContextP ctx, unsigned add_bytes);
 
-extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, bool with_lookup, unsigned add_bytes);
+extern void seg_integer (VBlockP vb, ContextP ctx, int64_t n, Lookup with_lookup, unsigned add_bytes);
 
 extern WordIndex seg_integer_as_snip_do (VBlockP vb, ContextP ctx, int64_t n, unsigned add_bytes); // segs integer as normal textual snip
 #define seg_integer_as_snip(vb,did_i,n,add_sizeof_n) seg_integer_as_snip_do((VBlockP)(vb), &vb->ca.contexts[did_i], (n), (add_sizeof_n) ? sizeof(n) : 0)
@@ -68,25 +70,18 @@ extern void seg_id_field (VBlockP vb, ContextP ctx, STRp(id), bool hint_zero_pad
 extern bool seg_id_field_varlen_int_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
 extern bool seg_id_field_fixed_int_cb (VBlockP vb, ContextP ctx, STRp(id), uint32_t repeat);
 
-typedef enum { LOOKUP_NONE, LOOKUP_SIMPLE, LOOKUP_WITH_LENGTH } Lookup;
-extern void seg_add_to_local_fixed_do (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, bool add_nul, Lookup lookup_type, bool is_singleton, unsigned add_bytes);
+// low-level appending to local, no LOOKUP, no ltype check. Use seg_add_to_local_blob/string if possible.
+extern void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, const void *const data, uint32_t data_len, unsigned add_bytes);
 
-extern void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup lookup_type, unsigned add_bytes);
+// adds a string and terminates it with \0, with optional { SNIP_LOOKUP }
+extern void seg_add_to_local_string (VBlockP vb, ContextP ctx, STRp(snip), Lookup with_lookup, unsigned add_bytes);
 extern bool seg_add_to_local_string_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat);
-extern bool seg_add_to_local_fixed_len_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat);
 
-static inline void seg_add_to_local_blob (VBlockP vb, ContextP ctx, STRp(blob), unsigned add_bytes) 
-{ 
-#ifdef DEBUG
-    ASSERT (segconf_running || ctx->ltype == LT_BLOB, "%s: Expecting %s.ltype=LT_BLOB but found %s", LN_NAME, ctx->tag_name, lt_name (ctx->ltype));
-#endif
-    seg_add_to_local_fixed_do (vb, ctx, STRa(blob), false, LOOKUP_WITH_LENGTH, false, add_bytes); 
-}
+// adds a blob (no \0), with optional { SNIP_LOOKUP, blob_len }
+extern void seg_add_to_local_blob (VBlockP vb, ContextP ctx, const void *blob, uint32_t blob_len, Lookup with_lookup, unsigned add_bytes);
+extern bool seg_add_to_local_blob_cb (VBlockP vb, ContextP ctx, STRp(str), uint32_t repeat);
 
-static inline void seg_add_to_local_fixed (VBlockP vb, ContextP ctx, const void *data, uint32_t data_len, Lookup lookup_type, unsigned add_bytes)
-    { seg_add_to_local_fixed_do (vb, ctx, STRa(data), false, lookup_type, false, add_bytes); }
-
-extern void seg_integer_fixed (VBlockP vb, ContextP ctx, void *restrict number, bool with_lookup, unsigned add_bytes);
+extern void seg_integer_fixed (VBlockP vb, ContextP ctx, void *restrict number, Lookup with_lookup, unsigned add_bytes);
 
 extern WordIndex seg_self_delta (VBlockP vb, ContextP ctx, int64_t value, char format, unsigned fixed_len, uint32_t add_bytes);
 

@@ -76,7 +76,7 @@ typedef struct Buffer {        // 64 bytes: the first 32B are frequently accesse
     uint64_t promiscuous : 1;  // used only in evb buffers: if true, a compute thread may allocate the buffer (not just the main thread as with usual evb buffers), 
                                // but it needs to be first buf_set_promiscuous by the main thread
     uint64_t shared      : 1;  // "memory" of this Buffer may be shared with other Buffers
-    uint64_t code_line   : 12; // the allocating line number in source code file (up to 4096)
+    uint64_t code_line   : 12; // the allocating line number in source code file (up to 4095)
     // --- 8 bytes ends here ---
 
     char *memory;              // memory allocated to this buffer - amount is: size + CTL_SIZE to allow for UNDERFLOW, OVERFLOW and user_count)
@@ -90,8 +90,8 @@ typedef struct Buffer {        // 64 bytes: the first 32B are frequently accesse
     BufferSpinlockP spinlock;  // Used for overlay top/bottom buffers, promiscuous buffers and buffer_list. see internal-docs/overlay-logic.txt
 } Buffer; 
 
-#define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW" - inserted at the begining of each memory block to detected underflows
-#define OVERFLOW_TRAP  0x776F6C667265766FULL // "overflow" - inserted at the end of each memory block to detected overflows
+#define UNDERFLOW_TRAP 0x574F4C4652444E55ULL // "UNDRFLOW"  - inserted at the begining of each memory block to detected underflows
+#define OVERFLOW_TRAP  0x006F6C667265766FULL // "\0verflow" - inserted at the end of each memory block to detected overflows. \0 also terminates faulty string operations (changed from 0x77 in 15.0.100)
 
 // extra padding between UNDERFLOW and data: partial overlay, or 64B-aligned "data" pointer.
 #define BUNDERFLOW_(memory) (*(uint64_t *)(memory)) 

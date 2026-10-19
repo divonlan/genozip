@@ -250,7 +250,7 @@ void vcf_seg_string (VBlockVCFP vb, ContextP ctx, STRp(value))
         seg_by_ctx (VB, STRa(value), ctx, value_len);
     
     else
-        seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len);
+        seg_add_to_local_string (VB, ctx, STRa(value), NO_LOOKUP, value_len);
 }
 
 static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
@@ -398,7 +398,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         // ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
         case _INFO_MMID3:           CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMID3   (vb, ctx, STRa(value)));
         case _INFO_MMURI3:          CALL_IF (segconf.vcf_is_mastermind, vcf_seg_INFO_MMURI3  (vb, ctx, STRa(value)));
-        case _INFO_MMURI:           CALL_IF (segconf.vcf_is_mastermind, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len)); // value is a URL
+        case _INFO_MMURI:           CALL_IF (segconf.vcf_is_mastermind, seg_add_to_local_string (VB, ctx, STRa(value), NO_LOOKUP, value_len)); // value is a URL
         case _INFO_GENE:            CALL_IF (segconf.vcf_is_mastermind, STORE_AND_SEG (STORE_NONE)); // consumed by vcf_seg_INFO_MMID3
 
         // _______________________________________
@@ -421,7 +421,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_RSPOS:           CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_RSPOS (vb, ctx, STRa(value)));
         case _INFO_GENEINFO:        CALL_IF (segconf.vcf_is_dbSNP, seg_array (VB, ctx, INFO_GENEINFO, STRa(value), '|', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
         case _INFO_VC:              CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_VC (vb, ctx, STRa(value)));
-        case _INFO_FREQ:            CALL_IF (segconf.vcf_is_dbSNP, seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_FREQ:            CALL_IF (segconf.vcf_is_dbSNP, seg_add_to_local_string (VB, ctx, STRa(value), NO_LOOKUP, value_len));
         case _INFO_CAF:             CALL_IF (segconf.vcf_is_dbSNP, vcf_seg_INFO_CAF (vb, ctx, STRa(value)));
         // case _INFO_TOPMED: // better leave as simple snip as the items are allele frequencies which are correleted
 
@@ -433,7 +433,7 @@ static void vcf_seg_info_one_subfield (VBlockVCFP vb, ContextP ctx, STRp(value))
         case _INFO_SiPhy_29way_pi : CALL (seg_array (VB, ctx, ctx->did_i, STRa(value), ',', 0, false, STORE_NONE, DICT_ID_NONE, value_len));
 
         case _INFO_VEST3_score    :
-        case _INFO_FATHMM_score   : CALL (seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_NONE, value_len));
+        case _INFO_FATHMM_score   : CALL (seg_add_to_local_string (VB, ctx, STRa(value), NO_LOOKUP, value_len));
 
         // _______________________________________
         // gnomAD
@@ -612,7 +612,7 @@ void vcf_seg_field_fallback (VBlockVCFP vb, ContextP ctx, STRp(value))
                    DICT_ID_NONE, VCF_SPECIAL_N_ALTS, N_ALTS, value_len);
 
     else if (ISTYPE(Float) && ISNUM(1) && ctx->seg_to_local) 
-        seg_add_to_local_string (VB, ctx, STRa(value), LOOKUP_SIMPLE, value_len);
+        seg_add_to_local_string (VB, ctx, STRa(value), WITH_LOOKUP, value_len);
 
     else
         // note: in case R/G, >1: values are usally correlated, so we're better off with segging to dict

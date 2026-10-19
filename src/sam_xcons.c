@@ -67,7 +67,7 @@ void sam_seg_xcons_XO (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xo, unsigne
         dl->XO_predicted = true;
     }
     else 
-        seg_integer (VB, ctx, xo, true, add_bytes);
+        seg_integer (VB, ctx, xo, WITH_LOOKUP, add_bytes);
 }
 
 // for backcomp: 15.0.27 to 15.0.75
@@ -99,7 +99,7 @@ void sam_seg_xcons_YY (VBlockSAMP vb, int64_t yy, unsigned add_bytes)
 
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_YY_i, &vb->mux_YY, channel_i);
 
-    seg_integer (VB, channel_ctx, yy, false, add_bytes);
+    seg_integer (VB, channel_ctx, yy, NO_LOOKUP, add_bytes);
     ctx_set_last_value (VB, CTX(OPTION_YY_i), yy);
 
     seg_by_did (VB, STRa(vb->mux_YY.snip), OPTION_YY_i, 0); // de-multiplexer
@@ -124,7 +124,7 @@ void sam_seg_xcons_XC (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xc, unsigne
         seg_by_did (VB, STRa(XC_snip), OPTION_XC_i, add_bytes);
 
     else
-        seg_integer (VB, CTX(OPTION_XC_i), xc, true, add_bytes);
+        seg_integer (VB, CTX(OPTION_XC_i), xc, WITH_LOOKUP, add_bytes);
 }
 
 // modify segged array
@@ -238,7 +238,7 @@ static int sam_xcons_split_qual_line_by_xo (VBlockSAMP vb, STRc(qual), DomqLine 
     if (min_offset + xo < qual_len)
         segments[2] = (DomqLine){ .qual = qual + min_offset + xo, .qual_len = qual_len - xo - min_offset };
 
-    seg_integer (VB, CTX(SAM_CQUAL), min_offset, false, 0);
+    seg_integer (VB, CTX(SAM_CQUAL), min_offset, NO_LOOKUP, 0);
 
     return (segments[0].qual_len > 0) + 1 + (segments[2].qual_len > 0); // number of segments
 }

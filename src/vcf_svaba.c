@@ -54,8 +54,8 @@ void vcf_seg_svaba_ID (VBlockVCFP vb, STRp(id))
         seg_special0 (VB, VCF_SPECIAL_COPY_MATE, ctx, id_len + 1); // +1 for \t
 
     else {
-        seg_integer (VB, ctx_get_ctx (vb, id_con.items[0].dict_id), ids[0], false, id_len - 2); // account without the eg :1
-        seg_integer (VB, ctx_get_ctx (vb, id_con.items[1].dict_id), ids[1], false, 1); // account for 1 or 2
+        seg_integer (VB, ctx_get_ctx (vb, id_con.items[0].dict_id), ids[0], NO_LOOKUP, id_len - 2); // account without the eg :1
+        seg_integer (VB, ctx_get_ctx (vb, id_con.items[1].dict_id), ids[1], NO_LOOKUP, 1); // account for 1 or 2
         seg_by_ctx (VB, STRa(con_id_snip), ctx, 2); // account for the colon and \t
     }
 }

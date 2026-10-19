@@ -179,7 +179,7 @@ void vcf_seg_FORMAT_GT (VBlockVCFP vb, ContextP ctx, ZipDataLineVCF𐤐 dl, STRp
             
             else { // big allele: '&' in ht_data and actual allele value in FORMAT_GT_HT_BIG
                 ht_data[ht_i] = '&';
-                seg_integer (VB, CTX(FORMAT_GT_HT_BIG), h[ht_i] - NUM_SMALL_ALLELES, false, 0);
+                seg_integer (VB, CTX(FORMAT_GT_HT_BIG), h[ht_i] - NUM_SMALL_ALLELES, NO_LOOKUP, 0);
             }
 
         ctx->gt.actual_last_ploidy = n_hs; // set before increasing con.repeats to vb->ploidy

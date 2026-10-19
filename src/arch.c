@@ -580,8 +580,11 @@ StrText4K arch_get_executable (void)
 {
     StrText4K path = {};
 
-#ifdef __linux__    
-    ssize_t path_len = readlink ("/proc/self/exe", path.s, sizeof(path.s) - 1); // doesn't nul-terminate
+#ifdef __linux__  
+    char proc_path[32];
+    snprintf (proc_path, sizeof(proc_path), "/proc/%u/exe", getpid()); // symbolic link to executable
+    
+    ssize_t path_len = readlink (proc_path, path.s, sizeof(path.s) - 1); // doesn't nul-terminate
     ASSGOTO (path_len > 0, "readlink() failed to get executable path from /proc/self/exe: %s", strerror(errno));
 
 #elif defined _WIN32

@@ -233,6 +233,7 @@ typedef struct __attribute__((gcc_struct)) {
     uint64_t show_ref_iupacs    : 1;
     uint64_t show_ranges        : 1;
     uint64_t show_codec         : 1;
+    uint64_t debug_codec        : 1;
     uint64_t show_cache         : 1;
     uint64_t show_memory        : 1;
     uint64_t show_regions       : 1;
@@ -475,9 +476,6 @@ extern void flags_update_piz_one_z_file (int z_file_i);
 extern void flags_update_piz_no_ref_file (void);
 extern void flags_store_command_line (int argc, char **argv);
 extern rom flags_command_line (void);
-extern rom flags_pipe_in_process_name (void);
-extern unsigned flags_pipe_in_pid (void);
-extern bool flags_pipe_in_process_died (void);
 extern bool flags_is_genocat_global_area_only (void);
 extern rom pair_type_name (PairType p);
 extern bool flags_writer_counts (void);

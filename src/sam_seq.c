@@ -289,13 +289,16 @@ void sam_seg_SEQ_initialize (VBlockP vb)
 {
     declare_seq_contexts;
 
-    bitmap_ctx->ltype = LT_BITMAP;
-    strand_ctx->ltype = LT_BITMAP;
+    ctx_set_ltype (VB, LT_BITMAP, SAM_SQBITMAP, SAM_STRAND, DID_EOL);
 
-    ctx_set_ltype (VB, LT_UINT8, SAM_SEQINS_A, SAM_SEQINS_C, SAM_SEQINS_G, SAM_SEQINS_T,
+    ctx_set_ltype (VB, LT_BLOB, SAM_NONREF, DID_EOL); // in case of no ACGT
+
+    ctx_set_dyn_int (VB, SAM_GPOS, SAM_GPOS_DELTA, DID_EOL); // this also sets STORE_INT
+
+    ctx_set_ltype (VB, LT_UINT8, 
+                   SAM_SEQINS_A, SAM_SEQINS_C, SAM_SEQINS_G, SAM_SEQINS_T,
                    SAM_SEQMIS_A, SAM_SEQMIS_C, SAM_SEQMIS_G, SAM_SEQMIS_T, DID_EOL);
 
-    ctx_set_dyn_int (VB, SAM_GPOS, DID_EOL); // also sets STORE_INT
     
     // MAIN: we may seg depn lines against in-VB prim lines
     if (IS_MAIN(vb) && !flag.bam_assist)

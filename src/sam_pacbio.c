@@ -43,7 +43,7 @@ void sam_seg_pacbio_zm (VBlockSAMP vb, int64_t zm, unsigned add_bytes)
         seg_by_ctx (VB, STRa(copy_Q1NAME_int), CTX(OPTION_zm_i), add_bytes);
 
     else 
-        seg_integer (VB, CTX(OPTION_zm_i), zm, true, add_bytes);
+        seg_integer (VB, CTX(OPTION_zm_i), zm, WITH_LOOKUP, add_bytes);
 }
 
 // -------------
@@ -61,7 +61,7 @@ void sam_seg_pacbio_np (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t np, unsign
         seg_delta_vs_other_localN (VB, CTX(OPTION_np_i), CTX(OPTION_ec_f), np, -1, add_bytes);
 
     else 
-        seg_integer (VB, CTX(OPTION_np_i), np, true, add_bytes);
+        seg_integer (VB, CTX(OPTION_np_i), np, WITH_LOOKUP, add_bytes);
 }
 
 int32_t sam_zip_get_np (VBlockP vb, LineIType line_i)
@@ -84,7 +84,7 @@ void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qs, unsign
             seg_by_ctx (VB, STRa(copy_Q2NAME_int), ctx, add_bytes);
 
         else
-            seg_integer (VB, ctx, qs, true, add_bytes); 
+            seg_integer (VB, ctx, qs, WITH_LOOKUP, add_bytes); 
     }
 
     // in ccs: qs has a small number of possible low values, often mono-value
@@ -98,7 +98,7 @@ void sam_seg_pacbio_qs (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qs, unsign
         }
 
         if (segconf.sam_diverse_qs)
-            seg_integer (VB, ctx, qs, true, add_bytes); 
+            seg_integer (VB, ctx, qs, WITH_LOOKUP, add_bytes); 
 
         else 
             seg_integer_as_snip_do (VB, ctx, qs, add_bytes); // this is usually all-the-same
@@ -115,7 +115,7 @@ void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qe, unsign
             seg_by_ctx (VB, STRa(copy_Q3NAME_int), ctx, add_bytes);
 
         else
-            seg_integer (VB, ctx, qe, true, add_bytes); 
+            seg_integer (VB, ctx, qe, WITH_LOOKUP, add_bytes); 
     }
 
     // in ccs: qe = qs + seq_len
@@ -125,7 +125,7 @@ void sam_seg_pacbio_qe (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t qe, unsign
             seg_special0 (VB, SAM_SPECIAL_PACBIO_qe, ctx, add_bytes);
         
         else
-            seg_integer (VB, ctx, qe, true, add_bytes); 
+            seg_integer (VB, ctx, qe, WITH_LOOKUP, add_bytes); 
     }
 }
 
@@ -161,12 +161,12 @@ void sam_seg_pacbio_we (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t we, unsign
         int64_t sum_pw = CTX(OPTION_pw_B_C)->last_value.i;
         int64_t delta = we - (ws + sum_ip + sum_pw + dl->SEQ.len);
 
-        seg_integer (VB, ctx, delta, false, 0);
+        seg_integer (VB, ctx, delta, NO_LOOKUP, 0);
         seg_special0 (VB, SAM_SPECIAL_PACBIO_we, ctx, add_bytes);
     }
     
     else 
-        seg_integer (VB, ctx, we, true, add_bytes); // delta vs ws is worse 
+        seg_integer (VB, ctx, we, WITH_LOOKUP, add_bytes); // delta vs ws is worse 
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_PACBIO_we)

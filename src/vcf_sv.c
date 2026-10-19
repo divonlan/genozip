@@ -414,7 +414,7 @@ void vcf_seg_HOMSEQ (VBlockVCFP vb, ContextP ctx, STRp(homseq))
     else
         method = '3';
     
-    seg_integer (VB, ctx, homseq_len, false, 0); // store here rather than relying on HOMSEQ_LEN, as HOMSEQ_LEN is not always present
+    seg_integer (VB, ctx, homseq_len, NO_LOOKUP, 0); // store here rather than relying on HOMSEQ_LEN, as HOMSEQ_LEN is not always present
     seg_special1 (VB, VCF_SPECIAL_HOMSEQ, method, ctx, homseq_len);
     return;
 

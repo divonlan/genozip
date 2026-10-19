@@ -68,11 +68,11 @@ void vcf_seg_MEINFO (VBlockVCFP vb, ContextP ctx, STRp(meinfo))
     seg_by_dict_id (VB, STRi(item,0), _MEINFO_NAME,     item_lens[0]); 
     seg_by_dict_id (VB, STRi(item,3), _MEINFO_POLARITY, item_lens[3]); 
     
-    seg_integer (VB, ctx_get_ctx (VB, _MEINFO_START), meinfo_start, false, item_lens[1]); 
+    seg_integer (VB, ctx_get_ctx (VB, _MEINFO_START), meinfo_start, NO_LOOKUP, item_lens[1]); 
 
     // MEINFO_END is expected to be close to MEINFO_START + SVLEN 
     int64_t delta = meinfo_end - (meinfo_start + svlen);
-    seg_integer (VB, ctx_get_ctx (VB, _MEINFO_DELTA), delta, false, item_lens[2]); // piz sets last_value, but does not reconstruct this
+    seg_integer (VB, ctx_get_ctx (VB, _MEINFO_DELTA), delta, NO_LOOKUP, item_lens[2]); // piz sets last_value, but does not reconstruct this
 
     ContextP end_ctx = ctx_get_ctx (vb, _MEINFO_END);
     end_ctx->flags.same_line = true; // note: not done in vcf_me_seg_initialize to avoid unnecessarily creating the context

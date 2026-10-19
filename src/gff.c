@@ -483,7 +483,7 @@ static inline DictId gff_seg_attr_subfield (VBlockGFFP vb, STRp(tag), STRp(value
     case _ATTR_Reference_seq:
     case _ATTR_ancestral_allele: 
         // note: all three are stored together in _ATTR_Reference_seq as they are correlated
-        CALL (seg_add_to_local_string (VB, CTX(ATTR_Reference_seq), STRa(value), LOOKUP_NONE, value_len)); 
+        CALL (seg_add_to_local_string (VB, CTX(ATTR_Reference_seq), STRa(value), NO_LOOKUP, value_len)); 
 
     case _ATTR_chr:
         CALL (chrom_seg_by_did_i (VB, ATTR_chr, STRa(value), value_len));

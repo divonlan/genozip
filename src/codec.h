@@ -85,18 +85,18 @@ typedef struct {
 /* z_file codecs - simple (note: CODEC_BZ2 is also a z_file codec)*/ \
 [CODEC_LZMA   ] = { 1, 0, "LZMA", "+",      codec_lzma_compress,      codec_lzma_uncompress,    NA3,                       codec_none_est_size      }, \
 [CODEC_BSC    ] = { 1, 0, "BSC",  "+",      codec_bsc_compress,       codec_bsc_uncompress,     NA3,                       codec_bsc_est_size       }, \
+[CODEC_RANA   ] = { 1, 0, "RANA", "+",      codec_RANA_compress,      codec_rans_uncompress,    NA3,                       codec_RANA_est_size      }, \
 [CODEC_RANB   ] = { 1, 0, "RANB", "+",      codec_RANB_compress,      codec_rans_uncompress,    NA3,                       codec_RANB_est_size      }, \
+[CODEC_RANV   ] = { 1, 0, "RANV", "+",      codec_RANV_compress,      codec_rans_uncompress,    NA3,                       codec_RANV_est_size      }, /* STRIPE */\
 [CODEC_RANW   ] = { 1, 0, "RANW", "+",      codec_RANW_compress,      codec_rans_uncompress,    NA3,                       codec_RANW_est_size      }, /* STRIPE */\
-[CODEC_RANb   ] = { 1, 0, "RANb", "+",      codec_RANb_compress,      codec_rans_uncompress,    NA3,                       codec_RANb_est_size      }, /* PACK */\
-[CODEC_RANw   ] = { 1, 0, "RANw", "+",      codec_RANw_compress,      codec_rans_uncompress,    NA3,                       codec_RANw_est_size      }, /* STRIPE & PACK */\
-[CODEC_ARTB   ] = { 1, 0, "ARTB", "+",      codec_ARTB_compress,      codec_arith_uncompress,   NA3,                       codec_ARTB_est_size      }, \
-[CODEC_ARTW   ] = { 1, 0, "ARTW", "+",      codec_ARTW_compress,      codec_arith_uncompress,   NA3,                       codec_ARTW_est_size      }, /* STRIPE */\
-[CODEC_ARTb   ] = { 1, 0, "ARTb", "+",      codec_ARTb_compress,      codec_arith_uncompress,   NA3,                       codec_ARTb_est_size      }, /* PACK   */\
-[CODEC_ARTw   ] = { 1, 0, "ARTw", "+",      codec_ARTw_compress,      codec_arith_uncompress,   NA3,                       codec_ARTw_est_size      }, /* STRIPE & PACK */\
+[CODEC_RAN0   ] = { 1, 0, "RAN0", "+",      codec_RAN0_compress,      codec_rans_uncompress,    NA3,                       codec_RAN0_est_size      }, \
+[CODEC_ARTA   ] = { 1, 0, "ARTA", "+",      codec_ARTA_compress,      codec_arith_uncompress,   NA3,                       codec_ARTA_est_size      }, /* O0 */ \
+[CODEC_ARTB   ] = { 1, 0, "ARTB", "+",      codec_ARTB_compress,      codec_arith_uncompress,   NA3,                       codec_ARTB_est_size      }, /* O1 */ \
+[CODEC_ARTV   ] = { 1, 0, "ARTV", "+",      codec_ARTV_compress,      codec_arith_uncompress,   NA3,                       codec_ARTV_est_size      }, /* O0 & STRIPE */\
+[CODEC_ARTW   ] = { 1, 0, "ARTW", "+",      codec_ARTW_compress,      codec_arith_uncompress,   NA3,                       codec_ARTW_est_size      }, /* O1 & STRIPE */\
 /* zfile codecs - compound - QUAL */ \
 [CODEC_DOMQ   ] = { 0, 0, "DOMQ", "+",      codec_domq_compress,      USE_SUBCODEC,             codec_domq_reconstruct,    codec_complex_est_size,  }, \
 [CODEC_PBWT   ] = { 0, 0, "PBWT", "+",      codec_pbwt_compress,      codec_pbwt_uncompress,    codec_pbwt_reconstruct,    codec_complex_est_size   }, \
-[CODEC_LONGR  ] = { 0, 0, "LNGR", "+",      NA1,                      USE_SUBCODEC,             codec_longr_reconstruct,   NA4                      }, /* LONGR used for compressing Nanopore QUAL. Compression discontinued 15.0.88, uncompression retained for backcomp */ \
 [CODEC_NORMQ  ] = { 0, 0, "NRMQ", "+",      codec_normq_compress,     USE_SUBCODEC,             codec_normq_reconstruct,   codec_complex_est_size,  }, \
 [CODEC_HOMP   ] = { 0, 0, "HOMP", "+",      codec_homp_compress,      USE_SUBCODEC,             codec_homp_reconstruct,    codec_complex_est_size,  }, \
 [CODEC_PACB   ] = { 0, 0, "PACB", "+",      codec_pacb_compress,      USE_SUBCODEC,             codec_pacb_reconstruct,    codec_trivial_size,      }, \
@@ -107,7 +107,13 @@ typedef struct {
 [CODEC_XCGT   ] = { 0, 0, "XCGT", "+",      USE_SUBCODEC,             codec_xcgt_uncompress,    NA3,                       NA4                      }, \
 [CODEC_T0     ] = { 0, 0, "T0",   "+",      codec_t0_compress,        USE_SUBCODEC,             codec_t0_reconstruct,      codec_complex_est_size,  }, \
 [CODEC_OQ     ] = { 0, 0, "OQ",   "+",      codec_oq_compress,        USE_SUBCODEC,             codec_oq_reconstruct,      codec_RANB_est_size,     }, \
-/* discontinued codecs - enum values and stubs kept from back comp */\
+/* discontinued codecs - uncompress still supported for back comp */\
+[CODEC_RANb   ] = { 1, 0, "RANb", "+",      NA1,                      codec_rans_uncompress,    NA3,                       NA4                      }, /* PACK. Compression discontinued 15.0.100. */\
+[CODEC_RANw   ] = { 1, 0, "RANw", "+",      NA1,                      codec_rans_uncompress,    NA3,                       NA4                      }, /* STRIPE & PACK. Compression discontinued 15.0.100. */\
+[CODEC_ARTb   ] = { 1, 0, "ARTb", "+",      NA1,                      codec_arith_uncompress,   NA3,                       NA4                      }, /* PACK. Compression discontinued 15.0.100.   */\
+[CODEC_ARTw   ] = { 1, 0, "ARTw", "+",      NA1,                      codec_arith_uncompress,   NA3,                       NA4                      }, /* STRIPE & PACK. Compression discontinued 15.0.100. */\
+[CODEC_LONGR  ] = { 0, 0, "LNGR", "+",      NA1,                      USE_SUBCODEC,             codec_longr_reconstruct,   NA4                      }, /* LONGR used for compressing Nanopore QUAL. Compression discontinued 15.0.88, uncompression retained for backcomp */ \
+/* discontinued codecs - enum values and stubs kept for displaying an error advising using an older version for uncompress */\
 [CODEC_HAPM   ] = { 0, 0, "HAPM", "+",      NA1,                      codec_hapmat_uncompress,  NA3,                       NA4,                     }, /* HapMat used for compressing in versions v1 to v10, and supported for decompression up to v14. Code removed 15.0.48. */ \
 [CODEC_GTSHARK] = { 0, 0, "GTSH", "+",      NA1,                      codec_gtshark_uncompress, NA3,                       NA4,                     }, /* gtshark discontinued in v12. keep for displaying an error */\
 }
@@ -116,8 +122,8 @@ extern CodecArgs codec_args[NUM_CODECS];
 
 extern CodecCompress codec_bz2_compress, codec_lzma_compress, codec_domq_compress, codec_bsc_compress, 
                      codec_none_compress, codec_acgt_compress, codec_xcgt_compress, codec_pbwt_compress, 
-                     codec_RANB_compress, codec_RANW_compress, codec_RANb_compress, codec_RANw_compress, 
-                     codec_ARTB_compress, codec_ARTW_compress, codec_ARTb_compress, codec_ARTw_compress,
+                     codec_RANA_compress, codec_RANB_compress, codec_RANV_compress, codec_RANW_compress, codec_RAN0_compress, 
+                     codec_ARTA_compress, codec_ARTB_compress, codec_ARTV_compress, codec_ARTW_compress, 
                      codec_normq_compress, codec_homp_compress, codec_t0_compress,
                      codec_pacb_compress, codec_smux_compress, codec_oq_compress, codec_tmpl_compress;
 
@@ -131,8 +137,8 @@ extern CodecReconstruct codec_domq_reconstruct, codec_pbwt_reconstruct,
                         codec_oq_reconstruct, codec_tmpl_reconstruct;
 
 extern CodecEstSizeFunc codec_none_est_size, codec_bsc_est_size, codec_domq_est_size,
-                        codec_RANB_est_size, codec_RANW_est_size, codec_RANb_est_size, codec_RANw_est_size, 
-                        codec_ARTB_est_size, codec_ARTW_est_size, codec_ARTb_est_size, codec_ARTw_est_size,
+                        codec_RANA_est_size, codec_RANB_est_size, codec_RANV_est_size, codec_RANW_est_size, codec_RAN0_est_size, 
+                        codec_ARTA_est_size, codec_ARTB_est_size, codec_ARTV_est_size, codec_ARTW_est_size, 
                         codec_complex_est_size, codec_trivial_size;
 
 // non-codec-specific functions
@@ -159,9 +165,14 @@ extern void codec_assign_best_qual_codec (VBlockP vb, Did qual_did, LocalGetLine
 extern void codec_acgt_seg_initialize (VBlockP vb, Did nonref_did_i, bool has_x);
 extern void codec_acgt_reconstruct (VBlockP vb, ContextP ctx, STRp(snip));
 
-// htscodec stuff
-static inline bool is_rans  (Codec c) { return IN_RANGX(c, CODEC_RANB, CODEC_RANw); }
-static inline bool is_arith (Codec c) { return IN_RANGX(c, CODEC_ARTB, CODEC_ARTw); }
+// htscodec stuff: values from X_* or RANS_ORDER_* in htscodecs/*
+#define HTS_ORDER1    0x01 // Each byte is modeled using the preceding byte as context
+#define HTS_ORDER_X32 0x04 // 32-way mode (32x16)
+#define HTS_STRIPE    0x08 // For N-byte integer data; rotate & encode N streams.
+#define HTS_NOSZ      0x10 // Don't store the original size; used by STRIPE mode
+#define HTS_PACK      0x80 // Pack 2,4,8 or infinite symbols into a byte.
+static inline bool is_rans  (Codec c) { return c==CODEC_RANB || c==CODEC_RANW || c==CODEC_RAN0; }
+static inline bool is_arith (Codec c) { return c==CODEC_ARTA || c==CODEC_ARTB || c==CODEC_ARTV || c==CODEC_ARTW; }
 static inline bool is_hts   (Codec c) { return is_rans (c) || is_arith (c); }
 
 // BSC stuff

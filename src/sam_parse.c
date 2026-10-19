@@ -98,7 +98,7 @@ void seg_qname_parse_QNAME0_cb (VBlockP vb, ContextP q0name_ctx, STRp(q0name))
         seg_special1 (VB, SAM_SPECIAL_Parse_copy_QNAME, PCQ_Q0NAME, q0name_ctx, q0name_len);
         
     else
-        seg_add_to_local_string (vb, q0name_ctx, STRa(q0name), LOOKUP_SIMPLE, q0name_len);
+        seg_add_to_local_string (vb, q0name_ctx, STRa(q0name), WITH_LOOKUP, q0name_len);
 }
 
 // Copy substrings of QNAME into pN, pB, CR and CB

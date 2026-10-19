@@ -299,7 +299,7 @@ bool fastq_parse_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), 
 
         seg_by_did (VB, STRa(segconf.copy_qname_umi_snip), FASTQ_NONBIO_UMI, 10);
     else 
-        seg_add_to_local_fixed (VB, CTX(FASTQ_NONBIO_UMI), seq, 10, LOOKUP_WITH_LENGTH, 10);
+        seg_add_to_local_blob (VB, CTX(FASTQ_NONBIO_UMI), seq, 10, WITH_LOOKUP, 10);
 
     // seg barcodes
     for (int i=0; i < 3; i++)
@@ -339,7 +339,7 @@ bool fastq_parse_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), 
     // add excess: verbatim if not aligned
     else if (seq_len) {
         seg_lookup_with_length_other (VB, CTX(FASTQ_NONBIO_EXCESS), _FASTQ_NONREF, seq_len, 0);
-        seg_add_to_local_fixed (VB, CTX(FASTQ_NONREF), STRa(seq), LOOKUP_NONE, seq_len);
+        seg_add_to_local_blob (VB, CTX(FASTQ_NONREF), STRa(seq), NO_LOOKUP, seq_len);
 
         vb->num_verbatim++;
     }

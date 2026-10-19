@@ -127,7 +127,7 @@ static void bed_seg_START (VBlockP vb, STRp(start), WordIndex prev_line_chrom)
     else {
         ASSSEG (str_get_int_range32 (STRa(start), 0, MAX_POS32, &start_val), "Invalid START=\"%.*s\"", STRf(start));
 
-        seg_integer_fixed (vb, ctx, &start_val, false, start_len+1);
+        seg_integer_fixed (vb, ctx, &start_val, NO_LOOKUP, start_len+1);
     }
 
     if (segconf_running) 
@@ -187,7 +187,7 @@ rom bed_seg_txt_line (VBlockP vb, rom line, uint32_t remaining_txt_len, bool *ha
     MAYBE_END_HERE(END);
 
     // NAME
-    seg_add_to_local_string (vb, CTX(BED_NAME), STRfld(NAME), LOOKUP_NONE, fld_lens[NAME] + 1);
+    seg_add_to_local_string (vb, CTX(BED_NAME), STRfld(NAME), NO_LOOKUP, fld_lens[NAME] + 1);
     MAYBE_END_HERE(NAME);
 
     // SCORE

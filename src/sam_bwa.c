@@ -271,7 +271,7 @@ void sam_seg_BWA_XC_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t XC, unsigne
     }
 
     else {
-        seg_integer (VB, ctx, XC, true, add_bytes);
+        seg_integer (VB, ctx, XC, WITH_LOOKUP, add_bytes);
     }
 
     ctx_set_encountered (VB, ctx); // needed for segconf xcons_std_line_histogram building to work
@@ -347,7 +347,7 @@ void sam_seg_BWA_X1_i (VBlockSAMP vb, int64_t X1, unsigned add_bytes)
     // note: rarely, X1 can be very large (tens of thousands)
     else 
         fallback:
-        seg_integer (VB, CTX(OPTION_X1_i), X1, true, add_bytes);
+        seg_integer (VB, CTX(OPTION_X1_i), X1, WITH_LOOKUP, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BWA_X1)
@@ -393,7 +393,7 @@ void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int64_t 
         if (channel_i == 3 ||
             segconf.AS_is_2ref_consumed) { // when AS:i is inflated x2 we observe that XS:i is not very near AS:i or AS:i/2 - we're better of segging in local
 
-            seg_integer (VB, channel_ctx, xs, true, add_bytes);
+            seg_integer (VB, channel_ctx, xs, WITH_LOOKUP, add_bytes);
         }
 
         else if (xs && dl->AS) { // XS can be before or after AS
@@ -412,7 +412,7 @@ void sam_seg_BWA_XS_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, int64_t 
     
     // delta doesn't make sense - store as snip
     else
-        seg_integer (VB, CTX(did_i), xs, true, add_bytes);
+        seg_integer (VB, CTX(did_i), xs, WITH_LOOKUP, add_bytes);
 }
 
 // v14: De-multiplex XS by MAPQ

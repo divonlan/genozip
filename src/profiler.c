@@ -383,7 +383,11 @@ void profiler_add_evb_and_print_report (void)
         PRINT (sam_deep_zip_merge, 2);
         PRINT (ref_make_create_range, 1);
         PRINT (codec_assign_best_codec, 1);
+
+        // exclude assign from compress codocs
+        profile.zip_compress_ctxs.time  -= profile.codec_assign_best_codec.time;
         PRINT (zip_compress_ctxs, 1);
+
         PRINT (b250_zip_generate, 2);
         PRINT (zip_generate_local, 2);
         

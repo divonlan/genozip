@@ -16,6 +16,7 @@
 #include "profiler.h"
 #include "mgzip.h"
 #include "sorter.h"
+#include "arch.h"
 
 #define BEST_LOCK_IN_THREASHOLD 4 // --best: number of VBs that agree on the codec, after which we lock it in --best
 #define DATA_LEN_HTS_OK (1 KB)    // --best: if data is smaller than this, switching between RANs and ARITH codecs is still considered consistent
@@ -125,26 +126,30 @@ typedef struct {
     float clock; // POSIX clock ticks (CLOCKS_PER_SEC=1000000)
 } CodecTest;
 
+static rom curr_tag;
 static SORTER (codec_assign_sorter)
 {
+    int winner, line, level=-1;
+    #define DECIDE(x) ({ winner = (x); line=__LINE__; goto done; })
+
     CodecTest *t1 = (CodecTest *)a;
     CodecTest *t2 = (CodecTest *)b;
     
     // in --fast mode - if one is significantly faster with a modest size hit, take it. Otherwise, take the best.
     if (flag.fast) {
-        if (t1->clock < t2->clock * 0.80 && t1->size < t2->size * 1.3) return -1; // t1 has 20% or more better time with at most 30% size hit
-        if (t2->clock < t1->clock * 0.80 && t2->size < t1->size * 1.3) return  1; 
+        if (t1->clock < t2->clock * 0.80 && t1->size < t2->size * 1.3) DECIDE (-1); // t1 has 20% or more better time with at most 30% size hit
+        if (t2->clock < t1->clock * 0.80 && t2->size < t1->size * 1.3) DECIDE (1); 
     }
 
     // in --best mode, or in normal mode if speed is fast enough in both cases, we take the smallest size, regardless of speed
-    if (flag.best || (t1->clock <= 5000 && t2->clock <= 5000)) {
-        if (t1->size != t2->size) return ASCENDING (CodecTest, size);
-        else                      return ASCENDING (CodecTest, clock);
+    if (flag.best || (t1->clock <= 150 && t2->clock <= 150)) {
+        if (t1->size != t2->size) DECIDE (ASCENDING (CodecTest, size));
+        else                      DECIDE (ASCENDING (CodecTest, clock));
     }
 
     // if both are tiny, take the fastest
-    if (t1->size < 100 && t2->size < 100 && t1->clock != t2->clock)
-        return ASCENDING (CodecTest, clock);
+    if (t1->size < 500 && t2->size < 500 && t1->clock != t2->clock)
+        DECIDE (ASCENDING (CodecTest, clock));
 
     static struct { float size, time; } threasholds[] = {
     //    size   time
@@ -155,21 +160,32 @@ static SORTER (codec_assign_sorter)
         { 0.99,  0.85 } 
     };
 
-    for (int level=0; level < ARRAY_LEN(threasholds); level++) {
-        if (t1->size  < t2->size  * threasholds[level].size) return -1; // t1 has significantly better size
-        if (t2->size  < t1->size  * threasholds[level].size) return  1; // t2 has significantly better size
+    for (level=0; level < ARRAY_LEN(threasholds); level++) {
+        if (t1->size  < t2->size  * threasholds[level].size) DECIDE (-1); // t1 has significantly better size
+        if (t2->size  < t1->size  * threasholds[level].size) DECIDE (1); // t2 has significantly better size
 
         // case: size is similar, select for significant difference in time 
-        if (t1->clock < t2->clock * threasholds[level].time) return -1; // t1 has significantly better time
-        if (t2->clock < t1->clock * threasholds[level].time) return  1; // t2 has significantly better time
+        if (t1->clock < t2->clock * threasholds[level].time) DECIDE (-1); // t1 has significantly better time
+        if (t2->clock < t1->clock * threasholds[level].time) DECIDE (1); // t2 has significantly better time
     }
 
     // if size is exactly the same - choose the lower-index codec (so to pick non-packing version of RAN and ART)
     if (t1->size == t2->size)
-        return ASCENDING(CodecTest, codec);
+        DECIDE (ASCENDING(CodecTest, codec));
 
     // time and size are very similar (within %1 and 15% respectively) - select for smaller size
-    return ASCENDING(CodecTest, size);
+    DECIDE (ASCENDING(CodecTest, size));
+
+done:
+    if (flag.debug_codec) {
+        rom c1 = codec_name (t1->codec), c2 = codec_name (t2->codec);
+        iprintf ("%-15s winner=%-4s line=%u %7s | %4s.size=%-5.0f %4s.size=%-5.0f %4s/%-4s=%-6.2f %4s/%-4s=%-6.2f | clock: %4s.time=%-6.0f %4s.time=%-6.0f %4s/%-4s=%-5.2f %4s/%-4s=%-5.2f\n",
+                curr_tag, (winner < 0)?c1 : (winner > 0)?c2 : "-", line, cond_int (level>=0, "level=", level), 
+                c1, t1->size,  c2, t2->size,  c1, c2, t1->size  / t2->size,  c2, c1, t2->size  / t1->size,
+                c1, t1->clock, c2, t2->clock, c1, c2, t1->clock / t2->clock, c2, c1, t2->clock / t1->clock);
+    }
+    
+    return winner;
 }
 
 // this function tests each of our generic codecs on a 100KB sample of local or b250 data, and assigns the best one based on 
@@ -231,6 +247,45 @@ static void codec_commit_to_zf_ctx (uint32_t data_len, Codec v_codec, Codec *z_c
     }
 }
 
+// pulls buf->data into L1/L2 cache
+static void codec_warm_cache (VBlockP vb, ContextP ctx, Buffer *buf, LocalGetLineCB get_line_cb)
+{
+    int sum = 0;
+    if (get_line_cb)
+        for_line {   
+            STRw(line);
+            get_line_cb (vb, ctx, line_i, pSTRa(line), CALLBACK_NO_SIZE_LIMIT, NULL);
+
+            for (int i=0; i < line_len; i += CPU_CACHE_LINE_BYTES) // one read per cache line is sufficient
+                sum += line[i];
+        }
+    else {
+        ARRAY32 (char, data, *buf);
+        for (int i=0; i < data_len; i += CPU_CACHE_LINE_BYTES)
+            sum += data[i];
+    }
+    
+    asm volatile ("" : : "r"(sum) : "memory"); // ensure calcualtion doesn't get optimized out;
+}
+
+static Codec codec_ART_codec_matching_best_RAN (CodecTest *tests) // the 4 RAN* tests
+{
+    for (int candidate=0; candidate < 4; candidate++) {
+        bool is_best = true; // optimistic
+        for (int i=0; i < 4; i++)
+            if (tests[candidate].size > tests[i].size) {
+                is_best = false;    
+                break; // candidate is not the best
+        }
+        if (is_best) 
+            #define C(x) tests[candidate].codec == CODEC_RAN##x ? CODEC_ART##x
+            return C(A) : C(B) : C(V) : CODEC_ARTW;
+            #undef C
+    }
+
+    return CODEC_NONE; // should never get here
+}
+
 Codec codec_assign_best_codec (VBlockP vb, 
                                ContextP ctx, /* for b250, local, dict */ 
                                BufferP data, /* non-context data, or context data that doesn't reside in its normal buffer */
@@ -288,14 +343,19 @@ Codec codec_assign_best_codec (VBlockP vb,
         goto return_selected; // if already assigned - no need to test
 
     CodecTest tests[] = { { CODEC_NONE }, 
-                          { CODEC_RANB }, { CODEC_RANW }, { CODEC_RANb }, { CODEC_RANw }, 
-                          { CODEC_ARTB }, { CODEC_ARTW }, { CODEC_ARTb }, { CODEC_ARTw },
-                          { CODEC_BZ2  }, { CODEC_BSC  }, { CODEC_LZMA } }; 
+                          { CODEC_RAN0 }, { CODEC_RANA }, { CODEC_RANB }, { CODEC_RANV }, { CODEC_RANW }, // must be before ART*, and CODEC_RANW must be last
+                          { }, // placeholder for the ART* codec corresponding to the best RAN* codec (always comes after CODEC_RANW)
+                          { CODEC_BZ2  }, { CODEC_BSC  }, { CODEC_LZMA } 
+                        }; 
     
-    // don't allow LZMA or BSC in buffers being compressed in the main thread - too slow (unless --best)
-    unsigned num_tests = ARRAY_LEN(tests) - (flag.best ? 0 : 2*(vb == evb)); 
+    unsigned num_tests = ARRAY_LEN(tests);
 
-    if (flag.no_lzma && num_tests == ARRAY_LEN(tests))
+    // don't allow LZMA or BSC in buffers being compressed in the main thread - too slow (unless --best)
+    if (!flag.best && vb == evb) 
+        num_tests -= 2;
+
+    // --no-lzma: remove LZMA if not already
+    else if (flag.no_lzma)
         num_tests--;
 
     // set data
@@ -315,8 +375,11 @@ Codec codec_assign_best_codec (VBlockP vb,
     if (data->len < MIN_LEN_FOR_COMPRESSION) 
         goto done; // if too small - don't assign - compression will use CODEC_NONE and the next VB can try to select
 
-    vb->z_data_test.param = true; // testing
+    LocalGetLineCB *callback = (is_local && !data_override && !ctx->no_callback) ? zip_get_local_data_callback (vb->data_type, ctx) : NULL;
+    codec_warm_cache (vb, ctx, callback ? NULL : data, callback); // pull buf->data into L1/L2 cache
 
+    vb->z_data_test.param = true; // testing
+        
     // measure the compressed size and duration for a small sample of of the local data, for each codec
     for (unsigned t=0; t < num_tests; t++) {
         *selected_codec = tests[t].codec;
@@ -325,10 +388,10 @@ Codec codec_assign_best_codec (VBlockP vb,
 
         clock_t start_time = clock();
 
-        if (*selected_codec == CODEC_NONE) tests[t].size = data->len;
-        else {
-            LocalGetLineCB *callback = (ST(LOCAL) && !data_override && !ctx->no_callback) ? zip_get_local_data_callback (vb->data_type, ctx) : NULL;
+        if (*selected_codec == CODEC_NONE) 
+            tests[t].size = data->len;
 
+        else {
             zfile_compress_section_data_ex (vb, ctx, SEC_RANDOM_ACCESS/*a section with SectionType header*/, callback ? NULL : data, callback, data->len, *selected_codec, SECTION_FLAGS_NONE, 
                                             "codec_assign_best_codec");
             tests[t].size = vb->z_data_test.len;
@@ -336,9 +399,15 @@ Codec codec_assign_best_codec (VBlockP vb,
         }
                                                            
         tests[t].clock = (clock() - start_time) * (1000000 / CLOCKS_PER_SEC); // note: POSIX requires CLOCKS_PER_SEC=1000000. In Windows it is 1000.
+
+        // the best ART* codec almost always corresponds to the best RAN* codec: now that we have tested all 4 RAN* 
+        // codecs (which are *much* faster than ART*), we test just the single ART codec corresponding to the best RAN codec
+        if (*selected_codec == CODEC_RANW) // last of the 4 RAN codecs (ex. RAN0)
+            tests[t+1].codec = codec_ART_codec_matching_best_RAN (&tests[t-3]);  
     }
 
     // sort codec by our selection criteria
+    curr_tag = ctx ? ctx->tag_name : st_name (st);
     qsort (tests, num_tests, sizeof (CodecTest), codec_assign_sorter);
 
     // --best: if we already have an assigned codec and this codec came in 2nd but has the
@@ -367,13 +436,15 @@ Codec codec_assign_best_codec (VBlockP vb,
     }
 
     if (flag_is_set (show_codec, zctx ? zctx->dict_id : DICT_ID_NONE)) {
-        iprintf ("%-8s %-12s %-5s %6.1fX   *[%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]%s\n", 
+        iprintf ("%-8s %-12s %-5s %6.1fX   *[%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]  [%-4s %5d B %6d μs]%s\n", 
                  VB_NAME, ctx ? ctx->tag_name : &st_name (st)[4], ctx ? &st_name (st)[4] : "SECT",
                  (float)data->len / tests[0].size,
                  codec_name (tests[0].codec), (int)tests[0].size, (int)tests[0].clock,
                  codec_name (tests[1].codec), (int)tests[1].size, (int)tests[1].clock,
                  codec_name (tests[2].codec), (int)tests[2].size, (int)tests[2].clock,
                  codec_name (tests[3].codec), (int)tests[3].size, (int)tests[3].clock,
+                 codec_name (tests[4].codec), (int)tests[4].size, (int)tests[4].clock,
+                 codec_name (tests[5].codec), (int)tests[5].size, (int)tests[5].clock,
                  ((is_local && flag.best && zctx->lcodec_count >= BEST_LOCK_IN_THREASHOLD) || (is_b250 && flag.best && zctx->bcodec_count >= BEST_LOCK_IN_THREASHOLD)) ? " --best-LOCK-IN" : "");
         fflush (info_stream);
     }

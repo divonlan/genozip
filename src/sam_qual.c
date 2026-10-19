@@ -224,10 +224,10 @@ static QualDiffType sam_seg_QUAL_diff (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STR
 
     // add flanks (regions that could not be diffed) to SAM_QUAL_FLANK.local
     if (flank[0]) 
-        seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), my_qual, flank[0], LOOKUP_NONE, 0);
+        seg_add_to_local_blob (VB, CTX(SAM_QUAL_FLANK), my_qual, flank[0], NO_LOOKUP, 0);
 
     if (flank[1])
-        seg_add_to_local_fixed (VB, CTX(SAM_QUAL_FLANK), &my_qual[my_qual_len - flank[1]], flank[1], LOOKUP_NONE, 0);
+        seg_add_to_local_blob (VB, CTX(SAM_QUAL_FLANK), &my_qual[my_qual_len - flank[1]], flank[1], NO_LOOKUP, 0);
 
     CTX(SAM_QUALSA)->local.len32 += overlap_len;
     CTX(SAM_QUAL)->txt_len += add_bytes - flank[0] - flank[1];
@@ -301,7 +301,7 @@ void sam_seg_QUAL (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(qual)/*always text
     else if (!vb->qual_missing && !str_is_qual_scores (STRa(qual))) {
         dl->dont_compress_QUAL = true; // this line is excluded from the usual QUAL codec compression
         bad_qual = true;
-        seg_add_to_local_fixed (VB, CTX(SAM_BADQUAL), STRa(qual), LOOKUP_NONE, add_bytes); 
+        seg_add_to_local_blob (VB, CTX(SAM_BADQUAL), STRa(qual), NO_LOOKUP, add_bytes); 
  
         DO_ONCE sam_seg_warn_bad_qual (vb, STRa(qual));
     }
@@ -481,7 +481,7 @@ static void sam_piz_QUAL_undiff_vs_other (VBlockSAMP vb, STRp (other_qual), Qual
 
     if (flank[0]) {
         vb->seq_len = flank[0];
-        reconstruct_from_local_sequence (VB, CTX(SAM_QUAL_FLANK), vb->seq_len, reconstruct); // reconstruct vb->seq_len quality scores
+        reconstruct_from_local_blob (VB, CTX(SAM_QUAL_FLANK), vb->seq_len, reconstruct); // reconstruct vb->seq_len quality scores
         qual += flank[0];
     }
 
@@ -514,7 +514,7 @@ static void sam_piz_QUAL_undiff_vs_other (VBlockSAMP vb, STRp (other_qual), Qual
 
     if (flank[1]) {
         vb->seq_len = flank[1];
-        reconstruct_from_local_sequence (VB, CTX(SAM_QUAL_FLANK), vb->seq_len, reconstruct);
+        reconstruct_from_local_blob (VB, CTX(SAM_QUAL_FLANK), vb->seq_len, reconstruct);
     }
 
     vb->seq_len = save_seq_len;
@@ -566,7 +566,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
     }
 
     else if (bad_qual) 
-        reconstruct_from_local_sequence (VB, CTX(SAM_BADQUAL), vb->seq_len, reconstruct); // 15.0.76: QUAL string that doesn't comply with SAM specification
+        reconstruct_from_local_blob (VB, CTX(SAM_BADQUAL), vb->seq_len, reconstruct); // 15.0.76: QUAL string that doesn't comply with SAM specification
     
     // case: diff against prediction based on PacBio dq, iq, sq fields
     else if (pacbio_diff)
@@ -632,7 +632,7 @@ SPECIAL_RECONSTRUCTOR_DT (sam_piz_special_QUAL)
                     codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, vb->seq_len, reconstruct); break;
 
                 case LT_BLOB: 
-                    reconstruct_from_local_sequence (VB, ctx, vb->seq_len, reconstruct); break;
+                    reconstruct_from_local_blob (VB, ctx, vb->seq_len, reconstruct); break;
 
                 default: ABORT_PIZ ("Invalid ltype=%s for %s. local.len=%u", lt_name (ctx->ltype), ctx->tag_name, ctx->local.len32);
             }

@@ -163,7 +163,7 @@ void tokenizer_seg (VBlockP vb, ContextP field_ctx, STRp(field),
                     goto fallback;
 
                 else 
-                    seg_integer (vb, item_ctx, ci->value, true, ci->item_len);
+                    seg_integer (vb, item_ctx, ci->value, WITH_LOOKUP, ci->item_len);
             }
 
             ctx_set_last_value (vb, item_ctx, ci->value);

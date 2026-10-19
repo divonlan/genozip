@@ -41,12 +41,12 @@ void sam_seg_s1_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t s1, unsigned ad
     int32_t delta = (int32_t)s1 - s1_prediction (cm);
 
     if (segconf.s1_to_cm_32 && cm) {
-        seg_integer (VB, ctx, delta, false, 0);
+        seg_integer (VB, ctx, delta, NO_LOOKUP, 0);
         seg_special0 (VB, SAM_SPECIAL_s1, ctx, add_bytes);
     }
 
     else fallback:
-        seg_integer (VB, ctx, s1, true, add_bytes);
+        seg_integer (VB, ctx, s1, WITH_LOOKUP, add_bytes);
 
     ctx_set_last_value (VB, ctx, s1);
 }
@@ -98,12 +98,12 @@ void sam_seg_cm_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t cm, unsigned ad
         int32_t prediction = dl->SEQ.len / segconf.seq_len_to_cm;
         int32_t delta = (int32_t)cm - prediction;
 
-        seg_integer (VB, ctx, delta, false, 0);
+        seg_integer (VB, ctx, delta, NO_LOOKUP, 0);
         seg_special0 (VB, SAM_SPECIAL_cm, ctx, add_bytes);
     }
 
     else fallback:
-        seg_integer (VB, ctx, cm, true, add_bytes);
+        seg_integer (VB, ctx, cm, WITH_LOOKUP, add_bytes);
 
     ctx_set_last_value (VB, ctx, cm);    
 }

@@ -146,7 +146,7 @@ void fastq_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), bool d
     else verbatim: {
         if (flag.show_aligner && !segconf_running) iprintf ("%s: verbatim\n", LN_NAME);
 
-        seg_add_to_local_fixed (VB, nonref_ctx, STRa(seq), LOOKUP_NONE, seq_len);
+        seg_add_to_local_blob (VB, nonref_ctx, STRa(seq), NO_LOOKUP, seq_len);
 
         // case: we don't need to consume pair-1 gpos (bc we are pair-1, or pair-1 was not aligned): look up from NONREF
         SNIPi3 (SNIP_SPECIAL, FASTQ_SPECIAL_unaligned_SEQ, ' '/*copy from NONREF*/, seq_len_by_qname (vb, seq_len) ? 0 : seq_len);
@@ -204,7 +204,7 @@ void fastq_seg_gpos_R2 (VBlockP vb, PosType64 gpos_R1, PosType64 gpos_R2, bool i
     PosType64 gpos_Δ = is_forward_R2 ? (gpos_R1 - gpos_R2) : (gpos_R2 - gpos_R1); 
 
     if (gpos_R1 != NO_GPOS && gpos_R2 != NO_GPOS && ABS(gpos_Δ) <= MAX_GPOS_DELTA) {
-        seg_integer (VB, gpos_Δ_ctx, gpos_Δ, false, 0);
+        seg_integer (VB, gpos_Δ_ctx, gpos_Δ, NO_LOOKUP, 0);
         seg_special1 (VB, FASTQ_SPECIAL_PAIR2_GPOS, segconf.is_interleaved ? 'I' : 'D', my_gpos_ctx, 0); // lookup from local and advance next_localR1 to consume gpos
 
         ctx_set_last_value (vb, gpos_Δ_ctx, gpos_Δ); // consumed in aligner_seg_seq
@@ -214,7 +214,7 @@ void fastq_seg_gpos_R2 (VBlockP vb, PosType64 gpos_R1, PosType64 gpos_R2, bool i
 
     // case: otherwise, store verbatim
     else {
-        seg_integer (VB, my_gpos_ctx, gpos_R2, false, 0);
+        seg_integer (VB, my_gpos_ctx, gpos_R2, NO_LOOKUP, 0);
         seg_special0 (VB, FASTQ_SPECIAL_PAIR2_GPOS, my_gpos_ctx, 0); 
     }
 }
@@ -396,7 +396,7 @@ SPECIAL_RECONSTRUCTOR (fastq_special_unaligned_SEQ)
 
     // case: take seq_len from DESC item with length=
     else if (!monochar) 
-        reconstruct_from_local_sequence (vb, nonref_ctx, vb->seq_len, reconstruct);
+        reconstruct_from_local_blob (vb, nonref_ctx, vb->seq_len, reconstruct);
 
     else {
         memset (BAFTtxt, monochar, vb->seq_len);

@@ -777,10 +777,10 @@ static bool qname_seg_qf (VBlockP vb, QType q, STRp(qname), unsigned add_additio
                 seg_numeric_or_not (vb, item_ctx, STRa(str), str_len); // hex or not
 
             else if (item_i == qfs->barcode_item || item_i == qfs->barcode_item2)
-                seg_add_to_local_fixed (vb, item_ctx, STRa(str), LOOKUP_WITH_LENGTH, str_len);
+                seg_add_to_local_blob (vb, item_ctx, STRa(str), WITH_LOOKUP, str_len);
 
             else 
-                seg_add_to_local_string (vb, item_ctx, STRa(str), LOOKUP_SIMPLE, str_len);
+                seg_add_to_local_string (vb, item_ctx, STRa(str), WITH_LOOKUP, str_len);
         }
 
         else if (qfs->callback_item == item_i || qfs->callback_item2 == item_i)

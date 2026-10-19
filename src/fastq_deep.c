@@ -561,7 +561,7 @@ static void fastq_seg_deep_do (VBlockFASTQP vb, uint64_t deep_value)
 
         else {
             int8_t delta8 = (pair_1_deep_value > deep_value) ? -(int8_t)abs_delta : (int8_t)abs_delta;
-            seg_integer_fixed (VB, CTX(FASTQ_DEEP_DELTA), &delta8, false, 0);
+            seg_integer_fixed (VB, CTX(FASTQ_DEEP_DELTA), &delta8, NO_LOOKUP, 0);
             seg_special1 (VB, FASTQ_SPECIAL_set_deep, '1', ctx, 0);
         }
     }
@@ -690,10 +690,10 @@ void fastq_deep_seg_SEQ (VBlockFASTQP vb, ZipDataLineFASTQ𐤐  dl, STRp(seq), C
         seg_by_ctx (VB, STRa(snip), bitmap_ctx, dl->sam_seq_len); 
 
         if (dl->sam_seq_offset) // left trim
-            seg_add_to_local_fixed (VB, nonref_ctx, seq, dl->sam_seq_offset, LOOKUP_NONE, 0);
+            seg_add_to_local_blob (VB, nonref_ctx, seq, dl->sam_seq_offset, NO_LOOKUP, 0);
 
         if (dl->sam_seq_offset + dl->sam_seq_len < seq_len) // right trim
-            seg_add_to_local_fixed (VB, nonref_ctx, &seq[dl->sam_seq_offset + dl->sam_seq_len], trim_len - dl->sam_seq_offset, LOOKUP_NONE, 0);
+            seg_add_to_local_blob (VB, nonref_ctx, &seq[dl->sam_seq_offset + dl->sam_seq_len], trim_len - dl->sam_seq_offset, NO_LOOKUP, 0);
     
         nonref_ctx->txt_len += trim_len;
     }
@@ -849,7 +849,7 @@ static uint8_t *fastq_special_deep_copy_SEQ_by_arith (VBlockFASTQP vb, uint8_t *
     uint32_t comp_len = GET_NUMBER_1B_or_5B;
 
     unsigned out_len = vb->deep_seq_len;        
-    ASSPIZ (arith_uncompress_to (VB, next, comp_len, (uint8_t*)BAFTtxt, &out_len) && out_len == vb->deep_seq_len,
+    ASSPIZ (arith_uncompress_to (next, comp_len, (uint8_t*)BAFTtxt, &out_len) && out_len == vb->deep_seq_len,
             "Failed arith_uncompress_to SEQ copied from SAM: compressed_len=%u uncompressed_len=%u (expected: %u)", 
             comp_len, out_len, vb->deep_seq_len);
     
@@ -973,7 +973,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
 
     // reconstruct left trim
     if (vb->sam_seq_offset)
-        reconstruct_from_local_sequence (VB, CTX(FASTQ_NONREF), vb->sam_seq_offset, reconstruct);
+        reconstruct_from_local_blob (VB, CTX(FASTQ_NONREF), vb->sam_seq_offset, reconstruct);
 
     uint32_t deep_ref_consumed = GET_NUMBER_1B_or_5B; 
 
@@ -996,7 +996,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_SEQ)
 
     // reconstruct right trim
     if (trim_len - vb->sam_seq_offset)
-        reconstruct_from_local_sequence (VB, CTX(FASTQ_NONREF), trim_len - vb->sam_seq_offset, reconstruct);
+        reconstruct_from_local_blob (VB, CTX(FASTQ_NONREF), trim_len - vb->sam_seq_offset, reconstruct);
 
 done:
     CTX(FASTQ_DEEP)->last_value.p = next;
@@ -1027,7 +1027,7 @@ SPECIAL_RECONSTRUCTOR_DT (fastq_special_deep_copy_QUAL)
             codec_args[ctx->lcodec].reconstruct (VB, ctx->lcodec, ctx, total_trim, reconstruct); 
 
         else if (ctx->ltype == LT_BLOB) 
-            reconstruct_from_local_sequence (VB, ctx, total_trim, reconstruct); 
+            reconstruct_from_local_blob (VB, ctx, total_trim, reconstruct); 
 
         else
             ABORT_PIZ ("Invalid ltype=%s for %s", lt_name (ctx->ltype), ctx->tag_name);

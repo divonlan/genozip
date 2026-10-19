@@ -20,7 +20,7 @@ void sam_seg_tmap_XM_i (VBlockSAMP vb, int64_t xm, unsigned add_bytes)
         seg_special0 (VB, SAM_SPECIAL_REF_CONSUMED, ctx, add_bytes);
         
     else
-        seg_integer (VB, ctx, xm, true, add_bytes);
+        seg_integer (VB, ctx, xm, WITH_LOOKUP, add_bytes);
 }
 
 static int64_t xt_prediction (int64_t as)
@@ -36,11 +36,11 @@ void sam_seg_tmap_XT_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t xt, unsign
         int64_t delta = xt - xt_prediction (dl->AS);
 
         seg_special1 (VB, SAM_SPECIAL_TMAP_XT, '1'/*method version*/, ctx, add_bytes);
-        seg_integer (VB, ctx, delta, false, 0);
+        seg_integer (VB, ctx, delta, NO_LOOKUP, 0);
     }
 
     else
-        seg_integer (VB, ctx, xt, true, add_bytes);
+        seg_integer (VB, ctx, xt, WITH_LOOKUP, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_TMAP_XT)

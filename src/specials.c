@@ -228,8 +228,8 @@ void seg_textual_float (VBlockP vb, ContextP ctx, STRp(f), unsigned add_bytes)
 
     dyn_int_append (vb, ctx, mantissa, 0);
 
-    seg_add_to_local_fixed (VB, frac_ctx, &frac_digits8, 1, LOOKUP_NONE, 0);
-    seg_add_to_local_fixed (VB, sign_ctx, &negative, 1, LOOKUP_NONE, 0);
+    seg_add_to_local_fixed (VB, frac_ctx, &frac_digits8, 1, 0); // ltype=LT_UINT8
+    seg_add_to_local_fixed (VB, sign_ctx, &negative, 1, 0);
 
     return;
 

@@ -128,7 +128,7 @@ static void sam_seg_CB_Z_segconf (VBlockSAMP vb, STRp(cb))
 static void sam_seg_CB_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cb), unsigned add_bytes)
 {
     if (!seg_by_container (VB, channel_ctx, &segconf.CB_con, STRa(cb), STRa(segconf.CB_con_snip), NULL, false, add_bytes))
-        seg_add_to_local_string (VB, channel_ctx, STRa(cb), LOOKUP_SIMPLE, add_bytes); // requires no_stons
+        seg_add_to_local_string (VB, channel_ctx, STRa(cb), WITH_LOOKUP, add_bytes); // requires no_stons
 }
 
 bytes sam_solo_sag_data (VBlockSAMP vb, const SoloAln *solo_aln, SoloTags solo)
@@ -195,7 +195,7 @@ static void sam_seg_CR_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(cr), un
     
     else fallback: {
         // add "exception" (i.e. undiffable) cr to CR_X
-        seg_add_to_local_blob (VB, CTX(OPTION_CR_Z_X), STRa(cr), add_bytes);
+        seg_add_to_local_blob (VB, CTX(OPTION_CR_Z_X), STRa(cr), WITH_LOOKUP, add_bytes);
 
         // add redirection CR -> CR_X
         seg_by_ctx (VB, STRa(redirect_to_CR_X_snip), channel_ctx, 0); 
@@ -262,14 +262,14 @@ bool sam_seg_barcode_qual (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, Solo
         if (!n_items) goto fallback;
 
         for (int i=0; i < n_items; i++) 
-            seg_add_to_local_blob (VB, CTX(array_did_i), STRi(item,i), item_lens[i]);
+            seg_add_to_local_blob (VB, CTX(array_did_i), STRi(item,i), WITH_LOOKUP, item_lens[i]);
 
         seg_by_did (VB, con_snip, *con_snip_len, did_i, (add_bytes - qual_len) + (n_items-1)); // account for separators
     }
 
     else fallback: 
         // note: this goes into the primary did_i, not the array item
-        seg_add_to_local_string (VB, CTX(did_i), STRa(qual), LOOKUP_SIMPLE, add_bytes);
+        seg_add_to_local_string (VB, CTX(did_i), STRa(qual), WITH_LOOKUP, add_bytes);
 
     return dont_compress;
 }
@@ -301,7 +301,7 @@ static void sam_seg_RX_do_seg (VBlockSAMP vb, ContextP channel_ctx, STRp(rx), un
     
     else fallback: {
         // if undiffable, store verbatim in RX_X
-        seg_add_to_local_blob (VB, CTX(OPTION_RX_Z_X), STRa(rx), add_bytes);
+        seg_add_to_local_blob (VB, CTX(OPTION_RX_Z_X), STRa(rx), WITH_LOOKUP, add_bytes);
 
         // add redirection RX -> RX_X
         seg_by_ctx (VB, STRa(redirect_to_RX_X_snip), channel_ctx, 0); 
@@ -354,14 +354,14 @@ static void sam_seg_BX_Z_do (VBlockSAMP vb, ContextP ctx, STRp(bx), uint32_t add
         bool as_predicted = same_CB ? str_issame_(STRtxt(bx_ctx->last_txt), STRa(bx)) : true;
 
         if (!same_CB || !as_predicted) 
-            seg_add_to_local_fixed (VB, ctx, STRa(bx), LOOKUP_NONE, 0);
+            seg_add_to_local_blob (VB, ctx, STRa(bx), NO_LOOKUP, 0);
 
         seg_special2 (VB, SAM_SPECIAL_BX, "01"[as_predicted], (bx_len + '0'), ctx, add_bytes);
 
         cb_ctx->prev_last_txt = cb_tw;
     }
     else
-        seg_add_to_local_blob (VB, ctx, STRa(bx), add_bytes);
+        seg_add_to_local_blob (VB, ctx, STRa(bx), WITH_LOOKUP, add_bytes);
 }
 
 SPECIAL_RECONSTRUCTOR (sam_piz_special_BX)
@@ -382,7 +382,7 @@ SPECIAL_RECONSTRUCTOR (sam_piz_special_BX)
 
     else {
         uint8_t bx_len = snip[1] - '0';
-        reconstruct_from_local_sequence (vb, ctx, bx_len, reconstruct); // consume data even if reconstruct==false
+        reconstruct_from_local_blob (vb, ctx, bx_len, reconstruct); // consume data even if reconstruct==false
     }
 
     if (!vb->peek_stack_level) // set only if really reconstructing, not merely peeking
@@ -589,7 +589,7 @@ void sam_seg_fx_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(fx), unsigned add_
 
 void sam_seg_other_seq (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, Did did_i, STRp(seq), unsigned add_bytes)
 {
-    seg_add_to_local_blob (VB, CTX(did_i), STRa(seq), add_bytes);
+    seg_add_to_local_blob (VB, CTX(did_i), STRa(seq), WITH_LOOKUP, add_bytes);
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -611,9 +611,7 @@ void sam_seg_GR_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gr), unsigned add_
     
     else fallback: {
         // add "exception" (i.e. undiffable) cr to CR_X
-        seg_add_to_local_blob (VB, CTX(OPTION_GR_Z_X), STRa(gr), add_bytes);
-        // SNIPi1 (SNIP_LOOKUP, gr_len);
-        // seg_by_did (VB, STRa(snip), OPTION_GR_Z_X, add_bytes);
+        seg_add_to_local_blob (VB, CTX(OPTION_GR_Z_X), STRa(gr), WITH_LOOKUP, add_bytes);
 
         // add redirection GR -> GR_X
         seg_by_ctx (VB, STRa(redirect_to_GR_X_snip), CTX(OPTION_GR_Z), 0); 
@@ -639,7 +637,7 @@ void sam_seg_GY_Z (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, STRp(gy), unsigned add_
     
     else fallback: {
         // add "exception" (i.e. undiffable) gy to GY_X
-        seg_add_to_local_blob (VB, CTX(OPTION_GY_Z_X), STRa(gy), add_bytes);
+        seg_add_to_local_blob (VB, CTX(OPTION_GY_Z_X), STRa(gy), WITH_LOOKUP, add_bytes);
 
         // add redirection GY -> GY_X
         seg_by_ctx (VB, STRa(redirect_to_GY_X_snip), CTX(OPTION_GY_Z), 0); 
@@ -803,7 +801,7 @@ static bool sam_seg_TX_AN_pos (VBlockP vb, ContextP pos_ctx, STRp(pos), uint32_t
             seg_by_ctx (vb, STRa(snip), pos_ctx, pos_len);
         }
         else 
-            seg_integer (vb, pos_ctx, this_pos, true, pos_len);
+            seg_integer (vb, pos_ctx, this_pos, WITH_LOOKUP, pos_len);
     }
 
     else { // no loopback
@@ -811,7 +809,7 @@ static bool sam_seg_TX_AN_pos (VBlockP vb, ContextP pos_ctx, STRp(pos), uint32_t
         // "SNIP_LOOKBACK". This requires setting flags.lookback0_ok.
         sam_seg_TX_AN_negative (vb, container_ctx, negative_ctx, 0, true);
         
-        seg_integer (vb, pos_ctx, this_pos, true, pos_len);
+        seg_integer (vb, pos_ctx, this_pos, WITH_LOOKUP, pos_len);
     }
     
     lookback_insert (vb, lb_ctx->did_i, pos_ctx->did_i,      false, (int64_t)this_pos);
@@ -934,7 +932,7 @@ void sam_seg_GP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned
         seg_delta_vs_other_localN (VB, channel_ctx, CTX(SAM_POS), value, -1, add_bytes);
 
     else 
-        seg_integer (VB, channel_ctx, value, true, add_bytes);
+        seg_integer (VB, channel_ctx, value, WITH_LOOKUP, add_bytes);
 
     seg_by_did (VB, STRa(vb->mux_GP.snip), OPTION_GP_i, 0);
 }
@@ -959,7 +957,7 @@ void sam_seg_MP_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned
         if (value == DATA_LINE (vb->mate_line_i)->GP) 
             seg_by_ctx (VB, STRa(copy_mate_GP_snip), channel_ctx, add_bytes);
         else
-            seg_integer (VB, channel_ctx, value, true, add_bytes);
+            seg_integer (VB, channel_ctx, value, WITH_LOOKUP, add_bytes);
     }
 
     else 
@@ -979,7 +977,7 @@ void sam_seg_xf_i (VBlockSAMP vb, ZipDataLineSAM𐤐 dl, int64_t value, unsigned
     int channel_i = dl->FLAG.duplicate;
     ContextP channel_ctx = seg_mux_get_channel_ctx (VB, OPTION_xf_i, &vb->mux_xf, channel_i);
 
-    seg_integer (VB, channel_ctx, value, false, add_bytes);
+    seg_integer (VB, channel_ctx, value, NO_LOOKUP, add_bytes);
     seg_by_did (VB, STRa(vb->mux_xf.snip), OPTION_xf_i, 0);
 }
 

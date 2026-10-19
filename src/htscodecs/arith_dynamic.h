@@ -31,33 +31,30 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef ARITH_DYNAMIC_H
+#define ARITH_DYNAMIC_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "../genozip.h"
+unsigned char *arith_compress(const unsigned char *in, unsigned int in_size,
+                              unsigned int *out_size, int order);
 
-#ifndef X_PACK
-#define X_PACK   0x80    // Pack 2,4,8 or infinite symbols into a byte.
-#define X_RLE    0x40    // Run length encoding with runs & lits encoded separately
-#define X_CAT    0x20    // Nop; for tiny segments where rANS overhead is too big
-#define X_NOSZ   0x10    // Don't store the original size; used by STRIPE mode
-#endif
-#define X_STRIPE 0x08    // For 4-byte integer data; rotate & encode 4 streams.
-#define X_EXT    0x04    // External compression codec via magic num (gz, xz, bz2)
-#define X_ORDER  0x03    // Mask to obtain order
+unsigned char *arith_uncompress(const unsigned char *in, unsigned int in_size,
+                                unsigned int *out_size);
 
-unsigned char *arith_compress_to(VBlockP vb, unsigned char *in,  unsigned int in_size,
-				 unsigned char *out, unsigned int *out_size,
-				 int order);
+unsigned char *arith_compress_to(const unsigned char *in,  unsigned int in_size,
+                                 unsigned char *out, unsigned int *out_size,
+                                 int order);
 
-unsigned char *arith_uncompress_to(VBlockP vb, unsigned char *in, unsigned int in_size,
-				   unsigned char *out, unsigned int *out_sz);
+unsigned char *arith_uncompress_to(const unsigned char *in, unsigned int in_size,
+                                   unsigned char *out, unsigned int *out_sz);
 
 unsigned int arith_compress_bound(unsigned int size, int order);
 
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* ARITH_DYNAMIC_H */

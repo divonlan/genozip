@@ -90,10 +90,6 @@ else
 	else
 		DISTOBJ := distribution.github.o # note: matches the name in version.c 
 	endif
-
-	ifdef win_x86
-		WINDRES := windres
-	endif
 	
 	ifdef vendor
         ifndef GENOZIP_HOME
@@ -157,6 +153,7 @@ ifdef win_x86
 	CFLAGS += -D_FILE_OFFSET_BITS=64
 
 	WSL     := wsl
+	WINDRES := windres
 	NASM    := nasm
 	ASMC    := run-on-wsl.sh asmc
 	MASM    := $(ASMC) -c -10 -win64
@@ -172,7 +169,6 @@ ifdef win_x86
 		fail := $(error Only the gcc and clang compilers are currently supported)
 	endif
 
-    $(call info_once,ℹ️ windres version=$(shell $(WINDRES) --version | head -1))
     $(call info_once,ℹ️ NASM version=$(shell $(NASM) --version | head -1))
 
 
@@ -210,6 +206,16 @@ ifneq ($(shell $(ASMC) -h >/dev/null 2>&1 && echo yes),yes)
     $(call info_once,ℹ️ MASM version=N/A)
 else
     $(call info_once,ℹ️ MASM version=$(shell $(MASM) -h | head -1))
+endif
+endif
+
+# check if windres is available (eg it's not available on conda-forge): we'll use pre-compiled objects it not
+ifdef WINDRES
+ifneq ($(shell $(WINDRES) -h >/dev/null 2>&1 && echo yes),yes)
+    undefine WINDRES
+    $(call info_once,ℹ️ WINDRES version=N/A)
+else
+    $(call info_once,ℹ️ windres version=$(shell $(WINDRES) --version | head -1))
 endif
 endif
 
@@ -257,7 +263,9 @@ C_SRCS := \
 	\
 	bsc/libsais.c 																						\
 	\
-	htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/pack.c htscodecs/arith_dynamic.c 			\
+	htscodecs/arith_dynamic.c htscodecs/pack.c  htscodecs/rANS_static32x16pr.c 	\
+	htscodecs/rANS_static32x16pr_avx2.c htscodecs/rANS_static32x16pr_neon.c 							\
+	htscodecs/rANS_static32x16pr_sse4.c htscodecs/rANS_static4x16pr.c htscodecs/rle.c htscodecs/utils.c	\
 	\
 	libdeflate_1.7/deflate_compress.c libdeflate_1.7/utils.c  											\
 	\
@@ -299,9 +307,10 @@ OTHER_SRCS := \
 	\
 	bzlib/bzlib.h bzlib/bzlib_private.h																	\
 	\
-	htscodecs/rANS_static4x16.h htscodecs/rle.h htscodecs/pack.h htscodecs/arith_dynamic.h 				\
-	htscodecs/c_simple_model.h htscodecs/rANS_word.h htscodecs/htscodecs_endian.h htscodecs/rANS_word.h \
-	htscodecs/utils.h htscodecs/varint.h htscodecs/varint2.h htscodecs/utils.h							\
+	htscodecs/rANS_static4x16.h htscodecs/pack.h htscodecs/rANS_word.h htscodecs/rANS_static32x16pr.h	\
+	htscodecs/c_simple_model.h htscodecs/htscodecs_endian.h htscodecs/arith_dynamic.h htscodecs/utils.h \
+	htscodecs/utils.h htscodecs/varint.h htscodecs/varint2.h htscodecs/permute.h htscodecs/rANS_word.h 	\
+	htscodecs/c_range_coder.h htscodecs/genozip_config.h htscodecs/rANS_static16_int.h htscodecs/rle.h	\
 	\
 	bsc/adler32.h bsc/bwt.h bsc/coder.h bsc/coder_tables.h bsc/filter_tables.h bsc/filters.h 			\
 	bsc/libbsc.h bsc/libsais.h bsc/lzp.h bsc/platform.h bsc/predictor.h bsc/qlfc.h bsc/qlfc_model.h 	\

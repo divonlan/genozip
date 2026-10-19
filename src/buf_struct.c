@@ -632,6 +632,9 @@ void buf_destroy_do (BufferP buf, Caller caller)
         *buf = (Buffer){};  
     }
 
+    else if (buf->type == BUF_SUPERIMPOSED)
+        *buf = (Buffer){};  
+
     else if ((ent = buflist_find_buf (buf->vb, buf, SOFT_FAIL))) 
         buf_destroy_do_do (ent, caller);
     

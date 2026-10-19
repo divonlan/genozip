@@ -358,7 +358,7 @@ batch_basic()
         replace=
     fi
 
-    test_standard "NOPREFIX CONCAT $ref" " " file://${TESTDIR}/$file
+    test_standard "NOPREFIX CONCAT $ref" " " file://${GENOZIP_HOME}/${TESTDIR}/$file
     test_standard "-p123 $ref" "--password 123" $file
     if [ -z "$is_windows" ] || [ "$file" != basic.bam ]; then # can't redirect binary files in Windows
         test_redirected $file
@@ -382,7 +382,7 @@ batch_precompressed()
 
         if [ -x "$(command -v xz)" -o "${file##*.}" != xz ] ; then # skip .xz files if xz is not installed
             test_standard " " " " "$file"
-            test_standard "NOPREFIX CONCAT" " " file://$TESTDIR/$file
+            test_standard "NOPREFIX CONCAT" " " file://${GENOZIP_HOME}/$TESTDIR/$file
             test_standard "-p123" "--password 123" $file
         fi
     done
@@ -429,7 +429,7 @@ batch_bgzf()
     local file
     for file in ${files[@]}; do
         test_standard " " " " $file
-        test_standard "NOPREFIX CONCAT" " " file://${TESTDIR}/$file
+        test_standard "NOPREFIX CONCAT" " " file://${GENOZIP_HOME}/${TESTDIR}/$file
         test_standard "-p123" "--password 123" $file
 #        if [ -z "$is_windows" ]; then # in windows, we don't support redirecting stdin
             test_redirected $file
@@ -2367,12 +2367,12 @@ batch_make_reference()
 
     cleanup
 
-    local fa_file=$GENOZIP_HOME/$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
+    local fa_file=$REFDIR/GRCh38_full_analysis_set_plus_decoy_hla.fa.gz 
     local ref_file=$OUTDIR/output.ref.genozip
 
     # test making from a URL
-    echo "Making a reference from a URL: $genozip --make-reference file://$fa_file"
-    $genozip --make-reference file://$fa_file --force -o $ref_file || exit 1
+    echo "Making a reference from a URL: $genozip --make-reference file://${GENOZIP_HOME}/$fa_file"
+    $genozip --make-reference file://${GENOZIP_HOME}/$fa_file --force -o $ref_file || exit 1
 
     # test making from stdin
     test_header "Making a reference from stdin: $genozip --make-reference -fo $ref_file - < $fa_file"
@@ -2427,10 +2427,25 @@ update_latest()
         exit 1
     fi
 
-    pushd ../genozip-latest
+    local need_clean=No
+
+    pushd ../genozip-latest || exit 1
     if [[ "$PWD" == *"genozip-latest"* ]]; then # double check before git reset --hard
-        git reset --hard
-        git pull | tee pull.out
+        # Discard local changes only if there are any
+        if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+            git reset --hard || exit 1
+            need_clean=Yes
+        fi
+
+        # Pull only if the remote branch has new commits
+        git fetch || exit 1
+        if (( $(git rev-list --count HEAD..'@{upstream}') > 0 )); then
+            git pull || exit 1
+            need_clean=Yes
+        fi
+    else
+        echo "Wrong directory: not in genozip-latest"
+        exit 1
     fi
 
     if [ -n "$is_mac" ]; then 
@@ -2439,14 +2454,12 @@ update_latest()
 
     # clean - but careful not to clean if executable might be good - because rebuilding
     # the executable will cause make to re-generate all private/test/latest files
-    if [[ `cat pull.out` != "Already up to date." ]] ; then    
-        make -j clean 
+    if [[ "$need_clean" == Yes ]] ; then    
+        make -j clean || exit 1
     fi
-    rm pull.out
 
-    make -j clean
-    make -j8 
-    popd
+    make -j8 || exit 1
+    popd || exit 1
 
     # remove old "latest" test files if needed
     old_latest_ver="`cat $TESTDIR/latest/VERSION 2>/dev/null`"
@@ -2749,7 +2762,7 @@ batch_gencomp_depn_methods() # note: use --debug-gencomp for detailed tracking
     verify_depn_far_to_num_depn 24
 
     test_header "invoke OFFLOAD method"
-    $genozip -fB1 -@3 -t --force-gencomp file://${TESTDIR}/test.pacbio.clr.bam -fo $output || exit 1
+    $genozip -fB1 -@3 -t --force-gencomp file://${GENOZIP_HOME}/${TESTDIR}/test.pacbio.clr.bam -fo $output || exit 1
     cat $TESTDIR/test.pacbio.clr.bam.gz | $genozip -i bam -fB1 -@3 -t - -fo $output || exit 1
     verify_depn_far_to_num_depn 24
 
@@ -3121,14 +3134,15 @@ else
 BASEDIR=.
 fi
 
-TESTDIR=$GENOZIP_HOME/private/test
+# test filenames passed to genozip should be relative path. explicitly prefix with 
+# ${GENOZIP_HOME}/ in cases absolute path is needed (e.g. file://)
+TESTDIR=private/test
 GZTESTDIR=$TESTDIR/mgzip
-SCRIPTSDIR=$GENOZIP_HOME/private/scripts
-LICENSESDIR=$GENOZIP_HOME/private/licenses
+REFDIR=public # relative path do some Windows test issue (to be debugged)
+LICENSESDIR=private/licenses
+SCRIPTSDIR=private/scripts
 OUTDIRNAME="outdir.`uname|cut -d_ -f1`"
 OUTDIR=$TESTDIR/$OUTDIRNAME # so we can test on Windows and WSL2 in parallel
-#REFDIR=$GENOZIP_HOME/public
-REFDIR=public # relative path do some Windows test issue (to be debugged)
 
 if [ -n "$is_windows" ]; then
     if [[ ! -v HOME ]]; then 
@@ -3358,11 +3372,11 @@ case $GENOZIP_TEST in
 69)  batch_genocat_backcomp_recon_plan ;;
 70)  batch_reference_backcomp          ;;
 71)  batch_v15_ref_interoperability    ;;
-72)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
-73)  batch_real_world_backcomp 12.0.42 ;; 
+72)  batch_real_world_backcomp latest  ;;
+73)  batch_real_world_backcomp 14.0.33 ;; 
 74)  batch_real_world_backcomp 13.0.21 ;; 
-75)  batch_real_world_backcomp 14.0.33 ;; 
-76)  batch_real_world_backcomp latest  ;;
+75)  batch_real_world_backcomp 12.0.42 ;; 
+76)  batch_real_world_backcomp 11.0.11 ;; # note: versions must match VERSIONS in test/Makefile
 77)  batch_basic basic.vcf     latest  ;;
 78)  batch_basic basic.bam     latest  ;;
 79)  batch_basic basic.sam     latest  ;;
